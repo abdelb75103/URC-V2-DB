@@ -108,7 +108,7 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 
 ## Local Commands
 
-- All of `data/` (pseudonymised intake, protected alias map, generated reporting exports) is Git-ignored. `lib/reporting.ts` imports `data/reporting/munster_dashboard_2024-25.json` at build time, so a fresh clone cannot `npm run build` until pipeline artifacts are restored or regenerated; at cutover this import must be replaced by reads from approved reporting views.
+- All of `data/` (pseudonymised intake, protected alias map, raw generated reporting exports) is Git-ignored. The pipeline writes reporting exports to Git-ignored `data/reporting/`; that path is the raw, unreviewed output. A disclosure-reviewed aggregate that is approved for publication is promoted by copying it to the committed `content/reporting/` path, which is the only reporting data allowed into Git/Vercel. `lib/reporting.ts` imports `content/reporting/munster_dashboard_2024-25.json` at build time, so a fresh clone can `npm run build` without restoring `data/`. Only promote aggregates that have passed the governance-approved small-cell/disclosure-control rule. At cutover this import must be replaced by reads from approved reporting views.
 - Install dependencies: `npm install`
 - Run the website: `npm run dev`
 - Build check: `npm run build`

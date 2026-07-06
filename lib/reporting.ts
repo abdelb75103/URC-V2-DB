@@ -1,5 +1,5 @@
 import "server-only";
-import dashboard from "../data/reporting/munster_dashboard_2024-25.json";
+import dashboard from "../content/reporting/munster_dashboard_2024-25.json";
 
 export type HeadlineMetric = {
   key: string;
