@@ -4,7 +4,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "pipeline": "python3 -m pipeline"
+    "pipeline": "python3 -m pipeline",
+    "pipeline:check": "python3 -m pipeline self-check",
+    "pipeline:alias-check": "python3 -m pipeline validate-alias-map"
   },
   "dependencies": {
     "next": "16.2.10",

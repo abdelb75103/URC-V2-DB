@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -42,6 +44,7 @@ EXPOSURE_WEEKLY_TEAM_ALIASES = ["Team I", "Team J", "Team K", "Team L"]
 # The team-name to league-alias map is protected research metadata. It lives in a
 # Git-ignored local file (backed up in UCD-managed storage), never in code or Git.
 TEAM_ALIAS_MAP_PATH = Path(__file__).resolve().parent.parent / "data" / "intake" / "team_alias_map.json"
+TEAM_ALIAS_CODEBOOK_PATH = Path("/Users/abdelbabiker/Desktop/URC/codebook- Teams URC.csv")
 
 
 def load_fixture_team_aliases() -> dict[str, str]:
@@ -157,32 +160,45 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def sql_literal(value: object) -> str:
-    if value is None:
-        return "null"
-    text = value if isinstance(value, str) else json.dumps(value, sort_keys=True)
-    return "'" + text.replace("'", "''") + "'"
+class SqlParams:
+    # Multi-statement SQL batches read values from a transaction-local table
+    # because pg bind parameters apply to a single prepared statement.
+    def __init__(self) -> None:
+        self.values: list[object] = []
+
+    def add(self, value: object) -> int:
+        self.values.append(value)
+        return len(self.values)
+
+    def text(self, value: object) -> str:
+        return f"(select value #>> '{{}}' from _pipeline_params where idx = {self.add(value)})"
+
+    def jsonb(self, value: object) -> str:
+        return f"(select value from _pipeline_params where idx = {self.add(value)})"
 
 
-def sql_json(value: object) -> str:
-    if value is None:
-        return "null"
-    return sql_literal(json.dumps(value, sort_keys=True)) + "::jsonb"
-
-
-def run_sql(sql: str) -> None:
+def run_sql(sql: str, params: list[object] | None = None) -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as handle:
         handle.write(sql)
         sql_path = handle.name
+    params_path = None
+    if params is not None:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(params, handle, sort_keys=True)
+            params_path = handle.name
 
     try:
         db_url = os.environ.get("SUPABASE_DB_URL")
         if not db_url:
             raise SystemExit("SUPABASE_DB_URL is required; load .env.local before DB writes")
         command = ["node", str(Path(__file__).with_name("sql_exec.mjs")), sql_path]
+        if params_path:
+            command.append(params_path)
         subprocess.run(command, check=True)
     finally:
         Path(sql_path).unlink(missing_ok=True)
+        if params_path:
+            Path(params_path).unlink(missing_ok=True)
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
@@ -198,6 +214,41 @@ def write_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) ->
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def validate_alias_map(args: argparse.Namespace) -> None:
+    alias_map = load_fixture_team_aliases()
+    codebook_path = Path(args.codebook)
+    codebook_rows = read_rows(codebook_path)
+    if not codebook_rows:
+        raise SystemExit(f"no team codebook rows found: {codebook_path}")
+    missing_columns = [column for column in ["original_id", "new_id"] if column not in codebook_rows[0]]
+    if missing_columns:
+        raise SystemExit(f"team codebook missing column(s): {', '.join(missing_columns)}")
+
+    codebook_aliases = {clean_text(row.get("new_id")) for row in codebook_rows if clean_text(row.get("new_id"))}
+    local_aliases = {clean_text(alias) for alias in alias_map.values() if clean_text(alias)}
+    missing_aliases = sorted(local_aliases - codebook_aliases)
+    if missing_aliases:
+        raise SystemExit(
+            f"alias map uses {len(missing_aliases)} codebook alias code(s) absent from {codebook_path.name}"
+        )
+
+    print(
+        json.dumps(
+            {
+                "alias_map": str(TEAM_ALIAS_MAP_PATH),
+                "alias_map_sha256": sha256_file(TEAM_ALIAS_MAP_PATH),
+                "codebook": str(codebook_path),
+                "codebook_sha256": sha256_file(codebook_path),
+                "fixture_names": len(alias_map),
+                "fixture_alias_codes": len(local_aliases),
+                "codebook_alias_codes": len(codebook_aliases),
+                "status": "valid",
+            },
+            indent=2,
+        )
+    )
 
 
 def stable_uid(prefix: str, *parts: object) -> str:
@@ -838,6 +889,7 @@ def process_exposure(args: argparse.Namespace) -> None:
     scope_counts: dict[str, int] = {}
     record_sql = []
     event_sql = []
+    params = SqlParams()
 
     for index, row in enumerate(rows, start=2):
         raw_id = raw_record_id(args.team, args.season, file_hash, index)
@@ -879,10 +931,10 @@ def process_exposure(args: argparse.Namespace) -> None:
             f"""
             insert into processing.record_versions
               (source_row_id, step_run_id, version_number, record_state, eligibility_status)
-            select sr.id, step.id, {version_number}, {sql_literal(state)}::jsonb,
-              {sql_literal(eligibility)}
+            select sr.id, step.id, {version_number}, {params.jsonb(state)},
+              {params.text(eligibility)}
             from ingestion.source_rows sr, current_step step
-            where sr.raw_record_id = {sql_literal(raw_id)}
+            where sr.raw_record_id = {params.text(raw_id)}
             on conflict (source_row_id, version_number) do update
               set step_run_id = excluded.step_run_id,
                   record_state = excluded.record_state,
@@ -894,11 +946,11 @@ def process_exposure(args: argparse.Namespace) -> None:
             insert into audit.record_events
               (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
             select step.id, sr.id, 'cleaning_action', null,
-              {sql_json(action)}, 'classify', 'exposure_cleaning_applied',
-              {sql_literal('Exposure cleaning protocol applied; rows retained in lineage and primary denominator eligibility recorded.')},
-              {sql_literal(args.step_version)}, 'not_required'
+              {params.jsonb(action)}, 'classify', 'exposure_cleaning_applied',
+              {params.text('Exposure cleaning protocol applied; rows retained in lineage and primary denominator eligibility recorded.')},
+              {params.text(args.step_version)}, 'not_required'
             from ingestion.source_rows sr, current_step step
-            where sr.raw_record_id = {sql_literal(raw_id)};
+            where sr.raw_record_id = {params.text(raw_id)};
             """
         )
 
@@ -914,14 +966,14 @@ def process_exposure(args: argparse.Namespace) -> None:
         insert into audit.pipeline_runs
           (command, team, season, status, input_hash, parameters, ended_at)
         values (
-          'process-exposure', {sql_literal(args.team)}, {sql_literal(args.season)}, 'succeeded',
-          {sql_literal(file_hash)},
-          {sql_literal({
+          'process-exposure', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
+          {params.text(file_hash)},
+          {params.jsonb({
             'file': path.name,
             'step': args.step_name,
             'step_version': args.step_version,
             'version_number': version_number,
-          })}::jsonb,
+          })},
           now()
         )
         returning id
@@ -929,10 +981,10 @@ def process_exposure(args: argparse.Namespace) -> None:
       step as (
         insert into audit.step_runs
           (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, ended_at)
-        select id, {sql_literal(args.step_name)}, {sql_literal(args.step_version)},
-          {sql_literal('exposure_no_exclusions' if excluded_rows == 0 else 'exposure_exclusion')},
+        select id, {params.text(args.step_name)}, {params.text(args.step_version)},
+          {params.text('exposure_no_exclusions' if excluded_rows == 0 else 'exposure_exclusion')},
           {len(rows)}, {included_rows},
-          {sql_literal({
+          {params.jsonb({
             args.team: {
               'rows': len(rows),
               'included_rows': included_rows,
@@ -941,8 +993,8 @@ def process_exposure(args: argparse.Namespace) -> None:
               'exposure_grain_counts': grain_counts,
               'scope_status_counts': scope_counts,
             }
-          })}::jsonb,
-          {sql_literal(file_hash)}, now()
+          })},
+          {params.text(file_hash)}, now()
         from run
         returning id
       )
@@ -951,7 +1003,7 @@ def process_exposure(args: argparse.Namespace) -> None:
       {"".join(record_sql)}
       {"".join(event_sql)}
     """
-    run_sql(sql)
+    run_sql(sql, params.values)
     print(
         json.dumps(
             {
@@ -1387,6 +1439,7 @@ def process_intake(args: argparse.Namespace) -> None:
 
     record_sql = []
     event_sql = []
+    params = SqlParams()
     changed_rows = 0
     event_count = 0
     review_required_rows = 0
@@ -1407,10 +1460,10 @@ def process_intake(args: argparse.Namespace) -> None:
             f"""
             insert into processing.record_versions
               (source_row_id, step_run_id, version_number, record_state, eligibility_status)
-            select sr.id, step.id, {args.version_number}, {sql_literal(state)}::jsonb,
-              {sql_literal(state["analysis_eligibility_status"])}
+            select sr.id, step.id, {args.version_number}, {params.jsonb(state)},
+              {params.text(state["analysis_eligibility_status"])}
             from ingestion.source_rows sr, current_step step
-            where sr.raw_record_id = {sql_literal(raw_id)}
+            where sr.raw_record_id = {params.text(raw_id)}
             on conflict (source_row_id, version_number) do update
               set step_run_id = excluded.step_run_id,
                   record_state = excluded.record_state,
@@ -1423,12 +1476,12 @@ def process_intake(args: argparse.Namespace) -> None:
                 f"""
                 insert into audit.record_events
                   (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
-                select step.id, sr.id, {sql_literal(event["field_name"])}, {sql_json(event["old_value"])},
-                  {sql_json(event["new_value"])}, {sql_literal(event["action"])},
-                  {sql_literal(event["reason_code"])}, {sql_literal(event["rationale"])},
-                  {sql_literal(args.step_version)}, {sql_literal(event["review_status"])}
+                select step.id, sr.id, {params.text(event["field_name"])}, {params.jsonb(event["old_value"])},
+                  {params.jsonb(event["new_value"])}, {params.text(event["action"])},
+                  {params.text(event["reason_code"])}, {params.text(event["rationale"])},
+                  {params.text(args.step_version)}, {params.text(event["review_status"])}
                 from ingestion.source_rows sr, current_step step
-                where sr.raw_record_id = {sql_literal(raw_id)};
+                where sr.raw_record_id = {params.text(raw_id)};
                 """
             )
 
@@ -1447,15 +1500,15 @@ def process_intake(args: argparse.Namespace) -> None:
         insert into audit.pipeline_runs
           (command, team, season, status, input_hash, parameters, ended_at)
         values (
-          'process-intake', {sql_literal(args.team)}, {sql_literal(args.season)}, 'succeeded',
-          {sql_literal(file_hash)},
-          {sql_literal({
+          'process-intake', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
+          {params.text(file_hash)},
+          {params.jsonb({
             'file': path.name,
             'step': args.step_name,
             'step_version': args.step_version,
             'window_start': args.window_start,
             'window_end': args.window_end,
-          })}::jsonb,
+          })},
           now()
         )
         returning id
@@ -1463,9 +1516,9 @@ def process_intake(args: argparse.Namespace) -> None:
       step as (
         insert into audit.step_runs
           (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, ended_at)
-        select id, {sql_literal(args.step_name)}, {sql_literal(args.step_version)}, 'locator_enriched_intake',
+        select id, {params.text(args.step_name)}, {params.text(args.step_version)}, 'locator_enriched_intake',
           {len(rows)}, {len(rows)},
-          {sql_literal({
+          {params.jsonb({
             args.team: {
               'rows': len(rows),
               'changed_or_flagged_rows': changed_rows,
@@ -1473,8 +1526,8 @@ def process_intake(args: argparse.Namespace) -> None:
               'record_events': event_count,
               'duplicate_signature_rows': len(duplicate_signature_rows),
             }
-          })}::jsonb,
-          {sql_literal(file_hash)}, now()
+          })},
+          {params.text(file_hash)}, now()
         from run
         returning id
       )
@@ -1483,7 +1536,7 @@ def process_intake(args: argparse.Namespace) -> None:
       {"".join(record_sql)}
       {"".join(event_sql)}
     """
-    run_sql(sql)
+    run_sql(sql, params.values)
     print(
         json.dumps(
             {
@@ -1528,6 +1581,7 @@ def ingest(args: argparse.Namespace) -> None:
     }
 
     row_sql = []
+    params = SqlParams()
     for index, row in enumerate(rows, start=2):
         row_hash = hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()
         raw_record_id = f"{args.team}:{args.season}:{file_hash[:12]}:{index}"
@@ -1535,11 +1589,11 @@ def ingest(args: argparse.Namespace) -> None:
             f"""
             insert into ingestion.source_rows
               (source_file_id, source_row_number, raw_record_id, row_sha256, source_values)
-            select id, {index}, {sql_literal(raw_record_id)}, {sql_literal(row_hash)}, {sql_literal(row)}::jsonb
+            select id, {index}, {params.text(raw_record_id)}, {params.text(row_hash)}, {params.jsonb(row)}
             from ingestion.source_files
-            where team = {sql_literal(args.team)}
-              and season = {sql_literal(args.season)}
-              and file_sha256 = {sql_literal(file_hash)}
+            where team = {params.text(args.team)}
+              and season = {params.text(args.season)}
+              and file_sha256 = {params.text(file_hash)}
             on conflict (source_file_id, sheet_name, source_row_number) do nothing;
             """
         )
@@ -1549,47 +1603,49 @@ def ingest(args: argparse.Namespace) -> None:
         insert into ingestion.source_files
           (team, season, file_name, file_sha256, file_size_bytes, intake_manifest, row_count)
         values (
-          {sql_literal(args.team)}, {sql_literal(args.season)}, {sql_literal(path.name)},
-          {sql_literal(file_hash)}, {path.stat().st_size}, {sql_literal(manifest)}::jsonb, {len(rows) if rows else 'null'}
+          {params.text(args.team)}, {params.text(args.season)}, {params.text(path.name)},
+          {params.text(file_hash)}, {path.stat().st_size}, {params.jsonb(manifest)}, {len(rows) if rows else 'null'}
         )
         on conflict (team, season, file_sha256) do update
           set intake_manifest = excluded.intake_manifest
         returning id
       )
       insert into audit.pipeline_runs (command, team, season, status, input_hash, parameters, ended_at)
-      values ('ingest', {sql_literal(args.team)}, {sql_literal(args.season)}, 'succeeded', {sql_literal(file_hash)}, {sql_literal({'file': path.name})}::jsonb, now());
+      values ('ingest', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.text(file_hash)}, {params.jsonb({'file': path.name})}, now());
       {"".join(row_sql)}
     """
-    run_sql(sql)
+    run_sql(sql, params.values)
     print(f"registered {path.name} sha256={file_hash} rows={len(rows) if rows else 'not-loaded'}")
 
 
 def run_step(args: argparse.Namespace) -> None:
+    params = SqlParams()
     sql = f"""
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, parameters, ended_at)
-        values ('run', {sql_literal(args.team)}, {sql_literal(args.season)}, 'succeeded', {sql_literal({'step': args.step})}::jsonb, now())
+        values ('run', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.jsonb({'step': args.step})}, now())
         returning id
       )
       insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, ended_at)
-      select id, {sql_literal(args.step)}, '0.1.0', 'placeholder_step', 0, 0, now()
+      select id, {params.text(args.step)}, '0.1.0', 'placeholder_step', 0, 0, now()
       from run;
     """
-    run_sql(sql)
+    run_sql(sql, params.values)
     print(f"recorded step {args.step}")
 
 
 def release(args: argparse.Namespace) -> None:
     label = f"{args.team}-{args.season}-local-smoke"
+    params = SqlParams()
     sql = f"""
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, parameters, ended_at)
-        values ('release', {sql_literal(args.team)}, {sql_literal(args.season)}, 'succeeded', {sql_literal({'release': label})}::jsonb, now())
+        values ('release', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.jsonb({'release': label})}, now())
         returning id
       ),
       release as (
         insert into reporting.aggregate_releases (release_label, status, pipeline_run_id, approved_at)
-        select {sql_literal(label)}, 'approved', id, now()
+        select {params.text(label)}, 'approved', id, now()
         from run
         on conflict (release_label) do update
           set status = 'approved', approved_at = now()
@@ -1597,15 +1653,15 @@ def release(args: argparse.Namespace) -> None:
       )
       insert into reporting.team_metric_aggregates
         (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
-      select release.id, {sql_literal(args.team)}, {sql_literal(args.season)}, 'registered_source_files',
+      select release.id, {params.text(args.team)}, {params.text(args.season)}, 'registered_source_files',
         'Registered source files', count(*), count(*), null, 'files', 'Local smoke aggregate only'
       from release, ingestion.source_files
-      where team = {sql_literal(args.team)} and season = {sql_literal(args.season)}
+      where team = {params.text(args.team)} and season = {params.text(args.season)}
       group by release.id
       on conflict (release_id, team, season, metric_key, scope) do update
         set value = excluded.value, numerator = excluded.numerator, coverage_note = excluded.coverage_note;
     """
-    run_sql(sql)
+    run_sql(sql, params.values)
     print(f"released {label}")
 
 
@@ -1926,6 +1982,155 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
     print(json.dumps({"output": str(output), "team": args.team, "season": args.season}, indent=2))
 
 
+def quiet_call(func: Any, args: argparse.Namespace) -> None:
+    with contextlib.redirect_stdout(io.StringIO()):
+        func(args)
+
+
+def self_check(args: argparse.Namespace) -> None:
+    params = SqlParams()
+    assert params.text("value") == "(select value #>> '{}' from _pipeline_params where idx = 1)"
+    assert params.jsonb({"key": "value"}) == "(select value from _pipeline_params where idx = 2)"
+    assert params.values == ["value", {"key": "value"}]
+
+    assert parse_flexible_date("10/7/24").date().isoformat() == "2024-10-07"
+    assert exposure_scope_status({}) == ("scope_unknown_included", "blank_scope_fields_retained")
+    assert exposure_scope_status({"Competition": "academy"})[0] == "out_of_scope_explicit"
+    assert severity_category(10, True)[0] == "eight_to_twenty_eight_days"
+    assert rate_per_1000(1, 2) == 500
+
+    locator = {field: "fixture" for field in LOCATOR_FIELDS}
+    locator["standardised_row_number"] = "2"
+    state, events = build_processing_state(
+        {
+            **locator,
+            "player_uid": "player_1",
+            "injury_uid": "injury_1",
+            "Date Injured": "02/07/2024",
+            "Days Injured": "10",
+            "Confirmed Return Date": "",
+            "is_injury_closed": "1",
+            "Occasion category": "Game",
+            "Match Type": "United Rugby Championship",
+            "Is Contact": "Contact",
+            "Recurrence": "First Episode",
+            "Body Part": "Ankle",
+            "Orchard Code": "",
+            "Injury Tissue Type/s": "Muscle",
+            "Illness Code": "",
+            "Description": "",
+        },
+        window_start=datetime(2024, 7, 1),
+        window_end=datetime(2025, 6, 30),
+        duplicate_signature_rows=set(),
+    )
+    assert state["analysis_eligibility_status"] == "included_pending_protocol"
+    assert state["derived_return_date"] == "2024-07-12"
+    assert state["activity_context"] == "urc_match"
+    assert state["body_location"] == "ankle"
+    assert any(event["field_name"] == "derived_return_date" for event in events)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        exposure_source = tmp_path / "exposure.csv"
+        exposure_clean = tmp_path / "exposure_clean.csv"
+        exposure_qc = tmp_path / "exposure_qc.json"
+        write_rows(
+            exposure_source,
+            [
+                {
+                    "Team": "Team I",
+                    "Competition": "",
+                    "session type": "",
+                    "If match, surface?": "",
+                    "name": "player",
+                    "session date": "07/01/2024",
+                    "minutes total": "120",
+                    "distance total": "10000",
+                    "player_uid": "player_1",
+                    "source_row_number": "2",
+                },
+                {
+                    "Team": "Team I",
+                    "Competition": "academy",
+                    "session type": "",
+                    "If match, surface?": "",
+                    "name": "player",
+                    "session date": "07/08/2024",
+                    "minutes total": "120",
+                    "distance total": "10000",
+                    "player_uid": "player_1",
+                    "source_row_number": "3",
+                },
+            ],
+            [
+                "Team",
+                "Competition",
+                "session type",
+                "If match, surface?",
+                "name",
+                "session date",
+                "minutes total",
+                "distance total",
+                "player_uid",
+                "source_row_number",
+            ],
+        )
+        quiet_call(
+            clean_exposure,
+            argparse.Namespace(
+                file=str(exposure_source),
+                output=str(exposure_clean),
+                qc_output=str(exposure_qc),
+                manifest=None,
+            ),
+        )
+        cleaned = read_rows(exposure_clean)
+        assert [row["cleaning_action"] for row in cleaned] == ["include", "exclude_from_primary"]
+        assert cleaned[0]["week_start_date"] == "2024-07-01"
+        assert json.loads(exposure_qc.read_text())["included_minutes_total"] == 120.0
+
+        injury_source = tmp_path / "injury.csv"
+        dashboard_output = tmp_path / "dashboard.json"
+        write_rows(
+            injury_source,
+            [
+                {
+                    "Date Injured": "02/07/2024",
+                    "Days Injured": "10",
+                    "is_injury_closed": "1",
+                    "Occasion category": "Game",
+                    "Body Part": "Ankle",
+                    "Injury Tissue Type/s": "Muscle",
+                }
+            ],
+            [
+                "Date Injured",
+                "Days Injured",
+                "is_injury_closed",
+                "Occasion category",
+                "Body Part",
+                "Injury Tissue Type/s",
+            ],
+        )
+        quiet_call(
+            build_munster_dashboard,
+            argparse.Namespace(
+                team="Self Check",
+                season="2024-25",
+                injury_file=str(injury_source),
+                exposure_file=str(exposure_clean),
+                output=str(dashboard_output),
+            ),
+        )
+        dashboard = json.loads(dashboard_output.read_text())
+        assert dashboard["coverage"]["hours"] == 2.0
+        assert dashboard["headline"][2]["value"] == 500.0
+        assert dashboard["headline"][5]["value"] == 5000.0
+
+    print("self-check passed")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="pipeline")
     subcommands = parser.add_subparsers(required=True)
@@ -2090,6 +2295,13 @@ def main() -> None:
         default="data/reporting/munster_dashboard_2024-25.json",
     )
     dashboard_parser.set_defaults(func=build_munster_dashboard)
+
+    check_parser = subcommands.add_parser("self-check")
+    check_parser.set_defaults(func=self_check)
+
+    alias_parser = subcommands.add_parser("validate-alias-map")
+    alias_parser.add_argument("--codebook", default=str(TEAM_ALIAS_CODEBOOK_PATH))
+    alias_parser.set_defaults(func=validate_alias_map)
 
     args = parser.parse_args()
     args.func(args)
