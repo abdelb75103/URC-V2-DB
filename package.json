@@ -1,0 +1,20 @@
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "pipeline": "python3 -m pipeline"
+  },
+  "dependencies": {
+    "next": "16.2.10",
+    "pg": "8.22.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/pg": "8.20.0",
+    "@types/react": "19.2.17",
+    "typescript": "5.9.3"
+  }
+}

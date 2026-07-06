@@ -1,0 +1,18 @@
+.next/
+node_modules/
+.env
+.env.local
+.env*.local
+.DS_Store
+__pycache__/
+*.pyc
+supabase/.branches/
+supabase/.temp/
+.vercel/
+
+# Pseudonymised research data and pipeline artifacts never enter Git.
+# data/intake holds intake files and the protected team alias map;
+# data/reporting holds generated aggregate exports (rebuilt by the pipeline).
+data/
+output/
+tsconfig.tsbuildinfo

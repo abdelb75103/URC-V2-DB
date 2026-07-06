@@ -1,0 +1,1 @@
+-- Intentionally empty. Aggregate smoke data is created through `pipeline release`.
