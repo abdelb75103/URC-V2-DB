@@ -81,6 +81,7 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 - Store pseudonym mappings separately with restricted access. Analysis tables should use stable pseudonymous IDs.
 - Keep the re-identification codebook only in encrypted UCD-managed storage. Never place it in Supabase, Git, Vercel, logs, fixtures, screenshots, or exports.
 - Treat the team-to-league-alias map as protected metadata; team-scoped outputs must not expose league aliases.
+- The alias map lives only in Git-ignored `data/intake/team_alias_map.json` (authoritative backup in encrypted UCD storage); never hardcode name-to-alias pairs in code, docs, or anything committed to Git.
 - Do not copy source data into this repository until the intended storage, encryption, access controls, backup, retention, and deletion process is confirmed.
 - Do not load player-level data into hosted Supabase until the applicable URC/UCD governance, ethics, DPA, region, retention, and backup approval is recorded.
 - Confirm the target database and environment before any write or migration. Never assume a local connection is non-production.
@@ -107,6 +108,7 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 
 ## Local Commands
 
+- All of `data/` (pseudonymised intake, protected alias map, generated reporting exports) is Git-ignored. `lib/reporting.ts` imports `data/reporting/munster_dashboard_2024-25.json` at build time, so a fresh clone cannot `npm run build` until pipeline artifacts are restored or regenerated; at cutover this import must be replaced by reads from approved reporting views.
 - Install dependencies: `npm install`
 - Run the website: `npm run dev`
 - Build check: `npm run build`
