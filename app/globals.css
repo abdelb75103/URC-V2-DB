@@ -1,0 +1,105 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 205 47% 14%;
+    --foreground: 0 0% 100%;
+
+    --card: 205 44% 17%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 205 44% 17%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 187 98% 47%; /* #02D5F0 */
+    --primary-foreground: 205 47% 14%;
+
+    --secondary: 205 44% 17%;
+    --secondary-foreground: 187 98% 47%;
+
+    --muted: 205 44% 25%;
+    --muted-foreground: 0 0% 75%;
+
+    --accent: 187 98% 47%;
+    --accent-foreground: 205 47% 14%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 205 44% 25%;
+    --input: 205 44% 25%;
+    --ring: 187 98% 47%;
+
+    /* Brand-aligned chart palette (cyan -> teal -> warm accents) */
+    --chart-1: 187 98% 47%;
+    --chart-2: 168 76% 52%;
+    --chart-3: 210 90% 62%;
+    --chart-4: 38 92% 60%;
+    --chart-5: 350 78% 62%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 205 47% 14%;
+    --foreground: 0 0% 100%;
+
+    --card: 205 44% 17%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 205 44% 17%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 187 98% 47%;
+    --primary-foreground: 205 47% 14%;
+
+    --secondary: 205 44% 17%;
+    --secondary-foreground: 187 98% 47%;
+
+    --muted: 205 44% 25%;
+    --muted-foreground: 0 0% 75%;
+
+    --accent: 187 98% 47%;
+    --accent-foreground: 205 47% 14%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 205 44% 25%;
+    --input: 205 44% 25%;
+    --ring: 187 98% 47%;
+
+    --chart-1: 187 98% 47%;
+    --chart-2: 168 76% 52%;
+    --chart-3: 210 90% 62%;
+    --chart-4: 38 92% 60%;
+    --chart-5: 350 78% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply text-foreground;
+    background-color: hsl(var(--background));
+    background-image: radial-gradient(circle at top, hsl(var(--background)) 0%, hsl(205 47% 10%) 100%);
+    background-attachment: fixed;
+  }
+}
+
+/* Export-specific styles: force light rendering for downloadable cards */
+.is-exporting .text-foreground,
+.is-exporting .recharts-text,
+.is-exporting [class*="text-foreground"] {
+  @apply text-black !important;
+  fill: black !important;
+}
+
+.is-exporting .text-muted-foreground,
+.is-exporting [class*="text-muted-foreground"] {
+  @apply text-black !important;
+}

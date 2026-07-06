@@ -9,6 +9,7 @@ __pycache__/
 supabase/.branches/
 supabase/.temp/
 .vercel/
+.playwright-cli/
 
 # Pseudonymised research data and pipeline artifacts never enter Git.
 # data/intake holds intake files and the protected team alias map;
