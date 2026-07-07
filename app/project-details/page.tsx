@@ -1,5 +1,4 @@
 import Image from 'next/image';
-import { ClipboardList, FlaskConical, Database } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -7,13 +6,11 @@ export const metadata = { title: 'Project Details — SCRIIPT' };
 
 const stages: {
   step: string;
-  icon: React.ComponentType<{ className?: string }>;
   title: string;
   body: React.ReactNode;
 }[] = [
   {
     step: '01',
-    icon: ClipboardList,
     title: 'Surveillance & Reporting',
     body: (
       <>
@@ -32,7 +29,6 @@ const stages: {
   },
   {
     step: '02',
-    icon: FlaskConical,
     title: 'Research & Analysis',
     body: (
       <p>
@@ -46,7 +42,6 @@ const stages: {
   },
   {
     step: '03',
-    icon: Database,
     title: 'Data Storage & Processing',
     body: (
       <p>
@@ -116,39 +111,18 @@ export default function ProjectDetailsPage() {
             </div>
           </Card>
 
-          <section className="space-y-6">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-                How the project works
-              </p>
-              <h2 className="text-xl font-semibold text-foreground sm:text-2xl">
-                From the training ground to the database
-              </h2>
-              <p className="max-w-2xl text-sm text-muted-foreground">
-                Every record follows the same governed path — collected at the club, analysed only in
-                aggregate, then stored securely.
-              </p>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-3">
-              {stages.map(({ step, icon: Icon, title, body }) => (
-                <Card key={step} className="flex h-full flex-col border-t-2 border-t-primary/60">
-                  <CardHeader className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <Icon className="h-5 w-5" />
-                      </span>
-                      <span className="text-3xl font-bold tabular-nums text-primary/25">{step}</span>
-                    </div>
-                    <CardTitle className="text-lg leading-snug">{title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-                    {body}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
+          <div className="grid gap-6 md:grid-cols-3">
+            {stages.map(({ step, title, body }) => (
+              <Card key={step} className="flex h-full flex-col border-t-2 border-t-primary/60">
+                <CardHeader>
+                  <CardTitle className="text-lg leading-snug">{title}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm leading-relaxed text-muted-foreground">
+                  {body}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     </div>
