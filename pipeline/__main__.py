@@ -62,6 +62,8 @@ EDINBURGH_URC_OPPONENTS = [
 ]
 EDINBURGH_EXPOSURE_SCOPE_RULE_VERSION = "edinburgh_exposure_scope_2026-07-07_v2"
 EXPOSURE_CANONICAL_SCHEMA_VERSION = "exposure_core_2026-07-07_v1"
+INJURY_PROCESSING_RULE_VERSION = "injury_processing_2026-07-07_v1"
+EXPOSURE_PROCESSING_RULE_VERSION = "exposure_processing_2026-07-07_v1"
 URC_OPPONENT_FUZZY_CUTOFF = 0.78
 
 # The team-name to league-alias map is protected research metadata. It lives in a
@@ -221,6 +223,28 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256_json(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def without_keys(value: object, keys: set[str]) -> object:
+    if isinstance(value, dict):
+        return {
+            key: without_keys(item, keys)
+            for key, item in value.items()
+            if key not in keys
+        }
+    if isinstance(value, list):
+        return [without_keys(item, keys) for item in value]
+    return value
+
+
+def is_protected_team_alias_value(value: str) -> bool:
+    return bool(re.fullmatch(r"Team [A-Z]", clean_text(value)))
 
 
 class SqlParams:
@@ -528,6 +552,38 @@ def clean_cell(value: object) -> str:
 
 def is_missing(value: str | None) -> bool:
     return clean_text(value).lower() in MISSING_VALUES
+
+
+def injury_cohort_exclusion_reasons(row: dict[str, str], expected_team: str = "") -> list[str]:
+    reasons = []
+    received_in_team = clean_text(row.get("Received/Injured In Team"))
+    if expected_team and not is_missing(received_in_team) and received_in_team.casefold() != expected_team.casefold():
+        reasons.append("received_or_injured_in_other_team")
+
+    match_type = clean_text(row.get("Match Type")).casefold()
+    non_urc_markers = (
+        "academy",
+        "club",
+        "cup",
+        "friendly",
+        "international",
+        "national",
+        "premiership",
+        "pro team a",
+        "super rugby",
+        "top 14",
+        "u18",
+        "u19",
+        "u20",
+        "u21",
+        "under 18",
+        "under 19",
+        "under 20",
+        "under 21",
+    )
+    if not is_missing(match_type) and any(marker in match_type for marker in non_urc_markers):
+        reasons.append("explicit_non_urc_match_type")
+    return reasons
 
 
 def activity_context(row: dict[str, str]) -> tuple[str, str]:
@@ -1250,6 +1306,7 @@ def process_exposure(args: argparse.Namespace) -> None:
     scope_counts: dict[str, int] = {}
     record_sql = []
     event_sql = []
+    output_states: list[dict[str, object]] = []
     params = SqlParams()
 
     for index, row in enumerate(rows, start=2):
@@ -1269,8 +1326,6 @@ def process_exposure(args: argparse.Namespace) -> None:
         eligibility = "included_pending_protocol" if action == "include" else "excluded_from_primary"
         state = {
             "player_uid": row.get("player_uid") or None,
-            "source_player_label": row.get("name") or None,
-            "team_alias": row.get("Team") or None,
             "exposure_grain": grain or None,
             "scope_status": scope or None,
             "scope_reason": row.get("scope_reason") or None,
@@ -1288,6 +1343,7 @@ def process_exposure(args: argparse.Namespace) -> None:
                 if field in row
             },
         }
+        output_states.append(state)
         record_sql.append(
             f"""
             insert into processing.record_versions
@@ -1296,24 +1352,31 @@ def process_exposure(args: argparse.Namespace) -> None:
               {params.text(eligibility)}
             from ingestion.source_rows sr, current_step step
             where sr.raw_record_id = {params.text(raw_id)}
-            on conflict (source_row_id, version_number) do update
-              set step_run_id = excluded.step_run_id,
-                  record_state = excluded.record_state,
-                  eligibility_status = excluded.eligibility_status;
+            ;
             """
         )
-        event_sql.append(
-            f"""
-            insert into audit.record_events
-              (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
-            select step.id, sr.id, 'cleaning_action', null,
-              {params.jsonb(action)}, 'classify', 'exposure_cleaning_applied',
-              {params.text('Exposure cleaning protocol applied; rows retained in lineage and primary denominator eligibility recorded.')},
-              {params.text(args.step_version)}, 'not_required'
-            from ingestion.source_rows sr, current_step step
-            where sr.raw_record_id = {params.text(raw_id)};
-            """
-        )
+        audit_reasons = exclusion_reasons or ["exposure_cleaning_applied"]
+        for reason in audit_reasons:
+            event_sql.append(
+                f"""
+                insert into audit.record_events
+                  (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+                select step.id, sr.id, 'analysis_eligibility_status', null,
+                  {params.jsonb(eligibility)}, {params.text('exclude' if exclusion_reasons else 'classify')},
+                  {params.text(reason)},
+                  {params.text(f'Exposure eligibility set by controlled reason: {reason}. Source values are preserved.')},
+                  {params.text(args.step_version)}, 'not_required'
+                from ingestion.source_rows sr, current_step step
+                where sr.raw_record_id = {params.text(raw_id)};
+                """
+            )
+
+    output_hash = sha256_json(output_states)
+    exposure_reason_codes = sorted(reason_counts)
+    reason_code_sql = "".join(
+        f"insert into audit.reason_codes (code, description) values ({params.text(reason)}, {params.text('Exposure exclusion reason emitted by the versioned cleaning protocol.')}) on conflict (code) do update set description = excluded.description;"
+        for reason in exposure_reason_codes
+    )
 
     sql = f"""
       insert into audit.reason_codes (code, description) values
@@ -1322,13 +1385,25 @@ def process_exposure(args: argparse.Namespace) -> None:
         ('exposure_exclusion', 'Exposure row excluded from the primary denominator by a protocol-defined rule.')
       on conflict (code) do update set description = excluded.description;
 
+      {reason_code_sql}
+
+      do $$
+      begin
+        if (select count(*) from ingestion.source_rows sr join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)}) <> {len(rows)} then
+          raise exception 'process-exposure requires every source row to be registered';
+        end if;
+        if exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)} and rv.version_number = {version_number}) then
+          raise exception 'process-exposure version already exists';
+        end if;
+      end $$;
+
       create temp table current_step on commit drop as
       with run as (
         insert into audit.pipeline_runs
-          (command, team, season, status, input_hash, parameters, ended_at)
+          (command, team, season, status, input_hash, output_hash, parameters, ended_at)
         values (
           'process-exposure', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
-          {params.text(file_hash)},
+          {params.text(file_hash)}, {params.text(output_hash)},
           {params.jsonb({
             'file': path.name,
             'step': args.step_name,
@@ -1341,7 +1416,7 @@ def process_exposure(args: argparse.Namespace) -> None:
       ),
       step as (
         insert into audit.step_runs
-          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, ended_at)
+          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, output_hash, ended_at)
         select id, {params.text(args.step_name)}, {params.text(args.step_version)},
           {params.text('exposure_no_exclusions' if excluded_rows == 0 else 'exposure_exclusion')},
           {len(rows)}, {included_rows},
@@ -1355,7 +1430,7 @@ def process_exposure(args: argparse.Namespace) -> None:
               'scope_status_counts': scope_counts,
             }
           })},
-          {params.text(file_hash)}, now()
+          {params.text(file_hash)}, {params.text(output_hash)}, now()
         from run
         returning id
       )
@@ -1795,6 +1870,22 @@ def process_intake(args: argparse.Namespace) -> None:
     window_start = datetime.strptime(args.window_start, "%Y-%m-%d")
     window_end = datetime.strptime(args.window_end, "%Y-%m-%d")
     file_hash = sha256_file(path)
+    analysis_audit_file = clean_text(getattr(args, "analysis_audit_file", ""))
+    analysis_audit_path = Path(analysis_audit_file) if analysis_audit_file else None
+    analysis_audit_rows = read_rows(analysis_audit_path) if analysis_audit_path else []
+    analysis_exclusions: dict[int, list[dict[str, str]]] = defaultdict(list)
+    for event in analysis_audit_rows:
+        if event.get("field") != "analysis_eligibility" or event.get("action") != "exclude":
+            continue
+        try:
+            row_number = int(event["standardised_row_number"])
+        except (KeyError, ValueError) as exc:
+            raise SystemExit("analysis audit contains an invalid standardised row number") from exc
+        analysis_exclusions[row_number].append(event)
+    known_row_numbers = {int(row["standardised_row_number"]) for row in rows}
+    unknown_audit_rows = sorted(set(analysis_exclusions) - known_row_numbers)
+    if unknown_audit_rows:
+        raise SystemExit(f"analysis audit references unknown rows: {unknown_audit_rows[:20]}")
 
     def duplicate_rows_for(columns: list[str]) -> set[int]:
         counts: dict[str, list[int]] = {}
@@ -1812,6 +1903,7 @@ def process_intake(args: argparse.Namespace) -> None:
 
     record_sql = []
     event_sql = []
+    output_states: list[dict[str, object]] = []
     params = SqlParams()
     changed_rows = 0
     event_count = 0
@@ -1824,6 +1916,23 @@ def process_intake(args: argparse.Namespace) -> None:
             window_end=window_end,
             duplicate_signature_rows=duplicate_signature_rows,
         )
+        for exclusion in analysis_exclusions.get(source_row_number, []):
+            reason = clean_text(exclusion.get("reason"))
+            if not reason:
+                raise SystemExit(f"analysis audit exclusion on row {source_row_number} has no reason")
+            state["analysis_eligibility_status"] = "excluded_from_analysis"
+            events.append(
+                {
+                    "field_name": "analysis_eligibility_status",
+                    "old_value": "included_pending_protocol",
+                    "new_value": "excluded_from_analysis",
+                    "action": "exclude",
+                    "reason_code": reason,
+                    "rationale": f"Final analysis cohort exclusion: {reason}.",
+                    "review_status": exclusion.get("review_status") or "pipeline_decision",
+                }
+            )
+        output_states.append(state)
         if state["analysis_eligibility_status"] == "review_required":
             review_required_rows += 1
         if events:
@@ -1837,10 +1946,7 @@ def process_intake(args: argparse.Namespace) -> None:
               {params.text(state["analysis_eligibility_status"])}
             from ingestion.source_rows sr, current_step step
             where sr.raw_record_id = {params.text(raw_id)}
-            on conflict (source_row_id, version_number) do update
-              set step_run_id = excluded.step_run_id,
-                  record_state = excluded.record_state,
-                  eligibility_status = excluded.eligibility_status;
+            ;
             """
         )
         for event in events:
@@ -1858,25 +1964,53 @@ def process_intake(args: argparse.Namespace) -> None:
                 """
             )
 
+    output_hash = sha256_json(output_states)
+    analysis_reason_codes = sorted(
+        {
+            clean_text(event.get("reason"))
+            for events in analysis_exclusions.values()
+            for event in events
+            if clean_text(event.get("reason"))
+        }
+    )
+    reason_code_sql = "".join(
+        f"insert into audit.reason_codes (code, description) values ({params.text(reason)}, {params.text('Final team analysis cohort exclusion emitted by the versioned dashboard pipeline.')}) on conflict (code) do update set description = excluded.description;"
+        for reason in analysis_reason_codes
+    )
     sql = f"""
       insert into audit.reason_codes (code, description) values
         ('locator_enriched_intake', 'Intake row includes provisional source row locator and stable opaque UIDs.'),
         ('derived_return_date', 'Return date derived from Date Injured plus Days Injured; source value preserved.'),
+        ('deterministic_derivation', 'Canonical value derived deterministically from preserved source fields.'),
         ('canonical_mapping', 'Canonical analysis field mapped from source field without overwriting the source value.'),
         ('controlled_inference', 'Canonical analysis field inferred from explicit high-confidence source evidence and marked with origin metadata.'),
         ('candidate_duplicate', 'Candidate duplicate flagged for review; source row retained.'),
         ('outside_provisional_window', 'Row falls outside provisional QC season window or has unparseable injury date; source row retained.')
       on conflict (code) do update set description = excluded.description;
 
+      {reason_code_sql}
+
+      do $$
+      begin
+        if (select count(*) from ingestion.source_rows sr join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)}) <> {len(rows)} then
+          raise exception 'process-intake requires every source row to be registered';
+        end if;
+        if exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)} and rv.version_number = {args.version_number}) then
+          raise exception 'process-intake version already exists';
+        end if;
+      end $$;
+
       create temp table current_step on commit drop as
       with run as (
         insert into audit.pipeline_runs
-          (command, team, season, status, input_hash, parameters, ended_at)
+          (command, team, season, status, input_hash, output_hash, parameters, ended_at)
         values (
           'process-intake', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
-          {params.text(file_hash)},
+          {params.text(file_hash)}, {params.text(output_hash)},
           {params.jsonb({
             'file': path.name,
+            'analysis_audit_file': str(analysis_audit_path) if analysis_audit_path else None,
+            'analysis_audit_hash': sha256_file(analysis_audit_path) if analysis_audit_path else None,
             'step': args.step_name,
             'step_version': args.step_version,
             'window_start': args.window_start,
@@ -1888,7 +2022,7 @@ def process_intake(args: argparse.Namespace) -> None:
       ),
       step as (
         insert into audit.step_runs
-          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, ended_at)
+          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, output_hash, ended_at)
         select id, {params.text(args.step_name)}, {params.text(args.step_version)}, 'locator_enriched_intake',
           {len(rows)}, {len(rows)},
           {params.jsonb({
@@ -1900,7 +2034,7 @@ def process_intake(args: argparse.Namespace) -> None:
               'duplicate_signature_rows': len(duplicate_signature_rows),
             }
           })},
-          {params.text(file_hash)}, now()
+          {params.text(file_hash)}, {params.text(output_hash)}, now()
         from run
         returning id
       )
@@ -1948,30 +2082,74 @@ def ingest(args: argparse.Namespace) -> None:
     path = Path(args.file)
     file_hash = sha256_file(path)
     rows = read_rows(path)
+    excluded_source_fields = {
+        clean_text(field)
+        for field in clean_text(getattr(args, "exclude_source_fields", "")).split(",")
+        if clean_text(field)
+    }
+    redacted_manifest_keys = {
+        clean_text(key)
+        for key in clean_text(getattr(args, "redact_manifest_keys", "")).split(",")
+        if clean_text(key)
+    } | {"current_file_team_aliases", "weekly_team_aliases"}
+    redacted_source_value_keys = {
+        clean_text(value).casefold()
+        for value in clean_text(getattr(args, "redact_source_values", "")).split(",")
+        if clean_text(value)
+    }
+    redacted_source_value_keys.update(
+        clean_text(value).casefold() for value in load_fixture_team_aliases().values()
+    )
+    source_manifest = json.loads(Path(args.manifest).read_text()) if args.manifest else {}
     manifest = {
-        "manifest": json.loads(Path(args.manifest).read_text()) if args.manifest else {},
+        "manifest": without_keys(source_manifest, redacted_manifest_keys),
         "original_path": str(path),
+        "database_redactions": {
+            "excluded_source_fields": sorted(excluded_source_fields),
+            "redacted_manifest_keys": sorted(redacted_manifest_keys),
+        },
     }
 
     row_sql = []
+    redacted_source_value_count = 0
     params = SqlParams()
     for index, row in enumerate(rows, start=2):
         row_hash = hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()
+        database_values = {}
+        for field, value in row.items():
+            if field in excluded_source_fields:
+                continue
+            if (
+                clean_text(value).casefold() in redacted_source_value_keys
+                or is_protected_team_alias_value(value)
+            ):
+                database_values[field] = "[REDACTED_PROTECTED_METADATA]"
+                redacted_source_value_count += 1
+            else:
+                database_values[field] = value
         raw_record_id = f"{args.team}:{args.season}:{file_hash[:12]}:{index}"
         row_sql.append(
             f"""
             insert into ingestion.source_rows
               (source_file_id, source_row_number, raw_record_id, row_sha256, source_values)
-            select id, {index}, {params.text(raw_record_id)}, {params.text(row_hash)}, {params.jsonb(row)}
+            select id, {index}, {params.text(raw_record_id)}, {params.text(row_hash)}, {params.jsonb(database_values)}
             from ingestion.source_files
             where team = {params.text(args.team)}
               and season = {params.text(args.season)}
               and file_sha256 = {params.text(file_hash)}
-            on conflict (source_file_id, sheet_name, source_row_number) do nothing;
+            ;
             """
         )
 
+    manifest["database_redactions"]["redacted_source_value_count"] = redacted_source_value_count
     sql = f"""
+      do $$
+      begin
+        if exists (select 1 from ingestion.source_files where team = {params.text(args.team)} and season = {params.text(args.season)} and file_sha256 = {params.text(file_hash)}) then
+          raise exception 'source file is already registered';
+        end if;
+      end $$;
+
       with source_file as (
         insert into ingestion.source_files
           (team, season, file_name, file_sha256, file_size_bytes, intake_manifest, row_count)
@@ -1979,13 +2157,17 @@ def ingest(args: argparse.Namespace) -> None:
           {params.text(args.team)}, {params.text(args.season)}, {params.text(path.name)},
           {params.text(file_hash)}, {path.stat().st_size}, {params.jsonb(manifest)}, {len(rows) if rows else 'null'}
         )
-        on conflict (team, season, file_sha256) do update
-          set intake_manifest = excluded.intake_manifest
         returning id
       )
       insert into audit.pipeline_runs (command, team, season, status, input_hash, parameters, ended_at)
-      values ('ingest', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.text(file_hash)}, {params.jsonb({'file': path.name})}, now());
+      values ('ingest', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.text(file_hash)}, {params.jsonb({'file': path.name, 'excluded_source_fields': sorted(excluded_source_fields), 'redacted_manifest_keys': sorted(redacted_manifest_keys), 'redacted_source_value_count': redacted_source_value_count})}, now());
       {"".join(row_sql)}
+      do $$
+      begin
+        if (select count(*) from ingestion.source_rows sr join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)}) <> {len(rows)} then
+          raise exception 'ingest row cardinality mismatch';
+        end if;
+      end $$;
     """
     run_sql(sql, params.values)
     print(f"registered {path.name} sha256={file_hash} rows={len(rows) if rows else 'not-loaded'}")
@@ -2008,85 +2190,165 @@ def run_step(args: argparse.Namespace) -> None:
 
 
 def release(args: argparse.Namespace) -> None:
-    label = f"{args.team}-{args.season}-approved"
     dashboard_path = Path(args.dashboard_file) if args.dashboard_file else (
         Path("content") / "reporting" / f"{args.team.lower()}_dashboard_{args.season}.json"
     )
-    dashboard_metrics: list[dict[str, object]] = []
-    if dashboard_path.exists():
-        dashboard = json.loads(dashboard_path.read_text())
-        dashboard_metrics = [
-            {
-                "metric_key": metric["key"],
-                "metric_label": metric["label"],
-                "value": metric.get("value"),
-                "numerator": metric.get("numerator"),
-                "denominator": metric.get("denominator"),
-                "unit": metric.get("unit"),
-                "coverage_note": f"Dashboard headline metric from {dashboard_path}",
-            }
-            for metric in dashboard.get("headline", [])
-        ]
+    if not dashboard_path.exists():
+        raise SystemExit(f"dashboard file is required for release: {dashboard_path}")
+    dashboard = json.loads(dashboard_path.read_text())
+    dashboard_team = clean_text(str(dashboard.get("team", "")))
+    expected_team = clean_text(args.team)
+    if not (
+        dashboard_team.casefold() == expected_team.casefold()
+        or dashboard_team.casefold().startswith(expected_team.casefold() + " ")
+    ):
+        raise SystemExit(
+            f"dashboard team mismatch: expected {expected_team!r}, found {dashboard_team!r}"
+        )
+    if clean_text(str(dashboard.get("season", ""))) != args.season:
+        raise SystemExit(
+            f"dashboard season mismatch: expected {args.season!r}, found {dashboard.get('season')!r}"
+        )
+    dashboard_metrics = [
+        {
+            "metric_key": metric["key"],
+            "metric_label": metric["label"],
+            "value": metric.get("value"),
+            "numerator": metric.get("numerator"),
+            "denominator": metric.get("denominator"),
+            "unit": metric.get("unit"),
+            "coverage_note": f"Dashboard headline metric from {dashboard_path}",
+        }
+        for metric in dashboard.get("headline", [])
+    ]
+    if not dashboard_metrics:
+        raise SystemExit("dashboard has no headline metrics")
+    source_files = dashboard.get("source_files", {})
+    injury_path = Path(str(source_files.get("injury", "")))
+    exposure_path = Path(str(source_files.get("exposure", "")))
+    if not injury_path.exists() or not exposure_path.exists():
+        raise SystemExit("dashboard source files are missing")
+    pipeline_evidence = dashboard.get("pipeline_evidence", {})
+    injury_hash = clean_text(str(pipeline_evidence.get("injury_file_sha256", "")))
+    exposure_hash = clean_text(str(pipeline_evidence.get("exposure_file_sha256", "")))
+    audit_hash = clean_text(str(pipeline_evidence.get("standardisation_audit_sha256", "")))
+    injury_rule_version = clean_text(
+        str(pipeline_evidence.get("injury_processing_rule_version", ""))
+    )
+    exposure_rule_version = clean_text(
+        str(pipeline_evidence.get("exposure_processing_rule_version", ""))
+    )
+    if not all([injury_hash, exposure_hash, audit_hash, injury_rule_version, exposure_rule_version]):
+        raise SystemExit("dashboard pipeline evidence is incomplete")
+    if sha256_file(injury_path) != injury_hash or sha256_file(exposure_path) != exposure_hash:
+        raise SystemExit("dashboard source file hash mismatch")
+    audit_path = Path(str(pipeline_evidence.get("standardisation_audit_file", "")))
+    if not audit_path.exists() or sha256_file(audit_path) != audit_hash:
+        raise SystemExit("dashboard standardisation audit hash mismatch")
+    requires_adjudication = bool(
+        dashboard.get("coverage", {})
+        .get("injury_cohort_filters", {})
+        .get("exclusion_reason_counts", {})
+        .get("adjudicated_duplicate", 0)
+    )
+    adjudicated_duplicate_rows = sorted(
+        int(row_number)
+        for row_number in dashboard.get("pipeline_evidence", {}).get(
+            "adjudicated_duplicate_rows", []
+        )
+    )
+    dashboard_hash = sha256_file(dashboard_path)
+    release_metrics = [
+        {
+            "metric_key": "registered_source_files",
+            "metric_label": "Registered source files",
+            "value": 2,
+            "numerator": 2,
+            "denominator": None,
+            "unit": "files",
+            "coverage_note": "Exact pseudonymised injury and exposure files bound to this approved release",
+        },
+        *dashboard_metrics,
+    ]
+    release_hash = sha256_json(release_metrics)
+    label = f"{args.team}-{args.season}-{dashboard_hash[:12]}-approved"
     params = SqlParams()
-    metric_insert = ""
-    if dashboard_metrics:
-        metric_insert = f"""
-          insert into reporting.team_metric_aggregates
-            (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
-          select current_release.id, {params.text(args.team)}, {params.text(args.season)},
-            metric_key, metric_label, value, numerator, denominator, unit, coverage_note
-          from current_release,
-            jsonb_to_recordset({params.jsonb(dashboard_metrics)}) as metric(
-              metric_key text,
-              metric_label text,
-              value numeric,
-              numerator numeric,
-              denominator numeric,
-              unit text,
-              coverage_note text
-            )
-          on conflict (release_id, team, season, metric_key, scope) do update
-            set metric_label = excluded.metric_label,
-                value = excluded.value,
-                numerator = excluded.numerator,
-                denominator = excluded.denominator,
-                unit = excluded.unit,
-                coverage_note = excluded.coverage_note,
-                suppressed = false;
-        """
+    metric_insert = f"""
+      insert into reporting.team_metric_aggregates
+        (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
+      select current_release.id, {params.text(args.team)}, {params.text(args.season)},
+        metric_key, metric_label, value, numerator, denominator, unit, coverage_note
+      from current_release,
+        jsonb_to_recordset({params.jsonb(release_metrics)}) as metric(
+          metric_key text,
+          metric_label text,
+          value numeric,
+          numerator numeric,
+          denominator numeric,
+          unit text,
+          coverage_note text
+        );
+    """
     sql = f"""
+      do $$
+      begin
+        if not exists (select 1 from supabase_migrations.schema_migrations where version = '20260707110832') then
+          raise exception 'release requires migration 20260707110832_latest_release_per_team';
+        end if;
+        if exists (select 1 from reporting.aggregate_releases where release_label = {params.text(label)}) then
+          raise exception 'immutable release already exists';
+        end if;
+        if (select count(*) from ingestion.source_files where team = {params.text(args.team)} and season = {params.text(args.season)} and file_sha256 in ({params.text(injury_hash)}, {params.text(exposure_hash)})) <> 2 then
+          raise exception 'release requires the exact dashboard injury and exposure source files';
+        end if;
+        if not exists (select 1 from audit.pipeline_runs where team = {params.text(args.team)} and season = {params.text(args.season)} and command = 'process-intake' and status = 'succeeded' and input_hash = {params.text(injury_hash)} and parameters->>'analysis_audit_hash' = {params.text(audit_hash)} and parameters->>'step_version' = {params.text(injury_rule_version)}) then
+          raise exception 'release requires a successful process-intake run for the dashboard injury file';
+        end if;
+        if not exists (select 1 from audit.pipeline_runs where team = {params.text(args.team)} and season = {params.text(args.season)} and command = 'process-exposure' and status = 'succeeded' and input_hash = {params.text(exposure_hash)} and parameters->>'step_version' = {params.text(exposure_rule_version)}) then
+          raise exception 'release requires a successful process-exposure run for the dashboard exposure file';
+        end if;
+        if {str(requires_adjudication).lower()} and not exists (select 1 from audit.pipeline_runs where team = {params.text(args.team)} and season = {params.text(args.season)} and command = 'adjudicate-duplicate-exclusion' and status = 'succeeded' and input_hash = {params.text(injury_hash)}) then
+          raise exception 'release requires the dashboard duplicate adjudication run';
+        end if;
+        if exists (
+          select 1
+          from jsonb_array_elements_text({params.jsonb(adjudicated_duplicate_rows)}) expected(row_number)
+          where not exists (
+            select 1
+            from audit.adjudications decision
+            join ingestion.source_rows sr on sr.id = decision.source_row_id
+            join ingestion.source_files sf on sf.id = sr.source_file_id
+            where sf.team = {params.text(args.team)}
+              and sf.season = {params.text(args.season)}
+              and sf.file_sha256 = {params.text(injury_hash)}
+              and sr.source_row_number = expected.row_number::integer
+              and decision.decision->>'decision' = 'exclude_duplicate'
+          )
+        ) then
+          raise exception 'release requires every dashboard duplicate adjudication decision';
+        end if;
+      end $$;
+
       create temp table current_release on commit drop as
       with run as (
-        insert into audit.pipeline_runs (command, team, season, status, parameters, ended_at)
-        values ('release', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.jsonb({'release': label, 'dashboard_file': str(dashboard_path) if dashboard_metrics else None})}, now())
+        insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at)
+        values ('release', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
+          {params.text(dashboard_hash)}, {params.text(release_hash)},
+          {params.jsonb({'release': label, 'dashboard_file': str(dashboard_path), 'dashboard_sha256': dashboard_hash, 'injury_sha256': injury_hash, 'exposure_sha256': exposure_hash, 'standardisation_audit_sha256': audit_hash, 'injury_processing_rule_version': injury_rule_version, 'exposure_processing_rule_version': exposure_rule_version})}, now())
         returning id
       ),
       release as (
         insert into reporting.aggregate_releases (release_label, status, pipeline_run_id, approved_at)
         select {params.text(label)}, 'approved', id, now()
         from run
-        on conflict (release_label) do update
-          set status = 'approved',
-              pipeline_run_id = excluded.pipeline_run_id,
-              approved_at = now()
         returning id
       )
       select id from release;
 
-      insert into reporting.team_metric_aggregates
-        (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
-      select current_release.id, {params.text(args.team)}, {params.text(args.season)}, 'registered_source_files',
-        'Registered source files', count(*), count(*), null, 'files', 'Registered pseudonymised intake files for approved aggregate release'
-      from current_release, ingestion.source_files
-      where team = {params.text(args.team)} and season = {params.text(args.season)}
-      group by current_release.id
-      on conflict (release_id, team, season, metric_key, scope) do update
-        set value = excluded.value, numerator = excluded.numerator, coverage_note = excluded.coverage_note;
-
       {metric_insert}
     """
     run_sql(sql, params.values)
-    print(f"released {label} metrics={len(dashboard_metrics) + 1}")
+    print(f"released {label} metrics={len(release_metrics)}")
 
 
 def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
@@ -2101,18 +2363,32 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
         "decision": "exclude_duplicate",
         "rationale": args.rationale,
     }
+    output_hash = sha256_json(state)
     sql = f"""
       insert into audit.reason_codes (code, description) values
         ('duplicate_adjudicated_exclusion', 'Manual review adjudicated a candidate duplicate and excluded it from analysis.')
       on conflict (code) do update set description = excluded.description;
 
+      do $$
+      begin
+        if not exists (select 1 from ingestion.source_rows where raw_record_id = {params.text(raw_id)}) then
+          raise exception 'adjudication source row is not registered';
+        end if;
+        if not exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id where sr.raw_record_id = {params.text(raw_id)} and rv.version_number < {args.version_number}) then
+          raise exception 'adjudication requires a prior processed record version';
+        end if;
+        if exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id where sr.raw_record_id = {params.text(raw_id)} and rv.version_number = {args.version_number}) then
+          raise exception 'adjudication version already exists';
+        end if;
+      end $$;
+
       create temp table current_step on commit drop as
       with run as (
         insert into audit.pipeline_runs
-          (command, team, season, status, input_hash, parameters, ended_at)
+          (command, team, season, status, input_hash, output_hash, parameters, ended_at)
         values (
           'adjudicate-duplicate-exclusion', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
-          {params.text(file_hash)},
+          {params.text(file_hash)}, {params.text(output_hash)},
           {params.jsonb({
             'file': path.name,
             'row_number': args.row_number,
@@ -2126,11 +2402,11 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
       ),
       step as (
         insert into audit.step_runs
-          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, ended_at)
+          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, output_hash, ended_at)
         select id, 'duplicate_adjudication', {params.text(args.step_version)},
-          'duplicate_adjudicated_exclusion', 1, 0,
+          'duplicate_adjudicated_exclusion', 1, 1,
           {params.jsonb({args.team: {'excluded_duplicate_rows': [args.row_number]}})},
-          {params.text(file_hash)}, now()
+          {params.text(file_hash)}, {params.text(output_hash)}, now()
         from run
         returning id
       )
@@ -2138,13 +2414,20 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
 
       insert into processing.record_versions
         (source_row_id, step_run_id, version_number, record_state, eligibility_status)
-      select sr.id, step.id, {args.version_number}, {params.jsonb(state)}, 'excluded_duplicate_adjudicated'
-      from ingestion.source_rows sr, current_step step
+      select sr.id, step.id, {args.version_number},
+        coalesce(previous.record_state, '{{}}'::jsonb) || {params.jsonb(state)},
+        'excluded_duplicate_adjudicated'
+      from ingestion.source_rows sr
+      cross join current_step step
+      left join lateral (
+        select rv.record_state
+        from processing.record_versions rv
+        where rv.source_row_id = sr.id and rv.version_number < {args.version_number}
+        order by rv.version_number desc
+        limit 1
+      ) previous on true
       where sr.raw_record_id = {params.text(raw_id)}
-      on conflict (source_row_id, version_number) do update
-        set step_run_id = excluded.step_run_id,
-            record_state = excluded.record_state,
-            eligibility_status = excluded.eligibility_status;
+      ;
 
       insert into audit.record_events
         (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
@@ -2154,6 +2437,19 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
         {params.text(args.step_version)}, 'adjudicated'
       from ingestion.source_rows sr, current_step step
       where sr.raw_record_id = {params.text(raw_id)};
+
+      insert into audit.adjudications
+        (source_row_id, field_name, decision, rationale, reviewer, consumed_by_step_run_id)
+      select sr.id, 'analysis_eligibility_status', {params.jsonb(state)},
+        {params.text(args.rationale)}, {params.text(args.reviewer)}, step.id
+      from ingestion.source_rows sr, current_step step
+      where sr.raw_record_id = {params.text(raw_id)}
+        and not exists (
+          select 1 from audit.adjudications existing
+          where existing.source_row_id = sr.id
+            and existing.field_name = 'analysis_eligibility_status'
+            and existing.decision = {params.jsonb(state)}
+        );
     """
     run_sql(sql, params.values)
     print(json.dumps({"team": args.team, "excluded_row": args.row_number, "raw_record_id": raw_id}, indent=2))
@@ -2458,11 +2754,18 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
     analysis_filled_columns: dict[str, set[str]] = {}
     standardisation_events: list[dict[str, str]] = []
     standardisation_errors: list[str] = []
+    injury_scope_exclusion_counts: dict[str, int] = defaultdict(int)
     injury_rows = []
     for index, row in enumerate(injury_source_rows, start=2):
         source_row_number = str(index)
         injured_at = parse_date_value(row.get("Date Injured", ""))
         filled_row = filled_injury_export_row(row)
+        protected_alias_replaced_fields = set()
+        if injured_in_team:
+            for field, value in filled_row.items():
+                if clean_text(value).casefold() == injured_in_team.casefold():
+                    filled_row[field] = args.team
+                    protected_alias_replaced_fields.add(field)
         source_tissue = clean_text(row.get("Injury Tissue Type/s"))
         source_contact = clean_text(row.get("Is Contact")).lower()
         source_recurrence = clean_text(row.get("Recurrence")).lower()
@@ -2523,20 +2826,37 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
                     "old_value": old_value,
                     "new_value": new_value,
                     "action": "fill" if not old_value else "standardise",
-                    "reason": clean_text(filled_row.get(origin_field, "")),
+                    "reason": (
+                        "protected_team_alias_replaced_in_team_scoped_export"
+                        if field in protected_alias_replaced_fields
+                        else clean_text(filled_row.get(origin_field, ""))
+                    ),
                     "review_status": "pipeline_decision",
                 }
             )
-        if (
-            source_row_number in excluded_injury_rows
-            or (injured_in_team and clean_text(row.get("Received/Injured In Team")) != injured_in_team)
-            or injured_at is None
-            or injured_at < coverage_start
-            or injured_at > coverage_end
-        ):
-            analysis_excluded_row_numbers.add(source_row_number)
-            continue
+        cohort_exclusion_reasons = injury_cohort_exclusion_reasons(row, injured_in_team)
+        if source_row_number in excluded_injury_rows:
+            cohort_exclusion_reasons.append("adjudicated_duplicate")
+        if injured_at is None or injured_at < coverage_start or injured_at > coverage_end:
+            cohort_exclusion_reasons.append("injury_date_missing_or_outside_exposure_coverage")
         if filled_row.get("Problem type") != "Injury":
+            cohort_exclusion_reasons.append("non_injury_problem_type")
+        for reason in cohort_exclusion_reasons:
+            injury_scope_exclusion_counts[reason] += 1
+            standardisation_events.append(
+                {
+                    "standardised_row_number": source_row_number,
+                    "field": "analysis_eligibility",
+                    "old_value": "",
+                    "new_value": "excluded",
+                    "action": "exclude",
+                    "reason": reason,
+                    "review_status": "user_adjudicated" if reason == "adjudicated_duplicate" else "pipeline_decision",
+                }
+            )
+        if (
+            cohort_exclusion_reasons
+        ):
             analysis_excluded_row_numbers.add(source_row_number)
             continue
         days_lost = effective_days_injured(filled_row)
@@ -2657,6 +2977,15 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
             "injury": str(args.injury_file),
             "exposure": str(args.exposure_file),
         },
+        "pipeline_evidence": {
+            "injury_file_sha256": sha256_file(Path(args.injury_file)),
+            "exposure_file_sha256": sha256_file(Path(args.exposure_file)),
+            "injury_processing_rule_version": INJURY_PROCESSING_RULE_VERSION,
+            "exposure_processing_rule_version": EXPOSURE_PROCESSING_RULE_VERSION,
+            "adjudicated_duplicate_rows": sorted(int(row) for row in excluded_injury_rows),
+            "standardisation_audit_file": None,
+            "standardisation_audit_sha256": None,
+        },
         "method": [
             "Headline injury metrics use time-loss injuries only: Days Injured > 0.",
             "Incidence = time-loss injuries / exposure hours * 1000.",
@@ -2665,7 +2994,10 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
             f"Exposure hours = sum(minutes_total_clean) / 60 for included {grain_label} exposure rows.",
             monthly_basis,
             "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
-            "Approved Received/Injured In Team cohort filter applied." if injured_in_team else "No Received/Injured In Team cohort filter applied.",
+            "Received/Injured In Team retains the approved team plus blank/N/A values; explicit other-team or Club values are excluded."
+            if injured_in_team
+            else "No Received/Injured In Team cohort filter applied.",
+            "Match Type retains URC, training, Other, blank/N/A, and generic match/game values; explicit non-URC competitions and teams are excluded.",
             f"Adjudicated duplicate standardised rows excluded from this aggregate: {', '.join(sorted(excluded_injury_rows))}."
             if excluded_injury_rows
             else "No adjudicated duplicate injury rows were excluded from this aggregate.",
@@ -2682,6 +3014,8 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
             "scope_status_counts": scope_status_counts,
             "injury_cohort_filters": {
                 "injured_in_team_applied": bool(injured_in_team),
+                "explicit_non_urc_match_type_applied": True,
+                "exclusion_reason_counts": dict(sorted(injury_scope_exclusion_counts.items())),
             },
         },
         "headline": [
@@ -2771,7 +3105,6 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
 
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(dashboard, indent=2) + "\n")
     analysis_source_output = clean_text(getattr(args, "analysis_source_output", ""))
     analysis_source_workbook = ""
     if analysis_source_output:
@@ -2806,8 +3139,9 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
             analysis_source_workbook = str(xlsx_path)
     standardisation_audit_output = clean_text(getattr(args, "standardisation_audit_output", ""))
     if standardisation_audit_output:
+        standardisation_audit_path = Path(standardisation_audit_output)
         write_rows(
-            Path(standardisation_audit_output),
+            standardisation_audit_path,
             standardisation_events,
             [
                 "standardised_row_number",
@@ -2819,6 +3153,13 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
                 "review_status",
             ],
         )
+        dashboard["pipeline_evidence"]["standardisation_audit_file"] = str(
+            standardisation_audit_path
+        )
+        dashboard["pipeline_evidence"]["standardisation_audit_sha256"] = sha256_file(
+            standardisation_audit_path
+        )
+    output.write_text(json.dumps(dashboard, indent=2) + "\n")
     print(
         json.dumps(
             {
@@ -2845,6 +3186,13 @@ def quiet_call(func: Any, args: argparse.Namespace) -> None:
 
 
 def self_check(args: argparse.Namespace) -> None:
+    assert sha256_json({"b": 2, "a": 1}) == sha256_json({"a": 1, "b": 2})
+    assert without_keys(
+        {"keep": 1, "nested": {"protected": 2}, "items": [{"protected": 3}]},
+        {"protected"},
+    ) == {"keep": 1, "nested": {}, "items": [{}]}
+    assert is_protected_team_alias_value("Team N")
+    assert not is_protected_team_alias_value("Glasgow Warriors")
     params = SqlParams()
     assert params.text("value") == "(select value #>> '{}' from _pipeline_params where idx = 1)"
     assert params.jsonb({"key": "value"}) == "(select value from _pipeline_params where idx = 2)"
@@ -2912,6 +3260,19 @@ def self_check(args: argparse.Namespace) -> None:
         "explicit_rehab_or_rtp",
     )
     assert exposure_scope_status({"session type": "Club Training"})[0] == "in_scope_explicit"
+    assert injury_cohort_exclusion_reasons(
+        {"Received/Injured In Team": "Team M", "Match Type": "URC"}, "Team M"
+    ) == []
+    assert injury_cohort_exclusion_reasons(
+        {"Received/Injured In Team": "N/A", "Match Type": "Other"}, "Team M"
+    ) == []
+    assert injury_cohort_exclusion_reasons(
+        {"Received/Injured In Team": "Club", "Match Type": "Champions Cup"}, "Team M"
+    ) == ["received_or_injured_in_other_team", "explicit_non_urc_match_type"]
+    assert injury_cohort_exclusion_reasons({"Match Type": "Pro team A game"}) == [
+        "explicit_non_urc_match_type"
+    ]
+    assert injury_cohort_exclusion_reasons({"Match Type": "Unclear competition label"}) == []
     assert severity_category(10, True)[0] == "eight_to_twenty_eight_days"
     assert contact_context({"Is Contact": "NA", "Injury Tissue Type/s": "Muscle Strain/Spasm", "Nature of onset": "Acute"}) == (
         "non_contact",
@@ -3114,6 +3475,7 @@ def self_check(args: argparse.Namespace) -> None:
         injury_source = tmp_path / "injury.csv"
         dashboard_output = tmp_path / "dashboard.json"
         analysis_source_output = tmp_path / "analysis_source.csv"
+        analysis_audit_output = tmp_path / "analysis_audit.csv"
         write_rows(
             injury_source,
             [
@@ -3125,6 +3487,7 @@ def self_check(args: argparse.Namespace) -> None:
                     "Occasion category": "Game",
                     "Body Part": "Ankle",
                     "Injury Tissue Type/s": "Muscle",
+                    "Received/Injured In Team": "Team Z",
                 },
                 {
                     "Date Injured": "01/01/2026",
@@ -3134,6 +3497,7 @@ def self_check(args: argparse.Namespace) -> None:
                     "Occasion category": "Game",
                     "Body Part": "Ankle",
                     "Injury Tissue Type/s": "Unknown",
+                    "Received/Injured In Team": "",
                 }
             ],
             [
@@ -3144,6 +3508,7 @@ def self_check(args: argparse.Namespace) -> None:
                 "Occasion category",
                 "Body Part",
                 "Injury Tissue Type/s",
+                "Received/Injured In Team",
             ],
         )
         quiet_call(
@@ -3155,6 +3520,8 @@ def self_check(args: argparse.Namespace) -> None:
                 exposure_file=str(exposure_clean),
                 output=str(dashboard_output),
                 analysis_source_output=str(analysis_source_output),
+                standardisation_audit_output=str(analysis_audit_output),
+                injured_in_team="Team Z",
             ),
         )
         dashboard = json.loads(dashboard_output.read_text())
@@ -3172,10 +3539,18 @@ def self_check(args: argparse.Namespace) -> None:
             "Occasion category",
             "Body Part",
             "Injury Tissue Type/s",
+            "Received/Injured In Team",
         ]
         assert analysis_rows[0]["Date Injured"] == "02/07/2024"
         assert analysis_rows[0]["Confirmed Return Date"] == "12/07/2024"
+        assert analysis_rows[0]["Received/Injured In Team"] == "Self Check"
+        assert all("Team Z" not in row.values() for row in analysis_rows)
         assert "Problem type origin" not in analysis_rows[0]
+        assert any(
+            row["standardised_row_number"] == "3"
+            and row["reason"] == "injury_date_missing_or_outside_exposure_coverage"
+            for row in read_rows(analysis_audit_output)
+        )
         from openpyxl import load_workbook
 
         analysis_workbook = load_workbook(analysis_source_output.with_suffix(".xlsx"))
@@ -3198,6 +3573,7 @@ def self_check(args: argparse.Namespace) -> None:
                 exposure_file=str(exposure_clean),
                 output=str(tmp_path / "dashboard_direct_xlsx.json"),
                 analysis_source_output=str(xlsx_only_output),
+                injured_in_team="Team Z",
             ),
         )
         assert xlsx_only_output.exists()
@@ -3272,6 +3648,9 @@ def main() -> None:
     ingest_parser.add_argument("--season", required=True)
     ingest_parser.add_argument("--file", required=True)
     ingest_parser.add_argument("--manifest")
+    ingest_parser.add_argument("--exclude-source-fields", default="")
+    ingest_parser.add_argument("--redact-manifest-keys", default="")
+    ingest_parser.add_argument("--redact-source-values", default="")
     ingest_parser.set_defaults(func=ingest)
 
     prepare_parser = subcommands.add_parser("prepare-intake")
@@ -3353,7 +3732,7 @@ def main() -> None:
         default="data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
     )
     process_exposure_parser.add_argument("--step-name", default="exposure_cleaning")
-    process_exposure_parser.add_argument("--step-version", default="0.1.0")
+    process_exposure_parser.add_argument("--step-version", default=EXPOSURE_PROCESSING_RULE_VERSION)
     process_exposure_parser.add_argument("--version-number", type=int, default=101)
     process_exposure_parser.set_defaults(func=process_exposure)
 
@@ -3402,8 +3781,9 @@ def main() -> None:
     process_parser.add_argument("--window-start", default="2024-07-01")
     process_parser.add_argument("--window-end", default="2025-06-30")
     process_parser.add_argument("--step-name", default="intake_first_pass")
-    process_parser.add_argument("--step-version", default="0.1.0")
+    process_parser.add_argument("--step-version", default=INJURY_PROCESSING_RULE_VERSION)
     process_parser.add_argument("--version-number", type=int, default=1)
+    process_parser.add_argument("--analysis-audit-file", default="")
     process_parser.set_defaults(func=process_intake)
 
     trace_parser = subcommands.add_parser("trace-row")
@@ -3431,7 +3811,8 @@ def main() -> None:
     adjudicate_duplicate_parser.add_argument("--row-number", type=int, required=True)
     adjudicate_duplicate_parser.add_argument("--duplicate-of", type=int, required=True)
     adjudicate_duplicate_parser.add_argument("--rationale", required=True)
-    adjudicate_duplicate_parser.add_argument("--step-version", default="0.1.0")
+    adjudicate_duplicate_parser.add_argument("--reviewer", required=True)
+    adjudicate_duplicate_parser.add_argument("--step-version", default=INJURY_PROCESSING_RULE_VERSION)
     adjudicate_duplicate_parser.add_argument("--version-number", type=int, default=2)
     adjudicate_duplicate_parser.set_defaults(func=adjudicate_duplicate_exclusion)
 

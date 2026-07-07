@@ -1,6 +1,7 @@
 import "server-only";
 import connachtDashboard from "../content/reporting/connacht_dashboard_2024-25.json";
 import edinburghDashboard from "../content/reporting/edinburgh_dashboard_2024-25.json";
+import glasgowDashboard from "../content/reporting/glasgow_dashboard_2024-25.json";
 import leinsterDashboard from "../content/reporting/leinster_dashboard_2024-25.json";
 import dashboard from "../content/reporting/munster_dashboard_2024-25.json";
 import ulsterDashboard from "../content/reporting/ulster_dashboard_2024-25.json";
@@ -26,7 +27,7 @@ export type Coverage = {
   included_exposure_status: string;
   scope_status?: string;
   scope_status_counts?: Record<string, number>;
-  injury_cohort_filters?: Record<string, boolean>;
+  injury_cohort_filters?: Record<string, boolean | Record<string, number>>;
 };
 
 export type AnalyticsRow = {
@@ -77,12 +78,32 @@ export type TeamDashboardData = {
 
 export type MunsterDashboard = TeamDashboardData;
 
+function publicDashboardData(raw: TeamDashboardData): TeamDashboardData {
+  return {
+    generated_at: raw.generated_at,
+    team: raw.team,
+    season: raw.season,
+    analysis_window: raw.analysis_window,
+    method: raw.method,
+    coverage: raw.coverage,
+    headline: raw.headline,
+    setting_split: raw.setting_split,
+    monthly: raw.monthly,
+    body_locations: raw.body_locations,
+    injury_types: raw.injury_types,
+    severity_distribution: raw.severity_distribution,
+    prior_season: raw.prior_season,
+    limitations: raw.limitations,
+  };
+}
+
 const dashboards: Record<string, TeamDashboardData> = {
-  connacht: connachtDashboard as TeamDashboardData,
-  edinburgh: edinburghDashboard as TeamDashboardData,
-  leinster: leinsterDashboard as TeamDashboardData,
-  munster: dashboard as TeamDashboardData,
-  ulster: ulsterDashboard as TeamDashboardData,
+  connacht: publicDashboardData(connachtDashboard as TeamDashboardData),
+  edinburgh: publicDashboardData(edinburghDashboard as TeamDashboardData),
+  glasgow: publicDashboardData(glasgowDashboard as TeamDashboardData),
+  leinster: publicDashboardData(leinsterDashboard as TeamDashboardData),
+  munster: publicDashboardData(dashboard as TeamDashboardData),
+  ulster: publicDashboardData(ulsterDashboard as TeamDashboardData),
 };
 
 export function getTeamDashboard(teamId: string): TeamDashboardData | undefined {
