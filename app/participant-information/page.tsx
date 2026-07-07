@@ -1,23 +1,24 @@
 import Link from 'next/link';
-import { Info } from 'lucide-react';
+import { MessageCircleQuestion } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/page-header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 export const metadata = { title: 'Participant Information — SCRIIPT' };
 
+const lead = {
+  title:
+    'The URC Surveillance of Continental Rugby Injury-Illness and Performance Tracking (SCRIIPT) Project',
+  body: (
+    <p>
+      The purpose of the URC SCRIIPT Project is to provide comprehensive, accurate and reliable
+      injury and illness surveillance, as well as benchmarking athletic performance and workload
+      exposure, in professional rugby.
+    </p>
+  ),
+};
+
 const sections: { title: string; body: React.ReactNode }[] = [
-  {
-    title:
-      'The URC Surveillance of Continental Rugby Injury-Illness and Performance Tracking (SCRIIPT) Project',
-    body: (
-      <p>
-        The purpose of the URC SCRIIPT Project is to provide comprehensive, accurate and reliable
-        injury and illness surveillance, as well as benchmarking athletic performance and workload
-        exposure, in professional rugby.
-      </p>
-    ),
-  },
   {
     title: 'Why are we doing this research?',
     body: (
@@ -113,37 +114,58 @@ export default function ParticipantInformationPage() {
     <div className="flex flex-col">
       <PageHeader title="Participant Information" />
       <div className="flex-1 p-4 sm:p-6">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertTitle>Welcome</AlertTitle>
-            <AlertDescription>
-              <p>
-                Thank you for participating in this project and for taking the time to read the
-                following information carefully. Please feel free to ask questions on our{' '}
-                <Link href="/contact" className="underline hover:text-primary">
-                  contact page
-                </Link>
-                . If anything you read is not clear or if you would like more information please
-                contact us{' '}
-                <Link href="/contact" className="underline hover:text-primary">
-                  here
-                </Link>
-                .
-              </p>
-            </AlertDescription>
-          </Alert>
+        <div className="mx-auto max-w-5xl space-y-6">
+          <Card>
+            <div className="p-6 sm:p-8 md:p-10">
+              <div className="max-w-3xl space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                  Participant Information Sheet
+                </p>
+                <h2 className="text-2xl font-bold leading-tight text-foreground sm:text-3xl">
+                  {lead.title}
+                </h2>
+                <div className="max-w-[65ch] text-base leading-relaxed text-muted-foreground sm:text-lg">
+                  {lead.body}
+                </div>
+              </div>
 
-          <div className="gap-6 lg:columns-2 [&>*]:mb-6 [&>*]:break-inside-avoid">
-            {sections.map((s) => (
-              <Card key={s.title} className="border-l-2 border-l-primary/50">
-                <CardHeader>
-                  <CardTitle className="leading-snug">{s.title}</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 text-muted-foreground">{s.body}</CardContent>
-              </Card>
-            ))}
-          </div>
+              <dl className="mt-10 divide-y divide-border/60 border-t border-border/60">
+                {sections.map((s) => (
+                  <div
+                    key={s.title}
+                    className="grid gap-x-10 gap-y-3 py-8 md:grid-cols-[minmax(0,15rem)_1fr]"
+                  >
+                    <dt className="text-base font-semibold leading-snug text-foreground md:text-lg">
+                      {s.title}
+                    </dt>
+                    <dd className="max-w-[68ch] space-y-4 leading-relaxed text-muted-foreground">
+                      {s.body}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </Card>
+
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <MessageCircleQuestion className="h-5 w-5" />
+                </span>
+                <div className="space-y-1">
+                  <p className="font-semibold text-foreground">Questions about the project?</p>
+                  <p className="text-sm text-muted-foreground">
+                    If anything you have read is not clear, or you would like more information, the
+                    project team is happy to help.
+                  </p>
+                </div>
+              </div>
+              <Button asChild className="shrink-0 sm:self-center">
+                <Link href="/contact">Contact the team</Link>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
