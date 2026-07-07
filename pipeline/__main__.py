@@ -3,10 +3,12 @@ from __future__ import annotations
 import argparse
 import contextlib
 import csv
+import difflib
 import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -41,6 +43,27 @@ EXPOSURE_LOCATOR_FIELDS = [
 
 EXPOSURE_WEEKLY_TEAM_ALIASES = ["Team I", "Team J", "Team K", "Team L"]
 
+EDINBURGH_URC_OPPONENTS = [
+    "benetton",
+    "bulls",
+    "cardiff",
+    "connacht",
+    "dragons",
+    "glasgow",
+    "leinster",
+    "lions",
+    "munster",
+    "ospreys",
+    "scarlets",
+    "sharks",
+    "stormers",
+    "ulster",
+    "zebre",
+]
+EDINBURGH_EXPOSURE_SCOPE_RULE_VERSION = "edinburgh_exposure_scope_2026-07-07_v2"
+EXPOSURE_CANONICAL_SCHEMA_VERSION = "exposure_core_2026-07-07_v1"
+URC_OPPONENT_FUZZY_CUTOFF = 0.78
+
 # The team-name to league-alias map is protected research metadata. It lives in a
 # Git-ignored local file (backed up in UCD-managed storage), never in code or Git.
 TEAM_ALIAS_MAP_PATH = Path(__file__).resolve().parent.parent / "data" / "intake" / "team_alias_map.json"
@@ -60,6 +83,7 @@ def load_fixture_team_aliases() -> dict[str, str]:
             f"invalid team alias map (expected non-empty 'fixture_team_aliases' object): {TEAM_ALIAS_MAP_PATH}"
         )
     return {str(name): str(alias) for name, alias in aliases.items()}
+
 
 FIXTURE_DATE_CORRECTIONS = {
     "DHL Stormers v Vodacom Bulls": "2025-02-08",
@@ -84,6 +108,8 @@ DUPLICATE_SIGNATURE_FIELDS = [
     "Side",
     "Description",
     "Nature of onset",
+    "Illness Code",
+    "Injury Tissue Type/s",
 ]
 
 MISSING_VALUES = {"", "na", "n/a", "null", "none", "unknown", "unspecified/crossing"}
@@ -142,6 +168,28 @@ ORCHARD_PATHOLOGY_TYPE_MAP = {
     "U": "chronic_instability",
     "D": "joint_sprain",
 }
+
+INJURY_DIAGNOSIS_TEXT_PATTERNS = [
+    ("brain_spinal_cord_injury", ["concussion"]),
+    ("tendon_rupture", ["tendon rupture"]),
+    ("bone_stress_injury", ["stress fracture", "stress injury", "stress reaction", "shin splints"]),
+    ("bone_contusion", ["bone contusion"]),
+    ("fracture", ["fractur"]),
+    ("peripheral_nerve_injury", ["nerve", "brachial plexus", "burner/stinger"]),
+    ("cartilage_injury", ["osteochondral", "cartilage", "labral", "labrum", "meniscal"]),
+    ("arthritis", ["osteoarthritis", "arthritis"]),
+    ("tendinopathy", ["tendinopathy", "tendon injury", "plantar fasci", "plantar heel pain", "tendon strain"]),
+    ("bursitis", ["bursitis"]),
+    ("synovitis_capsulitis", ["synovitis", "impingement"]),
+    ("chronic_instability", ["instability"]),
+    ("joint_sprain", ["sprain", "ligament", "dislocation", "subluxation", "plantar plate disruption", "hyperextension", "acl", "mcl", "pcl", "ucl"]),
+    ("muscle_contusion", ["muscle haematoma", "muscle contusion"]),
+    ("laceration", ["laceration"]),
+    ("abrasion", ["abrasion"]),
+    ("contusion_superficial", ["contusion", "haematoma", "bruis", "head impact", "head/neck impact"]),
+    ("muscle_injury", ["muscle", "strain", "hamstring", "gastroc", "soleus", "rectus femoris", "quadriceps", "pectoralis"]),
+    ("nonspecific", ["disc", "pain/injury", "pain undiagnosed", "not otherwise specified", "functional pain", "spinal injury", "soreness", "overuse injuries", "perforated ear drum"]),
+]
 
 IOC_BODY_CODE_MAP = {
     "H": "head",
@@ -231,6 +279,61 @@ def write_rows(path: Path, rows: list[dict[str, str]], fieldnames: list[str]) ->
         writer.writerows(rows)
 
 
+def write_analysis_source_workbook(
+    path: Path,
+    rows: list[dict[str, str]],
+    fieldnames: list[str],
+    excluded_row_numbers: set[str],
+    filled_columns_by_row_number: dict[str, set[str]],
+) -> None:
+    try:
+        from openpyxl import Workbook, load_workbook
+        from openpyxl.styles import Font
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:
+        raise SystemExit("openpyxl is required to write analysis source workbooks") from exc
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "analysis_source"
+    sheet.append(fieldnames)
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = f"A1:{get_column_letter(len(fieldnames))}{len(rows) + 1}"
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+
+    red_font = Font(color="C00000")
+    green_font = Font(color="008000")
+    for output_row_number, row in enumerate(rows, start=2):
+        sheet.append([row.get(field, "") for field in fieldnames])
+        source_row_number = str(output_row_number)
+        excluded = source_row_number in excluded_row_numbers
+        filled_columns = filled_columns_by_row_number.get(source_row_number, set())
+        for column_index, field in enumerate(fieldnames, start=1):
+            cell = sheet.cell(row=output_row_number, column=column_index)
+            if field in {"Date Injured", "Confirmed Return Date"}:
+                cell.number_format = "@"
+            if not clean_text(str(cell.value or "")):
+                continue
+            if excluded:
+                cell.font = red_font
+            elif field in filled_columns:
+                cell.font = green_font
+
+    for column_index, field in enumerate(fieldnames, start=1):
+        width = 14 if field in {"Date Injured", "Confirmed Return Date", "Fit For Selection Date"} else 18
+        if field in {"Description", "Mechanism Notes"}:
+            width = 28
+        sheet.column_dimensions[get_column_letter(column_index)].width = width
+
+    workbook.save(path)
+    load_workbook(path, read_only=True).close()
+
+
 def validate_alias_map(args: argparse.Namespace) -> None:
     alias_map = load_fixture_team_aliases()
     codebook_path = Path(args.codebook)
@@ -287,13 +390,18 @@ def parse_uk_date(value: str) -> datetime | None:
     return None
 
 
-def parse_flexible_date(value: object) -> datetime | None:
+def parse_flexible_date(value: object, date_order: str = "month-first") -> datetime | None:
     if isinstance(value, datetime):
         return value
     text = clean_text(str(value) if value is not None else "")
     if not text:
         return None
-    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%d/%m/%y", "%Y-%m-%d"):
+    slash_formats = (
+        ("%d/%m/%Y", "%d/%m/%y", "%m/%d/%Y", "%m/%d/%y")
+        if date_order == "day-first"
+        else ("%m/%d/%Y", "%m/%d/%y", "%d/%m/%Y", "%d/%m/%y")
+    )
+    for fmt in (*slash_formats, "%Y-%m-%d"):
         try:
             return datetime.strptime(text, fmt)
         except ValueError:
@@ -321,6 +429,91 @@ def parse_float(value: object) -> float | None:
         return None
 
 
+def parse_minutes(value: object) -> float | None:
+    parsed = parse_float(value)
+    if parsed is not None:
+        return parsed
+    text = clean_text(str(value) if value is not None else "")
+    parts = text.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours, minutes, seconds = (float(part) for part in parts)
+    except ValueError:
+        return None
+    return hours * 60 + minutes + seconds / 60
+
+
+def effective_days_injured_with_origin(row: dict[str, str]) -> tuple[int | None, str]:
+    days = parse_int(clean_text(row.get("Days Injured")))
+    if days is not None and days >= 0:
+        return days, "preserved_source_days_injured"
+
+    injured_at = parse_date_value(row.get("Date Injured", ""))
+    returned_at = parse_date_value(row.get("Confirmed Return Date", ""))
+    training_days = parse_int(clean_text(row.get("Training Days Missed")))
+    if training_days == -1:
+        return 0, "mapped_minus_one_training_days_to_same_day_zero"
+    if training_days is not None and training_days >= 0:
+        if injured_at and returned_at and returned_at >= injured_at:
+            calculated_days = max(0, (returned_at - injured_at).days - 1)
+            origin = (
+                "mapped_from_training_days_missed_date_consistent"
+                if calculated_days == training_days
+                else "mapped_from_training_days_missed_date_conflict"
+            )
+            return training_days, origin
+        return training_days, "mapped_from_training_days_missed_without_complete_dates"
+    if injured_at and returned_at:
+        try:
+            corrected_return = returned_at.replace(year=returned_at.year + 1)
+        except ValueError:
+            corrected_return = None
+        corrected_days = max(0, (corrected_return - injured_at).days - 1) if corrected_return else -1
+        if training_days is not None and training_days < -1 and 0 <= corrected_days <= 90:
+            return corrected_days, "corrected_return_year_then_derived_excluding_injury_day"
+        if returned_at >= injured_at:
+            return max(0, (returned_at - injured_at).days - 1), "derived_from_dates_excluding_injury_day"
+    if clean_text(row.get("TimeLoss vs Medical Attention")).lower() == "medical attention":
+        return 0, "inferred_zero_from_medical_attention_with_invalid_or_missing_duration"
+    return None, "insufficient_duration_evidence"
+
+
+def effective_days_injured(row: dict[str, str]) -> int | None:
+    return effective_days_injured_with_origin(row)[0]
+
+
+def effective_confirmed_return_date(
+    row: dict[str, str], days: int | None, days_origin: str
+) -> tuple[date | None, str]:
+    injured_at = parse_date_value(row.get("Date Injured", ""))
+    returned_at = parse_date_value(row.get("Confirmed Return Date", ""))
+    if (
+        injured_at
+        and days is not None
+        and days_origin == "mapped_from_training_days_missed_date_conflict"
+    ):
+        if days == 0:
+            return injured_at, "derived_same_day_return_from_zero_days_date_conflict"
+        return injured_at + timedelta(days=days + 1), "derived_from_training_days_missed_date_conflict"
+    if returned_at and (not injured_at or returned_at >= injured_at):
+        return returned_at, "preserved_source_confirmed_return_date"
+    if injured_at and returned_at and days_origin == "corrected_return_year_then_derived_excluding_injury_day":
+        try:
+            return returned_at.replace(year=returned_at.year + 1), "corrected_source_confirmed_return_year"
+        except ValueError:
+            pass
+    if injured_at and days == 0 and days_origin in {
+        "mapped_minus_one_training_days_to_same_day_zero",
+        "inferred_zero_from_medical_attention_with_invalid_or_missing_duration",
+    }:
+        return injured_at, "inferred_same_day_return"
+    if injured_at and days is not None:
+        offset = days if days_origin == "preserved_source_days_injured" else days + 1
+        return injured_at + timedelta(days=offset), "derived_from_date_injured_and_days_definition"
+    return None, "insufficient_return_date_evidence"
+
+
 def clean_text(value: str | None) -> str:
     return (value or "").strip()
 
@@ -344,14 +537,16 @@ def activity_context(row: dict[str, str]) -> tuple[str, str]:
         return "urc_match", "mapped_from_occasion_and_match_type"
     if occasion == "training" or match_type == "training":
         return "training", "mapped_from_occasion_category"
+    if occasion in {"game", "match"}:
+        return "match", "mapped_from_occasion_category_non_urc_match"
     return "unknown", "insufficient_direct_evidence"
 
 
 def contact_context(row: dict[str, str]) -> tuple[str, str]:
     value = clean_text(row.get("Is Contact")).lower()
-    if value == "contact":
+    if value == "contact" or value.startswith("contact ("):
         return "contact", "mapped_from_is_contact"
-    if value == "non-contact":
+    if value in {"non-contact", "non-contact trauma", "overuse (gradual onset)", "overuse (sudden onset)"}:
         return "non_contact", "mapped_from_is_contact"
     tissue = clean_text(row.get("Injury Tissue Type/s")).lower()
     onset = clean_text(row.get("Nature of onset")).lower()
@@ -362,9 +557,9 @@ def contact_context(row: dict[str, str]) -> tuple[str, str]:
 
 def recurrence_status(row: dict[str, str]) -> tuple[str, str]:
     value = clean_text(row.get("Recurrence")).lower()
-    if value == "first episode":
+    if value in {"first episode", "new injury (not recurrent)"}:
         return "first_episode", "mapped_from_recurrence"
-    if value == "recurrence":
+    if value == "recurrence" or value.endswith(" recurrence"):
         return "recurrence", "mapped_from_recurrence"
     return "unknown", "source_missing_or_unknown"
 
@@ -391,11 +586,27 @@ def injury_closed(row: dict[str, str]) -> tuple[bool | None, str]:
         return True, "mapped_from_is_injury_closed"
     if value == "0":
         return False, "mapped_from_is_injury_closed"
+    if parse_date_value(clean_text(row.get("Confirmed Return Date"))) is not None:
+        return True, "mapped_from_confirmed_return_date"
+    time_loss = clean_text(row.get("TimeLoss vs Medical Attention")).lower()
+    if time_loss == "time loss":
+        return False, "unclosed_time_loss_without_return_date"
+    if time_loss == "medical attention":
+        return True, "mapped_from_medical_attention_only"
     return None, "source_missing_or_unknown"
 
 
+def effective_orchard_code(row: dict[str, str]) -> str:
+    source = clean_text(row.get("Orchard Code"))
+    if source:
+        return source
+    if clean_text(row.get("Problem type")).lower() == "injury":
+        return clean_text(row.get("Illness Code"))
+    return ""
+
+
 def body_location(row: dict[str, str]) -> tuple[str, str]:
-    orchard_code = clean_text(row.get("Orchard Code"))
+    orchard_code = effective_orchard_code(row)
     if orchard_code:
         mapped_from_code = IOC_BODY_CODE_MAP.get(orchard_code[0].upper())
         if mapped_from_code:
@@ -417,6 +628,9 @@ def body_location(row: dict[str, str]) -> tuple[str, str]:
 
 
 def problem_type(row: dict[str, str]) -> tuple[str, str]:
+    source = clean_text(row.get("Problem type")).lower()
+    if source in {"injury", "illness"}:
+        return source, "mapped_from_problem_type"
     if not is_missing(row.get("Orchard Code")) or not is_missing(row.get("Injury Tissue Type/s")):
         return "injury", "inferred_from_orchard_code_or_injury_type"
     if not is_missing(row.get("Illness Code")):
@@ -425,18 +639,31 @@ def problem_type(row: dict[str, str]) -> tuple[str, str]:
 
 
 def injury_type(row: dict[str, str]) -> tuple[str, str]:
+    if clean_text(row.get("Problem type")).lower() == "illness":
+        return "unknown", "not_applicable_to_illness"
     value = clean_text(row.get("Injury Tissue Type/s")).lower()
     controlled = INJURY_TYPE_LABEL_TO_KEY.get(value)
     if controlled:
         return controlled, "preserved_controlled_injury_tissue_type"
-    orchard_code = clean_text(row.get("Orchard Code")).upper()
-    if value in {"", "na", "n/a", "unknown", "other pain/ unspecified", "unspecified/crossing"} and len(orchard_code) >= 2:
+    orchard_code = effective_orchard_code(row).upper()
+    if (is_missing(value) or value in {"other pain/ unspecified", "unspecified/crossing"}) and len(orchard_code) >= 2:
         mapped_from_code = ORCHARD_PATHOLOGY_TYPE_MAP.get(orchard_code[1])
         if mapped_from_code:
             return mapped_from_code, "mapped_from_orchard_code_ioc_pathology"
     mapped = INJURY_TYPE_MAP.get(value)
     if mapped:
         return mapped, "mapped_from_injury_tissue_type"
+    if "not concussion" in value or "not diagnosed as concussion" in value:
+        return "contusion_superficial", "mapped_from_explicit_diagnosis_text_ioc_pathology"
+    if "lumbar pain" in value:
+        return "nonspecific", "mapped_from_explicit_diagnosis_text_ioc_pathology"
+    for injury_key, patterns in INJURY_DIAGNOSIS_TEXT_PATTERNS:
+        if any(pattern in value for pattern in patterns):
+            return injury_key, "mapped_from_explicit_diagnosis_text_ioc_pathology"
+    if len(orchard_code) >= 2:
+        mapped_from_code = ORCHARD_PATHOLOGY_TYPE_MAP.get(orchard_code[1])
+        if mapped_from_code:
+            return mapped_from_code, "mapped_from_orchard_code_ioc_pathology"
     return "unknown", "source_missing_or_unknown"
 
 
@@ -445,10 +672,12 @@ def prepare_intake(args: argparse.Namespace) -> None:
     source_path = Path(args.source_file)
     output_path = Path(args.output)
     rows = read_rows(standardised_path)
-    if source_path.suffix.lower() == ".xlsx":
+    if source_path.suffix.lower() in {".xlsx", ".xlsm"}:
         _, source_rows = read_xlsx_rows(source_path, args.source_sheet)
+        source_row_numbers = [int(row["_source_row_number"]) for row in source_rows]
     else:
         source_rows = read_rows(source_path)
+        source_row_numbers = list(range(2, len(source_rows) + 2))
     if not rows:
         raise SystemExit(f"no standardised rows found: {standardised_path}")
     if args.player_id_column not in rows[0]:
@@ -461,14 +690,15 @@ def prepare_intake(args: argparse.Namespace) -> None:
     original_hash = sha256_file(standardised_path)
     source_hash = sha256_file(source_path)
     prepared_rows = []
-    for offset, row in enumerate(rows, start=2):
+    for index, row in enumerate(rows):
+        offset = index + 2
         prepared = dict(row)
         prepared.update(
             {
                 "source_archive_path": str(source_path),
                 "source_file_sha256": source_hash,
                 "source_sheet": args.source_sheet,
-                "source_row_number": str(offset),
+                "source_row_number": str(source_row_numbers[index]),
                 "standardised_file_sha256": original_hash,
                 "standardised_row_number": str(offset),
                 "source_locator_status": "provisional_reference_locator",
@@ -593,7 +823,7 @@ def prepare_exposure(args: argparse.Namespace) -> None:
             missing_player_rows.append(source_row_number)
         player_uid = stable_uid("ply", args.team, player_value)
 
-        parsed_date = parse_flexible_date(row.get(args.date_column))
+        parsed_date = parse_flexible_date(row.get(args.date_column), args.date_order)
         if parsed_date is None:
             missing_date_rows.append(source_row_number)
             if clean_cell(row.get(args.date_column)):
@@ -601,7 +831,7 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         else:
             dates.append(parsed_date)
 
-        minutes = parse_float(row.get(args.minutes_column))
+        minutes = parse_minutes(row.get(args.minutes_column))
         distance = parse_float(row.get(args.distance_column))
         if minutes is not None and minutes < 0:
             negative_minutes_rows.append(source_row_number)
@@ -693,6 +923,7 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         "exposure_reporting_grain": exposure_reporting_grain,
         "player_uid_count": len({row["player_uid"] for row in prepared_rows}),
         "date_column": args.date_column,
+        "date_order": args.date_order,
         "date_parseable_rows": len(dates),
         "date_parse_failure_rows": date_parse_failures,
         "date_min": min(dates).date().isoformat() if dates else None,
@@ -731,6 +962,7 @@ def prepare_exposure(args: argparse.Namespace) -> None:
             "locator_fields": EXPOSURE_LOCATOR_FIELDS,
             "uid_fields": ["player_uid"],
             "deidentified_source_label_columns_preserved": [args.player_column],
+            "date_order": args.date_order,
             "exposure_reporting_grain": exposure_reporting_grain,
             "source_locator_status": "provisional_reference_locator",
         }
@@ -752,21 +984,39 @@ def prepare_exposure(args: argparse.Namespace) -> None:
     )
 
 
-def exposure_scope_status(row: dict[str, str]) -> tuple[str, str]:
-    fields = ["Competition", "session type", "If match, surface?"]
+def urc_game_opponent(description: str) -> str | None:
+    bracket = re.search(r"\(([^()]*)\)", description)
+    if bracket is None:
+        return None
+    candidate = re.sub(r"\b(home|away|h|a)\b", "", bracket.group(1).lower())
+    candidate = re.sub(r"[^a-z]+", " ", candidate).strip()
+    matches = difflib.get_close_matches(
+        candidate,
+        EDINBURGH_URC_OPPONENTS,
+        n=1,
+        cutoff=URC_OPPONENT_FUZZY_CUTOFF,
+    )
+    return matches[0] if matches else None
+
+
+def exposure_scope_status(row: dict[str, str], team: str = "") -> tuple[str, str]:
+    fields = ["Competition", "session type", "If match, surface?", "Training With", "Training Type"]
     text = " ".join(clean_text(row.get(field)).lower() for field in fields).strip()
     if not text:
         return "scope_unknown_included", "blank_scope_fields_retained"
-    out_of_scope_terms = [
-        "academy",
-        "international",
-        "national",
-        "rehab",
-        "return to play",
-        "rtp",
-    ]
-    if any(term in text for term in out_of_scope_terms):
-        return "out_of_scope_explicit", "explicit_non_urc_or_non_squad_context"
+    if any(term in text for term in ["rehab", "return to play", "rtp"]):
+        return "out_of_scope_explicit", "explicit_rehab_or_rtp"
+    if any(term in text for term in ["international", "national", "scotland"]):
+        return "out_of_scope_explicit", "explicit_international_exposure"
+    edinburgh = clean_text(team).lower() == "edinburgh"
+    if "academy" in text and (not edinburgh or "game" in text):
+        return "out_of_scope_explicit", "academy_game"
+    if edinburgh and ("warm" in text or "top up" in text):
+        return "in_scope_explicit", "warmup_or_topup_retained"
+    if edinburgh and re.search(r"\bgame\b", text):
+        if urc_game_opponent(text):
+            return "in_scope_explicit", "urc_opponent_game"
+        return "out_of_scope_explicit", "non_urc_or_unspecified_game"
     return "in_scope_explicit", "explicit_scope_context_not_excluded"
 
 
@@ -786,18 +1036,33 @@ def clean_exposure(args: argparse.Namespace) -> None:
     included_minutes = 0.0
     included_distance = 0.0
     dates: list[datetime] = []
+    window_start = parse_date_value(clean_text(getattr(args, "window_start", "")))
+    window_end = parse_date_value(clean_text(getattr(args, "window_end", "")))
+    if bool(window_start) != bool(window_end):
+        raise SystemExit("exposure analysis window requires both --window-start and --window-end")
+    if window_start and window_end and window_start > window_end:
+        raise SystemExit("exposure analysis window start must not be after its end")
 
     for row in rows:
         team_alias = clean_text(row.get("Team"))
         grain = "weekly" if team_alias in EXPOSURE_WEEKLY_TEAM_ALIASES else "session"
         grain_counts[grain] = grain_counts.get(grain, 0) + 1
-        minutes = parse_float(row.get("minutes total"))
+        minutes = parse_minutes(row.get("minutes total"))
         distance = parse_float(row.get("distance total"))
-        parsed_date = parse_flexible_date(row.get("session date"))
+        parsed_date = parse_flexible_date(row.get("session date"), args.date_order)
         if parsed_date:
             dates.append(parsed_date)
-        scope_status, scope_reason = exposure_scope_status(row)
-        source_hash = hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()
+        scope_status, scope_reason = exposure_scope_status(row, getattr(args, "team", ""))
+        source_hash = row.get("source_row_sha256") or hashlib.sha256(
+            json.dumps(
+                {
+                    key: value
+                    for key, value in row.items()
+                    if key not in EXPOSURE_LOCATOR_FIELDS + ["player_uid"]
+                },
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
         duplicate_copy = source_hash in exact_seen
         exact_seen.setdefault(source_hash, int(row.get("source_row_number", "0") or 0))
 
@@ -837,6 +1102,11 @@ def clean_exposure(args: argparse.Namespace) -> None:
                     exclusion_reasons.append("session_impossible_distance_per_minute")
         if scope_status == "out_of_scope_explicit":
             exclusion_reasons.append(scope_reason)
+        if parsed_date and window_start and window_end:
+            period_start = parsed_date.date()
+            period_end = period_start + (timedelta(days=6) if grain == "weekly" else timedelta())
+            if period_end < window_start or period_start > window_end:
+                exclusion_reasons.append("outside_official_analysis_window")
 
         action = "exclude_from_primary" if exclusion_reasons else "include"
         counts[action] = counts.get(action, 0) + 1
@@ -889,14 +1159,46 @@ def clean_exposure(args: argparse.Namespace) -> None:
         "exposure_grain_counts": grain_counts,
         "date_min": min(dates).date().isoformat() if dates else None,
         "date_max": max(dates).date().isoformat() if dates else None,
+        "date_order": args.date_order,
+        "team": getattr(args, "team", ""),
+        "analysis_window": {
+            "start": window_start.isoformat() if window_start else None,
+            "end": window_end.isoformat() if window_end else None,
+            "weekly_rule": "retain a weekly row when its seven-day period overlaps the analysis window",
+        },
         "included_minutes_total": round(included_minutes, 6),
         "included_distance_total_m": round(included_distance, 6),
         "rules": {
-            "scope": "Only explicitly academy, international/national-team, rehab, RTP/return-to-play, or other named non-cohort contexts are excluded; blank scope fields are retained as scope_unknown_included.",
+            "canonical_schema_version": EXPOSURE_CANONICAL_SCHEMA_VERSION,
+            "canonical_columns": {
+                "cleaned_date": "ISO date",
+                "exposure_grain": "session or weekly",
+                "minutes_total_clean": "minutes",
+                "distance_total_m_clean": "metres",
+                "scope_status": "scope eligibility",
+                "scope_reason": "scope rule outcome",
+                "cleaning_action": "primary-analysis eligibility",
+                "exclusion_reason": "semicolon-delimited controlled reasons",
+            },
+            "scope_rule_version": (
+                EDINBURGH_EXPOSURE_SCOPE_RULE_VERSION
+                if clean_text(getattr(args, "team", "")).lower() == "edinburgh"
+                else "global_exposure_scope_v0.1.0"
+            ),
+            "scope": "Exclude explicit international/national-team exposure, academy, and rehab/RTP. Edinburgh additionally excludes game-labelled sessions without a fuzzy-matched URC opponent, except warm-ups and top-ups are retained; blank scope fields are retained as scope_unknown_included.",
+            "edinburgh_urc_opponents": EDINBURGH_URC_OPPONENTS if clean_text(getattr(args, "team", "")).lower() == "edinburgh" else [],
+            "urc_opponent_fuzzy_cutoff": URC_OPPONENT_FUZZY_CUTOFF,
+            "edinburgh_scope_decisions": [
+                "exclude all international and national-team exposure",
+                "exclude rehab and RTP exposure",
+                "exclude all academy games",
+                "retain warm-up and top-up exposure",
+                "retain game-labelled exposure only when the bracketed opponent fuzzy-matches one of the other 15 URC teams",
+            ] if clean_text(getattr(args, "team", "")).lower() == "edinburgh" else [],
             "weekly_teams": EXPOSURE_WEEKLY_TEAM_ALIASES,
             "weekly_exclusions": ["minutes < 5", "minutes > 1100", "distance > 40000m"],
             "session_exclusions": ["minutes < 5", "distance < 200m", "minutes > 220", "distance > 20000m", "distance/minute > 1000"],
-            "global_exclusions": ["exact duplicate copy", "missing player/date/minutes/distance", "negative minutes/distance", "minutes = 0 and distance = 0"],
+            "global_exclusions": ["exact duplicate copy", "missing player/date/minutes/distance", "negative minutes/distance", "minutes = 0 and distance = 0", "outside official analysis window"],
         },
     }
     qc_path.parent.mkdir(parents=True, exist_ok=True)
@@ -914,6 +1216,9 @@ def clean_exposure(args: argparse.Namespace) -> None:
             "action_counts": counts,
             "exclusion_reason_counts": reasons,
             "exposure_grain_counts": grain_counts,
+            "scope_rule_version": qc["rules"]["scope_rule_version"],
+            "canonical_schema_version": qc["rules"]["canonical_schema_version"],
+            "analysis_window": qc["analysis_window"],
         }
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     print(
@@ -1132,7 +1437,7 @@ def build_fixture_exposure(args: argparse.Namespace) -> None:
         if not away_alias:
             unresolved_teams.append(away)
 
-        source_date = parse_flexible_date(row.get("date"))
+        source_date = parse_flexible_date(row.get("date"), args.date_order)
         if source_date is None:
             raise SystemExit(f"unparseable fixture date on source row {source_row_number}: {row.get('date')}")
         corrected_date = FIXTURE_DATE_CORRECTIONS.get(fixture, source_date.date().isoformat())
@@ -1219,6 +1524,7 @@ def build_fixture_exposure(args: argparse.Namespace) -> None:
         "stage_counts": stage_counts,
         "date_corrections_applied": corrections_applied,
         "date_corrections_expected": len(FIXTURE_DATE_CORRECTIONS),
+        "date_order": args.date_order,
         "player_hours_per_team_match": args.player_hours_per_team_match,
         "training_exposure_rule": "always total_hours - match_hours",
         "total_exposure_file": str(args.total_exposure_file),
@@ -1291,7 +1597,7 @@ def qa_intake(args: argparse.Namespace) -> None:
         elif injured_at < window_start or injured_at > window_end:
             outside_window.append(index)
 
-        days = parse_int(value(row, "Days Injured"))
+        days = effective_days_injured(row)
         if injured_at and days is not None:
             _ = injured_at + timedelta(days=days)
             derived_return_dates += 1
@@ -1318,7 +1624,7 @@ def qa_intake(args: argparse.Namespace) -> None:
             "end": args.window_end,
         },
         "derived_return_date_rows": derived_return_dates,
-        "return_date_rule": "Date Injured + Days Injured",
+        "return_date_rule": "For Scottish-team rows, Days Injured comes from Training Days Missed and excludes the injury day; source return dates are preserved or corrected only with recorded evidence.",
         "notes": [
             "Rows are flagged for review or analysis exclusion; source rows are not deleted.",
             "Duplicate keys are hashed in this report to avoid printing player or injury identifiers.",
@@ -1340,11 +1646,12 @@ def build_processing_state(
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
     source_row_number = int(row["standardised_row_number"])
     injured_at = parse_uk_date(row.get("Date Injured", ""))
-    days_injured = parse_int(row.get("Days Injured", ""))
+    days_injured, days_injured_origin = effective_days_injured_with_origin(row)
     is_closed, is_closed_origin = injury_closed(row)
-    derived_return_date = None
-    if injured_at is not None and days_injured is not None:
-        derived_return_date = (injured_at + timedelta(days=days_injured)).date().isoformat()
+    effective_return_date, return_date_origin = effective_confirmed_return_date(
+        row, days_injured, days_injured_origin
+    )
+    derived_return_date = effective_return_date.isoformat() if effective_return_date else None
 
     activity, activity_origin = activity_context(row)
     contact, contact_origin = contact_context(row)
@@ -1353,11 +1660,8 @@ def build_processing_state(
     body, body_origin = body_location(row)
     problem, problem_origin = problem_type(row)
     injury, injury_origin = injury_type(row)
-    return_date_origin = None
     if derived_return_date and is_closed is False:
-        return_date_origin = "derived_from_days_injured_unclosed_censored"
-    elif derived_return_date:
-        return_date_origin = "derived_from_days_injured"
+        return_date_origin = f"{return_date_origin}_unclosed_censored"
 
     outside_window = injured_at is None or injured_at < window_start or injured_at > window_end
     duplicate_flags = {
@@ -1382,6 +1686,7 @@ def build_processing_state(
         "injury_type": injury,
         "field_origins": {
             "is_closed": is_closed_origin,
+            "days_injured": days_injured_origin,
             "activity_context": activity_origin,
             "contact_context": contact_origin,
             "recurrence_status": recurrence_origin,
@@ -1416,6 +1721,18 @@ def build_processing_state(
                 "review_status": "not_required",
             }
         )
+    if days_injured is not None:
+        events.append(
+            {
+                "field_name": "days_injured",
+                "old_value": row.get("Days Injured", "").strip() or None,
+                "new_value": days_injured,
+                "action": "infer" if days_injured_origin.startswith("inferred_") else "derive",
+                "reason_code": "controlled_inference" if days_injured_origin.startswith("inferred_") else "deterministic_derivation",
+                "rationale": f"Effective days injured set by {days_injured_origin}; source duration fields preserved.",
+                "review_status": "needs_review" if days_injured_origin.startswith("inferred_") else "not_required",
+            }
+        )
     for field_name in [
         "activity_context",
         "contact_context",
@@ -1447,7 +1764,7 @@ def build_processing_state(
                 "new_value": True,
                 "action": "flag",
                 "reason_code": "candidate_duplicate",
-                "rationale": "Same player, date, body part, Orchard code, side, description, and onset appear on more than one ingested row; row retained for review.",
+                "rationale": "Same player, date, diagnostic evidence, body part, side, description, and onset appear on more than one ingested row; row retained for review.",
                 "review_status": "needs_review",
             }
         )
@@ -1691,7 +2008,7 @@ def run_step(args: argparse.Namespace) -> None:
 
 
 def release(args: argparse.Namespace) -> None:
-    label = f"{args.team}-{args.season}-local-smoke"
+    label = f"{args.team}-{args.season}-approved"
     dashboard_path = Path(args.dashboard_file) if args.dashboard_file else (
         Path("content") / "reporting" / f"{args.team.lower()}_dashboard_{args.season}.json"
     )
@@ -1759,7 +2076,7 @@ def release(args: argparse.Namespace) -> None:
       insert into reporting.team_metric_aggregates
         (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
       select current_release.id, {params.text(args.team)}, {params.text(args.season)}, 'registered_source_files',
-        'Registered source files', count(*), count(*), null, 'files', 'Local smoke aggregate only'
+        'Registered source files', count(*), count(*), null, 'files', 'Registered pseudonymised intake files for approved aggregate release'
       from current_release, ingestion.source_files
       where team = {params.text(args.team)} and season = {params.text(args.season)}
       group by current_release.id
@@ -1899,6 +2216,7 @@ BODY_LOCATION_LABELS = {
 }
 
 INJURY_TYPE_LABELS = {
+    "abrasion": "Abrasion",
     "arthritis": "Arthritis",
     "avascular_necrosis": "Avascular necrosis",
     "bone_contusion": "Bone contusion",
@@ -1912,6 +2230,8 @@ INJURY_TYPE_LABELS = {
     "internal_organ_trauma": "Internal organs (organ trauma)",
     "joint_sprain": "Joint sprain",
     "laceration": "Laceration",
+    "muscle_compartment_syndrome": "Muscle compartment syndrome",
+    "muscle_contusion": "Muscle contusion",
     "muscle_injury": "Muscle injury",
     "nonspecific": "Nonspecific",
     "peripheral_nerve_injury": "Peripheral nerve injury",
@@ -1920,6 +2240,8 @@ INJURY_TYPE_LABELS = {
     "tendon_rupture": "Tendon rupture",
     "tendinopathy": "Tendinopathy",
     "unknown": "Unknown",
+    "vascular_trauma": "Vessels (vascular trauma)",
+    "stump_injury": "Stump injury",
 }
 
 CONTROLLED_BODY_LOCATION_LABELS = set(BODY_LOCATION_LABELS.values())
@@ -1937,22 +2259,6 @@ SEVERITY_LABELS = {
     "unknown_or_censored": "Unknown",
 }
 
-ANALYSIS_EXPORT_ORIGIN_FIELDS = [
-    "Problem type origin",
-    "Injury Status origin",
-    "Fit for selection origin",
-    "Confirmed Return Date origin",
-    "Occasion category origin",
-    "Match Type origin",
-    "Body Part origin",
-    "Injury Tissue Type/s origin",
-    "Injury Grade origin",
-    "Recurrence origin",
-    "Is Contact origin",
-    "TimeLoss vs Medical Attention origin",
-]
-
-
 def format_uk_date(value: date | None) -> str:
     return value.strftime("%d/%m/%Y") if value else ""
 
@@ -1960,7 +2266,7 @@ def format_uk_date(value: date | None) -> str:
 def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
     output = dict(row)
     injured_at = parse_date_value(row.get("Date Injured", ""))
-    days = parse_int(row.get("Days Injured", ""))
+    days, days_origin = effective_days_injured_with_origin(row)
     is_closed, is_closed_origin = injury_closed(row)
     activity, activity_origin = activity_context(row)
     contact, contact_origin = contact_context(row)
@@ -1969,14 +2275,38 @@ def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
     body, body_origin = body_location(row)
     problem, problem_origin = problem_type(row)
     injury, injury_origin = injury_type(row)
-    return_date = injured_at + timedelta(days=days) if injured_at and days is not None else None
+    return_date, return_date_origin = effective_confirmed_return_date(row, days, days_origin)
 
+    output["Date Injured"] = format_uk_date(injured_at) or clean_text(row.get("Date Injured", ""))
+    if days is not None and not clean_text(row.get("Days Injured")):
+        output["Days Injured"] = str(days)
+    output["Days Injured origin"] = days_origin
+    if clean_text(row.get("Training Days Missed")):
+        output["Training Days Missed"] = ""
+        output["Training Days Missed origin"] = "moved_to_days_injured_source_preserved_in_intake"
+    source_diagnosis = clean_text(row.get("Injury Tissue Type/s"))
+    source_diagnosis_key = source_diagnosis.lower()
+    if (
+        source_diagnosis
+        and not clean_text(row.get("Description"))
+        and source_diagnosis_key not in INJURY_TYPE_MAP
+        and source_diagnosis_key not in INJURY_TYPE_LABEL_TO_KEY
+    ):
+        output["Description"] = source_diagnosis
+        output["Description origin"] = "copied_from_source_diagnosis_before_ioc_bucketing"
+    source_recurrence = clean_text(row.get("Recurrence"))
+    if "recurrence" in source_recurrence.lower() and not clean_text(row.get("Recurrence Stage")):
+        output["Recurrence Stage"] = source_recurrence
+        output["Recurrence Stage origin"] = "copied_from_source_recurrence_subtype"
+    orchard_code = effective_orchard_code(row)
+    if orchard_code and not clean_text(row.get("Orchard Code")):
+        output["Orchard Code"] = orchard_code
     output["Problem type"] = {"injury": "Injury", "illness": "Illness"}.get(problem, "Unknown")
     output["Injury Status"] = {True: "Closed", False: "Open/Ongoing"}.get(is_closed, "Unknown")
     output["Fit for selection"] = {True: "Yes", False: "No"}.get(is_closed, "Unknown")
     output["Fit For Selection Date"] = ""
     output["Confirmed Return Date"] = format_uk_date(return_date) if is_closed is True else ""
-    output["Occasion category"] = {"urc_match": "match", "training": "training"}.get(activity, "unknown")
+    output["Occasion category"] = {"urc_match": "match", "match": "match", "training": "training"}.get(activity, "unknown")
     output["Match Type"] = {"urc_match": "URC", "training": "training"}.get(activity, "unknown")
     output["Body Part"] = BODY_LOCATION_LABELS.get(body, "Unknown")
     output["Injury Tissue Type/s"] = INJURY_TYPE_LABELS.get(injury, "Unknown")
@@ -1985,15 +2315,20 @@ def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
         recurrence, "Unknown"
     )
     output["Is Contact"] = {"contact": "Contact", "non_contact": "Non-Contact"}.get(contact, "Unknown")
+    source_time_loss = clean_text(row.get("TimeLoss vs Medical Attention"))
     output["TimeLoss vs Medical Attention"] = (
-        "Unknown" if days is None else "Time Loss" if days > 0 else "Medical Attention"
+        source_time_loss
+        if days is None and source_time_loss in {"Time Loss", "Medical Attention"}
+        else "Unknown"
+        if days is None
+        else "Time Loss"
+        if days > 0
+        else "Medical Attention"
     )
     output["Problem type origin"] = problem_origin
     output["Injury Status origin"] = is_closed_origin
     output["Fit for selection origin"] = is_closed_origin
-    output["Confirmed Return Date origin"] = (
-        "derived_from_date_injured_plus_days" if is_closed is True and return_date else ""
-    )
+    output["Confirmed Return Date origin"] = return_date_origin if is_closed is True and return_date else ""
     output["Occasion category origin"] = activity_origin
     output["Match Type origin"] = activity_origin
     output["Body Part origin"] = body_origin
@@ -2001,7 +2336,11 @@ def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
     output["Injury Grade origin"] = severity_origin
     output["Recurrence origin"] = recurrence_origin
     output["Is Contact origin"] = contact_origin
-    output["TimeLoss vs Medical Attention origin"] = "derived_from_days_injured"
+    output["TimeLoss vs Medical Attention origin"] = (
+        "preserved_source_classification_for_censored_injury"
+        if days is None and source_time_loss in {"Time Loss", "Medical Attention"}
+        else "derived_from_days_injured"
+    )
     return output
 
 
@@ -2068,6 +2407,7 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
         for item in clean_text(getattr(args, "exclude_injury_rows", "")).split(",")
         if clean_text(item)
     }
+    injured_in_team = clean_text(getattr(args, "injured_in_team", ""))
     exposure_rows = [
         row
         for row in read_rows(Path(args.exposure_file))
@@ -2075,6 +2415,10 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
     ]
     if not exposure_rows:
         raise SystemExit("no included exposure rows found")
+    scope_status_counts: dict[str, int] = {}
+    for row in exposure_rows:
+        scope_status = clean_text(row.get("scope_status")) or "unknown"
+        scope_status_counts[scope_status] = scope_status_counts.get(scope_status, 0) + 1
 
     grains = {
         clean_text(row.get("exposure_grain")) or "unknown"
@@ -2109,19 +2453,95 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
         exposure_by_month[key]["distance_km"] += (parse_float(row.get("distance_total_m_clean")) or 0) / 1000
 
     injury_source_rows = read_rows(Path(args.injury_file))
-    included_injury_source_rows = []
+    analysis_source_rows = []
+    analysis_excluded_row_numbers: set[str] = set()
+    analysis_filled_columns: dict[str, set[str]] = {}
+    standardisation_events: list[dict[str, str]] = []
+    standardisation_errors: list[str] = []
     injury_rows = []
     for index, row in enumerate(injury_source_rows, start=2):
-        if str(index) in excluded_injury_rows:
-            continue
+        source_row_number = str(index)
         injured_at = parse_date_value(row.get("Date Injured", ""))
-        if injured_at is None or injured_at < coverage_start or injured_at > coverage_end:
-            continue
-        days_lost = parse_int(row.get("Days Injured", ""))
-        closed = clean_text(row.get("is_injury_closed")) != "0"
-        band_key, band_label = severity_band(days_lost, closed)
         filled_row = filled_injury_export_row(row)
-        included_injury_source_rows.append(row)
+        source_tissue = clean_text(row.get("Injury Tissue Type/s"))
+        source_contact = clean_text(row.get("Is Contact")).lower()
+        source_recurrence = clean_text(row.get("Recurrence")).lower()
+        source_occasion = clean_text(row.get("Occasion category")).lower()
+        if (
+            clean_text(row.get("Problem type")).lower() == "injury"
+            and source_tissue
+            and not is_missing(source_tissue)
+            and filled_row.get("Injury Tissue Type/s") == "Unknown"
+        ):
+            standardisation_errors.append(f"row {source_row_number}: explicit injury diagnosis mapped to Unknown")
+        if (
+            source_contact not in {"", "na", "n/a", "unknown", "other - non-rugby"}
+            and filled_row.get("Is Contact") == "Unknown"
+        ):
+            standardisation_errors.append(f"row {source_row_number}: explicit contact value mapped to Unknown")
+        if (
+            source_recurrence not in {"", "na", "n/a", "unknown"}
+            and not any(marker in source_recurrence for marker in {"ã", "â"})
+            and filled_row.get("Recurrence") == "Unknown"
+        ):
+            standardisation_errors.append(f"row {source_row_number}: explicit recurrence value mapped to Unknown")
+        if source_occasion in {"match", "game", "training"} and filled_row.get("Occasion category") == "unknown":
+            standardisation_errors.append(f"row {source_row_number}: explicit occasion mapped to unknown")
+        analysis_source_rows.append(filled_row)
+        analysis_filled_columns[source_row_number] = {
+            field
+            for field, value in filled_row.items()
+            if clean_text(value) and not clean_text(row.get(field, ""))
+        }
+        origin_fields = {
+            "Days Injured": "Days Injured origin",
+            "Training Days Missed": "Training Days Missed origin",
+            "Description": "Description origin",
+            "Problem type": "Problem type origin",
+            "Injury Status": "Injury Status origin",
+            "Fit for selection": "Fit for selection origin",
+            "Confirmed Return Date": "Confirmed Return Date origin",
+            "Occasion category": "Occasion category origin",
+            "Match Type": "Match Type origin",
+            "Body Part": "Body Part origin",
+            "Injury Tissue Type/s": "Injury Tissue Type/s origin",
+            "Injury Grade": "Injury Grade origin",
+            "Recurrence": "Recurrence origin",
+            "Recurrence Stage": "Recurrence Stage origin",
+            "Is Contact": "Is Contact origin",
+            "TimeLoss vs Medical Attention": "TimeLoss vs Medical Attention origin",
+        }
+        for field, origin_field in origin_fields.items():
+            old_value = clean_text(row.get(field, ""))
+            new_value = clean_text(filled_row.get(field, ""))
+            if old_value == new_value:
+                continue
+            standardisation_events.append(
+                {
+                    "standardised_row_number": source_row_number,
+                    "field": field,
+                    "old_value": old_value,
+                    "new_value": new_value,
+                    "action": "fill" if not old_value else "standardise",
+                    "reason": clean_text(filled_row.get(origin_field, "")),
+                    "review_status": "pipeline_decision",
+                }
+            )
+        if (
+            source_row_number in excluded_injury_rows
+            or (injured_in_team and clean_text(row.get("Received/Injured In Team")) != injured_in_team)
+            or injured_at is None
+            or injured_at < coverage_start
+            or injured_at > coverage_end
+        ):
+            analysis_excluded_row_numbers.add(source_row_number)
+            continue
+        if filled_row.get("Problem type") != "Injury":
+            analysis_excluded_row_numbers.add(source_row_number)
+            continue
+        days_lost = effective_days_injured(filled_row)
+        closed, _ = injury_closed(filled_row)
+        band_key, band_label = severity_band(days_lost, closed is True)
         injury_rows.append(
             {
                 **row,
@@ -2136,6 +2556,9 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
                 "severity_band_label": band_label,
             }
         )
+
+    if standardisation_errors:
+        raise SystemExit("standardisation coverage failed: " + "; ".join(standardisation_errors[:20]))
 
     time_loss_rows = [row for row in injury_rows if row["is_time_loss"]]
     days_lost_total = sum(row["days_lost"] for row in time_loss_rows)
@@ -2242,6 +2665,7 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
             f"Exposure hours = sum(minutes_total_clean) / 60 for included {grain_label} exposure rows.",
             monthly_basis,
             "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
+            "Approved Received/Injured In Team cohort filter applied." if injured_in_team else "No Received/Injured In Team cohort filter applied.",
             f"Adjudicated duplicate standardised rows excluded from this aggregate: {', '.join(sorted(excluded_injury_rows))}."
             if excluded_injury_rows
             else "No adjudicated duplicate injury rows were excluded from this aggregate.",
@@ -2255,7 +2679,10 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
             "hours": rounded(hours),
             "distance_km": rounded(distance_m / 1000),
             "included_exposure_status": "included",
-            "scope_status": "scope_unknown_included",
+            "scope_status_counts": scope_status_counts,
+            "injury_cohort_filters": {
+                "injured_in_team_applied": bool(injured_in_team),
+            },
         },
         "headline": [
             {
@@ -2333,7 +2760,7 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
             f"Adjudicated duplicate standardised row exclusions applied: {', '.join(sorted(excluded_injury_rows))}."
             if excluded_injury_rows
             else "No adjudicated duplicate injury row exclusions applied.",
-            "This aggregate artifact is local and draft; a hosted reporting table or view should be created only after explicit approval of the live Supabase target.",
+            "Aggregate release is approved only after explicit confirmation of the live Supabase target; the dashboard reports aggregate values only.",
         ],
     }
 
@@ -2345,21 +2772,61 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(dashboard, indent=2) + "\n")
-    analysis_output = clean_text(getattr(args, "analysis_output", ""))
-    if analysis_output:
-        fieldnames = (list(injury_source_rows[0]) if injury_source_rows else []) + [
-            field for field in ANALYSIS_EXPORT_ORIGIN_FIELDS if not injury_source_rows or field not in injury_source_rows[0]
+    analysis_source_output = clean_text(getattr(args, "analysis_source_output", ""))
+    analysis_source_workbook = ""
+    if analysis_source_output:
+        export_excluded_fields = set(LOCATOR_FIELDS + UID_FIELDS)
+        fieldnames = [
+            field
+            for field in (list(injury_source_rows[0]) if injury_source_rows else [])
+            if field not in export_excluded_fields
         ]
+        exported_rows = [{field: row.get(field, "") for field in fieldnames} for row in analysis_source_rows]
+        analysis_source_path = Path(analysis_source_output)
+        if analysis_source_path.suffix.lower() == ".xlsx":
+            write_rows(analysis_source_path.with_suffix(".csv"), exported_rows, fieldnames)
+            write_analysis_source_workbook(
+                analysis_source_path,
+                exported_rows,
+                fieldnames,
+                analysis_excluded_row_numbers,
+                analysis_filled_columns,
+            )
+            analysis_source_workbook = str(analysis_source_path)
+        else:
+            write_rows(analysis_source_path, exported_rows, fieldnames)
+            xlsx_path = analysis_source_path.with_suffix(".xlsx")
+            write_analysis_source_workbook(
+                xlsx_path,
+                exported_rows,
+                fieldnames,
+                analysis_excluded_row_numbers,
+                analysis_filled_columns,
+            )
+            analysis_source_workbook = str(xlsx_path)
+    standardisation_audit_output = clean_text(getattr(args, "standardisation_audit_output", ""))
+    if standardisation_audit_output:
         write_rows(
-            Path(analysis_output),
-            [filled_injury_export_row(row) for row in included_injury_source_rows],
-            fieldnames,
+            Path(standardisation_audit_output),
+            standardisation_events,
+            [
+                "standardised_row_number",
+                "field",
+                "old_value",
+                "new_value",
+                "action",
+                "reason",
+                "review_status",
+            ],
         )
     print(
         json.dumps(
             {
                 "output": str(output),
-                "analysis_output": analysis_output or None,
+                "analysis_source_output": analysis_source_output or None,
+                "analysis_source_workbook": analysis_source_workbook or None,
+                "standardisation_audit_output": standardisation_audit_output or None,
+                "standardisation_events": len(standardisation_events),
                 "team": args.team,
                 "season": args.season,
             },
@@ -2384,8 +2851,67 @@ def self_check(args: argparse.Namespace) -> None:
     assert params.values == ["value", {"key": "value"}]
 
     assert parse_flexible_date("10/7/24").date().isoformat() == "2024-10-07"
+    assert parse_flexible_date("10/7/24", "day-first").date().isoformat() == "2024-07-10"
+    assert parse_minutes("01:30:30") == 90.5
+    assert effective_days_injured({"Days Injured": "", "Training Days Missed": "12"}) == 12
+    assert effective_days_injured({"Date Injured": "01/07/2024", "Confirmed Return Date": "01/07/2024", "Training Days Missed": "-1"}) == 0
+    assert effective_days_injured({"Date Injured": "13/12/2024", "Confirmed Return Date": "06/01/2024", "Training Days Missed": "-343"}) == 23
+    assert effective_days_injured({"Date Injured": "30/12/2024", "Confirmed Return Date": "07/12/2024", "Training Days Missed": "-24", "TimeLoss vs Medical Attention": "Medical Attention"}) == 0
+    assert effective_days_injured({"Training Days Missed": "-1", "TimeLoss vs Medical Attention": "Time Loss"}) == 0
+    assert effective_confirmed_return_date(
+        {"Date Injured": "02/10/2024", "Confirmed Return Date": "03/10/2024"},
+        1,
+        "mapped_from_training_days_missed_date_conflict",
+    ) == (date(2024, 10, 4), "derived_from_training_days_missed_date_conflict")
+    assert effective_confirmed_return_date(
+        {"Date Injured": "10/05/2025", "Confirmed Return Date": "05/10/2025"},
+        0,
+        "mapped_from_training_days_missed_date_conflict",
+    ) == (date(2025, 5, 10), "derived_same_day_return_from_zero_days_date_conflict")
+    assert effective_orchard_code({"Problem type": "Injury", "Illness Code": "TMXX"}) == "TMXX"
+    assert effective_orchard_code({"Problem type": "Illness", "Illness Code": "R05"}) == ""
+    assert problem_type({"Problem type": "Illness", "Injury Tissue Type/s": "Respiratory"}) == (
+        "illness",
+        "mapped_from_problem_type",
+    )
     assert exposure_scope_status({}) == ("scope_unknown_included", "blank_scope_fields_retained")
-    assert exposure_scope_status({"Competition": "academy"})[0] == "out_of_scope_explicit"
+    assert exposure_scope_status({"Competition": "academy"}, "Edinburgh")[0] == "in_scope_explicit"
+    assert exposure_scope_status({"session type": "Scotland U20"})[0] == "out_of_scope_explicit"
+    assert exposure_scope_status({"session type": "National Academy"})[0] == "out_of_scope_explicit"
+    assert exposure_scope_status({"session type": "Academy Training"}, "Edinburgh")[0] == "in_scope_explicit"
+    assert exposure_scope_status({"session type": "Academy Game (Glasgow A)"}, "Edinburgh") == (
+        "out_of_scope_explicit",
+        "academy_game",
+    )
+    assert exposure_scope_status({"session type": "Game (Connacht A)"}, "Edinburgh") == (
+        "in_scope_explicit",
+        "urc_opponent_game",
+    )
+    assert exposure_scope_status({"session type": "Game (Benneton H)"}, "Edinburgh") == (
+        "in_scope_explicit",
+        "urc_opponent_game",
+    )
+    assert exposure_scope_status({"session type": "Game (Bath H)"}, "Edinburgh") == (
+        "out_of_scope_explicit",
+        "non_urc_or_unspecified_game",
+    )
+    assert exposure_scope_status({"session type": "Game Warm Up"}, "Edinburgh") == (
+        "in_scope_explicit",
+        "warmup_or_topup_retained",
+    )
+    assert exposure_scope_status({"session type": "Game Top Up"}, "Edinburgh") == (
+        "in_scope_explicit",
+        "warmup_or_topup_retained",
+    )
+    assert exposure_scope_status({"Training With": "Academy Squad"}) == (
+        "out_of_scope_explicit",
+        "academy_game",
+    )
+    assert exposure_scope_status({"Training Type": "RTP"}) == (
+        "out_of_scope_explicit",
+        "explicit_rehab_or_rtp",
+    )
+    assert exposure_scope_status({"session type": "Club Training"})[0] == "in_scope_explicit"
     assert severity_category(10, True)[0] == "eight_to_twenty_eight_days"
     assert contact_context({"Is Contact": "NA", "Injury Tissue Type/s": "Muscle Strain/Spasm", "Nature of onset": "Acute"}) == (
         "non_contact",
@@ -2395,6 +2921,14 @@ def self_check(args: argparse.Namespace) -> None:
         "urc_match",
         "mapped_from_occasion_and_match_type",
     )
+    assert activity_context({"Occasion category": "Match", "Match Type": "Challenge Cup"}) == (
+        "match",
+        "mapped_from_occasion_category_non_urc_match",
+    )
+    assert contact_context({"Is Contact": "Contact (with other player)"})[0] == "contact"
+    assert contact_context({"Is Contact": "Overuse (gradual onset)"})[0] == "non_contact"
+    assert recurrence_status({"Recurrence": "New injury (not recurrent)"})[0] == "first_episode"
+    assert recurrence_status({"Recurrence": "Delayed recurrence"})[0] == "recurrence"
     assert injury_type({"Injury Tissue Type/s": "Other Pain/ unspecified", "Orchard Code": "NJPX"}) == (
         "joint_sprain",
         "mapped_from_orchard_code_ioc_pathology",
@@ -2404,12 +2938,30 @@ def self_check(args: argparse.Namespace) -> None:
         "muscle_injury",
         "preserved_controlled_injury_tissue_type",
     )
+    assert injury_type({"Problem type": "Injury", "Injury Tissue Type/s": "Biceps femoris strain grade 1 - 2"})[0] == "muscle_injury"
+    detailed_export = filled_injury_export_row(
+        {
+            "Problem type": "Injury",
+            "Injury Tissue Type/s": "Anterior talofibular ligament sprain",
+            "Recurrence": "Early recurrence",
+            "Training Days Missed": "5",
+        }
+    )
+    assert detailed_export["Description"] == "Anterior talofibular ligament sprain"
+    assert detailed_export["Injury Tissue Type/s"] == "Joint sprain"
+    assert detailed_export["Recurrence"] == "Recurrence"
+    assert detailed_export["Recurrence Stage"] == "Early recurrence"
+    assert detailed_export["Days Injured"] == "5"
+    assert detailed_export["Training Days Missed"] == ""
     assert set(BODY_LOCATION_LABELS.values()) == CONTROLLED_BODY_LOCATION_LABELS
     assert set(INJURY_TYPE_LABELS.values()) == CONTROLLED_INJURY_TYPE_LABELS
     unknown_export = filled_injury_export_row({"Date Injured": "02/07/2024", "Days Injured": "0"})
     assert unknown_export["Body Part"] == "Unknown"
     assert unknown_export["Injury Tissue Type/s"] == "Unknown"
     assert unknown_export["Fit for selection"] == "Unknown"
+    assert filled_injury_export_row({"TimeLoss vs Medical Attention": "Time Loss"})[
+        "TimeLoss vs Medical Attention"
+    ] == "Time Loss"
     assert rate_per_1000(1, 2) == 500
 
     locator = {field: "fixture" for field in LOCATOR_FIELDS}
@@ -2445,6 +2997,35 @@ def self_check(args: argparse.Namespace) -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
+        from openpyxl import Workbook
+
+        standardised_source = tmp_path / "standardised.xlsx"
+        source_workbook = Workbook()
+        source_sheet = source_workbook.active
+        source_sheet.title = "Standardized Data"
+        source_sheet.append(["PlayerID"])
+        source_sheet.append(["player_1"])
+        source_sheet.append([])
+        source_sheet.append(["player_2"])
+        source_workbook.save(standardised_source)
+        standardised_csv = tmp_path / "standardised.csv"
+        prepared_csv = tmp_path / "prepared.csv"
+        write_rows(standardised_csv, [{"PlayerID": "player_1"}, {"PlayerID": "player_2"}], ["PlayerID"])
+        quiet_call(
+            prepare_intake,
+            argparse.Namespace(
+                team="Self Check",
+                season="2024-25",
+                file=str(standardised_csv),
+                source_file=str(standardised_source),
+                output=str(prepared_csv),
+                manifest=None,
+                source_sheet="Standardized Data",
+                player_id_column="PlayerID",
+            ),
+        )
+        assert [row["source_row_number"] for row in read_rows(prepared_csv)] == ["2", "4"]
+
         exposure_source = tmp_path / "exposure.csv"
         exposure_clean = tmp_path / "exposure_clean.csv"
         exposure_qc = tmp_path / "exposure_qc.json"
@@ -2462,6 +3043,7 @@ def self_check(args: argparse.Namespace) -> None:
                     "distance total": "10000",
                     "player_uid": "player_1",
                     "source_row_number": "2",
+                    "source_row_sha256": "row_a",
                 },
                 {
                     "Team": "Team I",
@@ -2474,6 +3056,20 @@ def self_check(args: argparse.Namespace) -> None:
                     "distance total": "10000",
                     "player_uid": "player_1",
                     "source_row_number": "3",
+                    "source_row_sha256": "row_b",
+                },
+                {
+                    "Team": "Team I",
+                    "Competition": "",
+                    "session type": "",
+                    "If match, surface?": "",
+                    "name": "player",
+                    "session date": "07/01/2024",
+                    "minutes total": "120",
+                    "distance total": "10000",
+                    "player_uid": "player_1",
+                    "source_row_number": "4",
+                    "source_row_sha256": "row_a",
                 },
             ],
             [
@@ -2487,6 +3083,7 @@ def self_check(args: argparse.Namespace) -> None:
                 "distance total",
                 "player_uid",
                 "source_row_number",
+                "source_row_sha256",
             ],
         )
         quiet_call(
@@ -2496,29 +3093,52 @@ def self_check(args: argparse.Namespace) -> None:
                 output=str(exposure_clean),
                 qc_output=str(exposure_qc),
                 manifest=None,
+                date_order="month-first",
+                team="Edinburgh",
+                window_start="2024-07-06",
+                window_end="2024-07-10",
             ),
         )
         cleaned = read_rows(exposure_clean)
-        assert [row["cleaning_action"] for row in cleaned] == ["include", "exclude_from_primary"]
+        cleaning_actions = [row["cleaning_action"] for row in cleaned]
+        assert cleaning_actions == [
+            "include",
+            "include",
+            "exclude_from_primary",
+        ], cleaning_actions
+        assert cleaned[2]["exclusion_reason"] == "exact_duplicate_copy"
         assert cleaned[0]["week_start_date"] == "2024-07-01"
-        assert json.loads(exposure_qc.read_text())["included_minutes_total"] == 120.0
+        assert json.loads(exposure_qc.read_text())["included_minutes_total"] == 240.0
+        assert json.loads(exposure_qc.read_text())["analysis_window"]["start"] == "2024-07-06"
 
         injury_source = tmp_path / "injury.csv"
         dashboard_output = tmp_path / "dashboard.json"
+        analysis_source_output = tmp_path / "analysis_source.csv"
         write_rows(
             injury_source,
             [
                 {
-                    "Date Injured": "02/07/2024",
+                    "Date Injured": "2024-07-02",
+                    "Confirmed Return Date": "",
                     "Days Injured": "10",
                     "is_injury_closed": "1",
                     "Occasion category": "Game",
                     "Body Part": "Ankle",
                     "Injury Tissue Type/s": "Muscle",
+                },
+                {
+                    "Date Injured": "01/01/2026",
+                    "Confirmed Return Date": "",
+                    "Days Injured": "5",
+                    "is_injury_closed": "1",
+                    "Occasion category": "Game",
+                    "Body Part": "Ankle",
+                    "Injury Tissue Type/s": "Unknown",
                 }
             ],
             [
                 "Date Injured",
+                "Confirmed Return Date",
                 "Days Injured",
                 "is_injury_closed",
                 "Occasion category",
@@ -2534,12 +3154,54 @@ def self_check(args: argparse.Namespace) -> None:
                 injury_file=str(injury_source),
                 exposure_file=str(exposure_clean),
                 output=str(dashboard_output),
+                analysis_source_output=str(analysis_source_output),
             ),
         )
         dashboard = json.loads(dashboard_output.read_text())
-        assert dashboard["coverage"]["hours"] == 2.0
-        assert dashboard["headline"][2]["value"] == 500.0
-        assert dashboard["headline"][5]["value"] == 5000.0
+        assert dashboard["coverage"]["hours"] == 4.0
+        assert dashboard["headline"][0]["value"] == 1
+        assert dashboard["headline"][2]["value"] == 250.0
+        assert dashboard["headline"][5]["value"] == 2500.0
+        analysis_rows = read_rows(analysis_source_output)
+        assert len(analysis_rows) == 2
+        assert list(analysis_rows[0]) == [
+            "Date Injured",
+            "Confirmed Return Date",
+            "Days Injured",
+            "is_injury_closed",
+            "Occasion category",
+            "Body Part",
+            "Injury Tissue Type/s",
+        ]
+        assert analysis_rows[0]["Date Injured"] == "02/07/2024"
+        assert analysis_rows[0]["Confirmed Return Date"] == "12/07/2024"
+        assert "Problem type origin" not in analysis_rows[0]
+        from openpyxl import load_workbook
+
+        analysis_workbook = load_workbook(analysis_source_output.with_suffix(".xlsx"))
+        analysis_sheet = analysis_workbook.active
+        def font_rgb(cell: Any) -> str:
+            color = cell.font.color
+            return color.rgb if color and color.type == "rgb" else ""
+
+        assert not font_rgb(analysis_sheet["A2"]).endswith(("008000", "C00000"))
+        assert font_rgb(analysis_sheet["B2"]).endswith("008000")
+        assert font_rgb(analysis_sheet["A3"]).endswith("C00000")
+        analysis_workbook.close()
+        xlsx_only_output = tmp_path / "analysis_source_direct.xlsx"
+        quiet_call(
+            build_team_dashboard,
+            argparse.Namespace(
+                team="Self Check",
+                season="2024-25",
+                injury_file=str(injury_source),
+                exposure_file=str(exposure_clean),
+                output=str(tmp_path / "dashboard_direct_xlsx.json"),
+                analysis_source_output=str(xlsx_only_output),
+            ),
+        )
+        assert xlsx_only_output.exists()
+        assert read_rows(xlsx_only_output.with_suffix(".csv")) == analysis_rows
         session_exposure_source = tmp_path / "session_exposure.csv"
         session_exposure_clean = tmp_path / "session_exposure_clean.csv"
         session_exposure_qc = tmp_path / "session_exposure_qc.json"
@@ -2579,6 +3241,8 @@ def self_check(args: argparse.Namespace) -> None:
                 output=str(session_exposure_clean),
                 qc_output=str(session_exposure_qc),
                 manifest=None,
+                date_order="month-first",
+                team="Edinburgh",
             ),
         )
         quiet_call(
@@ -2655,6 +3319,7 @@ def main() -> None:
     exposure_parser.add_argument("--date-column", default="session date")
     exposure_parser.add_argument("--minutes-column", default="minutes total")
     exposure_parser.add_argument("--distance-column", default="distance total")
+    exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="month-first")
     exposure_parser.set_defaults(func=prepare_exposure)
 
     clean_exposure_parser = subcommands.add_parser("clean-exposure")
@@ -2662,6 +3327,7 @@ def main() -> None:
         "--file",
         default="data/intake/2024-25/munster/munster_exposure_intake_locator_enriched_2024-25.csv",
     )
+    clean_exposure_parser.add_argument("--team", default="Munster")
     clean_exposure_parser.add_argument(
         "--output",
         default="data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
@@ -2674,6 +3340,9 @@ def main() -> None:
         "--manifest",
         default="data/intake/2024-25/munster/intake_manifest.draft.json",
     )
+    clean_exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="month-first")
+    clean_exposure_parser.add_argument("--window-start", default="")
+    clean_exposure_parser.add_argument("--window-end", default="")
     clean_exposure_parser.set_defaults(func=clean_exposure)
 
     process_exposure_parser = subcommands.add_parser("process-exposure")
@@ -2716,6 +3385,7 @@ def main() -> None:
     fixture_exposure_parser.add_argument("--total-team-column", default="Team")
     fixture_exposure_parser.add_argument("--total-hours-column", default="hours_total")
     fixture_exposure_parser.add_argument("--player-hours-per-team-match", type=float, default=20.0)
+    fixture_exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="day-first")
     fixture_exposure_parser.set_defaults(func=build_fixture_exposure)
 
     qa_parser = subcommands.add_parser("qa-intake")
@@ -2781,7 +3451,9 @@ def main() -> None:
             default="data/reporting/munster_dashboard_2024-25.json",
         )
         command.add_argument("--exclude-injury-rows", default="")
-        command.add_argument("--analysis-output", default="")
+        command.add_argument("--injured-in-team", default="")
+        command.add_argument("--analysis-source-output", default="")
+        command.add_argument("--standardisation-audit-output", default="")
 
     team_dashboard_parser = subcommands.add_parser("build-team-dashboard")
     add_team_dashboard_args(team_dashboard_parser)

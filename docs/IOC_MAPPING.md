@@ -1,6 +1,6 @@
 # IOC Injury Taxonomy Mapping
 
-This file documents the controlled injury body-location and tissue/pathology taxonomy used by the URC V2 pipeline. It is the methodology-facing companion to the executable mapping in `pipeline/__main__.py` and the review export labels in `pipeline/export_filled_standardised.mjs`.
+This file documents the controlled injury body-location and tissue/pathology taxonomy used by the URC V2 pipeline. It is the methodology-facing companion to the executable mapping and analysis source export in `pipeline/__main__.py`.
 
 ## Source Standard
 
@@ -128,16 +128,17 @@ Known review point:
 
 ## Comparable Column Standardisation
 
-The filled analysis export standardises these comparable columns for every team before cross-team analysis:
+The per-team analysis source export standardises these comparable columns before cross-team analysis. It must retain the original standardised-file columns only; do not append origin, status, or review columns to the CSV/XLSX export.
 
 | Column | Controlled output |
 |---|---|
+| `Date Injured` | `DD/MM/YYYY` |
 | `Occasion category` | `match`, `training`, `unknown` |
 | `Match Type` | `URC`, `training`, `unknown` |
 | `Problem type` | `Injury`, `Illness`, `Unknown` |
 | `Injury Status` | `Closed`, `Open/Ongoing`, `Unknown` |
 | `Fit for selection` | `Yes`, `No`, `Unknown` |
-| `Confirmed Return Date` | Derived only where closed injury date and days injured support it; source value remains preserved separately in DB state. |
+| `Confirmed Return Date` | `DD/MM/YYYY`, derived only where closed injury date and days injured support it; source value remains preserved separately in DB state. |
 | `Injury Grade` | Project severity bands from days injured and closure status. |
 | `Recurrence` | `First episode`, `Recurrence`, `Unknown` |
 | `Is Contact` | `Contact`, `Non-Contact`, `Unknown` |
@@ -145,7 +146,7 @@ The filled analysis export standardises these comparable columns for every team 
 | `Injury Tissue Type/s` | Controlled IOC tissue/pathology label or `Unknown` |
 | `TimeLoss vs Medical Attention` | `Time Loss`, `Medical Attention`, `Unknown` |
 
-Each mapped, derived, or inferred value must carry an origin field in review exports and live DB processing state.
+Each mapped, derived, or inferred value must carry origin evidence in live DB processing state or audit artifacts, not as appended export columns. The plain CSV is the machine-readable companion. The Excel workbook is the human analysis source: it contains the same retained source rows and original standardised columns, uses red text for rows excluded from analysis, and uses green text only where a blank source cell was populated by the pipeline.
 
 ## Severity Categories
 

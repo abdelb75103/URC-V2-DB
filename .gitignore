@@ -16,6 +16,7 @@ supabase/.temp/
 # data/reporting holds generated aggregate exports (rebuilt by the pipeline).
 data/
 output/
+outputs/
 tsconfig.tsbuildinfo
 
 # Local comparison workbook; may contain source-level injury/exposure data.

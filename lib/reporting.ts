@@ -1,5 +1,6 @@
 import "server-only";
 import connachtDashboard from "../content/reporting/connacht_dashboard_2024-25.json";
+import edinburghDashboard from "../content/reporting/edinburgh_dashboard_2024-25.json";
 import leinsterDashboard from "../content/reporting/leinster_dashboard_2024-25.json";
 import dashboard from "../content/reporting/munster_dashboard_2024-25.json";
 import ulsterDashboard from "../content/reporting/ulster_dashboard_2024-25.json";
@@ -23,7 +24,9 @@ export type Coverage = {
   hours: number;
   distance_km: number;
   included_exposure_status: string;
-  scope_status: string;
+  scope_status?: string;
+  scope_status_counts?: Record<string, number>;
+  injury_cohort_filters?: Record<string, boolean>;
 };
 
 export type AnalyticsRow = {
@@ -76,6 +79,7 @@ export type MunsterDashboard = TeamDashboardData;
 
 const dashboards: Record<string, TeamDashboardData> = {
   connacht: connachtDashboard as TeamDashboardData,
+  edinburgh: edinburghDashboard as TeamDashboardData,
   leinster: leinsterDashboard as TeamDashboardData,
   munster: dashboard as TeamDashboardData,
   ulster: ulsterDashboard as TeamDashboardData,

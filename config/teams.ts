@@ -36,7 +36,7 @@ export const teams: Team[] = [
   { id: 'benetton', name: 'Benetton', crest: `${CREST}/BenettonRugby.svg.png`, accent: '#009639', accentSecondary: '#FFFFFF', status: 'locked' },
   { id: 'zebre', name: 'Zebre', crest: `${CREST}/ZebreRugby.svg.png`, accent: '#FFC72C', accentSecondary: '#000000', status: 'locked' },
   // Scotland
-  { id: 'edinburgh', name: 'Edinburgh', crest: `${CREST}/Edinburgh_Rugby_logo_2018.svg.png`, accent: '#002D56', accentSecondary: '#E87722', status: 'locked' },
+  { id: 'edinburgh', name: 'Edinburgh', crest: `${CREST}/Edinburgh_Rugby_logo_2018.svg.png`, accent: '#002D56', accentSecondary: '#E87722', status: 'live' },
   { id: 'glasgow', name: 'Glasgow', crest: `${CREST}/GlasgowRugby.svg.png`, accent: '#00A3E0', accentSecondary: '#000000', status: 'locked' },
 ];
 
