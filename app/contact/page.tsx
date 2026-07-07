@@ -36,10 +36,10 @@ export default function ContactPage() {
                 <CardContent className="flex flex-grow flex-col items-center justify-center">
                   <a
                     href={`mailto:${contact.email}`}
-                    className="flex items-center gap-2 text-foreground hover:text-primary hover:underline"
+                    className="group/email inline-flex max-w-full items-start gap-2 text-sm text-muted-foreground transition-colors hover:text-primary"
                   >
-                    <Mail className="h-4 w-4" />
-                    <span className="break-all">{contact.email}</span>
+                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span className="break-words group-hover/email:underline">{contact.email}</span>
                   </a>
                 </CardContent>
               </Card>

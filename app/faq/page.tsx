@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { PageHeader } from '@/components/dashboard/page-header';
+import { Card } from '@/components/ui/card';
 import {
   Accordion,
   AccordionContent,
@@ -133,15 +134,15 @@ export default function FaqPage() {
   return (
     <div className="flex flex-col">
       <PageHeader title="Frequently Asked Questions" />
-      <div className="flex-1 p-4 sm:p-6">
-        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[300px_1fr]">
+      <div className="flex-1 p-4 sm:p-6 lg:py-10">
+        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-12">
           <aside className="lg:sticky lg:top-24 lg:self-start">
-            <h2 className="text-xl font-semibold text-foreground">Questions & answers</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            <h2 className="text-xl font-semibold text-foreground">Questions &amp; answers</h2>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               Common questions about the SCRIIPT project, how data is collected and protected, and
               what participating teams receive in return.
             </p>
-            <p className="mt-4 text-sm text-muted-foreground">
+            <p className="mt-5 text-sm text-muted-foreground">
               Still unsure?{' '}
               <Link href="/contact" className="font-medium text-primary underline-offset-4 hover:underline">
                 Get in touch
@@ -150,14 +151,24 @@ export default function FaqPage() {
             </p>
           </aside>
 
-          <Accordion type="single" collapsible className="w-full">
-            {faqItems.map((item, index) => (
-              <AccordionItem key={index} value={`item-${index}`}>
-                <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">{item.answer}</AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
+          <Card className="overflow-hidden">
+            <Accordion type="single" collapsible className="w-full">
+              {faqItems.map((item, index) => (
+                <AccordionItem
+                  key={index}
+                  value={`item-${index}`}
+                  className="border-border/60 px-5 last:border-b-0 sm:px-6 data-[state=open]:bg-primary/[0.04]"
+                >
+                  <AccordionTrigger className="py-5 text-left text-[15px] font-semibold text-foreground hover:no-underline data-[state=open]:text-primary">
+                    {item.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="max-w-prose pb-5 leading-relaxed text-muted-foreground">
+                    {item.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </Card>
         </div>
       </div>
     </div>
