@@ -264,10 +264,12 @@ def parse_uk_date(value: str) -> datetime | None:
     value = value.strip()
     if not value:
         return None
-    try:
-        return datetime.strptime(value, "%d/%m/%Y")
-    except ValueError:
-        return None
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            pass
+    return None
 
 
 def parse_flexible_date(value: object) -> datetime | None:
@@ -413,7 +415,10 @@ def prepare_intake(args: argparse.Namespace) -> None:
     source_path = Path(args.source_file)
     output_path = Path(args.output)
     rows = read_rows(standardised_path)
-    source_rows = read_rows(source_path)
+    if source_path.suffix.lower() == ".xlsx":
+        _, source_rows = read_xlsx_rows(source_path, args.source_sheet)
+    else:
+        source_rows = read_rows(source_path)
     if not rows:
         raise SystemExit(f"no standardised rows found: {standardised_path}")
     if args.player_id_column not in rows[0]:
@@ -463,6 +468,27 @@ def prepare_intake(args: argparse.Namespace) -> None:
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
     print(f"prepared {output_path} sha256={output_hash} rows={len(prepared_rows)}")
+
+
+def export_xlsx_sheet(args: argparse.Namespace) -> None:
+    headers, rows = read_xlsx_rows(Path(args.file), args.sheet)
+    output_path = Path(args.output)
+    write_rows(
+        output_path,
+        [{header: clean_cell(row.get(header)) for header in headers if header} for row in rows],
+        [header for header in headers if header],
+    )
+    print(
+        json.dumps(
+            {
+                "exported": str(output_path),
+                "rows": len(rows),
+                "columns": len([header for header in headers if header]),
+                "sha256": sha256_file(output_path),
+            },
+            indent=2,
+        )
+    )
 
 
 def read_xlsx_rows(path: Path, sheet_name: str) -> tuple[list[str], list[dict[str, Any]]]:
@@ -1636,11 +1662,56 @@ def run_step(args: argparse.Namespace) -> None:
 
 def release(args: argparse.Namespace) -> None:
     label = f"{args.team}-{args.season}-local-smoke"
+    dashboard_path = Path(args.dashboard_file) if args.dashboard_file else (
+        Path("content") / "reporting" / f"{args.team.lower()}_dashboard_{args.season}.json"
+    )
+    dashboard_metrics: list[dict[str, object]] = []
+    if dashboard_path.exists():
+        dashboard = json.loads(dashboard_path.read_text())
+        dashboard_metrics = [
+            {
+                "metric_key": metric["key"],
+                "metric_label": metric["label"],
+                "value": metric.get("value"),
+                "numerator": metric.get("numerator"),
+                "denominator": metric.get("denominator"),
+                "unit": metric.get("unit"),
+                "coverage_note": f"Dashboard headline metric from {dashboard_path}",
+            }
+            for metric in dashboard.get("headline", [])
+        ]
     params = SqlParams()
+    metric_insert = ""
+    if dashboard_metrics:
+        metric_insert = f"""
+          insert into reporting.team_metric_aggregates
+            (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
+          select current_release.id, {params.text(args.team)}, {params.text(args.season)},
+            metric_key, metric_label, value, numerator, denominator, unit, coverage_note
+          from current_release,
+            jsonb_to_recordset({params.jsonb(dashboard_metrics)}) as metric(
+              metric_key text,
+              metric_label text,
+              value numeric,
+              numerator numeric,
+              denominator numeric,
+              unit text,
+              coverage_note text
+            )
+          on conflict (release_id, team, season, metric_key, scope) do update
+            set metric_label = excluded.metric_label,
+                value = excluded.value,
+                numerator = excluded.numerator,
+                denominator = excluded.denominator,
+                unit = excluded.unit,
+                coverage_note = excluded.coverage_note,
+                suppressed = false;
+        """
     sql = f"""
+      create temp table current_release on commit drop as
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, parameters, ended_at)
-        values ('release', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.jsonb({'release': label})}, now())
+        values ('release', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.jsonb({'release': label, 'dashboard_file': str(dashboard_path) if dashboard_metrics else None})}, now())
         returning id
       ),
       release as (
@@ -1648,21 +1719,97 @@ def release(args: argparse.Namespace) -> None:
         select {params.text(label)}, 'approved', id, now()
         from run
         on conflict (release_label) do update
-          set status = 'approved', approved_at = now()
+          set status = 'approved',
+              pipeline_run_id = excluded.pipeline_run_id,
+              approved_at = now()
         returning id
       )
+      select id from release;
+
       insert into reporting.team_metric_aggregates
         (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
-      select release.id, {params.text(args.team)}, {params.text(args.season)}, 'registered_source_files',
+      select current_release.id, {params.text(args.team)}, {params.text(args.season)}, 'registered_source_files',
         'Registered source files', count(*), count(*), null, 'files', 'Local smoke aggregate only'
-      from release, ingestion.source_files
+      from current_release, ingestion.source_files
       where team = {params.text(args.team)} and season = {params.text(args.season)}
-      group by release.id
+      group by current_release.id
       on conflict (release_id, team, season, metric_key, scope) do update
         set value = excluded.value, numerator = excluded.numerator, coverage_note = excluded.coverage_note;
+
+      {metric_insert}
     """
     run_sql(sql, params.values)
-    print(f"released {label}")
+    print(f"released {label} metrics={len(dashboard_metrics) + 1}")
+
+
+def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
+    path = Path(args.file)
+    file_hash = sha256_file(path)
+    raw_id = raw_record_id(args.team, args.season, file_hash, args.row_number)
+    params = SqlParams()
+    state = {
+        "analysis_eligibility_status": "excluded_duplicate_adjudicated",
+        "excluded_standardised_row_number": args.row_number,
+        "duplicate_of_standardised_row_number": args.duplicate_of,
+        "decision": "exclude_duplicate",
+        "rationale": args.rationale,
+    }
+    sql = f"""
+      insert into audit.reason_codes (code, description) values
+        ('duplicate_adjudicated_exclusion', 'Manual review adjudicated a candidate duplicate and excluded it from analysis.')
+      on conflict (code) do update set description = excluded.description;
+
+      create temp table current_step on commit drop as
+      with run as (
+        insert into audit.pipeline_runs
+          (command, team, season, status, input_hash, parameters, ended_at)
+        values (
+          'adjudicate-duplicate-exclusion', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
+          {params.text(file_hash)},
+          {params.jsonb({
+            'file': path.name,
+            'row_number': args.row_number,
+            'duplicate_of': args.duplicate_of,
+            'step_version': args.step_version,
+            'version_number': args.version_number,
+          })},
+          now()
+        )
+        returning id
+      ),
+      step as (
+        insert into audit.step_runs
+          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, input_hash, ended_at)
+        select id, 'duplicate_adjudication', {params.text(args.step_version)},
+          'duplicate_adjudicated_exclusion', 1, 0,
+          {params.jsonb({args.team: {'excluded_duplicate_rows': [args.row_number]}})},
+          {params.text(file_hash)}, now()
+        from run
+        returning id
+      )
+      select id from step;
+
+      insert into processing.record_versions
+        (source_row_id, step_run_id, version_number, record_state, eligibility_status)
+      select sr.id, step.id, {args.version_number}, {params.jsonb(state)}, 'excluded_duplicate_adjudicated'
+      from ingestion.source_rows sr, current_step step
+      where sr.raw_record_id = {params.text(raw_id)}
+      on conflict (source_row_id, version_number) do update
+        set step_run_id = excluded.step_run_id,
+            record_state = excluded.record_state,
+            eligibility_status = excluded.eligibility_status;
+
+      insert into audit.record_events
+        (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+      select step.id, sr.id, 'analysis_eligibility_status', null,
+        {params.jsonb('excluded_duplicate_adjudicated')}, 'exclude',
+        'duplicate_adjudicated_exclusion', {params.text(args.rationale)},
+        {params.text(args.step_version)}, 'adjudicated'
+      from ingestion.source_rows sr, current_step step
+      where sr.raw_record_id = {params.text(raw_id)};
+    """
+    run_sql(sql, params.values)
+    print(json.dumps({"team": args.team, "excluded_row": args.row_number, "raw_record_id": raw_id}, indent=2))
 
 
 def parse_date_value(value: str) -> date | None:
@@ -1740,7 +1887,26 @@ def build_group_rows(
     return result[:limit] if limit else result
 
 
-def build_munster_dashboard(args: argparse.Namespace) -> None:
+def exposure_analysis_date(row: dict[str, str], grain: str) -> date | None:
+    if grain == "weekly":
+        return parse_date_value(
+            row.get("week_start_date", "")
+            or row.get("cleaned_date", "")
+            or row.get("session_date_clean", "")
+        )
+    return parse_date_value(
+        row.get("session_date_clean", "")
+        or row.get("cleaned_date", "")
+        or row.get("week_start_date", "")
+    )
+
+
+def build_team_dashboard(args: argparse.Namespace) -> None:
+    excluded_injury_rows = {
+        clean_text(item)
+        for item in clean_text(getattr(args, "exclude_injury_rows", "")).split(",")
+        if clean_text(item)
+    }
     exposure_rows = [
         row
         for row in read_rows(Path(args.exposure_file))
@@ -1749,35 +1915,42 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
     if not exposure_rows:
         raise SystemExit("no included exposure rows found")
 
-    week_dates = [
+    grains = {
+        clean_text(row.get("exposure_grain")) or "unknown"
+        for row in exposure_rows
+    }
+    primary_grain = grains.pop() if len(grains) == 1 else "mixed"
+    exposure_dates = [
         parsed
-        for parsed in (parse_date_value(row.get("week_start_date", "")) for row in exposure_rows)
-        if parsed is not None
+        for row in exposure_rows
+        if (parsed := exposure_analysis_date(row, primary_grain)) is not None
     ]
-    if not week_dates:
-        raise SystemExit("no valid exposure week_start_date values found")
+    if not exposure_dates:
+        raise SystemExit("no valid exposure date values found")
 
-    coverage_start = min(week_dates)
-    coverage_end = max(week_dates) + timedelta(days=6)
+    coverage_start = min(exposure_dates)
+    coverage_end = max(exposure_dates) + (timedelta(days=6) if primary_grain == "weekly" else timedelta())
     hours = sum(parse_float(row.get("minutes_total_clean")) or 0 for row in exposure_rows) / 60
     distance_m = sum(parse_float(row.get("distance_total_m_clean")) or 0 for row in exposure_rows)
     players = {row.get("player_uid") for row in exposure_rows if clean_text(row.get("player_uid"))}
-    weeks = sorted({row.get("week_start_date") for row in exposure_rows if clean_text(row.get("week_start_date"))})
+    exposure_periods = sorted({date.isoformat() for date in exposure_dates})
 
     exposure_by_month: dict[str, dict[str, Any]] = defaultdict(
         lambda: {"month": "", "exposure_hours": 0.0, "distance_km": 0.0}
     )
     for row in exposure_rows:
-        week_start = parse_date_value(row.get("week_start_date", ""))
-        if week_start is None:
+        exposure_date = exposure_analysis_date(row, primary_grain)
+        if exposure_date is None:
             continue
-        key = week_start.strftime("%Y-%m")
-        exposure_by_month[key]["month"] = month_label(week_start)
+        key = exposure_date.strftime("%Y-%m")
+        exposure_by_month[key]["month"] = month_label(exposure_date)
         exposure_by_month[key]["exposure_hours"] += (parse_float(row.get("minutes_total_clean")) or 0) / 60
         exposure_by_month[key]["distance_km"] += (parse_float(row.get("distance_total_m_clean")) or 0) / 1000
 
     injury_rows = []
-    for row in read_rows(Path(args.injury_file)):
+    for index, row in enumerate(read_rows(Path(args.injury_file)), start=2):
+        if str(index) in excluded_injury_rows:
+            continue
         injured_at = parse_date_value(row.get("Date Injured", ""))
         if injured_at is None or injured_at < coverage_start or injured_at > coverage_end:
             continue
@@ -1863,6 +2036,22 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
         for item in build_group_rows(time_loss_rows, "Occasion category", hours)
     ]
 
+    grain_label = {
+        "weekly": "weekly",
+        "session": "session-level",
+        "mixed": "mixed-grain",
+    }.get(primary_grain, "unknown-grain")
+    monthly_basis = (
+        f"Monthly exposure is assigned to the week-start month because {args.team} reports weekly exposure."
+        if primary_grain == "weekly"
+        else "Monthly exposure is assigned to the cleaned exposure-date month."
+    )
+    setting_limitation = (
+        f"{args.team} exposure is weekly, so match and training incidence cannot be split until setting-specific exposure denominators are approved."
+        if primary_grain == "weekly"
+        else "Setting-specific rates are not split until setting-specific exposure denominators are approved."
+    )
+
     dashboard = {
         "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "team": args.team,
@@ -1870,7 +2059,7 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
         "analysis_window": {
             "start": coverage_start.isoformat(),
             "end": coverage_end.isoformat(),
-            "basis": "Munster exposure coverage window from included weekly exposure rows",
+            "basis": f"{args.team} exposure coverage window from included {grain_label} exposure rows",
         },
         "source_files": {
             "injury": str(args.injury_file),
@@ -1881,14 +2070,19 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
             "Incidence = time-loss injuries / exposure hours * 1000.",
             "Severity = mean and median days lost per time-loss injury.",
             "Burden = days lost / exposure hours * 1000.",
-            "Exposure hours = sum(minutes_total_clean) / 60 for included weekly Munster exposure rows.",
-            "Monthly exposure is assigned to the week-start month because Munster reports weekly exposure.",
+            f"Exposure hours = sum(minutes_total_clean) / 60 for included {grain_label} exposure rows.",
+            monthly_basis,
             "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
+            f"Adjudicated duplicate standardised rows excluded from this aggregate: {', '.join(sorted(excluded_injury_rows))}."
+            if excluded_injury_rows
+            else "No adjudicated duplicate injury rows were excluded from this aggregate.",
         ],
         "coverage": {
             "exposure_rows": len(exposure_rows),
             "exposed_players": len(players),
-            "weeks": len(weeks),
+            "weeks": len(exposure_periods) if primary_grain == "weekly" else 0,
+            "exposure_periods": len(exposure_periods),
+            "exposure_grain": primary_grain,
             "hours": rounded(hours),
             "distance_km": rounded(distance_m / 1000),
             "included_exposure_status": "included",
@@ -1963,10 +2157,13 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
         "prior_season": {
             "season": "2023-24",
             "status": "not_loaded_in_v2",
-            "note": "No Munster prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures.",
+            "note": f"No {args.team} prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures.",
         },
         "limitations": [
-            "Munster exposure is weekly, so match and training incidence cannot be split until setting-specific exposure denominators are approved.",
+            setting_limitation,
+            f"Adjudicated duplicate standardised row exclusions applied: {', '.join(sorted(excluded_injury_rows))}."
+            if excluded_injury_rows
+            else "No adjudicated duplicate injury row exclusions applied.",
             "This aggregate artifact is local and draft; a hosted reporting table or view should be created only after explicit approval of the live Supabase target.",
         ],
     }
@@ -1980,6 +2177,10 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(dashboard, indent=2) + "\n")
     print(json.dumps({"output": str(output), "team": args.team, "season": args.season}, indent=2))
+
+
+def build_munster_dashboard(args: argparse.Namespace) -> None:
+    build_team_dashboard(args)
 
 
 def quiet_call(func: Any, args: argparse.Namespace) -> None:
@@ -2114,7 +2315,7 @@ def self_check(args: argparse.Namespace) -> None:
             ],
         )
         quiet_call(
-            build_munster_dashboard,
+            build_team_dashboard,
             argparse.Namespace(
                 team="Self Check",
                 season="2024-25",
@@ -2127,6 +2328,61 @@ def self_check(args: argparse.Namespace) -> None:
         assert dashboard["coverage"]["hours"] == 2.0
         assert dashboard["headline"][2]["value"] == 500.0
         assert dashboard["headline"][5]["value"] == 5000.0
+        session_exposure_source = tmp_path / "session_exposure.csv"
+        session_exposure_clean = tmp_path / "session_exposure_clean.csv"
+        session_exposure_qc = tmp_path / "session_exposure_qc.json"
+        write_rows(
+            session_exposure_source,
+            [
+                {
+                    "Team": "Team A",
+                    "Competition": "",
+                    "session type": "",
+                    "If match, surface?": "",
+                    "name": "player",
+                    "session date": "07/02/2024",
+                    "minutes total": "60",
+                    "distance total": "8000",
+                    "player_uid": "player_1",
+                    "source_row_number": "2",
+                }
+            ],
+            [
+                "Team",
+                "Competition",
+                "session type",
+                "If match, surface?",
+                "name",
+                "session date",
+                "minutes total",
+                "distance total",
+                "player_uid",
+                "source_row_number",
+            ],
+        )
+        quiet_call(
+            clean_exposure,
+            argparse.Namespace(
+                file=str(session_exposure_source),
+                output=str(session_exposure_clean),
+                qc_output=str(session_exposure_qc),
+                manifest=None,
+            ),
+        )
+        quiet_call(
+            build_team_dashboard,
+            argparse.Namespace(
+                team="Session Check",
+                season="2024-25",
+                injury_file=str(injury_source),
+                exposure_file=str(session_exposure_clean),
+                output=str(dashboard_output),
+            ),
+        )
+        session_dashboard = json.loads(dashboard_output.read_text())
+        assert session_dashboard["coverage"]["exposure_grain"] == "session"
+        assert session_dashboard["coverage"]["weeks"] == 0
+        assert session_dashboard["analysis_window"]["end"] == "2024-07-02"
 
     print("self-check passed")
 
@@ -2152,6 +2408,12 @@ def main() -> None:
     prepare_parser.add_argument("--source-sheet", default="file")
     prepare_parser.add_argument("--player-id-column", default="PlayerID")
     prepare_parser.set_defaults(func=prepare_intake)
+
+    export_parser = subcommands.add_parser("export-xlsx-sheet")
+    export_parser.add_argument("--file", required=True)
+    export_parser.add_argument("--sheet", default="Standardized Data")
+    export_parser.add_argument("--output", required=True)
+    export_parser.set_defaults(func=export_xlsx_sheet)
 
     exposure_parser = subcommands.add_parser("prepare-exposure")
     exposure_parser.add_argument("--team", default="Munster")
@@ -2209,7 +2471,7 @@ def main() -> None:
         "--file",
         default="data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
     )
-    process_exposure_parser.add_argument("--step-name", default="munster_exposure_cleaning")
+    process_exposure_parser.add_argument("--step-name", default="exposure_cleaning")
     process_exposure_parser.add_argument("--step-version", default="0.1.0")
     process_exposure_parser.add_argument("--version-number", type=int, default=101)
     process_exposure_parser.set_defaults(func=process_exposure)
@@ -2257,7 +2519,7 @@ def main() -> None:
     process_parser.add_argument("--file", required=True)
     process_parser.add_argument("--window-start", default="2024-07-01")
     process_parser.add_argument("--window-end", default="2025-06-30")
-    process_parser.add_argument("--step-name", default="munster_intake_first_pass")
+    process_parser.add_argument("--step-name", default="intake_first_pass")
     process_parser.add_argument("--step-version", default="0.1.0")
     process_parser.add_argument("--version-number", type=int, default=1)
     process_parser.set_defaults(func=process_intake)
@@ -2277,23 +2539,43 @@ def main() -> None:
     release_parser = subcommands.add_parser("release")
     release_parser.add_argument("--team", required=True)
     release_parser.add_argument("--season", required=True)
+    release_parser.add_argument("--dashboard-file")
     release_parser.set_defaults(func=release)
 
+    adjudicate_duplicate_parser = subcommands.add_parser("adjudicate-duplicate-exclusion")
+    adjudicate_duplicate_parser.add_argument("--team", required=True)
+    adjudicate_duplicate_parser.add_argument("--season", required=True)
+    adjudicate_duplicate_parser.add_argument("--file", required=True)
+    adjudicate_duplicate_parser.add_argument("--row-number", type=int, required=True)
+    adjudicate_duplicate_parser.add_argument("--duplicate-of", type=int, required=True)
+    adjudicate_duplicate_parser.add_argument("--rationale", required=True)
+    adjudicate_duplicate_parser.add_argument("--step-version", default="0.1.0")
+    adjudicate_duplicate_parser.add_argument("--version-number", type=int, default=2)
+    adjudicate_duplicate_parser.set_defaults(func=adjudicate_duplicate_exclusion)
+
+    def add_team_dashboard_args(command: argparse.ArgumentParser) -> None:
+        command.add_argument("--team", default="Munster")
+        command.add_argument("--season", default="2024-25")
+        command.add_argument(
+            "--injury-file",
+            default="data/intake/2024-25/munster/munster_filled_standardised_2024-25.csv",
+        )
+        command.add_argument(
+            "--exposure-file",
+            default="data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
+        )
+        command.add_argument(
+            "--output",
+            default="data/reporting/munster_dashboard_2024-25.json",
+        )
+        command.add_argument("--exclude-injury-rows", default="")
+
+    team_dashboard_parser = subcommands.add_parser("build-team-dashboard")
+    add_team_dashboard_args(team_dashboard_parser)
+    team_dashboard_parser.set_defaults(func=build_team_dashboard)
+
     dashboard_parser = subcommands.add_parser("build-munster-dashboard")
-    dashboard_parser.add_argument("--team", default="Munster")
-    dashboard_parser.add_argument("--season", default="2024-25")
-    dashboard_parser.add_argument(
-        "--injury-file",
-        default="data/intake/2024-25/munster/munster_filled_standardised_2024-25.csv",
-    )
-    dashboard_parser.add_argument(
-        "--exposure-file",
-        default="data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
-    )
-    dashboard_parser.add_argument(
-        "--output",
-        default="data/reporting/munster_dashboard_2024-25.json",
-    )
+    add_team_dashboard_args(dashboard_parser)
     dashboard_parser.set_defaults(func=build_munster_dashboard)
 
     check_parser = subcommands.add_parser("self-check")

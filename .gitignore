@@ -17,3 +17,6 @@ supabase/.temp/
 data/
 output/
 tsconfig.tsbuildinfo
+
+# Local comparison workbook; may contain source-level injury/exposure data.
+V1 - FOR COMPARIOSN ONLY Injury & Exposure Data Master Sheet - Analysis.xlsx

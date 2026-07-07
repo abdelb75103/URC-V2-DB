@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, Info } from 'lucide-react';
-import type { MunsterDashboard } from '@/lib/reporting';
+import type { TeamDashboardData } from '@/lib/reporting';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KpiCard } from '@/components/dashboard/kpi-card';
@@ -60,7 +60,7 @@ function PendingNote({ children }: { children: React.ReactNode }) {
 const TAB_HEADINGS: Record<string, { title: string; blurb: string }> = {
   overview: {
     title: 'Team Overview',
-    blurb: 'Validated aggregate results for the accepted Munster coverage window.',
+    blurb: 'Validated aggregate results for the accepted team coverage window.',
   },
   'common-injuries': {
     title: 'Most Common Injuries & Illnesses',
@@ -76,7 +76,7 @@ const TAB_HEADINGS: Record<string, { title: string; blurb: string }> = {
   },
   exposure: {
     title: 'Exposure',
-    blurb: 'Weekly Munster exposure aggregated to the reporting month.',
+    blurb: 'Included exposure aggregated to the reporting month.',
   },
 };
 
@@ -85,7 +85,7 @@ export function TeamDashboard({
   crest,
   teamName,
 }: {
-  dashboard: MunsterDashboard;
+  dashboard: TeamDashboardData;
   crest: string;
   teamName: string;
 }) {
@@ -98,11 +98,14 @@ export function TeamDashboard({
   const unknownSeverity = dashboard.severity_distribution.find(
     (r) => r.key === 'unknown_or_censored'
   )?.recorded_injuries;
+  const exposureGrain = dashboard.coverage.exposure_grain ?? (dashboard.coverage.weeks > 0 ? 'weekly' : 'unknown');
+  const exposurePeriodLabel = exposureGrain === 'weekly' ? 'Reporting weeks' : 'Exposure periods';
+  const exposurePeriods = dashboard.coverage.exposure_periods ?? dashboard.coverage.weeks;
 
   const tabs = ['overview', 'common-injuries', 'location', 'type-tissue', 'exposure'];
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 sm:px-6">
+    <div className="mx-auto w-full max-w-7xl px-4 pb-16 pt-6 sm:px-6 lg:px-8">
       {/* Header */}
       <Link
         href="/"
@@ -148,7 +151,7 @@ export function TeamDashboard({
             {t === 'overview' && (
               <div className="space-y-6">
                 {/* KPI grid */}
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
                   <KpiCard label="Recorded injuries" value={fmt(val('recorded_injuries'), 0)} unit="in coverage window" emphasis />
                   <KpiCard label="Time-loss injuries" value={fmt(val('time_loss_injuries'), 0)} unit="days injured > 0" />
                   <KpiCard label="Medical-attention only" value={fmt(medicalAttention, 0)} unit="0 days lost" />
@@ -162,7 +165,7 @@ export function TeamDashboard({
                   {[
                     ['Player-hours', fmt(dashboard.coverage.hours)],
                     ['Exposed players', fmt(dashboard.coverage.exposed_players, 0)],
-                    ['Reporting weeks', fmt(dashboard.coverage.weeks, 0)],
+                    [exposurePeriodLabel, fmt(exposurePeriods, 0)],
                     ['Days lost', fmt(daysLost, 0)],
                     ['Window', `${dashboard.analysis_window.start} → ${dashboard.analysis_window.end}`],
                   ].map(([k, v]) => (
@@ -252,7 +255,7 @@ export function TeamDashboard({
                 </div>
                 <Panel title="Illness surveillance">
                   <PendingNote>
-                    Illness records are not part of the accepted Munster V2 aggregate yet. This section
+                    Illness records are not part of the accepted {teamName} V2 aggregate yet. This section
                     unlocks once an illness case definition and cleared illness dataset pass the V2 workflow.
                   </PendingNote>
                 </Panel>
@@ -282,9 +285,9 @@ export function TeamDashboard({
                   <TimeSeriesBars data={dashboard.monthly} xKey="month" yKey="distance_km" unit="km" color="hsl(var(--chart-2))" />
                 </Panel>
                 <PendingNote>
-                  Munster reports exposure weekly, so match and training exposure cannot be split until
-                  setting-specific denominators are approved. Daily observations are not fabricated from
-                  weekly totals.
+                  {exposureGrain === 'weekly'
+                    ? `${teamName} reports exposure weekly, so match and training exposure cannot be split until setting-specific denominators are approved. Daily observations are not fabricated from weekly totals.`
+                    : 'Setting-specific exposure is not split until setting-specific denominators are approved.'}
                 </PendingNote>
               </div>
             )}
@@ -299,7 +302,7 @@ function BreakdownTable({
   rows,
   title,
 }: {
-  rows: MunsterDashboard['body_locations'];
+  rows: TeamDashboardData['body_locations'];
   title: string;
 }) {
   return (

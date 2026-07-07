@@ -113,7 +113,7 @@ export default function ParticipantInformationPage() {
     <div className="flex flex-col">
       <PageHeader title="Participant Information" />
       <div className="flex-1 p-4 sm:p-6">
-        <div className="mx-auto max-w-4xl space-y-6">
+        <div className="mx-auto max-w-6xl space-y-6">
           <Alert>
             <Info className="h-4 w-4" />
             <AlertTitle>Welcome</AlertTitle>
@@ -134,14 +134,16 @@ export default function ParticipantInformationPage() {
             </AlertDescription>
           </Alert>
 
-          {sections.map((s) => (
-            <Card key={s.title}>
-              <CardHeader>
-                <CardTitle className="leading-snug">{s.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-muted-foreground">{s.body}</CardContent>
-            </Card>
-          ))}
+          <div className="gap-6 lg:columns-2 [&>*]:mb-6 [&>*]:break-inside-avoid">
+            {sections.map((s) => (
+              <Card key={s.title} className="border-l-2 border-l-primary/50">
+                <CardHeader>
+                  <CardTitle className="leading-snug">{s.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-muted-foreground">{s.body}</CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     </div>

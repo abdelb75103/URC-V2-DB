@@ -1,5 +1,8 @@
 import "server-only";
+import connachtDashboard from "../content/reporting/connacht_dashboard_2024-25.json";
+import leinsterDashboard from "../content/reporting/leinster_dashboard_2024-25.json";
 import dashboard from "../content/reporting/munster_dashboard_2024-25.json";
+import ulsterDashboard from "../content/reporting/ulster_dashboard_2024-25.json";
 
 export type HeadlineMetric = {
   key: string;
@@ -15,6 +18,8 @@ export type Coverage = {
   exposure_rows: number;
   exposed_players: number;
   weeks: number;
+  exposure_periods?: number;
+  exposure_grain?: string;
   hours: number;
   distance_km: number;
   included_exposure_status: string;
@@ -42,7 +47,7 @@ export type SeverityRow = {
   days_lost: number;
 };
 
-export type MunsterDashboard = {
+export type TeamDashboardData = {
   generated_at: string;
   team: string;
   season: string;
@@ -67,6 +72,19 @@ export type MunsterDashboard = {
   limitations: string[];
 };
 
-export function getMunsterDashboard(): MunsterDashboard {
-  return dashboard as MunsterDashboard;
+export type MunsterDashboard = TeamDashboardData;
+
+const dashboards: Record<string, TeamDashboardData> = {
+  connacht: connachtDashboard as TeamDashboardData,
+  leinster: leinsterDashboard as TeamDashboardData,
+  munster: dashboard as TeamDashboardData,
+  ulster: ulsterDashboard as TeamDashboardData,
+};
+
+export function getTeamDashboard(teamId: string): TeamDashboardData | undefined {
+  return dashboards[teamId];
+}
+
+export function getMunsterDashboard(): TeamDashboardData {
+  return dashboards.munster;
 }

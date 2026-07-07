@@ -10,8 +10,9 @@ Munster is the pilot. Freeze its accepted workflow and schema, then apply that s
 
 - Reference-only legacy archive: `/Users/abdelbabiker/Desktop/URC` (145 files across 16 team folders).
 - It contains heterogeneous raw injury and GPS/exposure exports, team mapping codebooks, standardised workbooks, cleaning reports, a cleaned injury master, prior surveillance reports, and microsite material.
+- When Abdel asks to compare to V1, use the project-root workbook `/Users/abdelbabiker/Desktop/URC-V2-DB/V1 - FOR COMPARIOSN ONLY Injury & Exposure Data Master Sheet - Analysis.xlsx` only as a comparison reference. Do not ingest it, clean it, release it, or treat it as a pipeline source. Use PDFs only as narrative context unless he explicitly asks for report-level baselines.
 - Never edit files in the legacy archive. Record archive originals' SHA-256 checksums and secure locators as intake provenance in UCD-managed storage; the pipeline ingests only the supplied pseudonymised intake files.
-- The archive mainly concerns 2024-25 data, while historical reports include 2022-23. For each study year, use the league-wide window from the earliest official URC fixture through the final, inclusive; exclude preseason and record late team reporting as missing coverage.
+- The archive mainly concerns 2024-25 data, while historical reports include 2022-23. During team profiling, record each team's actual reporting window and coverage first. Do not treat a team-specific coverage window as the final comparable window. After all teams are profiled, choose the largest defensible comparable window and record late/missing coverage rather than silently changing denominators.
 - Team inputs differ in schemas, units, daily versus weekly exposure, duration formats, and high-speed-running thresholds. Do not treat a populated standard column as proof that values are comparable.
 
 ## Target Data Flow
@@ -37,6 +38,8 @@ Every result must be traceable back to the source file and source row/cell.
 - Ambiguous joins are review cases. Do not silently choose the nearest date, duration, or distance match when a unique key is unavailable.
 - Manual corrections must enter through a recorded adjudication table/file and then be reapplied by the pipeline; never hand-edit a cleaned output.
 - Each published metric must be traceable to a pipeline run, analysis view/query, cohort definition, numerator, and denominator.
+- The workflow is human-in-the-loop. Do not build or require a monolithic command that runs every step for every team. Each small verified step must still record its inputs, rules/version, counts, hashes, and review/adjudication status.
+- `run` may stay lightweight only as orchestration: it does not need to execute the whole team pipeline, but any script/step that changes, derives, flags, excludes, validates, or exports data must capture what ran, on which inputs, with which rules/parameters, and what changed. `release` is the promotion boundary: provisional outputs can stay local/draft, but any dashboard/reporting aggregate used as a final output must record which processed inputs, checks, and run evidence produced it.
 - Keep only the final scripts actually used by the accepted pipeline. Remove superseded scratch scripts after their logic is rejected or incorporated; version control preserves history once it is established.
 - The web application is read-only. Run ingestion, cleaning, adjudication, analysis generation, and releases through versioned Python commands.
 
@@ -95,7 +98,7 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 - V2 deliberately uses shared team passwords, not user accounts or Supabase Auth. Store password hashes and signing secrets only in Vercel environment secrets; never commit them.
 - Treat every legacy password as public and generate new high-entropy V2 passwords. Verify a named team's password with a slow hash, issue one signed scope/expiry cookie, rate-limit unlock attempts, and protect preview deployments.
 - No upload or admin interface. Preview deployments must not run data imports, cleaning jobs, migrations, or destructive writes against the hosted database.
-- Apply a versioned, governance-approved disclosure-control rule to small or rare aggregates before release.
+- Do not suppress small aggregate counts by default. Exact `0`, `1`, and other small counts are retained and may be shown unless Abdel explicitly approves a later disclosure rule.
 
 ## Decisions Still Required
 
@@ -104,11 +107,10 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 - Device/vendor-specific validity rules and the treatment of weekly reporters.
 - UCD governance approval for Supabase hosting, Ireland region, retention, backups, and the shared-password access model.
 - Whether V2 includes union-scoped dashboards/passwords or explicitly removes the five legacy union routes.
-- Aggregate small-cell suppression threshold and release-review process.
 
 ## Local Commands
 
-- All of `data/` (pseudonymised intake, protected alias map, raw generated reporting exports) is Git-ignored. The pipeline writes reporting exports to Git-ignored `data/reporting/`; that path is the raw, unreviewed output. A disclosure-reviewed aggregate that is approved for publication is promoted by copying it to the committed `content/reporting/` path, which is the only reporting data allowed into Git/Vercel. `lib/reporting.ts` imports `content/reporting/munster_dashboard_2024-25.json` at build time, so a fresh clone can `npm run build` without restoring `data/`. Only promote aggregates that have passed the governance-approved small-cell/disclosure-control rule. At cutover this import must be replaced by reads from approved reporting views.
+- All of `data/` (pseudonymised intake, protected alias map, raw generated reporting exports) is Git-ignored. The pipeline writes reporting exports to Git-ignored `data/reporting/`; that path is the raw, unreviewed output. A reviewed aggregate that is approved for dashboard/reporting use is promoted by copying it to the committed `content/reporting/` path, which is the only reporting data allowed into Git/Vercel. `lib/reporting.ts` imports `content/reporting/munster_dashboard_2024-25.json` at build time, so a fresh clone can `npm run build` without restoring `data/`. Do not suppress small aggregate counts unless Abdel explicitly adds that rule later. At cutover this import must be replaced by reads from approved reporting views.
 - Install dependencies: `npm install`
 - Run the website: `npm run dev`
 - Build check: `npm run build`

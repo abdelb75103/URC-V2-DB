@@ -134,7 +134,22 @@ export default function FaqPage() {
     <div className="flex flex-col">
       <PageHeader title="Frequently Asked Questions" />
       <div className="flex-1 p-4 sm:p-6">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[300px_1fr]">
+          <aside className="lg:sticky lg:top-24 lg:self-start">
+            <h2 className="text-xl font-semibold text-foreground">Questions & answers</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Common questions about the SCRIIPT project, how data is collected and protected, and
+              what participating teams receive in return.
+            </p>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Still unsure?{' '}
+              <Link href="/contact" className="font-medium text-primary underline-offset-4 hover:underline">
+                Get in touch
+              </Link>
+              .
+            </p>
+          </aside>
+
           <Accordion type="single" collapsible className="w-full">
             {faqItems.map((item, index) => (
               <AccordionItem key={index} value={`item-${index}`}>

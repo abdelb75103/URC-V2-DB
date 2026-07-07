@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getTeamById, teams } from '@/config/teams';
-import { getMunsterDashboard } from '@/lib/reporting';
+import { getTeamDashboard } from '@/lib/reporting';
 import { LockedShell } from '@/components/locked-shell';
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 
@@ -30,7 +30,8 @@ export default async function TeamPage({
     );
   }
 
-  // Only Munster is live in the pilot.
-  const dashboard = getMunsterDashboard();
+  const dashboard = getTeamDashboard(team.id);
+  if (!dashboard) notFound();
+
   return <TeamDashboard dashboard={dashboard} crest={team.crest} teamName={team.name} />;
 }

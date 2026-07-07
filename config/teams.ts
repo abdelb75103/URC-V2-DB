@@ -18,10 +18,10 @@ const CREST = '/images/Team Crests';
 
 export const teams: Team[] = [
   // Ireland
-  { id: 'connacht', name: 'Connacht', crest: `${CREST}/ConnachtRugby.svg.png`, accent: '#007A4D', accentSecondary: '#000000', status: 'locked' },
-  { id: 'leinster', name: 'Leinster', crest: `${CREST}/LeinsterRugby.svg.png`, accent: '#005596', accentSecondary: '#FFFFFF', status: 'locked' },
+  { id: 'connacht', name: 'Connacht', crest: `${CREST}/ConnachtRugby.svg.png`, accent: '#007A4D', accentSecondary: '#000000', status: 'live' },
+  { id: 'leinster', name: 'Leinster', crest: `${CREST}/LeinsterRugby.svg.png`, accent: '#005596', accentSecondary: '#FFFFFF', status: 'live' },
   { id: 'munster', name: 'Munster', crest: `${CREST}/MunsterRugby.svg.png`, accent: '#D2232A', accentSecondary: '#FFFFFF', status: 'live' },
-  { id: 'ulster', name: 'Ulster', crest: `${CREST}/UlsterRugby.svg.png`, accent: '#D2232A', accentSecondary: '#FFFFFF', status: 'locked' },
+  { id: 'ulster', name: 'Ulster', crest: `${CREST}/UlsterRugby.svg.png`, accent: '#D2232A', accentSecondary: '#FFFFFF', status: 'live' },
   // Wales
   { id: 'cardiff', name: 'Cardiff', crest: `${CREST}/CardiffRugby.svg.png`, accent: '#00A3E0', accentSecondary: '#000000', status: 'locked' },
   { id: 'dragons', name: 'Dragons', crest: `${CREST}/DragonsRugby.svg.png`, accent: '#D2232A', accentSecondary: '#FFC72C', status: 'locked' },
