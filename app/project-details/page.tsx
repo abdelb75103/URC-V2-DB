@@ -13,18 +13,12 @@ const stages: {
     step: '01',
     title: 'Surveillance & Reporting',
     body: (
-      <>
-        <p>
-          Each club collects data capturing all injuries and illnesses, as defined in the appendices,
-          alongside exposure data (GPS-derived metrics as per definitions). Data is collected using
-          club-specific and/or union-mandated procedures, with the software used in each club&apos;s
-          daily practice or per union instructions.
-        </p>
-        <p>
-          Each player is given a unique identifier, and all personal data (name, date of birth,
-          demographics) is de-identified (anonymised).
-        </p>
-      </>
+      <p>
+        Each club collects data capturing all injuries and illnesses, as defined in the appendices,
+        alongside exposure data (GPS-derived metrics as per definitions). Data is collected using
+        club-specific and/or union-mandated procedures, with the software used in each club&apos;s
+        daily practice or per union instructions.
+      </p>
     ),
   },
   {
@@ -44,11 +38,17 @@ const stages: {
     step: '03',
     title: 'Data Storage & Processing',
     body: (
-      <p>
-        All data is transferred monthly into a URC Secured Database (Data Lakehouse). Data collection
-        and management are strictly confidential and adhere to GDPR and data-privacy guidelines and
-        legislation.
-      </p>
+      <>
+        <p>
+          All data is transferred monthly into a URC Secured Database (Data Lakehouse). Data collection
+          and management are strictly confidential and adhere to GDPR and data-privacy guidelines and
+          legislation.
+        </p>
+        <p>
+          Each player is given a unique identifier, and all personal data (name, date of birth,
+          demographics) is de-identified (anonymised).
+        </p>
+      </>
     ),
   },
 ];
@@ -67,7 +67,7 @@ export default function ProjectDetailsPage() {
                     The SCRIIPT Project
                   </p>
                   <CardTitle className="text-2xl sm:text-3xl">
-                    Injury, illness and performance across the URC
+                    Injury, illness and performance
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="max-w-[64ch] space-y-4 text-muted-foreground">
