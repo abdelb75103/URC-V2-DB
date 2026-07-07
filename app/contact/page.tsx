@@ -31,7 +31,9 @@ export default function ContactPage() {
               <Card key={contact.name} className="flex flex-col">
                 <CardHeader className="text-center">
                   <CardTitle>{contact.name}</CardTitle>
-                  <CardDescription className="text-primary">{contact.title}</CardDescription>
+                  <CardDescription className="text-primary md:flex md:min-h-[2.5rem] md:items-center md:justify-center">
+                    {contact.title}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-grow flex-col items-center justify-center">
                   <a
