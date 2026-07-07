@@ -47,7 +47,7 @@ export function SiteHeader() {
           : 'border-transparent bg-transparent'
       )}
     >
-      <div className="container mx-auto flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="container mx-auto flex h-20 items-center justify-between gap-4 px-4 sm:px-6">
         {/* Left: desktop URC logo */}
         <div className="flex items-center">
           <Link href="/" className="hidden shrink-0 items-center lg:flex" aria-label="Home">
