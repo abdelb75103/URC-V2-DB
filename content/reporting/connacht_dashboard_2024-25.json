@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-07T10:10:13Z",
+  "generated_at": "2026-07-07T10:58:39Z",
   "team": "Connacht",
   "season": "2024-25",
   "analysis_window": {
@@ -84,10 +84,10 @@
   ],
   "setting_split": [
     {
-      "label": "game",
-      "time_loss_injuries": 36,
-      "days_lost": 808,
-      "mean_severity_days": 22.4
+      "label": "match",
+      "time_loss_injuries": 33,
+      "days_lost": 749,
+      "mean_severity_days": 22.7
     },
     {
       "label": "training",
@@ -96,10 +96,10 @@
       "mean_severity_days": 15.0
     },
     {
-      "label": "other",
-      "time_loss_injuries": 4,
-      "days_lost": 37,
-      "mean_severity_days": 9.2
+      "label": "unknown",
+      "time_loss_injuries": 7,
+      "days_lost": 96,
+      "mean_severity_days": 13.7
     }
   ],
   "monthly": [
@@ -197,14 +197,14 @@
   "body_locations": [
     {
       "label": "Thigh",
-      "time_loss_injuries": 12,
-      "days_lost": 185,
-      "incidence_per_1000h": 3.7,
-      "burden_per_1000h": 57.5,
-      "mean_severity_days": 15.4
+      "time_loss_injuries": 14,
+      "days_lost": 194,
+      "incidence_per_1000h": 4.4,
+      "burden_per_1000h": 60.3,
+      "mean_severity_days": 13.9
     },
     {
-      "label": "Lower Leg",
+      "label": "Lower leg",
       "time_loss_injuries": 8,
       "days_lost": 140,
       "incidence_per_1000h": 2.5,
@@ -236,28 +236,28 @@
       "mean_severity_days": 23.1
     },
     {
-      "label": "Hip/Groin",
-      "time_loss_injuries": 6,
-      "days_lost": 68,
-      "incidence_per_1000h": 1.9,
-      "burden_per_1000h": 21.2,
-      "mean_severity_days": 11.3
+      "label": "Knee",
+      "time_loss_injuries": 4,
+      "days_lost": 130,
+      "incidence_per_1000h": 1.2,
+      "burden_per_1000h": 40.4,
+      "mean_severity_days": 32.5
     },
     {
       "label": "Foot",
-      "time_loss_injuries": 5,
-      "days_lost": 116,
-      "incidence_per_1000h": 1.6,
-      "burden_per_1000h": 36.1,
-      "mean_severity_days": 23.2
+      "time_loss_injuries": 4,
+      "days_lost": 61,
+      "incidence_per_1000h": 1.2,
+      "burden_per_1000h": 19.0,
+      "mean_severity_days": 15.2
     },
     {
-      "label": "Knee",
-      "time_loss_injuries": 3,
-      "days_lost": 75,
-      "incidence_per_1000h": 0.9,
-      "burden_per_1000h": 23.3,
-      "mean_severity_days": 25.0
+      "label": "Hip/Groin",
+      "time_loss_injuries": 4,
+      "days_lost": 59,
+      "incidence_per_1000h": 1.2,
+      "burden_per_1000h": 18.4,
+      "mean_severity_days": 14.8
     },
     {
       "label": "Neck",
@@ -268,7 +268,7 @@
       "mean_severity_days": 10.3
     },
     {
-      "label": "Wrist/Hand",
+      "label": "Wrist",
       "time_loss_injuries": 2,
       "days_lost": 44,
       "incidence_per_1000h": 0.6,
@@ -278,15 +278,15 @@
   ],
   "injury_types": [
     {
-      "label": "Muscle Strain/Spasm",
-      "time_loss_injuries": 18,
-      "days_lost": 288,
-      "incidence_per_1000h": 5.6,
-      "burden_per_1000h": 89.6,
-      "mean_severity_days": 16.0
+      "label": "Muscle injury",
+      "time_loss_injuries": 20,
+      "days_lost": 297,
+      "incidence_per_1000h": 6.2,
+      "burden_per_1000h": 92.4,
+      "mean_severity_days": 14.8
     },
     {
-      "label": "Bruising/ Haematoma",
+      "label": "Contusion (superficial)",
       "time_loss_injuries": 12,
       "days_lost": 161,
       "incidence_per_1000h": 3.7,
@@ -294,15 +294,15 @@
       "mean_severity_days": 13.4
     },
     {
-      "label": "Ligament",
-      "time_loss_injuries": 7,
-      "days_lost": 148,
-      "incidence_per_1000h": 2.2,
-      "burden_per_1000h": 46.0,
-      "mean_severity_days": 21.1
+      "label": "Joint sprain",
+      "time_loss_injuries": 11,
+      "days_lost": 259,
+      "incidence_per_1000h": 3.4,
+      "burden_per_1000h": 80.6,
+      "mean_severity_days": 23.5
     },
     {
-      "label": "Concussion/ Brain Injury",
+      "label": "Brain/spinal cord injury",
       "time_loss_injuries": 7,
       "days_lost": 79,
       "incidence_per_1000h": 2.2,
@@ -310,15 +310,7 @@
       "mean_severity_days": 11.3
     },
     {
-      "label": "Other Pain/ unspecified",
-      "time_loss_injuries": 4,
-      "days_lost": 89,
-      "incidence_per_1000h": 1.2,
-      "burden_per_1000h": 27.7,
-      "mean_severity_days": 22.2
-    },
-    {
-      "label": "Tendon",
+      "label": "Tendinopathy",
       "time_loss_injuries": 4,
       "days_lost": 86,
       "incidence_per_1000h": 1.2,
@@ -326,12 +318,12 @@
       "mean_severity_days": 21.5
     },
     {
-      "label": "Dislocation",
+      "label": "Nonspecific",
       "time_loss_injuries": 3,
-      "days_lost": 108,
+      "days_lost": 41,
       "incidence_per_1000h": 0.9,
-      "burden_per_1000h": 33.6,
-      "mean_severity_days": 36.0
+      "burden_per_1000h": 12.8,
+      "mean_severity_days": 13.7
     },
     {
       "label": "Fracture",
@@ -342,20 +334,28 @@
       "mean_severity_days": 72.0
     },
     {
-      "label": "Unspecified/Crossing",
+      "label": "Peripheral nerve injury",
       "time_loss_injuries": 2,
-      "days_lost": 9,
+      "days_lost": 72,
       "incidence_per_1000h": 0.6,
-      "burden_per_1000h": 2.8,
-      "mean_severity_days": 4.5
+      "burden_per_1000h": 22.4,
+      "mean_severity_days": 36.0
     },
     {
-      "label": "Synovitis/ Impingement/ Bursitis",
+      "label": "Synovitis/capsulitis",
       "time_loss_injuries": 1,
       "days_lost": 48,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 14.9,
       "mean_severity_days": 48.0
+    },
+    {
+      "label": "Arthritis",
+      "time_loss_injuries": 1,
+      "days_lost": 9,
+      "incidence_per_1000h": 0.3,
+      "burden_per_1000h": 2.8,
+      "mean_severity_days": 9.0
     }
   ],
   "severity_distribution": [

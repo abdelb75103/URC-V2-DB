@@ -128,6 +128,21 @@ INJURY_TYPE_MAP = {
     "unspecified/crossing": "nonspecific",
 }
 
+ORCHARD_PATHOLOGY_TYPE_MAP = {
+    "M": "muscle_injury",
+    "T": "tendinopathy",
+    "F": "fracture",
+    "J": "joint_sprain",
+    "N": "peripheral_nerve_injury",
+    "H": "contusion_superficial",
+    "K": "laceration",
+    "O": "internal_organ_trauma",
+    "G": "synovitis_capsulitis",
+    "A": "arthritis",
+    "U": "chronic_instability",
+    "D": "joint_sprain",
+}
+
 IOC_BODY_CODE_MAP = {
     "H": "head",
     "N": "neck",
@@ -325,9 +340,9 @@ def is_missing(value: str | None) -> bool:
 def activity_context(row: dict[str, str]) -> tuple[str, str]:
     occasion = clean_text(row.get("Occasion category")).lower()
     match_type = clean_text(row.get("Match Type")).lower()
-    if occasion == "game" and match_type == "united rugby championship":
+    if occasion in {"game", "match"} and match_type in {"united rugby championship", "urc"}:
         return "urc_match", "mapped_from_occasion_and_match_type"
-    if occasion == "training":
+    if occasion == "training" or match_type == "training":
         return "training", "mapped_from_occasion_category"
     return "unknown", "insufficient_direct_evidence"
 
@@ -338,6 +353,10 @@ def contact_context(row: dict[str, str]) -> tuple[str, str]:
         return "contact", "mapped_from_is_contact"
     if value == "non-contact":
         return "non_contact", "mapped_from_is_contact"
+    tissue = clean_text(row.get("Injury Tissue Type/s")).lower()
+    onset = clean_text(row.get("Nature of onset")).lower()
+    if is_missing(value) and tissue == "muscle strain/spasm" and onset == "acute":
+        return "non_contact", "inferred_from_acute_muscle_strain"
     return "unknown", "source_missing_or_unknown"
 
 
@@ -382,6 +401,9 @@ def body_location(row: dict[str, str]) -> tuple[str, str]:
         if mapped_from_code:
             return mapped_from_code, "mapped_from_orchard_code_ioc_body_area"
     source = clean_text(row.get("Body Part"))
+    controlled = BODY_LOCATION_LABEL_TO_KEY.get(source.lower())
+    if controlled:
+        return controlled, "preserved_controlled_body_part"
     mapped = BODY_LOCATION_MAP.get(source.lower())
     if mapped:
         return mapped, "mapped_from_body_part_ioc_body_area"
@@ -404,6 +426,14 @@ def problem_type(row: dict[str, str]) -> tuple[str, str]:
 
 def injury_type(row: dict[str, str]) -> tuple[str, str]:
     value = clean_text(row.get("Injury Tissue Type/s")).lower()
+    controlled = INJURY_TYPE_LABEL_TO_KEY.get(value)
+    if controlled:
+        return controlled, "preserved_controlled_injury_tissue_type"
+    orchard_code = clean_text(row.get("Orchard Code")).upper()
+    if value in {"", "na", "n/a", "unknown", "other pain/ unspecified", "unspecified/crossing"} and len(orchard_code) >= 2:
+        mapped_from_code = ORCHARD_PATHOLOGY_TYPE_MAP.get(orchard_code[1])
+        if mapped_from_code:
+            return mapped_from_code, "mapped_from_orchard_code_ioc_pathology"
     mapped = INJURY_TYPE_MAP.get(value)
     if mapped:
         return mapped, "mapped_from_injury_tissue_type"
@@ -1844,6 +1874,137 @@ def severity_band(days: int | None, closed: bool) -> tuple[str, str]:
     return "greater_than_twenty_eight_days", ">28 days"
 
 
+BODY_LOCATION_LABELS = {
+    "abdomen": "Abdomen",
+    "ankle": "Ankle",
+    "chest": "Chest",
+    "elbow": "Elbow",
+    "forearm": "Forearm",
+    "foot": "Foot",
+    "hand": "Hand",
+    "head": "Head",
+    "hip_groin": "Hip/Groin",
+    "knee": "Knee",
+    "lower_leg": "Lower leg",
+    "lumbosacral": "Lumbosacral",
+    "multiple": "Multiple",
+    "neck": "Neck",
+    "shoulder": "Shoulder",
+    "thigh": "Thigh",
+    "thoracic_spine": "Thoracic spine",
+    "unspecified": "Unspecified",
+    "upper_arm": "Upper arm",
+    "wrist": "Wrist",
+    "unknown": "Unknown",
+}
+
+INJURY_TYPE_LABELS = {
+    "arthritis": "Arthritis",
+    "avascular_necrosis": "Avascular necrosis",
+    "bone_contusion": "Bone contusion",
+    "bone_stress_injury": "Bone stress injury",
+    "brain_spinal_cord_injury": "Brain/spinal cord injury",
+    "bursitis": "Bursitis",
+    "cartilage_injury": "Cartilage injury",
+    "chronic_instability": "Chronic instability",
+    "contusion_superficial": "Contusion (superficial)",
+    "fracture": "Fracture",
+    "internal_organ_trauma": "Internal organs (organ trauma)",
+    "joint_sprain": "Joint sprain",
+    "laceration": "Laceration",
+    "muscle_injury": "Muscle injury",
+    "nonspecific": "Nonspecific",
+    "peripheral_nerve_injury": "Peripheral nerve injury",
+    "physis_injury": "Physis injury",
+    "synovitis_capsulitis": "Synovitis/capsulitis",
+    "tendon_rupture": "Tendon rupture",
+    "tendinopathy": "Tendinopathy",
+    "unknown": "Unknown",
+}
+
+CONTROLLED_BODY_LOCATION_LABELS = set(BODY_LOCATION_LABELS.values())
+CONTROLLED_INJURY_TYPE_LABELS = set(INJURY_TYPE_LABELS.values())
+BODY_LOCATION_LABEL_TO_KEY = {label.lower(): key for key, label in BODY_LOCATION_LABELS.items()}
+INJURY_TYPE_LABEL_TO_KEY = {label.lower(): key for key, label in INJURY_TYPE_LABELS.items()}
+
+SEVERITY_LABELS = {
+    "zero_days_medical_attention_only": "Medical Attention",
+    "one_day": "1 day",
+    "two_to_three_days": "2-3 days",
+    "four_to_seven_days": "4-7 days",
+    "eight_to_twenty_eight_days": "8-28 days",
+    "greater_than_twenty_eight_days": ">28 days",
+    "unknown_or_censored": "Unknown",
+}
+
+ANALYSIS_EXPORT_ORIGIN_FIELDS = [
+    "Problem type origin",
+    "Injury Status origin",
+    "Fit for selection origin",
+    "Confirmed Return Date origin",
+    "Occasion category origin",
+    "Match Type origin",
+    "Body Part origin",
+    "Injury Tissue Type/s origin",
+    "Injury Grade origin",
+    "Recurrence origin",
+    "Is Contact origin",
+    "TimeLoss vs Medical Attention origin",
+]
+
+
+def format_uk_date(value: date | None) -> str:
+    return value.strftime("%d/%m/%Y") if value else ""
+
+
+def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
+    output = dict(row)
+    injured_at = parse_date_value(row.get("Date Injured", ""))
+    days = parse_int(row.get("Days Injured", ""))
+    is_closed, is_closed_origin = injury_closed(row)
+    activity, activity_origin = activity_context(row)
+    contact, contact_origin = contact_context(row)
+    recurrence, recurrence_origin = recurrence_status(row)
+    severity, severity_origin = severity_category(days, is_closed)
+    body, body_origin = body_location(row)
+    problem, problem_origin = problem_type(row)
+    injury, injury_origin = injury_type(row)
+    return_date = injured_at + timedelta(days=days) if injured_at and days is not None else None
+
+    output["Problem type"] = {"injury": "Injury", "illness": "Illness"}.get(problem, "Unknown")
+    output["Injury Status"] = {True: "Closed", False: "Open/Ongoing"}.get(is_closed, "Unknown")
+    output["Fit for selection"] = {True: "Yes", False: "No"}.get(is_closed, "Unknown")
+    output["Fit For Selection Date"] = ""
+    output["Confirmed Return Date"] = format_uk_date(return_date) if is_closed is True else ""
+    output["Occasion category"] = {"urc_match": "match", "training": "training"}.get(activity, "unknown")
+    output["Match Type"] = {"urc_match": "URC", "training": "training"}.get(activity, "unknown")
+    output["Body Part"] = BODY_LOCATION_LABELS.get(body, "Unknown")
+    output["Injury Tissue Type/s"] = INJURY_TYPE_LABELS.get(injury, "Unknown")
+    output["Injury Grade"] = SEVERITY_LABELS.get(severity, "Unknown")
+    output["Recurrence"] = {"first_episode": "First episode", "recurrence": "Recurrence"}.get(
+        recurrence, "Unknown"
+    )
+    output["Is Contact"] = {"contact": "Contact", "non_contact": "Non-Contact"}.get(contact, "Unknown")
+    output["TimeLoss vs Medical Attention"] = (
+        "Unknown" if days is None else "Time Loss" if days > 0 else "Medical Attention"
+    )
+    output["Problem type origin"] = problem_origin
+    output["Injury Status origin"] = is_closed_origin
+    output["Fit for selection origin"] = is_closed_origin
+    output["Confirmed Return Date origin"] = (
+        "derived_from_date_injured_plus_days" if is_closed is True and return_date else ""
+    )
+    output["Occasion category origin"] = activity_origin
+    output["Match Type origin"] = activity_origin
+    output["Body Part origin"] = body_origin
+    output["Injury Tissue Type/s origin"] = injury_origin
+    output["Injury Grade origin"] = severity_origin
+    output["Recurrence origin"] = recurrence_origin
+    output["Is Contact origin"] = contact_origin
+    output["TimeLoss vs Medical Attention origin"] = "derived_from_days_injured"
+    return output
+
+
 def rate_per_1000(count: float, hours: float) -> float | None:
     if hours <= 0:
         return None
@@ -1947,8 +2108,10 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
         exposure_by_month[key]["exposure_hours"] += (parse_float(row.get("minutes_total_clean")) or 0) / 60
         exposure_by_month[key]["distance_km"] += (parse_float(row.get("distance_total_m_clean")) or 0) / 1000
 
+    injury_source_rows = read_rows(Path(args.injury_file))
+    included_injury_source_rows = []
     injury_rows = []
-    for index, row in enumerate(read_rows(Path(args.injury_file)), start=2):
+    for index, row in enumerate(injury_source_rows, start=2):
         if str(index) in excluded_injury_rows:
             continue
         injured_at = parse_date_value(row.get("Date Injured", ""))
@@ -1957,9 +2120,15 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
         days_lost = parse_int(row.get("Days Injured", ""))
         closed = clean_text(row.get("is_injury_closed")) != "0"
         band_key, band_label = severity_band(days_lost, closed)
+        filled_row = filled_injury_export_row(row)
+        included_injury_source_rows.append(row)
         injury_rows.append(
             {
                 **row,
+                "Occasion category": filled_row["Occasion category"],
+                "Match Type": filled_row["Match Type"],
+                "Body Part": filled_row["Body Part"],
+                "Injury Tissue Type/s": filled_row["Injury Tissue Type/s"],
                 "injured_at": injured_at,
                 "days_lost": days_lost or 0,
                 "is_time_loss": (days_lost or 0) > 0,
@@ -2176,7 +2345,27 @@ def build_team_dashboard(args: argparse.Namespace) -> None:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(dashboard, indent=2) + "\n")
-    print(json.dumps({"output": str(output), "team": args.team, "season": args.season}, indent=2))
+    analysis_output = clean_text(getattr(args, "analysis_output", ""))
+    if analysis_output:
+        fieldnames = (list(injury_source_rows[0]) if injury_source_rows else []) + [
+            field for field in ANALYSIS_EXPORT_ORIGIN_FIELDS if not injury_source_rows or field not in injury_source_rows[0]
+        ]
+        write_rows(
+            Path(analysis_output),
+            [filled_injury_export_row(row) for row in included_injury_source_rows],
+            fieldnames,
+        )
+    print(
+        json.dumps(
+            {
+                "output": str(output),
+                "analysis_output": analysis_output or None,
+                "team": args.team,
+                "season": args.season,
+            },
+            indent=2,
+        )
+    )
 
 
 def build_munster_dashboard(args: argparse.Namespace) -> None:
@@ -2198,6 +2387,29 @@ def self_check(args: argparse.Namespace) -> None:
     assert exposure_scope_status({}) == ("scope_unknown_included", "blank_scope_fields_retained")
     assert exposure_scope_status({"Competition": "academy"})[0] == "out_of_scope_explicit"
     assert severity_category(10, True)[0] == "eight_to_twenty_eight_days"
+    assert contact_context({"Is Contact": "NA", "Injury Tissue Type/s": "Muscle Strain/Spasm", "Nature of onset": "Acute"}) == (
+        "non_contact",
+        "inferred_from_acute_muscle_strain",
+    )
+    assert activity_context({"Occasion category": "match", "Match Type": "URC"}) == (
+        "urc_match",
+        "mapped_from_occasion_and_match_type",
+    )
+    assert injury_type({"Injury Tissue Type/s": "Other Pain/ unspecified", "Orchard Code": "NJPX"}) == (
+        "joint_sprain",
+        "mapped_from_orchard_code_ioc_pathology",
+    )
+    assert body_location({"Body Part": "Lower leg"}) == ("lower_leg", "preserved_controlled_body_part")
+    assert injury_type({"Injury Tissue Type/s": "Muscle injury"}) == (
+        "muscle_injury",
+        "preserved_controlled_injury_tissue_type",
+    )
+    assert set(BODY_LOCATION_LABELS.values()) == CONTROLLED_BODY_LOCATION_LABELS
+    assert set(INJURY_TYPE_LABELS.values()) == CONTROLLED_INJURY_TYPE_LABELS
+    unknown_export = filled_injury_export_row({"Date Injured": "02/07/2024", "Days Injured": "0"})
+    assert unknown_export["Body Part"] == "Unknown"
+    assert unknown_export["Injury Tissue Type/s"] == "Unknown"
+    assert unknown_export["Fit for selection"] == "Unknown"
     assert rate_per_1000(1, 2) == 500
 
     locator = {field: "fixture" for field in LOCATOR_FIELDS}
@@ -2569,6 +2781,7 @@ def main() -> None:
             default="data/reporting/munster_dashboard_2024-25.json",
         )
         command.add_argument("--exclude-injury-rows", default="")
+        command.add_argument("--analysis-output", default="")
 
     team_dashboard_parser = subcommands.add_parser("build-team-dashboard")
     add_team_dashboard_args(team_dashboard_parser)

@@ -1,0 +1,48 @@
+domain,bucket_key,review_label,consensus_basis,notes
+body_location,head,Head,IOC 2020 body area,Includes face/brain/concussion evidence when coded as head.
+body_location,neck,Neck,IOC 2020 body area,Includes cervical spine.
+body_location,shoulder,Shoulder,IOC 2020 body area,Includes shoulder/clavicle/scapula region.
+body_location,upper_arm,Upper arm,IOC 2020 body area,Upper arm segment.
+body_location,elbow,Elbow,IOC 2020 body area,Elbow region.
+body_location,forearm,Forearm,IOC 2020 body area,Forearm region.
+body_location,wrist,Wrist,IOC 2020 body area,Wrist/carpus region.
+body_location,hand,Hand,IOC 2020 body area,Hand/finger/thumb region.
+body_location,chest,Chest,IOC 2020 body area,Chest/rib/sternum region.
+body_location,thoracic_spine,Thoracic spine,IOC 2020 body area,Thoracic spine/costovertebral region.
+body_location,lumbosacral,Lumbosacral,IOC 2020 body area,Lumbar spine/sacrum/coccyx/buttock/pelvis fallback.
+body_location,abdomen,Abdomen,IOC 2020 body area,Abdominal/trunk fallback when code supports abdomen.
+body_location,hip_groin,Hip/Groin,IOC 2020 body area,Hip and groin region.
+body_location,thigh,Thigh,IOC 2020 body area,Thigh/femur/hamstring/quadriceps/adductor region.
+body_location,knee,Knee,IOC 2020 body area,Knee/patella/patellar tendon region.
+body_location,lower_leg,Lower leg,IOC 2020 body area,Lower leg/calf/Achilles region.
+body_location,ankle,Ankle,IOC 2020 body area,Ankle/syndesmosis region.
+body_location,foot,Foot,IOC 2020 body area,Foot/toe/calcaneus/plantar fascia region.
+body_location,unspecified,Unspecified,IOC 2020 body area,Use only when source/coding indicates unspecified body area.
+body_location,multiple,Multiple,IOC 2020 body area,Use only when source/coding indicates multiple body areas.
+body_location,unknown,Unknown,Pipeline audit category,Use when no defensible body-location evidence exists; not an IOC body-area bucket.
+injury_type,muscle_injury,Muscle injury,IOC 2020 tissue/pathology,Includes strain/tear/rupture-like muscle injury source categories.
+injury_type,muscle_contusion,Muscle contusion,IOC 2020 tissue/pathology,Reserved for future teams when source evidence distinguishes muscle contusion.
+injury_type,muscle_compartment_syndrome,Muscle compartment syndrome,IOC 2020 tissue/pathology,Reserved for future teams.
+injury_type,tendinopathy,Tendinopathy,IOC 2020 tissue/pathology,Nonrupture tendon/paratenon/bursa/fascia-related category.
+injury_type,tendon_rupture,Tendon rupture,IOC 2020 tissue/pathology,Reserved for explicit tendon rupture source evidence.
+injury_type,brain_spinal_cord_injury,Brain/spinal cord injury,IOC 2020 tissue/pathology,Includes concussion/brain/spinal cord injury.
+injury_type,peripheral_nerve_injury,Peripheral nerve injury,IOC 2020 tissue/pathology,Includes nerve injuries when source/coding supports it.
+injury_type,fracture,Fracture,IOC 2020 tissue/pathology,Traumatic fracture category.
+injury_type,bone_stress_injury,Bone stress injury,IOC 2020 tissue/pathology,Reserved for explicit stress injury evidence.
+injury_type,bone_contusion,Bone contusion,IOC 2020 tissue/pathology,Reserved for explicit bony contusion evidence.
+injury_type,avascular_necrosis,Avascular necrosis,IOC 2020 tissue/pathology,Reserved for future teams.
+injury_type,physis_injury,Physis injury,IOC 2020 tissue/pathology,Reserved for physeal/apophyseal injury evidence.
+injury_type,cartilage_injury,Cartilage injury,IOC 2020 tissue/pathology,Includes osteochondral/cartilage/labral/meniscal source categories when supported.
+injury_type,arthritis,Arthritis,IOC 2020 tissue/pathology,Includes osteoarthritis source categories.
+injury_type,synovitis_capsulitis,Synovitis/capsulitis,IOC 2020 tissue/pathology,Safe default for combined synovitis/impingement/bursitis source category unless bursitis is explicit.
+injury_type,bursitis,Bursitis,IOC 2020 tissue/pathology,Reserved for explicit bursitis evidence.
+injury_type,joint_sprain,Joint sprain,IOC 2020 tissue/pathology,Includes ligament/dislocation/subluxation-like source categories when supported.
+injury_type,chronic_instability,Chronic instability,IOC 2020 tissue/pathology,Includes instability source categories.
+injury_type,contusion_superficial,Contusion (superficial),IOC 2020 tissue/pathology,Includes bruising/haematoma when not specifically muscle contusion.
+injury_type,laceration,Laceration,IOC 2020 tissue/pathology,Includes laceration/abrasion source category unless abrasion is explicit.
+injury_type,abrasion,Abrasion,IOC 2020 tissue/pathology,Reserved for explicit abrasion evidence.
+injury_type,vascular_trauma,Vessels (vascular trauma),IOC 2020 tissue/pathology,Reserved for future teams.
+injury_type,stump_injury,Stump injury,IOC 2020 tissue/pathology,Reserved for future teams.
+injury_type,internal_organ_trauma,Internal organs (organ trauma),IOC 2020 tissue/pathology,Includes organ damage source categories.
+injury_type,nonspecific,Nonspecific,IOC 2020 tissue/pathology,Use when source/coding indicates nonspecific injury pathology.
+injury_type,unknown,Unknown,Pipeline audit category,Use when no defensible tissue/pathology evidence exists; not an IOC tissue/pathology bucket.

@@ -12,7 +12,7 @@ The IOC statement recommends aggregate injury reporting by body area and tissue/
 
 ## Body Location Categories
 
-These are the global body-location categories used across teams.
+These are the global body-location categories used across teams. The machine-readable bucket list is `docs/IOC_TAXONOMY_BUCKETS.csv`.
 
 | Pipeline key | Review label | IOC/OSIICS body code | Notes |
 |---|---|---:|---|
@@ -41,7 +41,8 @@ Pipeline rule:
 
 1. If `Orchard Code` is present, use its first character as the IOC/OSIICS body-area code.
 2. If no usable code is present, map the source `Body Part` to the nearest IOC body area.
-3. Preserve the original source value and record the field origin.
+3. If no defensible body-location evidence exists, leave the analysis value as `Unknown`; do not collapse missing evidence into the IOC `Unspecified` bucket.
+4. Preserve the original source value and record the field origin.
 
 Current Munster fallback mappings from source `Body Part`:
 
@@ -66,7 +67,7 @@ Current Munster fallback mappings from source `Body Part`:
 
 ## Injury Tissue/Pathology Categories
 
-These are the global tissue/pathology categories used across teams.
+These are the global tissue/pathology categories used across teams. The machine-readable bucket list is `docs/IOC_TAXONOMY_BUCKETS.csv`.
 
 | Pipeline key | Review label | Notes |
 |---|---|---|
@@ -123,6 +124,28 @@ Known review point:
 
 - `Synovitis/ Impingement/ Bursitis` combines two IOC categories: `synovitis_capsulitis` and `bursitis`. The current safe default is `synovitis_capsulitis` because the source value is not specific enough to split without extra evidence.
 - `Disc` and `Post Surgery` do not have exact IOC Table 5 tissue/pathology categories from the available Munster source value alone, so they are mapped to `nonspecific` unless a diagnosis code or clinical review supports a more precise category.
+- When source tissue/pathology is blank, `Other Pain/ unspecified`, or `Unspecified/Crossing`, the pipeline may use the Orchard/OSIICS pathology character only for controlled high-confidence mappings into the IOC tissue/pathology buckets. Otherwise the analysis value remains `Unknown` or `Nonspecific` with the origin recorded.
+
+## Comparable Column Standardisation
+
+The filled analysis export standardises these comparable columns for every team before cross-team analysis:
+
+| Column | Controlled output |
+|---|---|
+| `Occasion category` | `match`, `training`, `unknown` |
+| `Match Type` | `URC`, `training`, `unknown` |
+| `Problem type` | `Injury`, `Illness`, `Unknown` |
+| `Injury Status` | `Closed`, `Open/Ongoing`, `Unknown` |
+| `Fit for selection` | `Yes`, `No`, `Unknown` |
+| `Confirmed Return Date` | Derived only where closed injury date and days injured support it; source value remains preserved separately in DB state. |
+| `Injury Grade` | Project severity bands from days injured and closure status. |
+| `Recurrence` | `First episode`, `Recurrence`, `Unknown` |
+| `Is Contact` | `Contact`, `Non-Contact`, `Unknown` |
+| `Body Part` | Controlled IOC body-location label or `Unknown` |
+| `Injury Tissue Type/s` | Controlled IOC tissue/pathology label or `Unknown` |
+| `TimeLoss vs Medical Attention` | `Time Loss`, `Medical Attention`, `Unknown` |
+
+Each mapped, derived, or inferred value must carry an origin field in review exports and live DB processing state.
 
 ## Severity Categories
 

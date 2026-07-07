@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-07T10:10:12Z",
+  "generated_at": "2026-07-07T10:58:39Z",
   "team": "Leinster",
   "season": "2024-25",
   "analysis_window": {
@@ -84,22 +84,22 @@
   ],
   "setting_split": [
     {
-      "label": "game",
-      "time_loss_injuries": 25,
-      "days_lost": 696,
-      "mean_severity_days": 27.8
-    },
-    {
       "label": "training",
       "time_loss_injuries": 23,
       "days_lost": 908,
       "mean_severity_days": 39.5
     },
     {
-      "label": "other",
-      "time_loss_injuries": 2,
-      "days_lost": 35,
-      "mean_severity_days": 17.5
+      "label": "match",
+      "time_loss_injuries": 23,
+      "days_lost": 635,
+      "mean_severity_days": 27.6
+    },
+    {
+      "label": "unknown",
+      "time_loss_injuries": 4,
+      "days_lost": 96,
+      "mean_severity_days": 24.0
     }
   ],
   "monthly": [
@@ -204,7 +204,7 @@
       "mean_severity_days": 40.6
     },
     {
-      "label": "Lower Leg",
+      "label": "Lower leg",
       "time_loss_injuries": 11,
       "days_lost": 365,
       "incidence_per_1000h": 2.8,
@@ -278,7 +278,7 @@
   ],
   "injury_types": [
     {
-      "label": "Muscle Strain/Spasm",
+      "label": "Muscle injury",
       "time_loss_injuries": 28,
       "days_lost": 1066,
       "incidence_per_1000h": 7.1,
@@ -286,7 +286,15 @@
       "mean_severity_days": 38.1
     },
     {
-      "label": "Concussion/ Brain Injury",
+      "label": "Joint sprain",
+      "time_loss_injuries": 6,
+      "days_lost": 168,
+      "incidence_per_1000h": 1.5,
+      "burden_per_1000h": 42.9,
+      "mean_severity_days": 28.0
+    },
+    {
+      "label": "Brain/spinal cord injury",
       "time_loss_injuries": 6,
       "days_lost": 74,
       "incidence_per_1000h": 1.5,
@@ -294,15 +302,7 @@
       "mean_severity_days": 12.3
     },
     {
-      "label": "Ligament",
-      "time_loss_injuries": 5,
-      "days_lost": 150,
-      "incidence_per_1000h": 1.3,
-      "burden_per_1000h": 38.3,
-      "mean_severity_days": 30.0
-    },
-    {
-      "label": "Tendon",
+      "label": "Tendinopathy",
       "time_loss_injuries": 2,
       "days_lost": 138,
       "incidence_per_1000h": 0.5,
@@ -318,7 +318,15 @@
       "mean_severity_days": 39.0
     },
     {
-      "label": "Bruising/ Haematoma",
+      "label": "Nonspecific",
+      "time_loss_injuries": 2,
+      "days_lost": 60,
+      "incidence_per_1000h": 0.5,
+      "burden_per_1000h": 15.3,
+      "mean_severity_days": 30.0
+    },
+    {
+      "label": "Contusion (superficial)",
       "time_loss_injuries": 2,
       "days_lost": 34,
       "incidence_per_1000h": 0.5,
@@ -326,36 +334,12 @@
       "mean_severity_days": 17.0
     },
     {
-      "label": "Nerve",
+      "label": "Peripheral nerve injury",
       "time_loss_injuries": 2,
       "days_lost": 21,
       "incidence_per_1000h": 0.5,
       "burden_per_1000h": 5.4,
       "mean_severity_days": 10.5
-    },
-    {
-      "label": "Other Pain/ unspecified",
-      "time_loss_injuries": 1,
-      "days_lost": 41,
-      "incidence_per_1000h": 0.3,
-      "burden_per_1000h": 10.5,
-      "mean_severity_days": 41.0
-    },
-    {
-      "label": "Disc",
-      "time_loss_injuries": 1,
-      "days_lost": 19,
-      "incidence_per_1000h": 0.3,
-      "burden_per_1000h": 4.8,
-      "mean_severity_days": 19.0
-    },
-    {
-      "label": "Dislocation",
-      "time_loss_injuries": 1,
-      "days_lost": 18,
-      "incidence_per_1000h": 0.3,
-      "burden_per_1000h": 4.6,
-      "mean_severity_days": 18.0
     }
   ],
   "severity_distribution": [
