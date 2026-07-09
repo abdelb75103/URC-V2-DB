@@ -247,6 +247,49 @@ def is_protected_team_alias_value(value: str) -> bool:
     return bool(re.fullmatch(r"Team [A-Z]", clean_text(value)))
 
 
+# SQL-side counterpart of is_protected_team_alias_value(), used both to redact
+# live rows and to scan for regressions. Kept as a plain regex (no named
+# groups/backrefs) so it is safe to splice directly into generated SQL text.
+PROTECTED_ALIAS_SQL_PATTERN = "^Team [A-Z]$"
+PROTECTED_ALIAS_REDACTED_MARKER = "[REDACTED_PROTECTED_METADATA]"
+# Deliberately does NOT encode which letter A-Z was redacted (no length/shape
+# clue either): the whole point of the redaction is to purge the pairing
+# between a source row and its league alias, so the audit trail must not let
+# that pairing be reconstructed from old_value even though old_value is
+# normally a real prior value elsewhere in this pipeline.
+PROTECTED_ALIAS_OLD_VALUE_MARKER = "[REDACTED_PRIOR_PROTECTED_ALIAS_VALUE]"
+PROTECTED_ALIAS_REDACTION_RULE_VERSION = "protected_alias_redaction_2026-07-09_v1"
+AGGREGATE_RELEASE_RETIREMENT_RULE_VERSION = "aggregate_release_retirement_2026-07-09_v1"
+
+
+def protected_alias_scan_sql(check_label: str) -> str:
+    """Read-only 'do' block: raises if any live protected Team A-Z alias value
+    remains in ingestion.source_rows.source_values or
+    processing.record_versions.record_state->>'team_alias'. Only counts are
+    reported (never the offending value), so this is safe to run and log from
+    self-check, the release gate, or a bare read-only connection.
+    """
+    return f"""
+      do $$
+      declare
+        source_hits integer;
+        record_hits integer;
+      begin
+        select count(*) into source_hits
+        from ingestion.source_rows sr, jsonb_each(sr.source_values) e
+        where jsonb_typeof(e.value) = 'string'
+          and (e.value #>> '{{}}') ~ '{PROTECTED_ALIAS_SQL_PATTERN}';
+        select count(*) into record_hits
+        from processing.record_versions
+        where record_state ->> 'team_alias' ~ '{PROTECTED_ALIAS_SQL_PATTERN}';
+        if source_hits > 0 or record_hits > 0 then
+          raise exception '{check_label}: % protected Team A-Z alias value(s) remain (% in ingestion.source_rows.source_values, % in processing.record_versions.record_state.team_alias)',
+            source_hits + record_hits, source_hits, record_hits;
+        end if;
+      end $$;
+    """
+
+
 class SqlParams:
     # Multi-statement SQL batches read values from a transaction-local table
     # because pg bind parameters apply to a single prepared statement.
@@ -2290,6 +2333,8 @@ def release(args: argparse.Namespace) -> None:
         );
     """
     sql = f"""
+      {protected_alias_scan_sql('release gate')}
+
       do $$
       begin
         if not exists (select 1 from supabase_migrations.schema_migrations where version = '20260707110832') then
@@ -2453,6 +2498,246 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
     """
     run_sql(sql, params.values)
     print(json.dumps({"team": args.team, "excluded_row": args.row_number, "raw_record_id": raw_id}, indent=2))
+
+
+def redact_protected_team_aliases(args: argparse.Namespace) -> None:
+    """Retroactively purge exact 'Team A'-'Team Z' league-alias values left in
+    live rows (a gap predating alias redaction at ingest time). Replaces
+    values only -- no key or row is ever deleted -- and records one pipeline
+    run with two step_runs (one per table) plus one audit.record_events row
+    per changed row. See PROTECTED_ALIAS_OLD_VALUE_MARKER for why old_value is
+    a marker rather than the real prior string.
+    """
+    if args.scope != "all":
+        raise SystemExit("redact-protected-team-aliases currently only supports --scope all")
+
+    params = SqlParams()
+    pattern = params.text(PROTECTED_ALIAS_SQL_PATTERN)
+    marker = params.text(PROTECTED_ALIAS_REDACTED_MARKER)
+    old_marker = params.text(PROTECTED_ALIAS_OLD_VALUE_MARKER)
+    rule_version = params.text(PROTECTED_ALIAS_REDACTION_RULE_VERSION)
+    field_name_team_alias = params.text("team_alias")
+    step_source_rows = params.text("redact_source_row_values")
+    step_record_versions = params.text("redact_record_version_team_alias")
+
+    sql = f"""
+      do $$
+      begin
+        if not exists (select 1 from audit.reason_codes where code = 'protected_metadata_redaction') then
+          raise exception 'redact-protected-team-aliases requires reason code protected_metadata_redaction to be seeded by migration first';
+        end if;
+      end $$;
+
+      create temp table current_run on commit drop as
+      with run as (
+        insert into audit.pipeline_runs (command, status, parameters, ended_at)
+        values (
+          'redact-protected-team-aliases', 'succeeded',
+          {params.jsonb({"scope": args.scope, "pattern": PROTECTED_ALIAS_SQL_PATTERN, "rule_version": PROTECTED_ALIAS_REDACTION_RULE_VERSION})},
+          now()
+        )
+        returning id
+      )
+      select id from run;
+
+      -- Step 1: ingestion.source_rows.source_values (any matching value, any key)
+      create temp table source_rows_step on commit drop as
+      with step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, ended_at)
+        select id, {step_source_rows}, {rule_version}, 'protected_metadata_redaction', now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      create temp table source_rows_changes on commit drop as
+      select
+        sr.id as source_row_id,
+        sf.team as team,
+        (
+          select array_agg(e.key order by e.key)
+          from jsonb_each(sr.source_values) e
+          where jsonb_typeof(e.value) = 'string' and (e.value #>> '{{}}') ~ {pattern}
+        ) as changed_keys,
+        (
+          select jsonb_object_agg(
+            e.key,
+            case when jsonb_typeof(e.value) = 'string' and (e.value #>> '{{}}') ~ {pattern}
+                 then to_jsonb({marker}::text)
+                 else e.value
+            end
+          )
+          from jsonb_each(sr.source_values) e
+        ) as redacted_values
+      from ingestion.source_rows sr
+      join ingestion.source_files sf on sf.id = sr.source_file_id
+      where exists (
+        select 1 from jsonb_each(sr.source_values) e
+        where jsonb_typeof(e.value) = 'string' and (e.value #>> '{{}}') ~ {pattern}
+      );
+
+      update ingestion.source_rows sr
+      set source_values = c.redacted_values
+      from source_rows_changes c
+      where sr.id = c.source_row_id;
+
+      insert into audit.record_events
+        (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+      select
+        (select id from source_rows_step),
+        c.source_row_id,
+        array_to_string(c.changed_keys, ','),
+        jsonb_build_object('redacted_keys', to_jsonb(c.changed_keys), 'value', to_jsonb({old_marker}::text)),
+        jsonb_build_object('redacted_keys', to_jsonb(c.changed_keys), 'value', to_jsonb({marker}::text)),
+        'redact', 'protected_metadata_redaction',
+        'Purged protected Team A-Z league-alias placeholder value(s) from stored source_values; keys retained, only the value(s) replaced.',
+        {rule_version}, 'not_required'
+      from source_rows_changes c;
+
+      update audit.step_runs
+      set input_count = (select count(*) from ingestion.source_rows),
+          output_count = (select count(*) from source_rows_changes),
+          counts_by_team = (
+            select coalesce(jsonb_object_agg(team, cnt), '{{}}'::jsonb)
+            from (select team, count(*) as cnt from source_rows_changes group by team) t
+          ),
+          ended_at = now()
+      where id = (select id from source_rows_step);
+
+      -- Step 2: processing.record_versions.record_state ->> 'team_alias'
+      create temp table record_versions_step on commit drop as
+      with step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, ended_at)
+        select id, {step_record_versions}, {rule_version}, 'protected_metadata_redaction', now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      create temp table record_versions_changes on commit drop as
+      select rv.id as record_version_id, sr.id as source_row_id, sf.team as team
+      from processing.record_versions rv
+      join ingestion.source_rows sr on sr.id = rv.source_row_id
+      join ingestion.source_files sf on sf.id = sr.source_file_id
+      where rv.record_state ->> 'team_alias' ~ {pattern};
+
+      update processing.record_versions rv
+      set record_state = jsonb_set(rv.record_state, array[{field_name_team_alias}], to_jsonb({marker}::text))
+      from record_versions_changes c
+      where rv.id = c.record_version_id;
+
+      insert into audit.record_events
+        (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+      select
+        (select id from record_versions_step),
+        c.source_row_id,
+        {field_name_team_alias},
+        to_jsonb({old_marker}::text),
+        to_jsonb({marker}::text),
+        'redact', 'protected_metadata_redaction',
+        'Purged protected Team A-Z league-alias placeholder value from processing.record_versions.record_state.team_alias; key retained, only the value replaced.',
+        {rule_version}, 'not_required'
+      from record_versions_changes c;
+
+      update audit.step_runs
+      set input_count = (select count(*) from processing.record_versions),
+          output_count = (select count(*) from record_versions_changes),
+          counts_by_team = (
+            select coalesce(jsonb_object_agg(team, cnt), '{{}}'::jsonb)
+            from (select team, count(*) as cnt from record_versions_changes group by team) t
+          ),
+          ended_at = now()
+      where id = (select id from record_versions_step);
+
+      update audit.pipeline_runs
+      set output_hash = md5(
+        coalesce((select count(*) from source_rows_changes), 0)::text || ':' ||
+        coalesce((select count(*) from record_versions_changes), 0)::text
+      )
+      where id = (select id from current_run);
+
+      {protected_alias_scan_sql('redact-protected-team-aliases post-check')}
+    """
+    run_sql(sql, params.values)
+    print(
+        "redact-protected-team-aliases: pipeline run recorded (source_rows + "
+        "record_versions steps); re-query row counts read-only to confirm."
+    )
+
+
+def retire_releases(args: argparse.Namespace) -> None:
+    """Flip named reporting.aggregate_releases rows from 'approved' to
+    'retired' in one audited run. Rows are kept (never deleted); only
+    exact, explicitly named labels are accepted -- no implicit globbing of
+    what counts as a 'smoke' release, so this stays a reviewed, bounded
+    action rather than a standing cleanup rule.
+    """
+    labels = [clean_text(label) for label in args.labels.split(",") if clean_text(label)]
+    if not labels:
+        raise SystemExit("--labels must name at least one release_label to retire")
+
+    params = SqlParams()
+    labels_json = params.jsonb(labels)
+    rule_version = params.text(AGGREGATE_RELEASE_RETIREMENT_RULE_VERSION)
+    step_name = params.text("retire_aggregate_releases")
+
+    sql = f"""
+      do $$
+      begin
+        if not exists (select 1 from audit.reason_codes where code = 'aggregate_release_retired') then
+          raise exception 'retire-releases requires reason code aggregate_release_retired to be seeded by migration first';
+        end if;
+        if exists (
+          select 1
+          from jsonb_array_elements_text({labels_json}) expected(label)
+          where not exists (
+            select 1 from reporting.aggregate_releases r
+            where r.release_label = expected.label and r.status = 'approved'
+          )
+        ) then
+          raise exception 'retire-releases requires every named label to currently exist with status approved';
+        end if;
+      end $$;
+
+      create temp table current_run on commit drop as
+      with run as (
+        insert into audit.pipeline_runs (command, status, parameters, ended_at)
+        values (
+          'retire-releases', 'succeeded',
+          {params.jsonb({"labels": labels, "rationale": args.rationale, "reviewer": args.reviewer})},
+          now()
+        )
+        returning id
+      )
+      select id from run;
+
+      create temp table retire_step on commit drop as
+      with step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, ended_at)
+        select id, {step_name}, {rule_version}, 'aggregate_release_retired', now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      update reporting.aggregate_releases r
+      set status = 'retired'
+      where r.release_label in (select jsonb_array_elements_text({labels_json}))
+        and r.status = 'approved';
+
+      update audit.step_runs
+      set input_count = jsonb_array_length({labels_json}),
+          output_count = (
+            select count(*) from reporting.aggregate_releases
+            where release_label in (select jsonb_array_elements_text({labels_json}))
+              and status = 'retired'
+          ),
+          counts_by_team = '{{}}'::jsonb,
+          ended_at = now()
+      where id = (select id from retire_step);
+    """
+    run_sql(sql, params.values)
+    print(f"retired {len(labels)} release(s): {', '.join(labels)}")
 
 
 def parse_date_value(value: str) -> date | None:
@@ -3636,6 +3921,15 @@ def self_check(args: argparse.Namespace) -> None:
         assert session_dashboard["coverage"]["weeks"] == 0
         assert session_dashboard["analysis_window"]["end"] == "2024-07-02"
 
+    if os.environ.get("SUPABASE_DB_URL"):
+        run_sql(protected_alias_scan_sql("self-check"))
+        print("self-check: live protected-alias scan passed (0 hits)")
+    else:
+        print(
+            "self-check: SUPABASE_DB_URL not set; skipping live protected-alias "
+            "scan (this check is read-only, but requires DB connectivity)"
+        )
+
     print("self-check passed")
 
 
@@ -3843,6 +4137,16 @@ def main() -> None:
     dashboard_parser = subcommands.add_parser("build-munster-dashboard")
     add_team_dashboard_args(dashboard_parser)
     dashboard_parser.set_defaults(func=build_munster_dashboard)
+
+    redact_alias_parser = subcommands.add_parser("redact-protected-team-aliases")
+    redact_alias_parser.add_argument("--scope", default="all", choices=["all"])
+    redact_alias_parser.set_defaults(func=redact_protected_team_aliases)
+
+    retire_releases_parser = subcommands.add_parser("retire-releases")
+    retire_releases_parser.add_argument("--labels", required=True)
+    retire_releases_parser.add_argument("--rationale", required=True)
+    retire_releases_parser.add_argument("--reviewer", required=True)
+    retire_releases_parser.set_defaults(func=retire_releases)
 
     check_parser = subcommands.add_parser("self-check")
     check_parser.set_defaults(func=self_check)
