@@ -333,6 +333,37 @@ def run_sql(sql: str, params: list[object] | None = None) -> None:
             Path(params_path).unlink(missing_ok=True)
 
 
+def query_sql(sql: str, params: list[object] | None = None) -> list[dict[str, Any]]:
+    """Read-only counterpart of run_sql(): runs exactly one query in a
+    read-only transaction (pipeline/sql_query.mjs) and returns its rows as
+    Python dicts. Used to decide what to do (idempotence checks, team_key
+    resolution, dashboard-JSON reconciliation) before ever writing; never
+    call this expecting side effects, the transaction is always rolled back.
+    """
+    with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False) as handle:
+        handle.write(sql)
+        sql_path = handle.name
+    params_path = None
+    if params is not None:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:
+            json.dump(params, handle, sort_keys=True)
+            params_path = handle.name
+
+    try:
+        db_url = os.environ.get("SUPABASE_DB_URL")
+        if not db_url:
+            raise SystemExit("SUPABASE_DB_URL is required; load .env.local before DB reads")
+        command = ["node", str(Path(__file__).with_name("sql_query.mjs")), sql_path]
+        if params_path:
+            command.append(params_path)
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        return json.loads(result.stdout)
+    finally:
+        Path(sql_path).unlink(missing_ok=True)
+        if params_path:
+            Path(params_path).unlink(missing_ok=True)
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -2812,6 +2843,663 @@ def retire_releases(args: argparse.Namespace) -> None:
     print(f"retired {len(labels)} release(s): {', '.join(labels)}")
 
 
+CURATED_LAYER_MIGRATION_VERSION = "20260709233356"
+CURATED_BUILD_RULE_VERSION = "curated_build_2026-07-10_v1"
+CURATED_FIXTURE_LOAD_RULE_VERSION = "curated_fixture_load_2026-07-10_v1"
+# Fixed by docs/EXPOSURE_CLEANING_PROTOCOL.md: "Calculate fixture match
+# exposure as 20 player-hours per team per match." Not a tunable parameter
+# for the curated layer (unlike build_fixture_exposure's CLI-overridable
+# --player-hours-per-team-match, which produces a separate file-based
+# report rather than curated rows).
+PLAYER_HOURS_PER_TEAM_MATCH = 20.0
+URC_FIXTURES_2024_25_CORRECTED_PATH = "data/intake/2024-25/fixtures/urc_fixtures_2024_25.corrected.csv"
+URC_FIXTURES_2024_25_CORRECTED_SHA256 = "9608ff7e932cf76743eeb6de7d3bce6f5746ab1dfa4cec80a01f001ec2e9c39c"
+
+
+def resolve_team_key(team: str) -> str:
+    """Resolve a legacy team value exactly as stored in
+    ingestion.source_files.team (e.g. 'Munster', 'glasgow') to its public
+    reporting.teams.team_key via reporting.team_key_aliases. Never guesses:
+    an unmapped or excluded alias is a hard error naming the exact value.
+    """
+    params = SqlParams()
+    rows = query_sql(
+        f"select team_key, excluded from reporting.team_key_aliases where alias = {params.text(team)}",
+        params.values,
+    )
+    if not rows:
+        raise SystemExit(
+            f"no reporting.team_key_aliases entry for team {team!r}; add it by migration before building curated data"
+        )
+    if rows[0]["excluded"] or not rows[0]["team_key"]:
+        raise SystemExit(
+            f"team {team!r} is an excluded alias (e.g. a smoke-test artifact); refusing to build curated data for it"
+        )
+    return rows[0]["team_key"]
+
+
+def latest_curated_source_version_ids(team: str, season: str, file_name_pattern: str) -> list[str]:
+    """record_version ids for the latest version_number of every accepted
+    source row in the source file matching file_name_pattern
+    ('%injury%' / '%exposure%', verified against every live
+    ingestion.source_files.file_name) for team/season. Read-only.
+    """
+    params = SqlParams()
+    rows = query_sql(
+        f"""
+        select rv.id
+        from processing.record_versions rv
+        join ingestion.source_rows sr on sr.id = rv.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        where sf.team = {params.text(team)} and sf.season = {params.text(season)}
+          and sf.file_name like {params.text(file_name_pattern)}
+          and rv.version_number = (
+            select max(rv2.version_number)
+            from processing.record_versions rv2
+            where rv2.source_row_id = rv.source_row_id
+          )
+        order by rv.id
+        """,
+        params.values,
+    )
+    return [row["id"] for row in rows]
+
+
+def curated_source_version_set_hash(injury_ids: list[str], exposure_ids: list[str]) -> str:
+    return sha256_json({"injury": sorted(injury_ids), "exposure": sorted(exposure_ids)})
+
+
+def build_curated(args: argparse.Namespace) -> None:
+    team = clean_text(args.team)
+    season = clean_text(args.season)
+    if not team or not season:
+        raise SystemExit("--team and --season are required")
+    team_key = resolve_team_key(team)
+
+    injury_ids = latest_curated_source_version_ids(team, season, "%injury%")
+    exposure_ids = latest_curated_source_version_ids(team, season, "%exposure%")
+    if not injury_ids or not exposure_ids:
+        raise SystemExit(
+            f"no processing.record_versions found for team={team!r} season={season!r} "
+            f"(injury rows: {len(injury_ids)}, exposure rows: {len(exposure_ids)}); "
+            "run process-intake and process-exposure for this team before build-curated"
+        )
+    source_version_set_hash = curated_source_version_set_hash(injury_ids, exposure_ids)
+    source_version_set_count = len(injury_ids) + len(exposure_ids)
+
+    lookup_params = SqlParams()
+    active_builds = query_sql(
+        f"""
+        select id, source_version_set_hash, status
+        from curated.builds
+        where team_key = {lookup_params.text(team_key)} and season = {lookup_params.text(season)} and status = 'active'
+        """,
+        lookup_params.values,
+    )
+    if active_builds:
+        active = active_builds[0]
+        if active["source_version_set_hash"] == source_version_set_hash and not args.rebuild:
+            print(
+                json.dumps(
+                    {
+                        "status": "no_op",
+                        "reason": "an active curated build already matches the current source version set",
+                        "team_key": team_key,
+                        "season": season,
+                        "build_id": active["id"],
+                    },
+                    indent=2,
+                )
+            )
+            return
+        if active["source_version_set_hash"] != source_version_set_hash and not args.rebuild:
+            raise SystemExit(
+                f"an active curated build exists for team_key={team_key!r} season={season!r} but the live "
+                "source version set has changed since it was built; pass --rebuild to explicitly supersede it"
+            )
+
+    fixture_params = SqlParams()
+    fixture_rows = query_sql(
+        f"select count(*) as n, min(source_file_sha256) as sha from curated.fixtures where season = {fixture_params.text(season)}",
+        fixture_params.values,
+    )
+    if not fixture_rows or int(fixture_rows[0]["n"]) == 0:
+        raise SystemExit(f"curated.fixtures has no rows for season={season!r}; run load-curated-fixtures first")
+
+    params = SqlParams()
+    provenance = run_provenance()
+    team_p = params.text(team)
+    season_p = params.text(season)
+    team_key_p = params.text(team_key)
+    injury_pattern_p = params.text("%injury%")
+    exposure_pattern_p = params.text("%exposure%")
+    rebuild_flag = bool(getattr(args, "rebuild", False))
+
+    supersede_sql = (
+        f"update curated.builds set status = 'superseded' "
+        f"where team_key = {team_key_p} and season = {season_p} and status = 'active';"
+        if rebuild_flag
+        else ""
+    )
+
+    sql = f"""
+      do $$
+      begin
+        if not exists (select 1 from supabase_migrations.schema_migrations where version = '{CURATED_LAYER_MIGRATION_VERSION}') then
+          raise exception 'build-curated requires migration {CURATED_LAYER_MIGRATION_VERSION}_curated_layer';
+        end if;
+        if (select count(*) from audit.reason_codes where code in ('curated_projection', 'curated_denominator_derivation')) <> 2 then
+          raise exception 'build-curated requires reason codes curated_projection and curated_denominator_derivation to be seeded by migration first';
+        end if;
+        if (select count(distinct sf.id) from ingestion.source_files sf where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {injury_pattern_p}) <> 1 then
+          raise exception 'build-curated requires exactly one injury source file for team=% season=%', {team_p}, {season_p};
+        end if;
+        if (select count(distinct sf.id) from ingestion.source_files sf where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}) <> 1 then
+          raise exception 'build-curated requires exactly one exposure source file for team=% season=%', {team_p}, {season_p};
+        end if;
+        if not exists (select 1 from curated.fixtures where season = {season_p}) then
+          raise exception 'curated.fixtures has no rows for season=%; run load-curated-fixtures first', {season_p};
+        end if;
+      end $$;
+
+      {supersede_sql}
+
+      create temp table current_run on commit drop as
+      with run as (
+        insert into audit.pipeline_runs (command, team, season, status, parameters, ended_at, code_version, dependency_lock_hash, operator)
+        values (
+          'build-curated', {team_p}, {season_p}, 'succeeded',
+          {params.jsonb({
+            "team_key": team_key,
+            "rebuild": rebuild_flag,
+            "rule_version": CURATED_BUILD_RULE_VERSION,
+            "source_version_set_hash": source_version_set_hash,
+            "source_version_set_count": source_version_set_count,
+          })},
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
+        )
+        returning id
+      )
+      select id from run;
+
+      create temp table new_build on commit drop as
+      with build as (
+        insert into curated.builds (pipeline_run_id, team_key, season, source_version_set_count, source_version_set_hash, status)
+        select id, {team_key_p}, {season_p}, {source_version_set_count}, {params.text(source_version_set_hash)}, 'active'
+        from current_run
+        returning id
+      )
+      select id from build;
+
+      create temp table injuries_step on commit drop as
+      with step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, ended_at)
+        select id, 'curated_injuries', {params.text(CURATED_BUILD_RULE_VERSION)}, 'curated_projection', now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      insert into curated.injuries (
+        source_row_id, record_version_id, team_key, season, player_uid, injury_uid,
+        date_injured, days_injured, derived_return_date, is_closed,
+        activity_context, contact_context, recurrence_status, severity_category,
+        body_location, injury_type, problem_type, eligibility_status,
+        field_origins, source_locator, curated_build_id
+      )
+      select
+        rv.source_row_id, rv.id, {team_key_p}, {season_p},
+        rv.record_state ->> 'player_uid',
+        rv.record_state ->> 'injury_uid',
+        nullif(rv.record_state ->> 'date_injured', '')::date,
+        nullif(rv.record_state ->> 'days_injured_source', '')::numeric::int,
+        nullif(rv.record_state ->> 'derived_return_date', '')::date,
+        nullif(rv.record_state ->> 'is_closed', '')::boolean,
+        rv.record_state ->> 'activity_context',
+        rv.record_state ->> 'contact_context',
+        rv.record_state ->> 'recurrence_status',
+        rv.record_state ->> 'severity_category',
+        rv.record_state ->> 'body_location',
+        rv.record_state ->> 'injury_type',
+        rv.record_state ->> 'problem_type',
+        rv.eligibility_status,
+        coalesce(rv.record_state -> 'field_origins', '{{}}'::jsonb),
+        coalesce(rv.record_state -> 'source_locator', '{{}}'::jsonb),
+        (select id from new_build)
+      from processing.record_versions rv
+      join ingestion.source_rows sr on sr.id = rv.source_row_id
+      join ingestion.source_files sf on sf.id = sr.source_file_id
+      where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {injury_pattern_p}
+        and rv.version_number = (
+          select max(rv2.version_number) from processing.record_versions rv2 where rv2.source_row_id = rv.source_row_id
+        );
+
+      update audit.step_runs
+      set input_count = {len(injury_ids)},
+          output_count = (select count(*) from curated.injuries where curated_build_id = (select id from new_build)),
+          counts_by_team = jsonb_build_object({team_key_p}, jsonb_build_object('injuries', (select count(*) from curated.injuries where curated_build_id = (select id from new_build)))),
+          ended_at = now()
+      where id = (select id from injuries_step);
+
+      create temp table exposure_step on commit drop as
+      with step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, ended_at)
+        select id, 'curated_exposure', {params.text(CURATED_BUILD_RULE_VERSION)}, 'curated_projection', now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      insert into curated.exposure (
+        source_row_id, record_version_id, team_key, season, player_uid, grain,
+        session_date, week_start_date, minutes_clean, distance_m_clean,
+        scope_status, exclusion_reasons, eligibility_status, source_locator, curated_build_id
+      )
+      select
+        rv.source_row_id, rv.id, {team_key_p}, {season_p},
+        rv.record_state ->> 'player_uid',
+        rv.record_state ->> 'exposure_grain',
+        nullif(rv.record_state ->> 'session_date', '')::date,
+        nullif(rv.record_state ->> 'week_start_date', '')::date,
+        nullif(rv.record_state ->> 'minutes_total_clean', '')::numeric,
+        nullif(rv.record_state ->> 'distance_total_m_clean', '')::numeric,
+        rv.record_state ->> 'scope_status',
+        coalesce(
+          (select array_agg(x) from jsonb_array_elements_text(coalesce(rv.record_state -> 'exclusion_reasons', '[]'::jsonb)) x),
+          '{{}}'::text[]
+        ),
+        rv.eligibility_status,
+        coalesce(rv.record_state -> 'source_locator', '{{}}'::jsonb),
+        (select id from new_build)
+      from processing.record_versions rv
+      join ingestion.source_rows sr on sr.id = rv.source_row_id
+      join ingestion.source_files sf on sf.id = sr.source_file_id
+      where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}
+        and rv.version_number = (
+          select max(rv2.version_number) from processing.record_versions rv2 where rv2.source_row_id = rv.source_row_id
+        );
+
+      update audit.step_runs
+      set input_count = {len(exposure_ids)},
+          output_count = (select count(*) from curated.exposure where curated_build_id = (select id from new_build)),
+          counts_by_team = jsonb_build_object({team_key_p}, jsonb_build_object('exposure', (select count(*) from curated.exposure where curated_build_id = (select id from new_build)))),
+          ended_at = now()
+      where id = (select id from exposure_step);
+
+      create temp table denominator_step on commit drop as
+      with step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, ended_at)
+        select id, 'curated_team_exposure_denominator', {params.text(CURATED_BUILD_RULE_VERSION)}, 'curated_denominator_derivation', now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      create temp table denom_calc on commit drop as
+      select
+        (
+          select count(*) from curated.fixtures f
+          where f.season = {season_p} and (f.home_team_key = {team_key_p} or f.away_team_key = {team_key_p})
+        ) as matches_played,
+        (
+          select coalesce(sum(e.minutes_clean), 0) / 60
+          from curated.exposure e
+          where e.curated_build_id = (select id from new_build) and e.eligibility_status = 'included_pending_protocol'
+        ) as total_hours;
+
+      insert into curated.team_exposure_denominators (
+        team_key, season, matches_played, match_hours, training_hours, total_hours,
+        method_note, fixture_source_sha256, curated_build_id
+      )
+      select
+        {team_key_p}, {season_p}, matches_played,
+        matches_played * {PLAYER_HOURS_PER_TEAM_MATCH},
+        total_hours - matches_played * {PLAYER_HOURS_PER_TEAM_MATCH},
+        total_hours,
+        {params.text(
+          'training_hours = total_hours - match_hours; match_hours = matches_played * '
+          f'{PLAYER_HOURS_PER_TEAM_MATCH} player-hours per team per match '
+          '(docs/EXPOSURE_CLEANING_PROTOCOL.md); total_hours = sum(curated.exposure.minutes_clean) / 60 '
+          "where eligibility_status = 'included_pending_protocol'."
+        )},
+        (select min(source_file_sha256) from curated.fixtures where season = {season_p}),
+        (select id from new_build)
+      from denom_calc;
+
+      update audit.step_runs
+      set input_count = (select matches_played from denom_calc),
+          output_count = 1,
+          counts_by_team = jsonb_build_object({team_key_p}, (select to_jsonb(denom_calc.*) from denom_calc)),
+          ended_at = now()
+      where id = (select id from denominator_step);
+
+      update curated.builds
+      set row_counts = jsonb_build_object(
+            'injuries', (select count(*) from curated.injuries where curated_build_id = (select id from new_build)),
+            'exposure', (select count(*) from curated.exposure where curated_build_id = (select id from new_build)),
+            'team_exposure_denominators', (select count(*) from curated.team_exposure_denominators where curated_build_id = (select id from new_build))
+          ),
+          output_hash = md5(
+            coalesce((select count(*) from curated.injuries where curated_build_id = (select id from new_build)), 0)::text || ':' ||
+            coalesce((select count(*) from curated.exposure where curated_build_id = (select id from new_build)), 0)::text
+          )
+      where id = (select id from new_build);
+
+      update audit.pipeline_runs
+      set output_hash = (select output_hash from curated.builds where id = (select id from new_build))
+      where id = (select id from current_run);
+    """
+    run_sql(sql, params.values)
+
+    summary_params = SqlParams()
+    summary = query_sql(
+        f"""
+        select b.id as build_id, b.row_counts, d.matches_played, d.match_hours, d.training_hours, d.total_hours
+        from curated.builds b
+        left join curated.team_exposure_denominators d on d.curated_build_id = b.id
+        where b.team_key = {summary_params.text(team_key)} and b.season = {summary_params.text(season)} and b.status = 'active'
+        """,
+        summary_params.values,
+    )
+    print(json.dumps({"status": "built", "team": team, "team_key": team_key, "season": season, "result": summary[0] if summary else None}, indent=2))
+
+
+def load_curated_fixtures(args: argparse.Namespace) -> None:
+    season = clean_text(args.season)
+    path = Path(args.file)
+    rows = read_rows(path)
+    if not rows:
+        raise SystemExit(f"no fixture rows found: {path}")
+    missing_columns = [
+        column
+        for column in ["source_row_number", "stage", "round", "corrected_date", "date_status", "home_team", "away_team"]
+        if column not in rows[0]
+    ]
+    if missing_columns:
+        raise SystemExit(f"fixture file missing column(s): {', '.join(missing_columns)}")
+
+    file_hash = sha256_file(path)
+    if str(path) == URC_FIXTURES_2024_25_CORRECTED_PATH and file_hash != URC_FIXTURES_2024_25_CORRECTED_SHA256:
+        raise SystemExit(
+            "fixture file checksum mismatch for the documented 2024-25 corrected fixture file "
+            f"(docs/EXPOSURE_CLEANING_PROTOCOL.md): expected {URC_FIXTURES_2024_25_CORRECTED_SHA256}, got {file_hash}"
+        )
+
+    existing_params = SqlParams()
+    existing = query_sql(
+        f"select count(*) as n from curated.fixtures where season = {existing_params.text(season)}",
+        existing_params.values,
+    )
+    if existing and int(existing[0]["n"]) > 0:
+        print(
+            json.dumps(
+                {
+                    "status": "no_op",
+                    "reason": "curated.fixtures already loaded for this season",
+                    "season": season,
+                    "existing_rows": int(existing[0]["n"]),
+                },
+                indent=2,
+            )
+        )
+        return
+
+    # Resolve every home/away team name through reporting.team_key_aliases.
+    # These are public club names (e.g. 'Cardiff Rugby', 'Glasgow
+    # Warriors') read from the fixture-list home_team/away_team columns;
+    # the file's home_team_alias/away_team_alias columns (the protected
+    # Team A-Z league alias, resolved elsewhere via the Git-ignored
+    # protected alias map) are deliberately never read here.
+    alias_rows = query_sql("select alias, team_key, excluded from reporting.team_key_aliases")
+    alias_map = {row["alias"]: row for row in alias_rows}
+
+    fixture_rows = []
+    unresolved: list[str] = []
+    for row in rows:
+        home = clean_text(row.get("home_team"))
+        away = clean_text(row.get("away_team"))
+        home_entry = alias_map.get(home)
+        away_entry = alias_map.get(away)
+        if not home_entry or home_entry["excluded"] or not home_entry["team_key"]:
+            unresolved.append(home)
+        if not away_entry or away_entry["excluded"] or not away_entry["team_key"]:
+            unresolved.append(away)
+        fixture_rows.append(
+            {
+                "source_row_number": int(row["source_row_number"]),
+                "stage": clean_text(row.get("stage")),
+                "round": clean_text(row.get("round")),
+                "match_date": clean_text(row.get("corrected_date")),
+                "date_status": clean_text(row.get("date_status")),
+                "home_team_key": home_entry["team_key"] if home_entry else None,
+                "away_team_key": away_entry["team_key"] if away_entry else None,
+            }
+        )
+    unresolved_unique = sorted({name for name in unresolved if name})
+    if unresolved_unique:
+        raise SystemExit(
+            f"unmapped fixture team name(s) in reporting.team_key_aliases: {', '.join(unresolved_unique)}; "
+            "add them by migration before loading curated fixtures"
+        )
+
+    params = SqlParams()
+    provenance = run_provenance()
+    values_sql = ",".join(
+        f"""(
+          {params.text(season)}, {params.text(r['stage'])}, {params.text(r['round'])},
+          {params.text(r['match_date'])}::date, {params.text(r['date_status'])},
+          {params.text(r['home_team_key'])}, {params.text(r['away_team_key'])},
+          {r['source_row_number']}, {params.text(file_hash)}, (select id from current_run)
+        )"""
+        for r in fixture_rows
+    )
+    sql = f"""
+      do $$
+      begin
+        if not exists (select 1 from supabase_migrations.schema_migrations where version = '{CURATED_LAYER_MIGRATION_VERSION}') then
+          raise exception 'load-curated-fixtures requires migration {CURATED_LAYER_MIGRATION_VERSION}_curated_layer';
+        end if;
+        if not exists (select 1 from audit.reason_codes where code = 'curated_fixture_load') then
+          raise exception 'load-curated-fixtures requires reason code curated_fixture_load to be seeded by migration first';
+        end if;
+      end $$;
+
+      create temp table current_run on commit drop as
+      with run as (
+        insert into audit.pipeline_runs (command, season, status, input_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
+        values (
+          'load-curated-fixtures', {params.text(season)}, 'succeeded', {params.text(file_hash)},
+          {params.jsonb({"file": str(path), "rows": len(fixture_rows), "rule_version": CURATED_FIXTURE_LOAD_RULE_VERSION})},
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
+        )
+        returning id
+      )
+      select id from run;
+
+      create temp table current_step on commit drop as
+      with step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, input_hash, output_hash, ended_at)
+        select id, 'curated_fixture_load', {params.text(CURATED_FIXTURE_LOAD_RULE_VERSION)}, 'curated_fixture_load',
+          {len(fixture_rows)}, {len(fixture_rows)}, {params.text(file_hash)}, {params.text(file_hash)}, now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      insert into curated.fixtures (season, stage, round, match_date, date_status, home_team_key, away_team_key, source_row_number, source_file_sha256, loaded_by_run_id)
+      values {values_sql}
+      on conflict (season, source_row_number) do nothing;
+    """
+    run_sql(sql, params.values)
+    print(json.dumps({"status": "loaded", "season": season, "rows": len(fixture_rows), "file": str(path), "file_sha256": file_hash}, indent=2))
+
+
+def reconcile_curated(args: argparse.Namespace) -> None:
+    """Read-only reconciliation gate: compares curated.injuries/exposure/
+    team_exposure_denominators for the active build against (a)
+    processing.record_versions and (b) the committed dashboard JSON. Never
+    writes and never auto-fixes; every mismatch is printed with enough
+    detail to adjudicate.
+    """
+    team = clean_text(args.team)
+    season = clean_text(args.season)
+    team_key = resolve_team_key(team)
+
+    checks: list[dict[str, Any]] = []
+
+    def check(name: str, passed: bool, detail: dict[str, Any]) -> None:
+        checks.append({"check": name, "status": "PASS" if passed else "FAIL", **detail})
+
+    def close_enough(a: float | None, b: float | None, tolerance: float = 0.05) -> bool:
+        if a is None or b is None:
+            return a is None and b is None
+        return abs(a - b) <= tolerance
+
+    build_params = SqlParams()
+    builds = query_sql(
+        f"""
+        select id, source_version_set_hash, source_version_set_count, row_counts, created_at
+        from curated.builds
+        where team_key = {build_params.text(team_key)} and season = {build_params.text(season)} and status = 'active'
+        """,
+        build_params.values,
+    )
+    if not builds:
+        check(
+            "active_curated_build_exists",
+            False,
+            {"detail": f"no active curated.builds row for team_key={team_key!r} season={season!r}; run build-curated first"},
+        )
+        print(json.dumps({"team": team, "team_key": team_key, "season": season, "checks": checks}, indent=2))
+        raise SystemExit(1)
+    build = builds[0]
+    check("active_curated_build_exists", True, {"build_id": build["id"], "created_at": build["created_at"]})
+
+    injury_ids = latest_curated_source_version_ids(team, season, "%injury%")
+    exposure_ids = latest_curated_source_version_ids(team, season, "%exposure%")
+    live_hash = curated_source_version_set_hash(injury_ids, exposure_ids)
+    check(
+        "curated_build_matches_live_record_versions",
+        build["source_version_set_hash"] == live_hash,
+        {
+            "built_hash": build["source_version_set_hash"],
+            "live_hash": live_hash,
+            "detail": "if FAIL, record_versions changed since this build; run build-curated --rebuild",
+        },
+    )
+
+    counts_params = SqlParams()
+    counts = query_sql(
+        f"""
+        select
+          (select count(*) from curated.injuries where curated_build_id = {counts_params.text(build['id'])}::uuid) as curated_injuries,
+          (select count(*) from curated.exposure where curated_build_id = {counts_params.text(build['id'])}::uuid) as curated_exposure,
+          (select count(*) from curated.exposure where curated_build_id = {counts_params.text(build['id'])}::uuid and eligibility_status = 'included_pending_protocol') as curated_exposure_included,
+          (select count(distinct player_uid) from curated.exposure where curated_build_id = {counts_params.text(build['id'])}::uuid and eligibility_status = 'included_pending_protocol') as curated_exposed_players,
+          (select coalesce(sum(minutes_clean), 0) / 60 from curated.exposure where curated_build_id = {counts_params.text(build['id'])}::uuid and eligibility_status = 'included_pending_protocol') as curated_included_hours
+        """,
+        counts_params.values,
+    )[0]
+    check(
+        "curated_injuries_count_matches_record_versions",
+        int(counts["curated_injuries"]) == len(injury_ids),
+        {"curated_injuries": int(counts["curated_injuries"]), "record_versions_injury_rows": len(injury_ids)},
+    )
+    check(
+        "curated_exposure_count_matches_record_versions",
+        int(counts["curated_exposure"]) == len(exposure_ids),
+        {"curated_exposure": int(counts["curated_exposure"]), "record_versions_exposure_rows": len(exposure_ids)},
+    )
+
+    denom_params = SqlParams()
+    denom_rows = query_sql(
+        f"select matches_played, match_hours, training_hours, total_hours, fixture_source_sha256 "
+        f"from curated.team_exposure_denominators where curated_build_id = {denom_params.text(build['id'])}::uuid",
+        denom_params.values,
+    )
+    if not denom_rows:
+        check("team_exposure_denominators_row_exists", False, {"detail": "no denominator row for this build"})
+    else:
+        denom = denom_rows[0]
+        check(
+            "denominator_total_hours_matches_curated_exposure",
+            close_enough(float(denom["total_hours"]), float(counts["curated_included_hours"])),
+            {"denominator_total_hours": float(denom["total_hours"]), "curated_included_hours": float(counts["curated_included_hours"])},
+        )
+        check(
+            "denominator_match_hours_formula",
+            close_enough(float(denom["match_hours"]), float(denom["matches_played"]) * PLAYER_HOURS_PER_TEAM_MATCH),
+            {"match_hours": float(denom["match_hours"]), "matches_played": denom["matches_played"]},
+        )
+        check(
+            "denominator_training_hours_formula",
+            close_enough(float(denom["training_hours"]), float(denom["total_hours"]) - float(denom["match_hours"])),
+            {"training_hours": float(denom["training_hours"])},
+        )
+
+    dashboard_path = REPO_ROOT / "content" / "reporting" / f"{team_key}_dashboard_2024-25.json"
+    if not dashboard_path.exists():
+        check("dashboard_json_exists", False, {"detail": f"missing {dashboard_path}"})
+    else:
+        dashboard = json.loads(dashboard_path.read_text())
+        coverage = dashboard.get("coverage", {})
+        check(
+            "curated_exposure_included_hours_matches_dashboard",
+            close_enough(float(counts["curated_included_hours"]), float(coverage.get("hours", -1))),
+            {"curated_hours": round(float(counts["curated_included_hours"]), 1), "dashboard_hours": coverage.get("hours")},
+        )
+        check(
+            "curated_exposure_included_rows_matches_dashboard",
+            int(counts["curated_exposure_included"]) == coverage.get("exposure_rows"),
+            {"curated_exposure_included": int(counts["curated_exposure_included"]), "dashboard_exposure_rows": coverage.get("exposure_rows")},
+        )
+        check(
+            "curated_exposed_players_matches_dashboard",
+            int(counts["curated_exposed_players"]) == coverage.get("exposed_players"),
+            {"curated_exposed_players": int(counts["curated_exposed_players"]), "dashboard_exposed_players": coverage.get("exposed_players")},
+        )
+        headline = {item["key"]: item["value"] for item in dashboard.get("headline", [])}
+        included_injury_params = SqlParams()
+        included_injuries = query_sql(
+            f"select count(*) as n from curated.injuries where curated_build_id = {included_injury_params.text(build['id'])}::uuid and eligibility_status = 'included_pending_protocol'",
+            included_injury_params.values,
+        )[0]["n"]
+        checks.append(
+            {
+                "check": "curated_included_injuries_vs_dashboard_recorded_injuries",
+                "status": "INFO",
+                "detail": (
+                    "informational only, not a Phase 2 pass/fail gate: curated.injuries carries the DB "
+                    "eligibility_status verbatim, while the dashboard JSON's recorded_injuries/time_loss_injuries "
+                    "additionally apply cohort filters (received/injured-in-team, non-URC match type, non-injury "
+                    "problem type, exposure-coverage-window) that live only in build_team_dashboard today. "
+                    "Formalising those filters into one reusable definition is Phase 3 (analysis.injury_cohort_v1 "
+                    "+ verify-analysis-parity), not this gate."
+                ),
+                "curated_included_pending_protocol_injuries": int(included_injuries),
+                "dashboard_recorded_injuries": headline.get("recorded_injuries"),
+                "dashboard_time_loss_injuries": headline.get("time_loss_injuries"),
+            }
+        )
+
+    hard_failures = [c for c in checks if c["status"] == "FAIL"]
+    print(
+        json.dumps(
+            {
+                "team": team,
+                "team_key": team_key,
+                "season": season,
+                "build_id": build["id"],
+                "overall": "PASS" if not hard_failures else "FAIL",
+                "checks": checks,
+            },
+            indent=2,
+        )
+    )
+    if hard_failures:
+        raise SystemExit(1)
+
+
 def parse_date_value(value: str) -> date | None:
     text = clean_text(value)
     if not text:
@@ -3999,6 +4687,40 @@ def self_check(args: argparse.Namespace) -> None:
         assert session_dashboard["coverage"]["weeks"] == 0
         assert session_dashboard["analysis_window"]["end"] == "2024-07-02"
 
+    assert PLAYER_HOURS_PER_TEAM_MATCH == 20.0
+    assert curated_source_version_set_hash(["b", "a"], ["c"]) == curated_source_version_set_hash(["a", "b"], ["c"])
+    assert curated_source_version_set_hash(["a"], ["c"]) != curated_source_version_set_hash(["a"], ["d"])
+    assert curated_source_version_set_hash([], []) == curated_source_version_set_hash([], [])
+
+    # The curated_layer migration's code_lists seed must stay in lockstep
+    # with the pipeline's controlled vocabularies: a drift here (someone
+    # adds a body-location bucket to BODY_LOCATION_LABELS but forgets the
+    # migration, or vice versa) would either reject valid values at
+    # build-curated time or silently accept a bucket the pipeline can never
+    # emit. This is a text-level check (no DB connection required).
+    curated_migration_path = REPO_ROOT / "supabase" / "migrations" / f"{CURATED_LAYER_MIGRATION_VERSION}_curated_layer.sql"
+    curated_migration_text = curated_migration_path.read_text()
+    seeded_pairs = set(re.findall(r"\('([a-z_]+)', '([a-z0-9_]+)',", curated_migration_text))
+
+    def seeded_codes(list_name: str) -> set[str]:
+        return {code for (seeded_list, code) in seeded_pairs if seeded_list == list_name}
+
+    assert seeded_codes("body_location") == set(BODY_LOCATION_LABELS), seeded_codes("body_location") ^ set(BODY_LOCATION_LABELS)
+    assert seeded_codes("injury_type") == set(INJURY_TYPE_LABELS), seeded_codes("injury_type") ^ set(INJURY_TYPE_LABELS)
+    assert seeded_codes("activity_context") == {"urc_match", "training", "match", "unknown"}
+    assert seeded_codes("contact_context") == {"contact", "non_contact", "unknown"}
+    assert seeded_codes("recurrence_status") == {"first_episode", "recurrence", "unknown"}
+    assert seeded_codes("problem_type") == {"injury", "illness", "unknown"}
+    assert seeded_codes("severity_category") == {
+        "zero_days_medical_attention_only",
+        "one_day",
+        "two_to_three_days",
+        "four_to_seven_days",
+        "eight_to_twenty_eight_days",
+        "greater_than_twenty_eight_days",
+        "unknown_or_censored",
+    }
+
     if os.environ.get("SUPABASE_DB_URL"):
         run_sql(protected_alias_scan_sql("self-check"))
         print("self-check: live protected-alias scan passed (0 hits)")
@@ -4225,6 +4947,22 @@ def main() -> None:
     retire_releases_parser.add_argument("--rationale", required=True)
     retire_releases_parser.add_argument("--reviewer", required=True)
     retire_releases_parser.set_defaults(func=retire_releases)
+
+    load_fixtures_parser = subcommands.add_parser("load-curated-fixtures")
+    load_fixtures_parser.add_argument("--season", default="2024-25")
+    load_fixtures_parser.add_argument("--file", default=URC_FIXTURES_2024_25_CORRECTED_PATH)
+    load_fixtures_parser.set_defaults(func=load_curated_fixtures)
+
+    build_curated_parser = subcommands.add_parser("build-curated")
+    build_curated_parser.add_argument("--team", required=True)
+    build_curated_parser.add_argument("--season", default="2024-25")
+    build_curated_parser.add_argument("--rebuild", action="store_true")
+    build_curated_parser.set_defaults(func=build_curated)
+
+    reconcile_curated_parser = subcommands.add_parser("reconcile-curated")
+    reconcile_curated_parser.add_argument("--team", required=True)
+    reconcile_curated_parser.add_argument("--season", default="2024-25")
+    reconcile_curated_parser.set_defaults(func=reconcile_curated)
 
     check_parser = subcommands.add_parser("self-check")
     check_parser.set_defaults(func=self_check)

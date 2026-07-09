@@ -1,0 +1,49 @@
+import fs from "node:fs";
+import { Client } from "pg";
+
+// Read-only counterpart of sql_exec.mjs: runs exactly one query inside a
+// read-only transaction and prints its rows as JSON to stdout. Used by
+// pipeline commands (via query_sql() in pipeline/__main__.py) that need to
+// read live data to decide what to do (idempotence checks, team_key
+// resolution, reconciliation) before ever writing.
+
+const sqlPath = process.argv[2];
+const paramsPath = process.argv[3];
+if (!sqlPath) {
+  console.error("SQL file path required");
+  process.exit(2);
+}
+
+const client = new Client({
+  connectionString: process.env.SUPABASE_DB_URL,
+  connectionTimeoutMillis: 10000
+});
+
+try {
+  await client.connect();
+  // Postgres rejects CREATE (even for temp tables) inside a read-only
+  // transaction, so the params table is a session-scoped temp table set up
+  // before the transaction starts; the caller's query itself still runs
+  // under `read only` enforcement and is always rolled back.
+  if (paramsPath) {
+    const params = JSON.parse(fs.readFileSync(paramsPath, "utf8"));
+    await client.query("create temp table _pipeline_params (idx integer primary key, value jsonb)");
+    await client.query(
+      "insert into _pipeline_params select ordinality::int, value from jsonb_array_elements($1::jsonb) with ordinality",
+      [JSON.stringify(params)]
+    );
+  }
+  await client.query("begin transaction read only");
+  const result = await client.query(fs.readFileSync(sqlPath, "utf8"));
+  const rows = Array.isArray(result) ? result[result.length - 1].rows : result.rows;
+  await client.query("rollback");
+  process.stdout.write(JSON.stringify(rows));
+} catch (error) {
+  try {
+    await client.query("rollback");
+  } catch {}
+  console.error(error.message);
+  process.exitCode = 1;
+} finally {
+  await client.end();
+}
