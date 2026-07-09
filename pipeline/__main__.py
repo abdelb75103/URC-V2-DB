@@ -4,10 +4,12 @@ import argparse
 import contextlib
 import csv
 import difflib
+import getpass
 import hashlib
 import io
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -329,6 +331,60 @@ def run_sql(sql: str, params: list[object] | None = None) -> None:
         Path(sql_path).unlink(missing_ok=True)
         if params_path:
             Path(params_path).unlink(missing_ok=True)
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def run_provenance() -> dict[str, str]:
+    """Run-identity metadata threaded into every audit.pipeline_runs insert:
+    the exact code commit, dependency environment, and operator that
+    produced the run. Cheap (a couple of subprocess calls and one file
+    hash); call once per command invocation and reuse the result rather
+    than recomputing per insert.
+
+    - code_version: `git rev-parse HEAD`, suffixed `-dirty` when
+      `git status --porcelain` is non-empty. `release()` refuses to run
+      when dirty; every other command may run dirty (see AGENTS.md: the
+      pipeline is human-in-the-loop, small verified steps, not a single
+      always-clean command).
+    - dependency_lock_hash: SHA-256 of `<python_version>\\x1f<sha256 of
+      package-lock.json bytes>`, so it changes if either the interpreter
+      or the locked JS dependency set changes.
+    - operator: PIPELINE_OPERATOR env var, else the OS username.
+    """
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    dirty = bool(
+        subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=REPO_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    code_version = f"{commit}-dirty" if dirty else commit
+
+    package_lock_path = REPO_ROOT / "package-lock.json"
+    if not package_lock_path.exists():
+        raise SystemExit(f"dependency lock file not found: {package_lock_path}")
+    dependency_lock_hash = hashlib.sha256(
+        f"{platform.python_version()}\x1f{sha256_file(package_lock_path)}".encode()
+    ).hexdigest()
+
+    operator = os.environ.get("PIPELINE_OPERATOR") or getpass.getuser()
+
+    return {
+        "code_version": code_version,
+        "dependency_lock_hash": dependency_lock_hash,
+        "operator": operator,
+    }
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
@@ -1351,6 +1407,7 @@ def process_exposure(args: argparse.Namespace) -> None:
     event_sql = []
     output_states: list[dict[str, object]] = []
     params = SqlParams()
+    provenance = run_provenance()
 
     for index, row in enumerate(rows, start=2):
         raw_id = raw_record_id(args.team, args.season, file_hash, index)
@@ -1443,7 +1500,7 @@ def process_exposure(args: argparse.Namespace) -> None:
       create temp table current_step on commit drop as
       with run as (
         insert into audit.pipeline_runs
-          (command, team, season, status, input_hash, output_hash, parameters, ended_at)
+          (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values (
           'process-exposure', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
           {params.text(file_hash)}, {params.text(output_hash)},
@@ -1453,7 +1510,7 @@ def process_exposure(args: argparse.Namespace) -> None:
             'step_version': args.step_version,
             'version_number': version_number,
           })},
-          now()
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
       ),
@@ -1948,6 +2005,7 @@ def process_intake(args: argparse.Namespace) -> None:
     event_sql = []
     output_states: list[dict[str, object]] = []
     params = SqlParams()
+    provenance = run_provenance()
     changed_rows = 0
     event_count = 0
     review_required_rows = 0
@@ -2046,7 +2104,7 @@ def process_intake(args: argparse.Namespace) -> None:
       create temp table current_step on commit drop as
       with run as (
         insert into audit.pipeline_runs
-          (command, team, season, status, input_hash, output_hash, parameters, ended_at)
+          (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values (
           'process-intake', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
           {params.text(file_hash)}, {params.text(output_hash)},
@@ -2059,7 +2117,7 @@ def process_intake(args: argparse.Namespace) -> None:
             'window_start': args.window_start,
             'window_end': args.window_end,
           })},
-          now()
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
       ),
@@ -2156,6 +2214,7 @@ def ingest(args: argparse.Namespace) -> None:
     row_sql = []
     redacted_source_value_count = 0
     params = SqlParams()
+    provenance = run_provenance()
     for index, row in enumerate(rows, start=2):
         row_hash = hashlib.sha256(json.dumps(row, sort_keys=True).encode()).hexdigest()
         database_values = {}
@@ -2202,8 +2261,8 @@ def ingest(args: argparse.Namespace) -> None:
         )
         returning id
       )
-      insert into audit.pipeline_runs (command, team, season, status, input_hash, parameters, ended_at)
-      values ('ingest', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.text(file_hash)}, {params.jsonb({'file': path.name, 'excluded_source_fields': sorted(excluded_source_fields), 'redacted_manifest_keys': sorted(redacted_manifest_keys), 'redacted_source_value_count': redacted_source_value_count})}, now());
+      insert into audit.pipeline_runs (command, team, season, status, input_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
+      values ('ingest', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.text(file_hash)}, {params.jsonb({'file': path.name, 'excluded_source_fields': sorted(excluded_source_fields), 'redacted_manifest_keys': sorted(redacted_manifest_keys), 'redacted_source_value_count': redacted_source_value_count})}, now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])});
       {"".join(row_sql)}
       do $$
       begin
@@ -2218,10 +2277,11 @@ def ingest(args: argparse.Namespace) -> None:
 
 def run_step(args: argparse.Namespace) -> None:
     params = SqlParams()
+    provenance = run_provenance()
     sql = f"""
       with run as (
-        insert into audit.pipeline_runs (command, team, season, status, parameters, ended_at)
-        values ('run', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.jsonb({'step': args.step})}, now())
+        insert into audit.pipeline_runs (command, team, season, status, parameters, ended_at, code_version, dependency_lock_hash, operator)
+        values ('run', {params.text(args.team)}, {params.text(args.season)}, 'succeeded', {params.jsonb({'step': args.step})}, now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])})
         returning id
       )
       insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, ended_at)
@@ -2233,6 +2293,14 @@ def run_step(args: argparse.Namespace) -> None:
 
 
 def release(args: argparse.Namespace) -> None:
+    provenance = run_provenance()
+    if provenance["code_version"].endswith("-dirty"):
+        raise SystemExit(
+            "release refuses to run from an uncommitted working tree "
+            f"(code_version={provenance['code_version']}); commit or stash local "
+            "changes before releasing so the release row records an exact, "
+            "reproducible commit"
+        )
     dashboard_path = Path(args.dashboard_file) if args.dashboard_file else (
         Path("content") / "reporting" / f"{args.team.lower()}_dashboard_{args.season}.json"
     )
@@ -2376,10 +2444,11 @@ def release(args: argparse.Namespace) -> None:
 
       create temp table current_release on commit drop as
       with run as (
-        insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at)
+        insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values ('release', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
           {params.text(dashboard_hash)}, {params.text(release_hash)},
-          {params.jsonb({'release': label, 'dashboard_file': str(dashboard_path), 'dashboard_sha256': dashboard_hash, 'injury_sha256': injury_hash, 'exposure_sha256': exposure_hash, 'standardisation_audit_sha256': audit_hash, 'injury_processing_rule_version': injury_rule_version, 'exposure_processing_rule_version': exposure_rule_version})}, now())
+          {params.jsonb({'release': label, 'dashboard_file': str(dashboard_path), 'dashboard_sha256': dashboard_hash, 'injury_sha256': injury_hash, 'exposure_sha256': exposure_hash, 'standardisation_audit_sha256': audit_hash, 'injury_processing_rule_version': injury_rule_version, 'exposure_processing_rule_version': exposure_rule_version})}, now(),
+          {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])})
         returning id
       ),
       release as (
@@ -2401,6 +2470,7 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
     file_hash = sha256_file(path)
     raw_id = raw_record_id(args.team, args.season, file_hash, args.row_number)
     params = SqlParams()
+    provenance = run_provenance()
     state = {
         "analysis_eligibility_status": "excluded_duplicate_adjudicated",
         "excluded_standardised_row_number": args.row_number,
@@ -2430,7 +2500,7 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
       create temp table current_step on commit drop as
       with run as (
         insert into audit.pipeline_runs
-          (command, team, season, status, input_hash, output_hash, parameters, ended_at)
+          (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values (
           'adjudicate-duplicate-exclusion', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
           {params.text(file_hash)}, {params.text(output_hash)},
@@ -2441,7 +2511,7 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
             'step_version': args.step_version,
             'version_number': args.version_number,
           })},
-          now()
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
       ),
@@ -2512,6 +2582,7 @@ def redact_protected_team_aliases(args: argparse.Namespace) -> None:
         raise SystemExit("redact-protected-team-aliases currently only supports --scope all")
 
     params = SqlParams()
+    provenance = run_provenance()
     pattern = params.text(PROTECTED_ALIAS_SQL_PATTERN)
     marker = params.text(PROTECTED_ALIAS_REDACTED_MARKER)
     old_marker = params.text(PROTECTED_ALIAS_OLD_VALUE_MARKER)
@@ -2530,11 +2601,11 @@ def redact_protected_team_aliases(args: argparse.Namespace) -> None:
 
       create temp table current_run on commit drop as
       with run as (
-        insert into audit.pipeline_runs (command, status, parameters, ended_at)
+        insert into audit.pipeline_runs (command, status, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values (
           'redact-protected-team-aliases', 'succeeded',
           {params.jsonb({"scope": args.scope, "pattern": PROTECTED_ALIAS_SQL_PATTERN, "rule_version": PROTECTED_ALIAS_REDACTION_RULE_VERSION})},
-          now()
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
       )
@@ -2677,6 +2748,7 @@ def retire_releases(args: argparse.Namespace) -> None:
         raise SystemExit("--labels must name at least one release_label to retire")
 
     params = SqlParams()
+    provenance = run_provenance()
     labels_json = params.jsonb(labels)
     rule_version = params.text(AGGREGATE_RELEASE_RETIREMENT_RULE_VERSION)
     step_name = params.text("retire_aggregate_releases")
@@ -2701,11 +2773,11 @@ def retire_releases(args: argparse.Namespace) -> None:
 
       create temp table current_run on commit drop as
       with run as (
-        insert into audit.pipeline_runs (command, status, parameters, ended_at)
+        insert into audit.pipeline_runs (command, status, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values (
           'retire-releases', 'succeeded',
           {params.jsonb({"labels": labels, "rationale": args.rationale, "reviewer": args.reviewer})},
-          now()
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
       )
@@ -3482,6 +3554,12 @@ def self_check(args: argparse.Namespace) -> None:
     assert params.text("value") == "(select value #>> '{}' from _pipeline_params where idx = 1)"
     assert params.jsonb({"key": "value"}) == "(select value from _pipeline_params where idx = 2)"
     assert params.values == ["value", {"key": "value"}]
+
+    provenance = run_provenance()
+    assert re.fullmatch(r"[0-9a-f]{40}(-dirty)?", provenance["code_version"]), provenance["code_version"]
+    assert re.fullmatch(r"[0-9a-f]{64}", provenance["dependency_lock_hash"])
+    assert provenance["operator"].strip()
+    assert set(provenance) == {"code_version", "dependency_lock_hash", "operator"}
 
     assert parse_flexible_date("10/7/24").date().isoformat() == "2024-10-07"
     assert parse_flexible_date("10/7/24", "day-first").date().isoformat() == "2024-07-10"
