@@ -1,15 +1,11 @@
 {
-  "generated_at": "2026-07-07T10:58:39Z",
+  "generated_at": "2026-07-10T21:26:21Z",
   "team": "Connacht",
   "season": "2024-25",
   "analysis_window": {
     "start": "2024-09-16",
     "end": "2025-06-15",
     "basis": "Connacht exposure coverage window from included weekly exposure rows"
-  },
-  "source_files": {
-    "injury": "data/intake/2024-25/connacht/connacht_injury_standardised_2024-25.csv",
-    "exposure": "data/intake/2024-25/connacht/connacht_exposure_cleaned_2024-25.csv"
   },
   "method": [
     "Headline injury metrics use time-loss injuries only: Days Injured > 0.",
@@ -19,18 +15,31 @@
     "Exposure hours = sum(minutes_total_clean) / 60 for included weekly exposure rows.",
     "Monthly exposure is assigned to the week-start month because Connacht reports weekly exposure.",
     "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
+    "No Received/Injured In Team cohort filter applied.",
+    "Match Type retains URC, training, Other, blank/N/A, and generic match/game values; explicit non-URC competitions and teams are excluded.",
     "Adjudicated duplicate standardised rows excluded from this aggregate: 125."
   ],
   "coverage": {
-    "exposure_rows": 679,
-    "exposed_players": 38,
-    "weeks": 21,
-    "exposure_periods": 21,
-    "exposure_grain": "weekly",
     "hours": 3214.8,
+    "weeks": 21,
     "distance_km": 10762.7,
-    "included_exposure_status": "included",
-    "scope_status": "scope_unknown_included"
+    "exposure_rows": 679,
+    "exposure_grain": "weekly",
+    "exposed_players": 38,
+    "exposure_periods": 21,
+    "scope_status_counts": {
+      "scope_unknown_included": 679
+    },
+    "injury_cohort_filters": {
+      "exclusion_reason_counts": {
+        "adjudicated_duplicate": 1,
+        "non_injury_problem_type": 1,
+        "injury_date_missing_or_outside_exposure_coverage": 15
+      },
+      "injured_in_team_applied": false,
+      "explicit_non_urc_match_type_applied": true
+    },
+    "included_exposure_status": "included"
   },
   "headline": [
     {
@@ -93,7 +102,7 @@
       "label": "training",
       "time_loss_injuries": 24,
       "days_lost": 360,
-      "mean_severity_days": 15.0
+      "mean_severity_days": 15
     },
     {
       "label": "unknown",
@@ -105,7 +114,7 @@
   "monthly": [
     {
       "month": "Sep 2024",
-      "exposure_hours": 674.0,
+      "exposure_hours": 674,
       "distance_km": 2194.6,
       "time_loss_injuries": 7,
       "days_lost": 150,
@@ -163,7 +172,7 @@
       "distance_km": 1151.3,
       "time_loss_injuries": 6,
       "days_lost": 57,
-      "incidence_per_1000h": 18.0,
+      "incidence_per_1000h": 18,
       "burden_per_1000h": 170.9
     },
     {
@@ -181,7 +190,7 @@
       "distance_km": 831.9,
       "time_loss_injuries": 6,
       "days_lost": 120,
-      "incidence_per_1000h": 24.0,
+      "incidence_per_1000h": 24,
       "burden_per_1000h": 480.2
     },
     {
@@ -190,8 +199,8 @@
       "distance_km": 147.3,
       "time_loss_injuries": 0,
       "days_lost": 0,
-      "incidence_per_1000h": 0.0,
-      "burden_per_1000h": 0.0
+      "incidence_per_1000h": 0,
+      "burden_per_1000h": 0
     }
   ],
   "body_locations": [
@@ -248,7 +257,7 @@
       "time_loss_injuries": 4,
       "days_lost": 61,
       "incidence_per_1000h": 1.2,
-      "burden_per_1000h": 19.0,
+      "burden_per_1000h": 19,
       "mean_severity_days": 15.2
     },
     {
@@ -273,7 +282,7 @@
       "days_lost": 44,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 13.7,
-      "mean_severity_days": 22.0
+      "mean_severity_days": 22
     }
   ],
   "injury_types": [
@@ -331,7 +340,7 @@
       "days_lost": 144,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 44.8,
-      "mean_severity_days": 72.0
+      "mean_severity_days": 72
     },
     {
       "label": "Peripheral nerve injury",
@@ -339,7 +348,7 @@
       "days_lost": 72,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 22.4,
-      "mean_severity_days": 36.0
+      "mean_severity_days": 36
     },
     {
       "label": "Synovitis/capsulitis",
@@ -347,7 +356,7 @@
       "days_lost": 48,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 14.9,
-      "mean_severity_days": 48.0
+      "mean_severity_days": 48
     },
     {
       "label": "Arthritis",
@@ -355,7 +364,7 @@
       "days_lost": 9,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 2.8,
-      "mean_severity_days": 9.0
+      "mean_severity_days": 9
     }
   ],
   "severity_distribution": [
@@ -403,13 +412,13 @@
     }
   ],
   "prior_season": {
+    "note": "No Connacht prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures.",
     "season": "2023-24",
-    "status": "not_loaded_in_v2",
-    "note": "No Connacht prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures."
+    "status": "not_loaded_in_v2"
   },
   "limitations": [
     "Connacht exposure is weekly, so match and training incidence cannot be split until setting-specific exposure denominators are approved.",
     "Adjudicated duplicate standardised row exclusions applied: 125.",
-    "This aggregate artifact is local and draft; a hosted reporting table or view should be created only after explicit approval of the live Supabase target."
+    "Aggregate release is approved only after explicit confirmation of the live Supabase target; the dashboard reports aggregate values only."
   ]
 }
