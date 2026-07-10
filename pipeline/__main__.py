@@ -3492,7 +3492,12 @@ def release(args: argparse.Namespace) -> None:
                 f"but {expected} rows were written for this release"
             )
 
-    export_path = Path(getattr(args, "output", "") or "") or Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
+    output_arg = clean_text(getattr(args, "output", "") or "")
+    export_path = (
+        Path(output_arg)
+        if output_arg
+        else Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
+    )
     dashboard_json = export_release_dashboard_json(label)
     export_path.parent.mkdir(parents=True, exist_ok=True)
     export_path.write_text(json.dumps(dashboard_json, indent=2) + "\n")
