@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-06T17:37:37Z",
+  "generated_at": "2026-07-10T21:29:05Z",
   "team": "Munster",
   "season": "2024-25",
   "analysis_window": {
@@ -7,27 +7,37 @@
     "end": "2025-06-15",
     "basis": "Munster exposure coverage window from included weekly exposure rows"
   },
-  "source_files": {
-    "injury": "data/intake/2024-25/munster/munster_filled_standardised_2024-25.csv",
-    "exposure": "data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv"
-  },
   "method": [
     "Headline injury metrics use time-loss injuries only: Days Injured > 0.",
     "Incidence = time-loss injuries / exposure hours * 1000.",
     "Severity = mean and median days lost per time-loss injury.",
     "Burden = days lost / exposure hours * 1000.",
-    "Exposure hours = sum(minutes_total_clean) / 60 for included weekly Munster exposure rows.",
+    "Exposure hours = sum(minutes_total_clean) / 60 for included weekly exposure rows.",
     "Monthly exposure is assigned to the week-start month because Munster reports weekly exposure.",
-    "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping."
+    "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
+    "No Received/Injured In Team cohort filter applied.",
+    "Match Type retains URC, training, Other, blank/N/A, and generic match/game values; explicit non-URC competitions and teams are excluded.",
+    "No adjudicated duplicate injury rows were excluded from this aggregate."
   ],
   "coverage": {
-    "exposure_rows": 803,
-    "exposed_players": 47,
-    "weeks": 21,
     "hours": 3243.1,
+    "weeks": 21,
     "distance_km": 10996.8,
-    "included_exposure_status": "included",
-    "scope_status": "scope_unknown_included"
+    "exposure_rows": 803,
+    "exposure_grain": "weekly",
+    "exposed_players": 47,
+    "exposure_periods": 21,
+    "scope_status_counts": {
+      "scope_unknown_included": 803
+    },
+    "injury_cohort_filters": {
+      "exclusion_reason_counts": {
+        "injury_date_missing_or_outside_exposure_coverage": 16
+      },
+      "injured_in_team_applied": false,
+      "explicit_non_urc_match_type_applied": true
+    },
+    "included_exposure_status": "included"
   },
   "headline": [
     {
@@ -103,7 +113,7 @@
     {
       "month": "Sep 2024",
       "exposure_hours": 616.3,
-      "distance_km": 2027.0,
+      "distance_km": 2027,
       "time_loss_injuries": 2,
       "days_lost": 46,
       "incidence_per_1000h": 3.2,
@@ -116,7 +126,7 @@
       "time_loss_injuries": 7,
       "days_lost": 640,
       "incidence_per_1000h": 15.8,
-      "burden_per_1000h": 1444.0
+      "burden_per_1000h": 1444
     },
     {
       "month": "Nov 2024",
@@ -129,7 +139,7 @@
     },
     {
       "month": "Dec 2024",
-      "exposure_hours": 273.0,
+      "exposure_hours": 273,
       "distance_km": 948.9,
       "time_loss_injuries": 4,
       "days_lost": 260,
@@ -147,7 +157,7 @@
     },
     {
       "month": "Feb 2025",
-      "exposure_hours": 330.0,
+      "exposure_hours": 330,
       "distance_km": 1162.3,
       "time_loss_injuries": 7,
       "days_lost": 312,
@@ -170,7 +180,7 @@
       "time_loss_injuries": 9,
       "days_lost": 188,
       "incidence_per_1000h": 29.4,
-      "burden_per_1000h": 615.0
+      "burden_per_1000h": 615
     },
     {
       "month": "May 2025",
@@ -230,7 +240,7 @@
       "days_lost": 340,
       "incidence_per_1000h": 1.2,
       "burden_per_1000h": 104.8,
-      "mean_severity_days": 85.0
+      "mean_severity_days": 85
     },
     {
       "label": "Lower leg",
@@ -254,7 +264,7 @@
       "days_lost": 322,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 99.3,
-      "mean_severity_days": 161.0
+      "mean_severity_days": 161
     },
     {
       "label": "Hip/Groin",
@@ -262,7 +272,7 @@
       "days_lost": 104,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 32.1,
-      "mean_severity_days": 104.0
+      "mean_severity_days": 104
     },
     {
       "label": "Elbow",
@@ -270,7 +280,7 @@
       "days_lost": 20,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 6.2,
-      "mean_severity_days": 20.0
+      "mean_severity_days": 20
     }
   ],
   "injury_types": [
@@ -320,7 +330,7 @@
       "days_lost": 186,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 57.4,
-      "mean_severity_days": 93.0
+      "mean_severity_days": 93
     },
     {
       "label": "Contusion (superficial)",
@@ -335,8 +345,8 @@
       "time_loss_injuries": 1,
       "days_lost": 26,
       "incidence_per_1000h": 0.3,
-      "burden_per_1000h": 8.0,
-      "mean_severity_days": 26.0
+      "burden_per_1000h": 8,
+      "mean_severity_days": 26
     },
     {
       "label": "Fracture",
@@ -344,7 +354,7 @@
       "days_lost": 12,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 3.7,
-      "mean_severity_days": 12.0
+      "mean_severity_days": 12
     },
     {
       "label": "Synovitis/capsulitis",
@@ -352,7 +362,7 @@
       "days_lost": 12,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 3.7,
-      "mean_severity_days": 12.0
+      "mean_severity_days": 12
     }
   ],
   "severity_distribution": [
@@ -400,12 +410,13 @@
     }
   ],
   "prior_season": {
+    "note": "No Munster prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures.",
     "season": "2023-24",
-    "status": "not_loaded_in_v2",
-    "note": "No Munster prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures."
+    "status": "not_loaded_in_v2"
   },
   "limitations": [
     "Munster exposure is weekly, so match and training incidence cannot be split until setting-specific exposure denominators are approved.",
-    "This aggregate artifact is local and draft; a hosted reporting table or view should be created only after explicit approval of the live Supabase target."
+    "No adjudicated duplicate injury row exclusions applied.",
+    "Aggregate release is approved only after explicit confirmation of the live Supabase target; the dashboard reports aggregate values only."
   ]
 }
