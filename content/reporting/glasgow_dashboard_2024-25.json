@@ -1,26 +1,11 @@
 {
-  "generated_at": "2026-07-07T22:00:04Z",
+  "generated_at": "2026-07-10T21:27:57Z",
   "team": "Glasgow Warriors",
   "season": "2024-25",
   "analysis_window": {
     "start": "2024-09-20",
     "end": "2025-06-07",
     "basis": "Glasgow Warriors exposure coverage window from included session-level exposure rows"
-  },
-  "source_files": {
-    "injury": "data/intake/2024-25/glasgow/glasgow_injury_intake_locator_enriched_2024-25.csv",
-    "exposure": "data/intake/2024-25/glasgow/glasgow_exposure_cleaned_2024-25.csv"
-  },
-  "pipeline_evidence": {
-    "injury_file_sha256": "c88580b70c0b5687eece3d79439589e8680c41507564cf0f441416057e513f7c",
-    "exposure_file_sha256": "1a7d31c7bdcce84846817bf4eb62c74bea1f8bb9b1e65410d5fdf270a0ea74fb",
-    "injury_processing_rule_version": "injury_processing_2026-07-07_v1",
-    "exposure_processing_rule_version": "exposure_processing_2026-07-07_v1",
-    "adjudicated_duplicate_rows": [
-      428
-    ],
-    "standardisation_audit_file": "data/reporting/glasgow_injury_standardisation_audit_2024-25.csv",
-    "standardisation_audit_sha256": "ed186a0fcc556d4330926f37b987d743a4b154ea94cdc16a7c8dbc647bf9282f"
   },
   "method": [
     "Headline injury metrics use time-loss injuries only: Days Injured > 0.",
@@ -35,28 +20,28 @@
     "Adjudicated duplicate standardised rows excluded from this aggregate: 428."
   ],
   "coverage": {
-    "exposure_rows": 4371,
-    "exposed_players": 79,
-    "weeks": 0,
-    "exposure_periods": 110,
-    "exposure_grain": "session",
     "hours": 4951.6,
+    "weeks": 0,
     "distance_km": 16582.4,
-    "included_exposure_status": "included",
+    "exposure_rows": 4371,
+    "exposure_grain": "session",
+    "exposed_players": 79,
+    "exposure_periods": 110,
     "scope_status_counts": {
       "in_scope_explicit": 4371
     },
     "injury_cohort_filters": {
-      "injured_in_team_applied": true,
-      "explicit_non_urc_match_type_applied": true,
       "exclusion_reason_counts": {
         "adjudicated_duplicate": 1,
-        "explicit_non_urc_match_type": 99,
-        "injury_date_missing_or_outside_exposure_coverage": 72,
         "non_injury_problem_type": 86,
-        "received_or_injured_in_other_team": 92
-      }
-    }
+        "explicit_non_urc_match_type": 99,
+        "received_or_injured_in_other_team": 92,
+        "injury_date_missing_or_outside_exposure_coverage": 72
+      },
+      "injured_in_team_applied": true,
+      "explicit_non_urc_match_type_applied": true
+    },
+    "included_exposure_status": "included"
   },
   "headline": [
     {
@@ -125,7 +110,7 @@
       "label": "unknown",
       "time_loss_injuries": 5,
       "days_lost": 125,
-      "mean_severity_days": 25.0
+      "mean_severity_days": 25
     }
   ],
   "monthly": [
@@ -145,7 +130,7 @@
       "time_loss_injuries": 8,
       "days_lost": 135,
       "incidence_per_1000h": 8.1,
-      "burden_per_1000h": 136.0
+      "burden_per_1000h": 136
     },
     {
       "month": "Nov 2024",
@@ -189,13 +174,13 @@
       "distance_km": 1643.2,
       "time_loss_injuries": 23,
       "days_lost": 173,
-      "incidence_per_1000h": 42.0,
+      "incidence_per_1000h": 42,
       "burden_per_1000h": 315.6
     },
     {
       "month": "Apr 2025",
       "exposure_hours": 485.3,
-      "distance_km": 1643.0,
+      "distance_km": 1643,
       "time_loss_injuries": 14,
       "days_lost": 94,
       "incidence_per_1000h": 28.8,
@@ -203,7 +188,7 @@
     },
     {
       "month": "May 2025",
-      "exposure_hours": 1053.0,
+      "exposure_hours": 1053,
       "distance_km": 3331.9,
       "time_loss_injuries": 21,
       "days_lost": 185,
@@ -251,7 +236,7 @@
       "days_lost": 72,
       "incidence_per_1000h": 1.8,
       "burden_per_1000h": 14.5,
-      "mean_severity_days": 8.0
+      "mean_severity_days": 8
     },
     {
       "label": "Neck",
@@ -267,7 +252,7 @@
       "days_lost": 161,
       "incidence_per_1000h": 1.4,
       "burden_per_1000h": 32.5,
-      "mean_severity_days": 23.0
+      "mean_severity_days": 23
     },
     {
       "label": "Foot",
@@ -299,7 +284,7 @@
       "days_lost": 12,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 2.4,
-      "mean_severity_days": 4.0
+      "mean_severity_days": 4
     }
   ],
   "injury_types": [
@@ -307,7 +292,7 @@
       "label": "Contusion (superficial)",
       "time_loss_injuries": 25,
       "days_lost": 111,
-      "incidence_per_1000h": 5.0,
+      "incidence_per_1000h": 5,
       "burden_per_1000h": 22.4,
       "mean_severity_days": 4.4
     },
@@ -325,7 +310,7 @@
       "days_lost": 357,
       "incidence_per_1000h": 3.4,
       "burden_per_1000h": 72.1,
-      "mean_severity_days": 21.0
+      "mean_severity_days": 21
     },
     {
       "label": "Brain/spinal cord injury",
@@ -347,7 +332,7 @@
       "label": "Nonspecific",
       "time_loss_injuries": 5,
       "days_lost": 7,
-      "incidence_per_1000h": 1.0,
+      "incidence_per_1000h": 1,
       "burden_per_1000h": 1.4,
       "mean_severity_days": 1.4
     },
@@ -357,7 +342,7 @@
       "days_lost": 108,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 21.8,
-      "mean_severity_days": 36.0
+      "mean_severity_days": 36
     },
     {
       "label": "Cartilage injury",
@@ -365,7 +350,7 @@
       "days_lost": 9,
       "incidence_per_1000h": 0.6,
       "burden_per_1000h": 1.8,
-      "mean_severity_days": 3.0
+      "mean_severity_days": 3
     },
     {
       "label": "Bursitis",
@@ -373,7 +358,7 @@
       "days_lost": 6,
       "incidence_per_1000h": 0.4,
       "burden_per_1000h": 1.2,
-      "mean_severity_days": 3.0
+      "mean_severity_days": 3
     },
     {
       "label": "Bone contusion",
@@ -381,7 +366,7 @@
       "days_lost": 6,
       "incidence_per_1000h": 0.2,
       "burden_per_1000h": 1.2,
-      "mean_severity_days": 6.0
+      "mean_severity_days": 6
     }
   ],
   "severity_distribution": [
@@ -436,9 +421,9 @@
     }
   ],
   "prior_season": {
+    "note": "No Glasgow Warriors prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures.",
     "season": "2023-24",
-    "status": "not_loaded_in_v2",
-    "note": "No Glasgow Warriors prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures."
+    "status": "not_loaded_in_v2"
   },
   "limitations": [
     "Setting-specific rates are not split until setting-specific exposure denominators are approved.",
