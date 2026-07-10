@@ -1,15 +1,11 @@
 {
-  "generated_at": "2026-07-07T16:32:55Z",
+  "generated_at": "2026-07-10T21:30:02Z",
   "team": "Edinburgh",
   "season": "2024-25",
   "analysis_window": {
     "start": "2024-09-20",
     "end": "2025-05-17",
     "basis": "Edinburgh exposure coverage window from included session-level exposure rows"
-  },
-  "source_files": {
-    "injury": "data/intake/2024-25/edinburgh/edinburgh_injury_standardised_2024-25.csv",
-    "exposure": "data/intake/2024-25/edinburgh/edinburgh_exposure_cleaned_2024-25.csv"
   },
   "method": [
     "Headline injury metrics use time-loss injuries only: Days Injured > 0.",
@@ -19,72 +15,80 @@
     "Exposure hours = sum(minutes_total_clean) / 60 for included session-level exposure rows.",
     "Monthly exposure is assigned to the cleaned exposure-date month.",
     "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
-    "Approved Received/Injured In Team cohort filter applied.",
+    "Received/Injured In Team retains the approved team plus blank/N/A values; explicit other-team or Club values are excluded.",
+    "Match Type retains URC, training, Other, blank/N/A, and generic match/game values; explicit non-URC competitions and teams are excluded.",
     "No adjudicated duplicate injury rows were excluded from this aggregate."
   ],
   "coverage": {
-    "exposure_rows": 5428,
-    "exposed_players": 86,
-    "weeks": 0,
-    "exposure_periods": 144,
-    "exposure_grain": "session",
     "hours": 6706.3,
+    "weeks": 0,
     "distance_km": 8447.1,
-    "included_exposure_status": "included",
+    "exposure_rows": 5428,
+    "exposure_grain": "session",
+    "exposed_players": 86,
+    "exposure_periods": 144,
     "scope_status_counts": {
       "in_scope_explicit": 5388,
       "scope_unknown_included": 40
     },
     "injury_cohort_filters": {
-      "injured_in_team_applied": true
-    }
+      "exclusion_reason_counts": {
+        "non_injury_problem_type": 43,
+        "explicit_non_urc_match_type": 38,
+        "received_or_injured_in_other_team": 36,
+        "injury_date_missing_or_outside_exposure_coverage": 57
+      },
+      "injured_in_team_applied": true,
+      "explicit_non_urc_match_type_applied": true
+    },
+    "included_exposure_status": "included"
   },
   "headline": [
     {
       "key": "recorded_injuries",
       "label": "Recorded injuries in coverage window",
-      "value": 140,
+      "value": 115,
       "unit": "injuries",
       "formula": "count(injury rows with Date Injured inside exposure coverage window)"
     },
     {
       "key": "time_loss_injuries",
       "label": "Time-loss injuries",
-      "value": 92,
+      "value": 75,
       "unit": "injuries",
       "formula": "count(injury rows where Days Injured > 0)"
     },
     {
       "key": "incidence_per_1000h",
       "label": "Incidence",
-      "value": 13.7,
+      "value": 11.2,
       "unit": "per 1,000 player-hours",
-      "numerator": 92,
+      "numerator": 75,
       "denominator": 6706.3,
       "formula": "time-loss injuries / exposure hours * 1000"
     },
     {
       "key": "severity_mean_days",
       "label": "Mean severity",
-      "value": 20.3,
+      "value": 22.2,
       "unit": "days lost per injury",
-      "numerator": 1867,
-      "denominator": 92,
+      "numerator": 1663,
+      "denominator": 75,
       "formula": "days lost / time-loss injuries"
     },
     {
       "key": "severity_median_days",
       "label": "Median severity",
-      "value": 11.0,
+      "value": 13,
       "unit": "days lost per injury",
       "formula": "median(Days Injured) for time-loss injuries"
     },
     {
       "key": "burden_per_1000h",
       "label": "Burden",
-      "value": 278.4,
+      "value": 248,
       "unit": "days lost per 1,000 player-hours",
-      "numerator": 1867,
+      "numerator": 1663,
       "denominator": 6706.3,
       "formula": "days lost / exposure hours * 1000"
     }
@@ -92,9 +96,9 @@
   "setting_split": [
     {
       "label": "match",
-      "time_loss_injuries": 63,
-      "days_lost": 1302,
-      "mean_severity_days": 20.7
+      "time_loss_injuries": 46,
+      "days_lost": 1098,
+      "mean_severity_days": 23.9
     },
     {
       "label": "training",
@@ -123,10 +127,10 @@
       "month": "Oct 2024",
       "exposure_hours": 852.8,
       "distance_km": 1180.1,
-      "time_loss_injuries": 9,
-      "days_lost": 125,
-      "incidence_per_1000h": 10.6,
-      "burden_per_1000h": 146.6
+      "time_loss_injuries": 8,
+      "days_lost": 100,
+      "incidence_per_1000h": 9.4,
+      "burden_per_1000h": 117.3
     },
     {
       "month": "Nov 2024",
@@ -141,19 +145,19 @@
       "month": "Dec 2024",
       "exposure_hours": 1013.6,
       "distance_km": 1158.6,
-      "time_loss_injuries": 13,
-      "days_lost": 334,
-      "incidence_per_1000h": 12.8,
-      "burden_per_1000h": 329.5
+      "time_loss_injuries": 8,
+      "days_lost": 228,
+      "incidence_per_1000h": 7.9,
+      "burden_per_1000h": 224.9
     },
     {
       "month": "Jan 2025",
       "exposure_hours": 620.2,
       "distance_km": 770.4,
-      "time_loss_injuries": 11,
-      "days_lost": 426,
-      "incidence_per_1000h": 17.7,
-      "burden_per_1000h": 686.9
+      "time_loss_injuries": 8,
+      "days_lost": 381,
+      "incidence_per_1000h": 12.9,
+      "burden_per_1000h": 614.3
     },
     {
       "month": "Feb 2025",
@@ -177,10 +181,10 @@
       "month": "Apr 2025",
       "exposure_hours": 1090.9,
       "distance_km": 1245.1,
-      "time_loss_injuries": 14,
-      "days_lost": 92,
-      "incidence_per_1000h": 12.8,
-      "burden_per_1000h": 84.3
+      "time_loss_injuries": 6,
+      "days_lost": 64,
+      "incidence_per_1000h": 5.5,
+      "burden_per_1000h": 58.7
     },
     {
       "month": "May 2025",
@@ -188,26 +192,18 @@
       "distance_km": 801.4,
       "time_loss_injuries": 0,
       "days_lost": 0,
-      "incidence_per_1000h": 0.0,
-      "burden_per_1000h": 0.0
+      "incidence_per_1000h": 0,
+      "burden_per_1000h": 0
     }
   ],
   "body_locations": [
     {
       "label": "Head",
-      "time_loss_injuries": 20,
-      "days_lost": 179,
-      "incidence_per_1000h": 3.0,
-      "burden_per_1000h": 26.7,
-      "mean_severity_days": 8.9
-    },
-    {
-      "label": "Ankle",
-      "time_loss_injuries": 12,
-      "days_lost": 280,
-      "incidence_per_1000h": 1.8,
-      "burden_per_1000h": 41.8,
-      "mean_severity_days": 23.3
+      "time_loss_injuries": 17,
+      "days_lost": 166,
+      "incidence_per_1000h": 2.5,
+      "burden_per_1000h": 24.8,
+      "mean_severity_days": 9.8
     },
     {
       "label": "Shoulder",
@@ -219,19 +215,11 @@
     },
     {
       "label": "Lower leg",
-      "time_loss_injuries": 10,
-      "days_lost": 257,
-      "incidence_per_1000h": 1.5,
-      "burden_per_1000h": 38.3,
-      "mean_severity_days": 25.7
-    },
-    {
-      "label": "Knee",
       "time_loss_injuries": 9,
-      "days_lost": 144,
+      "days_lost": 234,
       "incidence_per_1000h": 1.3,
-      "burden_per_1000h": 21.5,
-      "mean_severity_days": 16.0
+      "burden_per_1000h": 34.9,
+      "mean_severity_days": 26
     },
     {
       "label": "Thigh",
@@ -242,12 +230,20 @@
       "mean_severity_days": 35.2
     },
     {
-      "label": "Hip/Groin",
-      "time_loss_injuries": 5,
-      "days_lost": 36,
-      "incidence_per_1000h": 0.7,
-      "burden_per_1000h": 5.4,
-      "mean_severity_days": 7.2
+      "label": "Ankle",
+      "time_loss_injuries": 8,
+      "days_lost": 168,
+      "incidence_per_1000h": 1.2,
+      "burden_per_1000h": 25.1,
+      "mean_severity_days": 21
+    },
+    {
+      "label": "Knee",
+      "time_loss_injuries": 4,
+      "days_lost": 104,
+      "incidence_per_1000h": 0.6,
+      "burden_per_1000h": 15.5,
+      "mean_severity_days": 26
     },
     {
       "label": "Neck",
@@ -258,62 +254,62 @@
       "mean_severity_days": 22.2
     },
     {
-      "label": "Foot",
+      "label": "Hip/Groin",
       "time_loss_injuries": 4,
-      "days_lost": 76,
+      "days_lost": 32,
       "incidence_per_1000h": 0.6,
-      "burden_per_1000h": 11.3,
-      "mean_severity_days": 19.0
+      "burden_per_1000h": 4.8,
+      "mean_severity_days": 8
     },
     {
       "label": "Hand",
       "time_loss_injuries": 3,
       "days_lost": 40,
       "incidence_per_1000h": 0.4,
-      "burden_per_1000h": 6.0,
+      "burden_per_1000h": 6,
       "mean_severity_days": 13.3
+    },
+    {
+      "label": "Foot",
+      "time_loss_injuries": 2,
+      "days_lost": 67,
+      "incidence_per_1000h": 0.3,
+      "burden_per_1000h": 10,
+      "mean_severity_days": 33.5
     }
   ],
   "injury_types": [
     {
       "label": "Muscle injury",
-      "time_loss_injuries": 13,
-      "days_lost": 439,
-      "incidence_per_1000h": 1.9,
-      "burden_per_1000h": 65.5,
-      "mean_severity_days": 33.8
-    },
-    {
-      "label": "Joint sprain",
-      "time_loss_injuries": 11,
-      "days_lost": 256,
-      "incidence_per_1000h": 1.6,
-      "burden_per_1000h": 38.2,
-      "mean_severity_days": 23.3
+      "time_loss_injuries": 12,
+      "days_lost": 416,
+      "incidence_per_1000h": 1.8,
+      "burden_per_1000h": 62,
+      "mean_severity_days": 34.7
     },
     {
       "label": "Nonspecific",
-      "time_loss_injuries": 11,
-      "days_lost": 236,
-      "incidence_per_1000h": 1.6,
-      "burden_per_1000h": 35.2,
-      "mean_severity_days": 21.5
+      "time_loss_injuries": 10,
+      "days_lost": 211,
+      "incidence_per_1000h": 1.5,
+      "burden_per_1000h": 31.5,
+      "mean_severity_days": 21.1
     },
     {
-      "label": "Contusion (superficial)",
-      "time_loss_injuries": 11,
-      "days_lost": 65,
-      "incidence_per_1000h": 1.6,
-      "burden_per_1000h": 9.7,
-      "mean_severity_days": 5.9
+      "label": "Joint sprain",
+      "time_loss_injuries": 8,
+      "days_lost": 159,
+      "incidence_per_1000h": 1.2,
+      "burden_per_1000h": 23.7,
+      "mean_severity_days": 19.9
     },
     {
       "label": "Brain/spinal cord injury",
-      "time_loss_injuries": 9,
-      "days_lost": 142,
-      "incidence_per_1000h": 1.3,
-      "burden_per_1000h": 21.2,
-      "mean_severity_days": 15.8
+      "time_loss_injuries": 8,
+      "days_lost": 131,
+      "incidence_per_1000h": 1.2,
+      "burden_per_1000h": 19.5,
+      "mean_severity_days": 16.4
     },
     {
       "label": "Laceration",
@@ -325,19 +321,19 @@
     },
     {
       "label": "Tendinopathy",
-      "time_loss_injuries": 7,
-      "days_lost": 175,
-      "incidence_per_1000h": 1.0,
-      "burden_per_1000h": 26.1,
-      "mean_severity_days": 25.0
+      "time_loss_injuries": 6,
+      "days_lost": 172,
+      "incidence_per_1000h": 0.9,
+      "burden_per_1000h": 25.6,
+      "mean_severity_days": 28.7
     },
     {
-      "label": "Abrasion",
-      "time_loss_injuries": 7,
-      "days_lost": 27,
-      "incidence_per_1000h": 1.0,
-      "burden_per_1000h": 4.0,
-      "mean_severity_days": 3.9
+      "label": "Contusion (superficial)",
+      "time_loss_injuries": 6,
+      "days_lost": 39,
+      "incidence_per_1000h": 0.9,
+      "burden_per_1000h": 5.8,
+      "mean_severity_days": 6.5
     },
     {
       "label": "Fracture",
@@ -353,64 +349,72 @@
       "days_lost": 48,
       "incidence_per_1000h": 0.4,
       "burden_per_1000h": 7.2,
-      "mean_severity_days": 16.0
+      "mean_severity_days": 16
+    },
+    {
+      "label": "Abrasion",
+      "time_loss_injuries": 3,
+      "days_lost": 11,
+      "incidence_per_1000h": 0.4,
+      "burden_per_1000h": 1.6,
+      "mean_severity_days": 3.7
     }
   ],
   "severity_distribution": [
     {
       "key": "zero_days_medical_attention_only",
       "label": "Medical attention",
-      "recorded_injuries": 39,
+      "recorded_injuries": 34,
       "time_loss_injuries": 0,
       "days_lost": 0
     },
     {
       "key": "one_day",
       "label": "1 day",
-      "recorded_injuries": 5,
-      "time_loss_injuries": 5,
-      "days_lost": 5
+      "recorded_injuries": 3,
+      "time_loss_injuries": 3,
+      "days_lost": 3
     },
     {
       "key": "two_to_three_days",
       "label": "2-3 days",
-      "recorded_injuries": 7,
-      "time_loss_injuries": 7,
-      "days_lost": 18
+      "recorded_injuries": 3,
+      "time_loss_injuries": 3,
+      "days_lost": 6
     },
     {
       "key": "four_to_seven_days",
       "label": "4-7 days",
-      "recorded_injuries": 21,
-      "time_loss_injuries": 21,
-      "days_lost": 102
+      "recorded_injuries": 16,
+      "time_loss_injuries": 16,
+      "days_lost": 80
     },
     {
       "key": "eight_to_twenty_eight_days",
       "label": "8-28 days",
-      "recorded_injuries": 37,
-      "time_loss_injuries": 37,
-      "days_lost": 522
+      "recorded_injuries": 33,
+      "time_loss_injuries": 33,
+      "days_lost": 448
     },
     {
       "key": "greater_than_twenty_eight_days",
       "label": ">28 days",
-      "recorded_injuries": 22,
-      "time_loss_injuries": 22,
-      "days_lost": 1220
+      "recorded_injuries": 20,
+      "time_loss_injuries": 20,
+      "days_lost": 1126
     },
     {
       "key": "unknown_or_censored",
       "label": "Unknown or censored",
-      "recorded_injuries": 9,
+      "recorded_injuries": 6,
       "time_loss_injuries": 0,
       "days_lost": 0
     }
   ],
   "prior_season": {
+    "note": "No Edinburgh prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures.",
     "season": "2023-24",
-    "status": "not_loaded_in_v2",
-    "note": "No Edinburgh prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures."
+    "status": "not_loaded_in_v2"
   },
   "limitations": [
     "Setting-specific rates are not split until setting-specific exposure denominators are approved.",
