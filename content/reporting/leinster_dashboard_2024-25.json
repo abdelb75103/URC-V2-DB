@@ -1,15 +1,11 @@
 {
-  "generated_at": "2026-07-07T10:58:39Z",
+  "generated_at": "2026-07-10T21:28:37Z",
   "team": "Leinster",
   "season": "2024-25",
   "analysis_window": {
     "start": "2024-09-16",
     "end": "2025-06-15",
     "basis": "Leinster exposure coverage window from included weekly exposure rows"
-  },
-  "source_files": {
-    "injury": "data/intake/2024-25/leinster/leinster_injury_standardised_2024-25.csv",
-    "exposure": "data/intake/2024-25/leinster/leinster_exposure_cleaned_2024-25.csv"
   },
   "method": [
     "Headline injury metrics use time-loss injuries only: Days Injured > 0.",
@@ -19,18 +15,31 @@
     "Exposure hours = sum(minutes_total_clean) / 60 for included weekly exposure rows.",
     "Monthly exposure is assigned to the week-start month because Leinster reports weekly exposure.",
     "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
+    "No Received/Injured In Team cohort filter applied.",
+    "Match Type retains URC, training, Other, blank/N/A, and generic match/game values; explicit non-URC competitions and teams are excluded.",
     "Adjudicated duplicate standardised rows excluded from this aggregate: 48."
   ],
   "coverage": {
-    "exposure_rows": 953,
-    "exposed_players": 52,
-    "weeks": 21,
-    "exposure_periods": 21,
-    "exposure_grain": "weekly",
     "hours": 3919.4,
-    "distance_km": 14291.0,
-    "included_exposure_status": "included",
-    "scope_status": "scope_unknown_included"
+    "weeks": 21,
+    "distance_km": 14291,
+    "exposure_rows": 953,
+    "exposure_grain": "weekly",
+    "exposed_players": 52,
+    "exposure_periods": 21,
+    "scope_status_counts": {
+      "scope_unknown_included": 953
+    },
+    "injury_cohort_filters": {
+      "exclusion_reason_counts": {
+        "adjudicated_duplicate": 1,
+        "non_injury_problem_type": 1,
+        "injury_date_missing_or_outside_exposure_coverage": 43
+      },
+      "injured_in_team_applied": false,
+      "explicit_non_urc_match_type_applied": true
+    },
+    "included_exposure_status": "included"
   },
   "headline": [
     {
@@ -99,7 +108,7 @@
       "label": "unknown",
       "time_loss_injuries": 4,
       "days_lost": 96,
-      "mean_severity_days": 24.0
+      "mean_severity_days": 24
     }
   ],
   "monthly": [
@@ -118,7 +127,7 @@
       "distance_km": 2242.1,
       "time_loss_injuries": 8,
       "days_lost": 246,
-      "incidence_per_1000h": 13.0,
+      "incidence_per_1000h": 13,
       "burden_per_1000h": 400.3
     },
     {
@@ -155,7 +164,7 @@
       "time_loss_injuries": 3,
       "days_lost": 121,
       "incidence_per_1000h": 8.8,
-      "burden_per_1000h": 355.0
+      "burden_per_1000h": 355
     },
     {
       "month": "Mar 2025",
@@ -225,7 +234,7 @@
       "days_lost": 93,
       "incidence_per_1000h": 0.8,
       "burden_per_1000h": 23.7,
-      "mean_severity_days": 31.0
+      "mean_severity_days": 31
     },
     {
       "label": "Neck",
@@ -249,7 +258,7 @@
       "days_lost": 93,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 23.7,
-      "mean_severity_days": 93.0
+      "mean_severity_days": 93
     },
     {
       "label": "Forearm",
@@ -257,7 +266,7 @@
       "days_lost": 52,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 13.3,
-      "mean_severity_days": 52.0
+      "mean_severity_days": 52
     },
     {
       "label": "Knee",
@@ -265,7 +274,7 @@
       "days_lost": 31,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 7.9,
-      "mean_severity_days": 31.0
+      "mean_severity_days": 31
     },
     {
       "label": "Ankle",
@@ -273,7 +282,7 @@
       "days_lost": 26,
       "incidence_per_1000h": 0.3,
       "burden_per_1000h": 6.6,
-      "mean_severity_days": 26.0
+      "mean_severity_days": 26
     }
   ],
   "injury_types": [
@@ -282,7 +291,7 @@
       "time_loss_injuries": 28,
       "days_lost": 1066,
       "incidence_per_1000h": 7.1,
-      "burden_per_1000h": 272.0,
+      "burden_per_1000h": 272,
       "mean_severity_days": 38.1
     },
     {
@@ -291,7 +300,7 @@
       "days_lost": 168,
       "incidence_per_1000h": 1.5,
       "burden_per_1000h": 42.9,
-      "mean_severity_days": 28.0
+      "mean_severity_days": 28
     },
     {
       "label": "Brain/spinal cord injury",
@@ -307,7 +316,7 @@
       "days_lost": 138,
       "incidence_per_1000h": 0.5,
       "burden_per_1000h": 35.2,
-      "mean_severity_days": 69.0
+      "mean_severity_days": 69
     },
     {
       "label": "Fracture",
@@ -315,7 +324,7 @@
       "days_lost": 78,
       "incidence_per_1000h": 0.5,
       "burden_per_1000h": 19.9,
-      "mean_severity_days": 39.0
+      "mean_severity_days": 39
     },
     {
       "label": "Nonspecific",
@@ -323,7 +332,7 @@
       "days_lost": 60,
       "incidence_per_1000h": 0.5,
       "burden_per_1000h": 15.3,
-      "mean_severity_days": 30.0
+      "mean_severity_days": 30
     },
     {
       "label": "Contusion (superficial)",
@@ -331,7 +340,7 @@
       "days_lost": 34,
       "incidence_per_1000h": 0.5,
       "burden_per_1000h": 8.7,
-      "mean_severity_days": 17.0
+      "mean_severity_days": 17
     },
     {
       "label": "Peripheral nerve injury",
@@ -394,13 +403,13 @@
     }
   ],
   "prior_season": {
+    "note": "No Leinster prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures.",
     "season": "2023-24",
-    "status": "not_loaded_in_v2",
-    "note": "No Leinster prior-season injury and exposure denominator pair exists in this V2 workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures."
+    "status": "not_loaded_in_v2"
   },
   "limitations": [
     "Leinster exposure is weekly, so match and training incidence cannot be split until setting-specific exposure denominators are approved.",
     "Adjudicated duplicate standardised row exclusions applied: 48.",
-    "This aggregate artifact is local and draft; a hosted reporting table or view should be created only after explicit approval of the live Supabase target."
+    "Aggregate release is approved only after explicit confirmation of the live Supabase target; the dashboard reports aggregate values only."
   ]
 }
