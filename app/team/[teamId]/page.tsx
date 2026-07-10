@@ -4,7 +4,11 @@ import { getTeamDashboard } from '@/lib/reporting';
 import { LockedShell } from '@/components/locked-shell';
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 
-export const dynamic = 'force-static';
+// Dashboards change only at approved releases: prerender every team page at
+// deploy, then revalidate hourly. If a revalidation cannot reach the
+// database, getTeamDashboard throws and Next keeps serving the last good
+// cached render.
+export const revalidate = 3600;
 
 export function generateStaticParams() {
   return teams.map((team) => ({ teamId: team.id }));
@@ -30,8 +34,20 @@ export default async function TeamPage({
     );
   }
 
-  const dashboard = getTeamDashboard(team.id);
-  if (!dashboard) notFound();
+  // Fail closed: a live-flagged team with no approved release in the
+  // database (or no reader credential in this environment) renders the
+  // locked shell rather than erroring or exposing anything.
+  const dashboard = await getTeamDashboard(team.id);
+  if (!dashboard) {
+    return (
+      <LockedShell
+        title={`${team.name} Dashboard`}
+        subtitle="URC injury & exposure surveillance"
+        crest={team.crest}
+        accent={team.accent}
+      />
+    );
+  }
 
   return <TeamDashboard dashboard={dashboard} crest={team.crest} teamName={team.name} />;
 }

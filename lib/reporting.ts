@@ -1,10 +1,6 @@
 import "server-only";
-import connachtDashboard from "../content/reporting/connacht_dashboard_2024-25.json";
-import edinburghDashboard from "../content/reporting/edinburgh_dashboard_2024-25.json";
-import glasgowDashboard from "../content/reporting/glasgow_dashboard_2024-25.json";
-import leinsterDashboard from "../content/reporting/leinster_dashboard_2024-25.json";
-import dashboard from "../content/reporting/munster_dashboard_2024-25.json";
-import ulsterDashboard from "../content/reporting/ulster_dashboard_2024-25.json";
+import { Pool } from "pg";
+import { z } from "zod";
 
 export type HeadlineMetric = {
   key: string;
@@ -76,40 +72,167 @@ export type TeamDashboardData = {
   limitations: string[];
 };
 
-export type MunsterDashboard = TeamDashboardData;
+// The view emits jsonb_build_object rows, so optional numeric fields can be
+// explicit JSON nulls; nullish() accepts both shapes and stripNulls()
+// normalizes them back to absent keys (the committed-JSON convention the
+// dashboard components were written against).
+const headlineMetricSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  value: z.number().nullish(),
+  unit: z.string(),
+  numerator: z.number().nullish(),
+  denominator: z.number().nullish(),
+  formula: z.string(),
+});
 
-function publicDashboardData(raw: TeamDashboardData): TeamDashboardData {
+const analyticsRowSchema = z.object({
+  label: z.string().nullish(),
+  month: z.string().nullish(),
+  exposure_hours: z.number().nullish(),
+  distance_km: z.number().nullish(),
+  time_loss_injuries: z.number(),
+  recorded_injuries: z.number().nullish(),
+  days_lost: z.number(),
+  incidence_per_1000h: z.number().nullish(),
+  burden_per_1000h: z.number().nullish(),
+  mean_severity_days: z.number().nullish(),
+});
+
+const severityRowSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  recorded_injuries: z.number(),
+  time_loss_injuries: z.number(),
+  days_lost: z.number(),
+});
+
+const coverageSchema = z
+  .object({
+    exposure_rows: z.number(),
+    exposed_players: z.number(),
+    weeks: z.number(),
+    exposure_periods: z.number().nullish(),
+    exposure_grain: z.string().nullish(),
+    hours: z.number(),
+    distance_km: z.number(),
+    included_exposure_status: z.string(),
+    scope_status_counts: z.record(z.string(), z.number()).nullish(),
+    injury_cohort_filters: z
+      .record(z.string(), z.union([z.boolean(), z.record(z.string(), z.number())]))
+      .nullish(),
+  })
+  .passthrough();
+
+const dashboardRowSchema = z.object({
+  team: z.string(),
+  season: z.string(),
+  generated_at: z.union([z.string(), z.date()]),
+  analysis_window: z.object({
+    start: z.string(),
+    end: z.string(),
+    basis: z.string(),
+  }),
+  method: z.array(z.string()),
+  coverage: coverageSchema,
+  headline: z.array(headlineMetricSchema).min(1),
+  setting_split: z.array(analyticsRowSchema),
+  monthly: z.array(analyticsRowSchema),
+  body_locations: z.array(analyticsRowSchema),
+  injury_types: z.array(analyticsRowSchema),
+  severity_distribution: z.array(severityRowSchema),
+  prior_season: z.object({
+    season: z.string(),
+    status: z.string(),
+    note: z.string(),
+  }),
+  limitations: z.array(z.string()),
+});
+
+function stripNulls<T extends Record<string, unknown>>(row: T): T {
+  return Object.fromEntries(
+    Object.entries(row).filter(([, v]) => v !== null && v !== undefined)
+  ) as T;
+}
+
+// Lazy singleton so builds without a credential never open a pool, and dev
+// hot reloads reuse one pool instead of leaking connections.
+declare global {
+  // eslint-disable-next-line no-var
+  var __urcWebReaderPool: Pool | undefined;
+}
+
+function webReaderPool(): Pool | undefined {
+  const url = process.env.WEB_READER_DB_URL;
+  if (!url) return undefined;
+  if (!globalThis.__urcWebReaderPool) {
+    globalThis.__urcWebReaderPool = new Pool({
+      connectionString: url,
+      max: 3,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+    });
+  }
+  return globalThis.__urcWebReaderPool;
+}
+
+/**
+ * Reads the latest approved release for a team from
+ * reporting.latest_team_dashboard (the web_reader role's only readable
+ * relation) and validates it into TeamDashboardData.
+ *
+ * Fail-closed contract:
+ * - No credential configured, or no approved release for the team ->
+ *   undefined (callers render the locked shell).
+ * - Database unreachable or payload fails validation -> throws, so an ISR
+ *   revalidation fails and Next keeps serving the last good cached render
+ *   instead of downgrading a live dashboard to a locked shell.
+ */
+export async function getTeamDashboard(
+  teamId: string,
+  season = "2024-25"
+): Promise<TeamDashboardData | undefined> {
+  const pool = webReaderPool();
+  if (!pool) return undefined;
+
+  const result = await pool.query(
+    `select team, season, generated_at, analysis_window, method, coverage,
+            headline, setting_split, monthly, body_locations, injury_types,
+            severity_distribution, prior_season, limitations
+     from reporting.latest_team_dashboard
+     where team_key = $1 and season = $2`,
+    [teamId, season]
+  );
+  if (result.rows.length === 0) return undefined;
+  if (result.rows.length > 1) {
+    throw new Error(`expected one dashboard row for team ${teamId}, got ${result.rows.length}`);
+  }
+
+  const row = dashboardRowSchema.parse(result.rows[0]);
+  const generatedAt =
+    row.generated_at instanceof Date
+      ? row.generated_at.toISOString().replace(/\.\d{3}Z$/, "Z")
+      : row.generated_at;
+
+  // Rebuilt field-by-field: only the published dashboard payload crosses
+  // this boundary (never release ids, build ids, or future view columns).
   return {
-    generated_at: raw.generated_at,
-    team: raw.team,
-    season: raw.season,
-    analysis_window: raw.analysis_window,
-    method: raw.method,
-    coverage: raw.coverage,
-    headline: raw.headline,
-    setting_split: raw.setting_split,
-    monthly: raw.monthly,
-    body_locations: raw.body_locations,
-    injury_types: raw.injury_types,
-    severity_distribution: raw.severity_distribution,
-    prior_season: raw.prior_season,
-    limitations: raw.limitations,
+    generated_at: generatedAt,
+    team: row.team,
+    season: row.season,
+    analysis_window: row.analysis_window,
+    method: row.method,
+    coverage: stripNulls(row.coverage) as Coverage,
+    headline: row.headline.map(({ value, ...rest }) => ({
+      ...(stripNulls(rest) as Omit<HeadlineMetric, "value">),
+      value: value ?? null,
+    })),
+    setting_split: row.setting_split.map(stripNulls) as AnalyticsRow[],
+    monthly: row.monthly.map(stripNulls) as AnalyticsRow[],
+    body_locations: row.body_locations.map(stripNulls) as AnalyticsRow[],
+    injury_types: row.injury_types.map(stripNulls) as AnalyticsRow[],
+    severity_distribution: row.severity_distribution.map(stripNulls) as SeverityRow[],
+    prior_season: row.prior_season,
+    limitations: row.limitations,
   };
-}
-
-const dashboards: Record<string, TeamDashboardData> = {
-  connacht: publicDashboardData(connachtDashboard as TeamDashboardData),
-  edinburgh: publicDashboardData(edinburghDashboard as TeamDashboardData),
-  glasgow: publicDashboardData(glasgowDashboard as TeamDashboardData),
-  leinster: publicDashboardData(leinsterDashboard as TeamDashboardData),
-  munster: publicDashboardData(dashboard as TeamDashboardData),
-  ulster: publicDashboardData(ulsterDashboard as TeamDashboardData),
-};
-
-export function getTeamDashboard(teamId: string): TeamDashboardData | undefined {
-  return dashboards[teamId];
-}
-
-export function getMunsterDashboard(): TeamDashboardData {
-  return dashboards.munster;
 }
