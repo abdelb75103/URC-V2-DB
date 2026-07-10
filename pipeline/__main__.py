@@ -2671,21 +2671,32 @@ def adjudicated_duplicate_row_numbers(team_key: str, season: str) -> list[int]:
 def release_cohort_filter_flags(team_key: str, season: str) -> dict[str, Any]:
     """Adjudication 2 (data/reporting/analysis_parity_adjudications_2026-07-10.json):
     reproduces the dashboard's coverage.injury_cohort_filters block from
-    audit evidence (audit.record_events), outside any analysis.*_v1 view.
+    audit/curated evidence at release time, outside any analysis.*_v1 view.
 
-    injured_in_team_applied is derived from the SAME audit-evidence query as
-    exclusion_reason_counts (whether at least one
-    received_or_injured_in_other_team exclusion was recorded for this team),
-    not from curated.injuries.received_in_team_status: that Phase 3.5 column
-    is only populated once a team's process-intake is rerun under the new
-    cohort-signal logic (only edinburgh so far, per
-    20260710110000_cohort_signal_columns.sql's header), so it is NULL for
-    every one of the five teams being re-released here even though glasgow's
-    audit evidence shows the check was applied and excluded 92 rows -- a
-    curated-column-based check would have wrongly reported False for
-    glasgow. Both signals agree whenever any exclusion was actually recorded;
-    the inherent limitation (a check that ran but excluded zero rows is
-    indistinguishable from a check that never ran) is unavoidable either way.
+    Two disjoint evidence paths, audit evidence first (Adjudication 2's
+    named mechanism), curated cohort signals as the fallback:
+
+    - Audit path (glasgow): its old dashboard-run exclusions were folded
+      into eligibility_status by its analysis-audit-file reapplication, and
+      the per-reason detail lives only in audit.record_events
+      (field_name='analysis_eligibility_status', action='exclude'). Using
+      this path when it has rows reproduces glasgow's committed
+      injury_cohort_filters block exactly.
+    - Curated path (edinburgh and every team processed after Phase 3.5,
+      plus the four Irish teams, which have no such audit exclude events):
+      the cohort exclusions actually applied by
+      analysis.injury_cohort_v1's WHERE clause are counted directly from
+      the active curated build, per view filter, using the view's own
+      exposure-coverage-window formula. A row failing several filters
+      counts once under each, matching the old dashboard's
+      injury_scope_exclusion_counts semantics.
+
+    injured_in_team_applied is true when either path shows the
+    received/injured-in-team check operating: audit exclusions recorded,
+    or any non-null received_in_team_status in the active build (the
+    Phase 3.5 signal is computed at process-intake, so non-null values
+    mean the view's filter is live for this team even if it excluded
+    zero rows).
     """
     reason_list_sql = ", ".join(f"'{code}'" for code in DASHBOARD_COHORT_FILTER_REASON_CODES)
     reason_params = SqlParams()
@@ -2703,9 +2714,54 @@ def release_cohort_filter_flags(team_key: str, season: str) -> dict[str, Any]:
         """,
         reason_params.values,
     )
-    exclusion_reason_counts = {row["reason_code"]: int(row["n"]) for row in reason_rows}
+    audit_counts = {row["reason_code"]: int(row["n"]) for row in reason_rows}
+
+    curated_params = SqlParams()
+    curated_rows = query_sql(
+        f"""
+        with active as (
+          select id from curated.builds
+          where team_key = {curated_params.text(team_key)} and season = {curated_params.text(season)}
+            and status = 'active'
+        ),
+        win as (
+          select
+            min(coalesce(e.session_date, e.week_start_date)) as coverage_start,
+            max(coalesce(e.session_date, e.week_start_date))
+              + case when count(distinct e.grain) = 1 and min(e.grain) = 'weekly' then 6 else 0 end
+              as coverage_end
+          from curated.exposure e
+          join active a on a.id = e.curated_build_id
+          where e.eligibility_status = 'included_pending_protocol'
+            and coalesce(e.session_date, e.week_start_date) is not null
+        )
+        select
+          count(*) filter (where i.received_in_team_status in ('other_team', 'club')) as received_or_injured_in_other_team,
+          count(*) filter (where i.urc_match_scope = 'non_urc_marker') as explicit_non_urc_match_type,
+          count(*) filter (where i.problem_type is distinct from 'injury') as non_injury_problem_type,
+          count(*) filter (
+            where i.date_injured is null or i.date_injured < win.coverage_start or i.date_injured > win.coverage_end
+          ) as injury_date_missing_or_outside_exposure_coverage,
+          count(*) filter (where i.eligibility_status = 'excluded_duplicate_adjudicated') as adjudicated_duplicate,
+          count(*) filter (where i.received_in_team_status is not null) as received_in_team_status_computed
+        from curated.injuries i
+        join active a on a.id = i.curated_build_id
+        cross join win
+        """,
+        curated_params.values,
+    )
+    curated_counts = {
+        code: int(curated_rows[0][code])
+        for code in DASHBOARD_COHORT_FILTER_REASON_CODES
+        if int(curated_rows[0][code]) > 0
+    }
+    received_signal_computed = int(curated_rows[0]["received_in_team_status_computed"]) > 0
+
+    exclusion_reason_counts = audit_counts if audit_counts else curated_counts
     return {
-        "injured_in_team_applied": "received_or_injured_in_other_team" in exclusion_reason_counts,
+        "injured_in_team_applied": (
+            "received_or_injured_in_other_team" in audit_counts or received_signal_computed
+        ),
         "explicit_non_urc_match_type_applied": True,
         "exclusion_reason_counts": dict(sorted(exclusion_reason_counts.items())),
     }
@@ -2906,12 +2962,28 @@ def classify_dashboard_json_diff(path: str, kind: str) -> str | None:
         (Adjudication 1: coverage-shape regeneration).
       - coverage.injury_cohort_filters appearing or changing (Adjudication 2:
         carried from audit evidence at release time, outside analysis views).
+      - method[*] / limitations[*] narrative lines (including their array
+        lengths): the committed JSONs carry heterogeneous text vintages
+        (munster 7 method lines, connacht/leinster/ulster 8, edinburgh 9,
+        glasgow 10; Irish limitations still say 'local and draft'), while
+        the release command regenerates the current frozen narrative for
+        every team from DB evidence (grain, cohort-filter state, and
+        audit.adjudications-derived duplicate rows). These lines are
+        descriptive method text, never published metric values; the
+        embedded adjudicated-row numbers are re-derived from
+        audit.adjudications at release time, so a wrong number here would
+        mean wrong audit evidence, which the release gates check
+        separately.
     Anything else -- any numeric headline/monthly/body_locations/
-    injury_types/severity_distribution/setting_split value, any method or
-    limitations line not covered above, any label -- is BLOCKED.
+    injury_types/severity_distribution/setting_split value, any label,
+    team name, or analysis-window value -- is BLOCKED.
     """
     if path in DASHBOARD_JSON_DIFF_WHITELIST_NOTES:
         return DASHBOARD_JSON_DIFF_WHITELIST_NOTES[path]
+    if path == "method" or path.startswith("method[") or path == "method.length":
+        return "regenerated method narrative (current frozen wording, derived from DB evidence at release time)"
+    if path == "limitations" or path.startswith("limitations[") or path == "limitations.length":
+        return "regenerated limitations narrative (current frozen wording, derived from DB evidence at release time)"
     if path == "source_files" or path.startswith("source_files."):
         return "Phase 4 internal-key stripping (source_files is never exported)"
     if path == "pipeline_evidence" or path.startswith("pipeline_evidence."):
