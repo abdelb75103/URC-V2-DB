@@ -2594,7 +2594,435 @@ def run_step(args: argparse.Namespace) -> None:
     print(f"recorded step {args.step}")
 
 
+RELEASE_DASHBOARDS_MIGRATION_VERSION = "20260710130000"
+INJURY_COHORT_V1_AMENDMENT_MIGRATION_VERSION = "20260710120000"
+FULL_DASHBOARD_RELEASE_RULE_VERSION = "full_dashboard_release_2026-07-10_v1"
+DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
+# The five dashboard cohort-exclusion reason codes analysis.coverage_v1
+# cannot reproduce under its curated-only read rule (see
+# 20260710100000_analysis_views_v1.sql header). release_cohort_filter_flags()
+# tallies these from audit.record_events (field_name='analysis_eligibility_status',
+# action='exclude') instead -- audit evidence, outside any analysis.*_v1 view.
+DASHBOARD_COHORT_FILTER_REASON_CODES = [
+    "received_or_injured_in_other_team",
+    "explicit_non_urc_match_type",
+    "non_injury_problem_type",
+    "injury_date_missing_or_outside_exposure_coverage",
+    "adjudicated_duplicate",
+]
+RELEASE_TABLE_ROWS_SECTIONS = (
+    "headline",
+    "setting_split",
+    "monthly",
+    "body_locations",
+    "injury_types",
+    "severity_distribution",
+)
+
+
+def slug_key(text: str) -> str:
+    """Stable, ascii-safe reporting.release_table_rows.row_key for a display
+    label (setting_split / body_locations / injury_types row identity)."""
+    slug = re.sub(r"[^a-z0-9]+", "_", clean_text(text).lower()).strip("_")
+    return slug or "unknown"
+
+
+def strip_none_keys(mapping: dict[str, Any], keys: set[str]) -> dict[str, Any]:
+    return {key: value for key, value in mapping.items() if not (key in keys and value is None)}
+
+
+def fetch_team_season_rows(sql_template: str, team_key: str, season: str) -> list[dict[str, Any]]:
+    params = SqlParams()
+    return query_sql(
+        sql_template.format(team_key=params.text(team_key), season=params.text(season)),
+        params.values,
+    )
+
+
+def team_display_name_for(team_key: str) -> str:
+    params = SqlParams()
+    rows = query_sql(
+        f"select display_name from reporting.teams where team_key = {params.text(team_key)}",
+        params.values,
+    )
+    if not rows:
+        raise SystemExit(f"no reporting.teams row for team_key={team_key!r}")
+    return rows[0]["display_name"]
+
+
+def adjudicated_duplicate_row_numbers(team_key: str, season: str) -> list[int]:
+    params = SqlParams()
+    rows = query_sql(
+        f"""
+        select sr.source_row_number
+        from audit.adjudications adj
+        join ingestion.source_rows sr on sr.id = adj.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        join reporting.team_key_aliases a on a.alias = sf.team
+        where a.team_key = {params.text(team_key)} and sf.season = {params.text(season)}
+          and adj.decision ->> 'decision' = 'exclude_duplicate'
+        order by sr.source_row_number
+        """,
+        params.values,
+    )
+    return sorted(int(row["source_row_number"]) for row in rows)
+
+
+def release_cohort_filter_flags(team_key: str, season: str) -> dict[str, Any]:
+    """Adjudication 2 (data/reporting/analysis_parity_adjudications_2026-07-10.json):
+    reproduces the dashboard's coverage.injury_cohort_filters block from
+    audit evidence (audit.record_events), outside any analysis.*_v1 view.
+
+    injured_in_team_applied is derived from the SAME audit-evidence query as
+    exclusion_reason_counts (whether at least one
+    received_or_injured_in_other_team exclusion was recorded for this team),
+    not from curated.injuries.received_in_team_status: that Phase 3.5 column
+    is only populated once a team's process-intake is rerun under the new
+    cohort-signal logic (only edinburgh so far, per
+    20260710110000_cohort_signal_columns.sql's header), so it is NULL for
+    every one of the five teams being re-released here even though glasgow's
+    audit evidence shows the check was applied and excluded 92 rows -- a
+    curated-column-based check would have wrongly reported False for
+    glasgow. Both signals agree whenever any exclusion was actually recorded;
+    the inherent limitation (a check that ran but excluded zero rows is
+    indistinguishable from a check that never ran) is unavoidable either way.
+    """
+    reason_list_sql = ", ".join(f"'{code}'" for code in DASHBOARD_COHORT_FILTER_REASON_CODES)
+    reason_params = SqlParams()
+    reason_rows = query_sql(
+        f"""
+        select ev.reason_code, count(*) as n
+        from audit.record_events ev
+        join ingestion.source_rows sr on sr.id = ev.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        join reporting.team_key_aliases a on a.alias = sf.team
+        where a.team_key = {reason_params.text(team_key)} and sf.season = {reason_params.text(season)}
+          and ev.field_name = 'analysis_eligibility_status' and ev.action = 'exclude'
+          and ev.reason_code in ({reason_list_sql})
+        group by ev.reason_code
+        """,
+        reason_params.values,
+    )
+    exclusion_reason_counts = {row["reason_code"]: int(row["n"]) for row in reason_rows}
+    return {
+        "injured_in_team_applied": "received_or_injured_in_other_team" in exclusion_reason_counts,
+        "explicit_non_urc_match_type_applied": True,
+        "exclusion_reason_counts": dict(sorted(exclusion_reason_counts.items())),
+    }
+
+
+def render_release_table_rows(rendered: dict[str, Any], monthly_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Flattens render_analysis_dashboard_sections() output (the Phase 3.2
+    parity renderer, reused unmodified here) into reporting.release_table_rows
+    records: one dict per row, each tagged with its section/row_key/ordinal.
+    """
+    table_rows: list[dict[str, Any]] = []
+    for ordinal, metric in enumerate(rendered["headline"]):
+        table_rows.append(
+            {
+                "section": "headline", "row_key": metric["key"], "ordinal": ordinal,
+                "label": metric["label"], "value": metric["value"], "unit": metric["unit"],
+                "numerator": metric.get("numerator"), "denominator": metric.get("denominator"),
+                "formula": metric["formula"],
+            }
+        )
+    for ordinal, row in enumerate(rendered["setting_split"]):
+        table_rows.append(
+            {
+                "section": "setting_split", "row_key": slug_key(row["label"]), "ordinal": ordinal,
+                "label": row["label"], "time_loss_injuries": row["time_loss_injuries"],
+                "days_lost": row["days_lost"], "mean_severity_days": row["mean_severity_days"],
+            }
+        )
+    monthly_sorted_raw = sorted(monthly_rows, key=lambda item: str(item["month_start_text"]))
+    if len(monthly_sorted_raw) != len(rendered["monthly"]):
+        raise SystemExit("monthly row count mismatch between raw view rows and rendered rows")
+    for ordinal, (row, raw) in enumerate(zip(rendered["monthly"], monthly_sorted_raw)):
+        table_rows.append(
+            {
+                "section": "monthly", "row_key": raw["month_start_text"], "ordinal": ordinal,
+                "month": row["month"], "exposure_hours": row["exposure_hours"], "distance_km": row["distance_km"],
+                "time_loss_injuries": row["time_loss_injuries"], "days_lost": row["days_lost"],
+                "incidence_per_1000h": row["incidence_per_1000h"], "burden_per_1000h": row["burden_per_1000h"],
+            }
+        )
+    for section in ("body_locations", "injury_types"):
+        for ordinal, row in enumerate(rendered[section]):
+            table_rows.append(
+                {
+                    "section": section, "row_key": slug_key(row["label"]), "ordinal": ordinal,
+                    "label": row["label"], "time_loss_injuries": row["time_loss_injuries"],
+                    "days_lost": row["days_lost"], "incidence_per_1000h": row["incidence_per_1000h"],
+                    "burden_per_1000h": row["burden_per_1000h"], "mean_severity_days": row["mean_severity_days"],
+                }
+            )
+    for ordinal, row in enumerate(rendered["severity_distribution"]):
+        table_rows.append(
+            {
+                "section": "severity_distribution", "row_key": row["key"], "ordinal": ordinal,
+                "label": row["label"], "recorded_injuries": row["recorded_injuries"],
+                "time_loss_injuries": row["time_loss_injuries"], "days_lost": row["days_lost"],
+            }
+        )
+    return table_rows
+
+
+def export_release_dashboard_json(release_label: str) -> dict[str, Any]:
+    """Reads the just-written reporting.release_context / release_table_rows
+    snapshot back out of the DB and assembles it into the exact
+    TeamDashboardData shape lib/reporting.ts expects, with source_files /
+    pipeline_evidence never populated in the first place (unlike the old
+    JSON-file-driven release()) -- stripped again here defensively so a
+    future accidental column addition can never leak internal paths/hashes.
+    """
+    ctx_params = SqlParams()
+    ctx_rows = query_sql(
+        f"""
+        select
+          rc.team_display_name, rc.season,
+          to_char(rc.generated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as generated_at,
+          rc.analysis_window_start::text as analysis_window_start,
+          rc.analysis_window_end::text as analysis_window_end,
+          rc.analysis_window_basis, rc.method, rc.coverage, rc.prior_season, rc.limitations
+        from reporting.release_context rc
+        join reporting.aggregate_releases r on r.id = rc.release_id
+        where r.release_label = {ctx_params.text(release_label)}
+        """,
+        ctx_params.values,
+    )
+    if len(ctx_rows) != 1:
+        raise SystemExit(f"expected exactly one release_context row for release_label={release_label!r}")
+    ctx = ctx_rows[0]
+
+    rows_params = SqlParams()
+    table_rows = query_sql(
+        f"""
+        select r.section, r.row_key, r.label, r.month, r.value, r.numerator, r.denominator,
+          r.unit, r.formula, r.exposure_hours, r.distance_km, r.time_loss_injuries, r.recorded_injuries,
+          r.days_lost, r.incidence_per_1000h, r.burden_per_1000h, r.mean_severity_days
+        from reporting.release_table_rows r
+        join reporting.aggregate_releases rel on rel.id = r.release_id
+        where rel.release_label = {rows_params.text(release_label)}
+        order by r.section, r.ordinal
+        """,
+        rows_params.values,
+    )
+
+    sections: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in table_rows:
+        section = row["section"]
+        if section == "headline":
+            doc = strip_none_keys(
+                {
+                    "key": row["row_key"], "label": row["label"], "value": as_number(row["value"]),
+                    "unit": row["unit"], "numerator": as_number(row["numerator"]),
+                    "denominator": as_number(row["denominator"]), "formula": row["formula"],
+                },
+                {"numerator", "denominator"},
+            )
+        elif section == "setting_split":
+            doc = {
+                "label": row["label"], "time_loss_injuries": as_number(row["time_loss_injuries"]),
+                "days_lost": as_number(row["days_lost"]), "mean_severity_days": as_number(row["mean_severity_days"]),
+            }
+        elif section == "monthly":
+            doc = {
+                "month": row["month"], "exposure_hours": as_number(row["exposure_hours"]),
+                "distance_km": as_number(row["distance_km"]),
+                "time_loss_injuries": as_number(row["time_loss_injuries"]),
+                "days_lost": as_number(row["days_lost"]),
+                "incidence_per_1000h": as_number(row["incidence_per_1000h"]),
+                "burden_per_1000h": as_number(row["burden_per_1000h"]),
+            }
+        elif section in ("body_locations", "injury_types"):
+            doc = {
+                "label": row["label"], "time_loss_injuries": as_number(row["time_loss_injuries"]),
+                "days_lost": as_number(row["days_lost"]),
+                "incidence_per_1000h": as_number(row["incidence_per_1000h"]),
+                "burden_per_1000h": as_number(row["burden_per_1000h"]),
+                "mean_severity_days": as_number(row["mean_severity_days"]),
+            }
+        elif section == "severity_distribution":
+            doc = {
+                "key": row["row_key"], "label": row["label"],
+                "recorded_injuries": as_number(row["recorded_injuries"]),
+                "time_loss_injuries": as_number(row["time_loss_injuries"]),
+                "days_lost": as_number(row["days_lost"]),
+            }
+        else:
+            raise SystemExit(f"unknown release_table_rows section {section!r}")
+        sections[section].append(doc)
+
+    dashboard = {
+        "generated_at": ctx["generated_at"],
+        "team": ctx["team_display_name"],
+        "season": ctx["season"],
+        "analysis_window": {
+            "start": ctx["analysis_window_start"], "end": ctx["analysis_window_end"],
+            "basis": ctx["analysis_window_basis"],
+        },
+        "method": ctx["method"],
+        "coverage": ctx["coverage"],
+        "headline": sections["headline"],
+        "setting_split": sections["setting_split"],
+        "monthly": sections["monthly"],
+        "body_locations": sections["body_locations"],
+        "injury_types": sections["injury_types"],
+        "severity_distribution": sections["severity_distribution"],
+        "prior_season": ctx["prior_season"],
+        "limitations": ctx["limitations"],
+    }
+    return without_keys(dashboard, {"source_files", "pipeline_evidence"})
+
+
+# ---------------------------------------------------------------------------
+# Phase 4.3 planning: old-vs-new dashboard JSON diff check. Pure file diff,
+# no DB access -- meant to gate the five-team re-release, one team at a
+# time: diff the previously-committed content/reporting/<team>_dashboard.json
+# against the freshly-exported one and confirm every difference is a
+# whitelisted Phase 4 shape/text change (never a numeric change to an
+# already-published value).
+# ---------------------------------------------------------------------------
+
+DASHBOARD_JSON_DIFF_WHITELIST_NOTES = {
+    "generated_at": "release timestamp is always regenerated at release time",
+}
+
+
+def classify_dashboard_json_diff(path: str, kind: str) -> str | None:
+    """Returns a whitelist reason string if this old-vs-new dashboard JSON
+    diff at `path` is an expected, approved Phase 4 shape/text change; None
+    if the diff must be treated as a blocking, unexplained change.
+
+    Whitelisted categories (all recorded in
+    data/reporting/analysis_parity_adjudications_2026-07-10.json, or this
+    executor's own documented, flagged design decisions -- see the Phase 4
+    gate report):
+      - generated_at always differs (fresh release timestamp).
+      - source_files / pipeline_evidence disappearing (Phase 4 internal-key
+        stripping fix).
+      - coverage.scope_status -> coverage.scope_status_counts, and newly
+        appearing coverage.exposure_periods / coverage.exposure_grain
+        (Adjudication 1: coverage-shape regeneration).
+      - coverage.injury_cohort_filters appearing or changing (Adjudication 2:
+        carried from audit evidence at release time, outside analysis views).
+    Anything else -- any numeric headline/monthly/body_locations/
+    injury_types/severity_distribution/setting_split value, any method or
+    limitations line not covered above, any label -- is BLOCKED.
+    """
+    if path in DASHBOARD_JSON_DIFF_WHITELIST_NOTES:
+        return DASHBOARD_JSON_DIFF_WHITELIST_NOTES[path]
+    if path == "source_files" or path.startswith("source_files."):
+        return "Phase 4 internal-key stripping (source_files is never exported)"
+    if path == "pipeline_evidence" or path.startswith("pipeline_evidence."):
+        return "Phase 4 internal-key stripping (pipeline_evidence is never exported)"
+    if path == "coverage.scope_status" and kind == "missing_in_new":
+        return "Adjudication 1: coverage-shape regeneration (scope_status -> scope_status_counts)"
+    if path == "coverage.scope_status_counts" and kind == "extra_in_new":
+        return "Adjudication 1: coverage-shape regeneration (scope_status -> scope_status_counts)"
+    if path in {"coverage.exposure_periods", "coverage.exposure_grain"} and kind in {
+        "missing_in_new", "extra_in_new",
+    }:
+        return "Adjudication 1: coverage-shape regeneration (added exposure_periods/exposure_grain)"
+    if path == "coverage.injury_cohort_filters" or path.startswith("coverage.injury_cohort_filters."):
+        return "Adjudication 2: injury_cohort_filters carried from audit evidence at release time"
+    return None
+
+
+def diff_json_documents(old: object, new: object) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+
+    def record(path: str, old_value: object, new_value: object, kind: str) -> None:
+        results.append({"path": path, "kind": kind, "old": old_value, "new": new_value})
+
+    def walk(path: str, old_value: object, new_value: object) -> None:
+        if isinstance(old_value, dict) and isinstance(new_value, dict):
+            for key in sorted(set(old_value) | set(new_value)):
+                child_path = f"{path}.{key}" if path else key
+                if key not in new_value:
+                    record(child_path, old_value[key], None, "missing_in_new")
+                elif key not in old_value:
+                    record(child_path, None, new_value[key], "extra_in_new")
+                else:
+                    walk(child_path, old_value[key], new_value[key])
+            return
+        if isinstance(old_value, list) and isinstance(new_value, list):
+            if len(old_value) != len(new_value):
+                record(f"{path}.length", len(old_value), len(new_value), "row_count")
+            for index in range(max(len(old_value), len(new_value))):
+                child_path = f"{path}[{index}]"
+                if index >= len(new_value):
+                    record(child_path, old_value[index], None, "missing_in_new")
+                elif index >= len(old_value):
+                    record(child_path, None, new_value[index], "extra_in_new")
+                else:
+                    walk(child_path, old_value[index], new_value[index])
+            return
+        if isinstance(old_value, (dict, list)) != isinstance(new_value, (dict, list)):
+            record(path, old_value, new_value, "type_mismatch")
+            return
+        if not parity_values_equal(old_value, new_value):
+            record(path, old_value, new_value, "value_mismatch")
+
+    walk("", old, new)
+    return results
+
+
+def diff_dashboard_json(args: argparse.Namespace) -> None:
+    """Phase 4.3 planning tool: pure file diff (no DB access) between an old
+    (previously-committed) and new (just-exported) dashboard JSON,
+    classifying every difference as ALLOWED (a whitelisted Phase 4
+    shape/text change, per classify_dashboard_json_diff) or BLOCKED (an
+    unexplained change that must be investigated before the release is kept).
+    Exit code is nonzero if any BLOCKED diff exists.
+    """
+    old_path = Path(args.old)
+    new_path = Path(args.new)
+    if not old_path.exists():
+        raise SystemExit(f"old dashboard JSON not found: {old_path}")
+    if not new_path.exists():
+        raise SystemExit(f"new dashboard JSON not found: {new_path}")
+    old_doc = json.loads(old_path.read_text())
+    new_doc = json.loads(new_path.read_text())
+
+    diffs = diff_json_documents(old_doc, new_doc)
+    blocked = []
+    allowed = []
+    for diff in diffs:
+        reason = classify_dashboard_json_diff(diff["path"], diff["kind"])
+        if reason is None:
+            blocked.append(diff)
+        else:
+            allowed.append({**diff, "whitelist_reason": reason})
+
+    result = {
+        "old": str(old_path),
+        "new": str(new_path),
+        "total_diffs": len(diffs),
+        "allowed": len(allowed),
+        "blocked": len(blocked),
+        "overall": "BLOCKED" if blocked else "ALLOWED_ONLY",
+        "blocked_diffs": blocked,
+        "allowed_diffs": allowed,
+    }
+    print(json.dumps(result, indent=2))
+    if blocked:
+        raise SystemExit(1)
+
+
 def release(args: argparse.Namespace) -> None:
+    """Phase 4 release: reads analysis.*_v1 views directly (no JSON/CSV
+    input), snapshots every dashboard section into reporting.release_context
+    / reporting.release_table_rows in one transaction as a recorded pipeline
+    run, and exports content/reporting/<team_key>_dashboard_<season>.json
+    from that DB snapshot with internal keys stripped (never populated in
+    the first place, unlike the old JSON-file-driven release()).
+    """
+    team = clean_text(args.team)
+    season = clean_text(args.season)
+    if not team or not season:
+        raise SystemExit("--team and --season are required")
+
     provenance = run_provenance()
     if provenance["code_version"].endswith("-dirty"):
         raise SystemExit(
@@ -2603,103 +3031,313 @@ def release(args: argparse.Namespace) -> None:
             "changes before releasing so the release row records an exact, "
             "reproducible commit"
         )
-    dashboard_path = Path(args.dashboard_file) if args.dashboard_file else (
-        Path("content") / "reporting" / f"{args.team.lower()}_dashboard_{args.season}.json"
+
+    team_key = resolve_team_key(team)
+
+    required_migrations = [
+        CURATED_LAYER_MIGRATION_VERSION,
+        ANALYSIS_VIEWS_MIGRATION_VERSION,
+        INJURY_COHORT_V1_AMENDMENT_MIGRATION_VERSION,
+        RELEASE_DASHBOARDS_MIGRATION_VERSION,
+    ]
+    migration_in_list = ", ".join(f"'{version}'" for version in required_migrations)
+    migration_rows = query_sql(
+        f"select version from supabase_migrations.schema_migrations where version in ({migration_in_list})"
     )
-    if not dashboard_path.exists():
-        raise SystemExit(f"dashboard file is required for release: {dashboard_path}")
-    dashboard = json.loads(dashboard_path.read_text())
-    dashboard_team = clean_text(str(dashboard.get("team", "")))
-    expected_team = clean_text(args.team)
-    if not (
-        dashboard_team.casefold() == expected_team.casefold()
-        or dashboard_team.casefold().startswith(expected_team.casefold() + " ")
-    ):
+    applied = {row["version"] for row in migration_rows}
+    missing = sorted(set(required_migrations) - applied)
+    if missing:
+        raise SystemExit(f"release requires migrations {', '.join(missing)} to be applied and tracked first")
+
+    # --- Active curated build, and a freshness gate (strengthens the old
+    # file-hash gate: refuses to release from a curated build that is stale
+    # against the latest processing.record_versions). ----------------------
+    build_params = SqlParams()
+    build_rows = query_sql(
+        f"""
+        select id, source_version_set_hash
+        from curated.builds
+        where team_key = {build_params.text(team_key)} and season = {build_params.text(season)} and status = 'active'
+        """,
+        build_params.values,
+    )
+    if len(build_rows) != 1:
         raise SystemExit(
-            f"dashboard team mismatch: expected {expected_team!r}, found {dashboard_team!r}"
+            f"release requires exactly one active curated.builds row for team_key={team_key!r} "
+            f"season={season!r}, found {len(build_rows)}; run build-curated first"
         )
-    if clean_text(str(dashboard.get("season", ""))) != args.season:
+    curated_build_id = build_rows[0]["id"]
+    injury_ids = latest_curated_source_version_ids(team, season, "%injury%")
+    exposure_ids = latest_curated_source_version_ids(team, season, "%exposure%")
+    fresh_hash = curated_source_version_set_hash(injury_ids, exposure_ids)
+    if fresh_hash != build_rows[0]["source_version_set_hash"]:
         raise SystemExit(
-            f"dashboard season mismatch: expected {args.season!r}, found {dashboard.get('season')!r}"
+            "release refuses to run: the active curated build is stale against the latest "
+            "processing.record_versions for this team/season; run build-curated --rebuild first"
         )
-    dashboard_metrics = [
+
+    # --- Duplicate-adjudication consistency (strengthens the old file-based
+    # gate: every adjudicated exclude_duplicate decision for this team/season
+    # must already be reflected in the active curated build's eligibility_status). --
+    dup_params = SqlParams()
+    unreflected_dups = query_sql(
+        f"""
+        select sr.source_row_number
+        from audit.adjudications adj
+        join ingestion.source_rows sr on sr.id = adj.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        join reporting.team_key_aliases a on a.alias = sf.team
+        where a.team_key = {dup_params.text(team_key)}
+          and sf.season = {dup_params.text(season)}
+          and adj.decision ->> 'decision' = 'exclude_duplicate'
+          and not exists (
+            select 1 from curated.injuries i
+            where i.source_row_id = adj.source_row_id
+              and i.curated_build_id = {dup_params.text(curated_build_id)}::uuid
+              and i.eligibility_status = 'excluded_duplicate_adjudicated'
+          )
+        order by sr.source_row_number
+        """,
+        dup_params.values,
+    )
+    if unreflected_dups:
+        rows = ", ".join(str(row["source_row_number"]) for row in unreflected_dups)
+        raise SystemExit(
+            f"release refuses to run: adjudicated duplicate exclusion(s) for source row(s) {rows} "
+            "are not reflected in the active curated build; rebuild curated data first"
+        )
+
+    # --- Read analysis.*_v1 views (read-only; the same seven queries
+    # verify-analysis-parity uses, plus the exposure coverage window). -----
+    headline_rows = fetch_team_season_rows(
+        "select * from analysis.headline_metrics_v1 where team_key = {team_key} and season = {season}",
+        team_key, season,
+    )
+    if len(headline_rows) != 1:
+        raise SystemExit(
+            f"expected exactly one analysis.headline_metrics_v1 row for team_key={team_key!r} "
+            f"season={season!r}, found {len(headline_rows)}"
+        )
+    coverage_rows = fetch_team_season_rows(
+        "select * from analysis.coverage_v1 where team_key = {team_key} and season = {season}",
+        team_key, season,
+    )
+    if len(coverage_rows) != 1:
+        raise SystemExit(
+            f"expected exactly one analysis.coverage_v1 row for team_key={team_key!r} season={season!r}, "
+            f"found {len(coverage_rows)}"
+        )
+    setting_rows = fetch_team_season_rows(
+        "select * from analysis.setting_split_v1 where team_key = {team_key} and season = {season} "
+        "order by time_loss_injuries desc, days_lost desc, label asc",
+        team_key, season,
+    )
+    monthly_rows = fetch_team_season_rows(
+        "select *, month_start::text as month_start_text from analysis.monthly_v1 "
+        "where team_key = {team_key} and season = {season} order by month_start",
+        team_key, season,
+    )
+    body_location_rows = fetch_team_season_rows(
+        "select * from analysis.body_locations_v1 where team_key = {team_key} and season = {season} order by rank",
+        team_key, season,
+    )
+    injury_type_rows = fetch_team_season_rows(
+        "select * from analysis.injury_types_v1 where team_key = {team_key} and season = {season} order by rank",
+        team_key, season,
+    )
+    severity_rows = fetch_team_season_rows(
+        "select * from analysis.severity_distribution_v1 where team_key = {team_key} and season = {season} "
+        "order by band_order",
+        team_key, season,
+    )
+    window_rows = fetch_team_season_rows(
+        "select distinct coverage_start::text as coverage_start, coverage_end::text as coverage_end "
+        "from analysis.injury_cohort_v1 where team_key = {team_key} and season = {season}",
+        team_key, season,
+    )
+    if len(window_rows) != 1:
+        raise SystemExit(
+            f"expected exactly one distinct exposure coverage window for team_key={team_key!r} "
+            f"season={season!r} in analysis.injury_cohort_v1, found {len(window_rows)}; "
+            "is there at least one injury in the cohort?"
+        )
+
+    rendered = render_analysis_dashboard_sections(
+        headline_row=headline_rows[0],
+        setting_rows=setting_rows,
+        monthly_rows=monthly_rows,
+        body_location_rows=body_location_rows,
+        injury_type_rows=injury_type_rows,
+        severity_rows=severity_rows,
+        coverage_row=coverage_rows[0],
+    )
+
+    # --- Released-rows-vs-views consistency check: every rendered section
+    # must reconcile against the headline totals it is supposed to sum to.
+    # This exercises the SAME rendered rows that will be written, so it also
+    # proves render_analysis_dashboard_sections() (Phase 3.2's own parity
+    # renderer, reused unmodified here) did not drop or duplicate rows
+    # before they are ever written. -----------------------------------------
+    headline_time_loss = next(m["value"] for m in rendered["headline"] if m["key"] == "time_loss_injuries")
+    headline_recorded = next(m["value"] for m in rendered["headline"] if m["key"] == "recorded_injuries")
+    monthly_time_loss_sum = sum(row["time_loss_injuries"] for row in rendered["monthly"])
+    severity_time_loss_sum = sum(row["time_loss_injuries"] for row in rendered["severity_distribution"])
+    severity_recorded_sum = sum(row["recorded_injuries"] for row in rendered["severity_distribution"])
+    if monthly_time_loss_sum != headline_time_loss:
+        raise SystemExit(
+            f"release refuses to run: analysis.monthly_v1 time_loss_injuries sum ({monthly_time_loss_sum}) "
+            f"does not reconcile with analysis.headline_metrics_v1 time_loss_injuries ({headline_time_loss})"
+        )
+    if severity_time_loss_sum != headline_time_loss:
+        raise SystemExit(
+            f"release refuses to run: analysis.severity_distribution_v1 time_loss_injuries sum "
+            f"({severity_time_loss_sum}) does not reconcile with headline time_loss_injuries ({headline_time_loss})"
+        )
+    if severity_recorded_sum != headline_recorded:
+        raise SystemExit(
+            f"release refuses to run: analysis.severity_distribution_v1 recorded_injuries sum "
+            f"({severity_recorded_sum}) does not reconcile with headline recorded_injuries ({headline_recorded})"
+        )
+    # setting_split is time-loss-only by construction but is not required to
+    # sum to the full time-loss total (a row can carry the "unknown" setting
+    # label), so it is intentionally not cross-checked against the headline
+    # total here -- matches the dashboard's own documented behaviour.
+
+    # --- Cohort filter block (Adjudication 2: from audit evidence, outside
+    # analysis views). -------------------------------------------------------
+    cohort_filters = release_cohort_filter_flags(team_key, season)
+    team_display_name = team_display_name_for(team_key)
+
+    grain = clean_text(coverage_rows[0].get("exposure_grain")) or "unknown"
+    grain_label = DASHBOARD_EXPORT_GRAIN_LABELS.get(grain, "unknown-grain")
+    monthly_basis = (
+        f"Monthly exposure is assigned to the week-start month because {team_display_name} reports weekly exposure."
+        if grain == "weekly"
+        else "Monthly exposure is assigned to the cleaned exposure-date month."
+    )
+    setting_limitation = (
+        f"{team_display_name} exposure is weekly, so match and training incidence cannot be split until "
+        "setting-specific exposure denominators are approved."
+        if grain == "weekly"
+        else "Setting-specific rates are not split until setting-specific exposure denominators are approved."
+    )
+    adjudicated_duplicate_rows = adjudicated_duplicate_row_numbers(team_key, season)
+    adjudicated_duplicate_text = ", ".join(str(number) for number in adjudicated_duplicate_rows)
+
+    method = [
+        "Headline injury metrics use time-loss injuries only: Days Injured > 0.",
+        "Incidence = time-loss injuries / exposure hours * 1000.",
+        "Severity = mean and median days lost per time-loss injury.",
+        "Burden = days lost / exposure hours * 1000.",
+        f"Exposure hours = sum(minutes_total_clean) / 60 for included {grain_label} exposure rows.",
+        monthly_basis,
+        "IOC-aligned body-location, tissue/pathology, and severity labels come from the accepted V2 mapping.",
+        (
+            "Received/Injured In Team retains the approved team plus blank/N/A values; explicit other-team "
+            "or Club values are excluded."
+            if cohort_filters["injured_in_team_applied"]
+            else "No Received/Injured In Team cohort filter applied."
+        ),
+        "Match Type retains URC, training, Other, blank/N/A, and generic match/game values; explicit non-URC "
+        "competitions and teams are excluded.",
+        (
+            f"Adjudicated duplicate standardised rows excluded from this aggregate: {adjudicated_duplicate_text}."
+            if adjudicated_duplicate_rows
+            else "No adjudicated duplicate injury rows were excluded from this aggregate."
+        ),
+    ]
+    limitations = [
+        setting_limitation,
+        (
+            f"Adjudicated duplicate standardised row exclusions applied: {adjudicated_duplicate_text}."
+            if adjudicated_duplicate_rows
+            else "No adjudicated duplicate injury row exclusions applied."
+        ),
+        "Aggregate release is approved only after explicit confirmation of the live Supabase target; the "
+        "dashboard reports aggregate values only.",
+    ]
+    prior_season = {
+        "season": "2023-24",
+        "status": "not_loaded_in_v2",
+        "note": (
+            f"No {team_display_name} prior-season injury and exposure denominator pair exists in this V2 "
+            "workspace, so the dashboard leaves comparison blank rather than mixing in legacy report figures."
+        ),
+    }
+    coverage = {**rendered["coverage"], "injury_cohort_filters": cohort_filters}
+
+    generated_at_iso = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    analysis_window_start = window_rows[0]["coverage_start"]
+    analysis_window_end = window_rows[0]["coverage_end"]
+    analysis_window_basis = (
+        f"{team_display_name} exposure coverage window from included {grain_label} exposure rows"
+    )
+
+    table_rows = render_release_table_rows(rendered, monthly_rows)
+    counts_by_section: dict[str, int] = defaultdict(int)
+    for row in table_rows:
+        counts_by_section[row["section"]] += 1
+
+    release_content_hash = sha256_json(
         {
-            "metric_key": metric["key"],
-            "metric_label": metric["label"],
-            "value": metric.get("value"),
-            "numerator": metric.get("numerator"),
-            "denominator": metric.get("denominator"),
-            "unit": metric.get("unit"),
-            "coverage_note": f"Dashboard headline metric from {dashboard_path}",
+            "context": {
+                "team_key": team_key, "season": season, "method": method, "coverage": coverage,
+                "prior_season": prior_season, "limitations": limitations,
+                "analysis_window": {
+                    "start": analysis_window_start, "end": analysis_window_end, "basis": analysis_window_basis,
+                },
+            },
+            "rows": table_rows,
         }
-        for metric in dashboard.get("headline", [])
-    ]
-    if not dashboard_metrics:
-        raise SystemExit("dashboard has no headline metrics")
-    source_files = dashboard.get("source_files", {})
-    injury_path = Path(str(source_files.get("injury", "")))
-    exposure_path = Path(str(source_files.get("exposure", "")))
-    if not injury_path.exists() or not exposure_path.exists():
-        raise SystemExit("dashboard source files are missing")
-    pipeline_evidence = dashboard.get("pipeline_evidence", {})
-    injury_hash = clean_text(str(pipeline_evidence.get("injury_file_sha256", "")))
-    exposure_hash = clean_text(str(pipeline_evidence.get("exposure_file_sha256", "")))
-    audit_hash = clean_text(str(pipeline_evidence.get("standardisation_audit_sha256", "")))
-    injury_rule_version = clean_text(
-        str(pipeline_evidence.get("injury_processing_rule_version", ""))
     )
-    exposure_rule_version = clean_text(
-        str(pipeline_evidence.get("exposure_processing_rule_version", ""))
-    )
-    if not all([injury_hash, exposure_hash, audit_hash, injury_rule_version, exposure_rule_version]):
-        raise SystemExit("dashboard pipeline evidence is incomplete")
-    if sha256_file(injury_path) != injury_hash or sha256_file(exposure_path) != exposure_hash:
-        raise SystemExit("dashboard source file hash mismatch")
-    audit_path = Path(str(pipeline_evidence.get("standardisation_audit_file", "")))
-    if not audit_path.exists() or sha256_file(audit_path) != audit_hash:
-        raise SystemExit("dashboard standardisation audit hash mismatch")
-    requires_adjudication = bool(
-        dashboard.get("coverage", {})
-        .get("injury_cohort_filters", {})
-        .get("exclusion_reason_counts", {})
-        .get("adjudicated_duplicate", 0)
-    )
-    adjudicated_duplicate_rows = sorted(
-        int(row_number)
-        for row_number in dashboard.get("pipeline_evidence", {}).get(
-            "adjudicated_duplicate_rows", []
-        )
-    )
-    dashboard_hash = sha256_file(dashboard_path)
-    release_metrics = [
-        {
-            "metric_key": "registered_source_files",
-            "metric_label": "Registered source files",
-            "value": 2,
-            "numerator": 2,
-            "denominator": None,
-            "unit": "files",
-            "coverage_note": "Exact pseudonymised injury and exposure files bound to this approved release",
-        },
-        *dashboard_metrics,
-    ]
-    release_hash = sha256_json(release_metrics)
-    label = f"{args.team}-{args.season}-{dashboard_hash[:12]}-approved"
+    label = f"{team_key}-{season}-{release_content_hash[:12]}-approved"
+
+    context_record = {
+        "team_key": team_key, "season": season, "team_display_name": team_display_name,
+        "curated_build_id": curated_build_id, "analysis_view_version": ANALYSIS_VIEW_VERSION_SUFFIX,
+        "generated_at": generated_at_iso,
+        "analysis_window_start": analysis_window_start, "analysis_window_end": analysis_window_end,
+        "analysis_window_basis": analysis_window_basis,
+        "method": method, "coverage": coverage, "injury_cohort_filters": cohort_filters,
+        "prior_season": prior_season, "limitations": limitations,
+    }
+
     params = SqlParams()
-    metric_insert = f"""
-      insert into reporting.team_metric_aggregates
-        (release_id, team, season, metric_key, metric_label, value, numerator, denominator, unit, coverage_note)
-      select current_release.id, {params.text(args.team)}, {params.text(args.season)},
-        metric_key, metric_label, value, numerator, denominator, unit, coverage_note
+    context_insert = f"""
+      insert into reporting.release_context
+        (release_id, team_key, season, team_display_name, curated_build_id, analysis_view_version,
+         generated_at, analysis_window_start, analysis_window_end, analysis_window_basis,
+         method, coverage, injury_cohort_filters, prior_season, limitations)
+      select
+        current_release.id, ctx.team_key, ctx.season, ctx.team_display_name, ctx.curated_build_id::uuid,
+        ctx.analysis_view_version, ctx.generated_at::timestamptz, ctx.analysis_window_start::date,
+        ctx.analysis_window_end::date, ctx.analysis_window_basis, ctx.method, ctx.coverage,
+        ctx.injury_cohort_filters, ctx.prior_season, ctx.limitations
       from current_release,
-        jsonb_to_recordset({params.jsonb(release_metrics)}) as metric(
-          metric_key text,
-          metric_label text,
-          value numeric,
-          numerator numeric,
-          denominator numeric,
-          unit text,
-          coverage_note text
+        jsonb_to_recordset({params.jsonb([context_record])}) as ctx(
+          team_key text, season text, team_display_name text, curated_build_id text,
+          analysis_view_version text, generated_at text, analysis_window_start text,
+          analysis_window_end text, analysis_window_basis text, method jsonb, coverage jsonb,
+          injury_cohort_filters jsonb, prior_season jsonb, limitations jsonb
+        );
+    """
+    rows_insert = f"""
+      insert into reporting.release_table_rows
+        (release_id, team_key, season, section, row_key, ordinal, label, month, value, numerator,
+         denominator, unit, formula, exposure_hours, distance_km, time_loss_injuries, recorded_injuries,
+         days_lost, incidence_per_1000h, burden_per_1000h, mean_severity_days)
+      select
+        current_release.id, {params.text(team_key)}, {params.text(season)},
+        row.section, row.row_key, row.ordinal, row.label, row.month, row.value, row.numerator,
+        row.denominator, row.unit, row.formula, row.exposure_hours, row.distance_km,
+        row.time_loss_injuries, row.recorded_injuries, row.days_lost, row.incidence_per_1000h,
+        row.burden_per_1000h, row.mean_severity_days
+      from current_release,
+        jsonb_to_recordset({params.jsonb(table_rows)}) as row(
+          section text, row_key text, ordinal int, label text, month text, value numeric,
+          numerator numeric, denominator numeric, unit text, formula text, exposure_hours numeric,
+          distance_km numeric, time_loss_injuries numeric, recorded_injuries numeric, days_lost numeric,
+          incidence_per_1000h numeric, burden_per_1000h numeric, mean_severity_days numeric
         );
     """
     sql = f"""
@@ -2707,51 +3345,29 @@ def release(args: argparse.Namespace) -> None:
 
       do $$
       begin
-        if not exists (select 1 from supabase_migrations.schema_migrations where version = '20260707110832') then
-          raise exception 'release requires migration 20260707110832_latest_release_per_team';
+        if not exists (select 1 from curated.builds where id = {params.text(curated_build_id)}::uuid and status = 'active') then
+          raise exception 'release refuses to run: the active curated build changed since it was read; rerun release';
         end if;
         if exists (select 1 from reporting.aggregate_releases where release_label = {params.text(label)}) then
           raise exception 'immutable release already exists';
-        end if;
-        if (select count(*) from ingestion.source_files where team = {params.text(args.team)} and season = {params.text(args.season)} and file_sha256 in ({params.text(injury_hash)}, {params.text(exposure_hash)})) <> 2 then
-          raise exception 'release requires the exact dashboard injury and exposure source files';
-        end if;
-        if not exists (select 1 from audit.pipeline_runs where team = {params.text(args.team)} and season = {params.text(args.season)} and command = 'process-intake' and status = 'succeeded' and input_hash = {params.text(injury_hash)} and parameters->>'analysis_audit_hash' = {params.text(audit_hash)} and parameters->>'step_version' = {params.text(injury_rule_version)}) then
-          raise exception 'release requires a successful process-intake run for the dashboard injury file';
-        end if;
-        if not exists (select 1 from audit.pipeline_runs where team = {params.text(args.team)} and season = {params.text(args.season)} and command = 'process-exposure' and status = 'succeeded' and input_hash = {params.text(exposure_hash)} and parameters->>'step_version' = {params.text(exposure_rule_version)}) then
-          raise exception 'release requires a successful process-exposure run for the dashboard exposure file';
-        end if;
-        if {str(requires_adjudication).lower()} and not exists (select 1 from audit.pipeline_runs where team = {params.text(args.team)} and season = {params.text(args.season)} and command = 'adjudicate-duplicate-exclusion' and status = 'succeeded' and input_hash = {params.text(injury_hash)}) then
-          raise exception 'release requires the dashboard duplicate adjudication run';
-        end if;
-        if exists (
-          select 1
-          from jsonb_array_elements_text({params.jsonb(adjudicated_duplicate_rows)}) expected(row_number)
-          where not exists (
-            select 1
-            from audit.adjudications decision
-            join ingestion.source_rows sr on sr.id = decision.source_row_id
-            join ingestion.source_files sf on sf.id = sr.source_file_id
-            where sf.team = {params.text(args.team)}
-              and sf.season = {params.text(args.season)}
-              and sf.file_sha256 = {params.text(injury_hash)}
-              and sr.source_row_number = expected.row_number::integer
-              and decision.decision->>'decision' = 'exclude_duplicate'
-          )
-        ) then
-          raise exception 'release requires every dashboard duplicate adjudication decision';
         end if;
       end $$;
 
       create temp table current_release on commit drop as
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
-        values ('release', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
-          {params.text(dashboard_hash)}, {params.text(release_hash)},
-          {params.jsonb({'release': label, 'dashboard_file': str(dashboard_path), 'dashboard_sha256': dashboard_hash, 'injury_sha256': injury_hash, 'exposure_sha256': exposure_hash, 'standardisation_audit_sha256': audit_hash, 'injury_processing_rule_version': injury_rule_version, 'exposure_processing_rule_version': exposure_rule_version})}, now(),
+        values ('release', {params.text(team)}, {params.text(season)}, 'succeeded',
+          {params.text(curated_build_id)}, {params.text(release_content_hash)},
+          {params.jsonb({'release': label, 'team_key': team_key, 'curated_build_id': curated_build_id, 'analysis_view_version': ANALYSIS_VIEW_VERSION_SUFFIX})}, now(),
           {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])})
         returning id
+      ),
+      step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, ended_at)
+        select id, 'release_full_dashboard', {params.text(FULL_DASHBOARD_RELEASE_RULE_VERSION)}, 'full_dashboard_release',
+          {len(table_rows)}, {len(table_rows)}, {params.jsonb(dict(counts_by_section))}, now()
+        from run
+        returning pipeline_run_id
       ),
       release as (
         insert into reporting.aggregate_releases (release_label, status, pipeline_run_id, approved_at)
@@ -2761,10 +3377,68 @@ def release(args: argparse.Namespace) -> None:
       )
       select id from release;
 
-      {metric_insert}
+      {context_insert}
+
+      {rows_insert}
     """
     run_sql(sql, params.values)
-    print(f"released {label} metrics={len(release_metrics)}")
+
+    # --- Post-write verification: reporting.latest_team_dashboard resolves
+    # to exactly this release and its section row counts reconcile with what
+    # was just written. --------------------------------------------------
+    verify_params = SqlParams()
+    verify_rows = query_sql(
+        f"""
+        select
+          jsonb_array_length(headline) as headline_n, jsonb_array_length(setting_split) as setting_split_n,
+          jsonb_array_length(monthly) as monthly_n, jsonb_array_length(body_locations) as body_locations_n,
+          jsonb_array_length(injury_types) as injury_types_n,
+          jsonb_array_length(severity_distribution) as severity_distribution_n
+        from reporting.latest_team_dashboard
+        where team_key = {verify_params.text(team_key)} and season = {verify_params.text(season)}
+        """,
+        verify_params.values,
+    )
+    if len(verify_rows) != 1:
+        raise SystemExit(
+            f"post-release verification failed: reporting.latest_team_dashboard returned "
+            f"{len(verify_rows)} row(s) for team_key={team_key!r} season={season!r}, expected 1"
+        )
+    verify = verify_rows[0]
+    expected_counts = {
+        "headline_n": counts_by_section.get("headline", 0),
+        "setting_split_n": counts_by_section.get("setting_split", 0),
+        "monthly_n": counts_by_section.get("monthly", 0),
+        "body_locations_n": counts_by_section.get("body_locations", 0),
+        "injury_types_n": counts_by_section.get("injury_types", 0),
+        "severity_distribution_n": counts_by_section.get("severity_distribution", 0),
+    }
+    for key, expected in expected_counts.items():
+        if int(verify[key]) != expected:
+            raise SystemExit(
+                f"post-release verification failed: reporting.latest_team_dashboard.{key}={verify[key]!r} "
+                f"but {expected} rows were written for this release"
+            )
+
+    export_path = Path(getattr(args, "output", "") or "") or Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
+    dashboard_json = export_release_dashboard_json(label)
+    export_path.parent.mkdir(parents=True, exist_ok=True)
+    export_path.write_text(json.dumps(dashboard_json, indent=2) + "\n")
+
+    print(
+        json.dumps(
+            {
+                "release_label": label,
+                "team_key": team_key,
+                "season": season,
+                "curated_build_id": curated_build_id,
+                "rows_written": len(table_rows),
+                "counts_by_section": dict(counts_by_section),
+                "export_path": str(export_path),
+            },
+            indent=2,
+        )
+    )
 
 
 def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
@@ -6152,6 +6826,90 @@ def self_check(args: argparse.Namespace) -> None:
         ("coverage.scope_status", "missing_in_rendered"),
     }, parity_diffs
 
+    # Phase 4 release/export helpers (pure functions only; DB-backed release
+    # gates are exercised live, not here).
+    assert slug_key("Lower Leg") == "lower_leg"
+    assert slug_key("2-3 days") == "2_3_days"
+    assert slug_key("") == "unknown"
+    assert strip_none_keys({"a": 1, "b": None, "c": 2}, {"b"}) == {"a": 1, "c": 2}
+    assert strip_none_keys({"a": 1, "b": None}, {"a"}) == {"a": 1, "b": None}
+
+    release_table_rows_fixture = render_release_table_rows(
+        {
+            "headline": [
+                {"key": "recorded_injuries", "label": "Recorded", "value": 10, "unit": "injuries", "formula": "f"},
+                {
+                    "key": "incidence_per_1000h", "label": "Incidence", "value": 5.0, "unit": "per 1,000h",
+                    "numerator": 3, "denominator": 100.0, "formula": "f",
+                },
+            ],
+            "setting_split": [{"label": "match", "time_loss_injuries": 2, "days_lost": 4, "mean_severity_days": 2.0}],
+            "monthly": [
+                {
+                    "month": "Jul 2024", "exposure_hours": 10.0, "distance_km": 1.0, "time_loss_injuries": 1,
+                    "days_lost": 2, "incidence_per_1000h": 1.0, "burden_per_1000h": 2.0,
+                }
+            ],
+            "body_locations": [
+                {
+                    "label": "Knee", "time_loss_injuries": 1, "days_lost": 2, "incidence_per_1000h": 1.0,
+                    "burden_per_1000h": 2.0, "mean_severity_days": 2.0,
+                }
+            ],
+            "injury_types": [],
+            "severity_distribution": [
+                {"key": "one_day", "label": "1 day", "recorded_injuries": 1, "time_loss_injuries": 1, "days_lost": 1}
+            ],
+        },
+        [{"month_start_text": "2024-07-01"}],
+    )
+    assert len(release_table_rows_fixture) == 6
+    headline_fixture_rows = [row for row in release_table_rows_fixture if row["section"] == "headline"]
+    assert headline_fixture_rows[0]["row_key"] == "recorded_injuries"
+    assert headline_fixture_rows[0]["ordinal"] == 0
+    assert headline_fixture_rows[1]["numerator"] == 3
+    monthly_fixture_rows = [row for row in release_table_rows_fixture if row["section"] == "monthly"]
+    assert monthly_fixture_rows[0]["row_key"] == "2024-07-01"
+    setting_fixture_rows = [row for row in release_table_rows_fixture if row["section"] == "setting_split"]
+    assert setting_fixture_rows[0]["row_key"] == "match"
+
+    # Phase 4.3 old-vs-new dashboard JSON diff tool.
+    old_dashboard_fixture = {
+        "generated_at": "2026-01-01T00:00:00Z",
+        "team": "Glasgow Warriors",
+        "coverage": {"scope_status": "in_scope_explicit", "hours": 100},
+        "source_files": {"injury": "x.csv"},
+        "headline": [{"key": "recorded_injuries", "value": 10}],
+    }
+    new_dashboard_fixture = {
+        "generated_at": "2026-07-10T00:00:00Z",
+        "team": "Glasgow Warriors",
+        "coverage": {
+            "scope_status_counts": {"in_scope_explicit": 100}, "hours": 100,
+            "exposure_grain": "session", "injury_cohort_filters": {"injured_in_team_applied": True},
+        },
+        "headline": [{"key": "recorded_injuries", "value": 10}],
+    }
+    fixture_diffs = diff_json_documents(old_dashboard_fixture, new_dashboard_fixture)
+    fixture_blocked = [
+        d for d in fixture_diffs if classify_dashboard_json_diff(d["path"], d["kind"]) is None
+    ]
+    assert not fixture_blocked, fixture_blocked
+    new_dashboard_fixture_bad = json.loads(json.dumps(new_dashboard_fixture))
+    new_dashboard_fixture_bad["headline"][0]["value"] = 11
+    fixture_diffs_bad = diff_json_documents(old_dashboard_fixture, new_dashboard_fixture_bad)
+    fixture_blocked_bad = [
+        d for d in fixture_diffs_bad if classify_dashboard_json_diff(d["path"], d["kind"]) is None
+    ]
+    assert [d["path"] for d in fixture_blocked_bad] == ["headline[0].value"], fixture_blocked_bad
+    new_dashboard_fixture_renamed = json.loads(json.dumps(new_dashboard_fixture))
+    new_dashboard_fixture_renamed["team"] = "Glasgow"
+    fixture_diffs_renamed = diff_json_documents(old_dashboard_fixture, new_dashboard_fixture_renamed)
+    fixture_blocked_renamed = [
+        d for d in fixture_diffs_renamed if classify_dashboard_json_diff(d["path"], d["kind"]) is None
+    ]
+    assert [d["path"] for d in fixture_blocked_renamed] == ["team"], fixture_blocked_renamed
+
     if os.environ.get("SUPABASE_DB_URL"):
         run_sql(protected_alias_scan_sql("self-check"))
         print("self-check: live protected-alias scan passed (0 hits)")
@@ -6325,9 +7083,14 @@ def main() -> None:
 
     release_parser = subcommands.add_parser("release")
     release_parser.add_argument("--team", required=True)
-    release_parser.add_argument("--season", required=True)
-    release_parser.add_argument("--dashboard-file")
+    release_parser.add_argument("--season", default="2024-25")
+    release_parser.add_argument("--output", default="")
     release_parser.set_defaults(func=release)
+
+    diff_dashboard_json_parser = subcommands.add_parser("diff-dashboard-json")
+    diff_dashboard_json_parser.add_argument("--old", required=True)
+    diff_dashboard_json_parser.add_argument("--new", required=True)
+    diff_dashboard_json_parser.set_defaults(func=diff_dashboard_json)
 
     adjudicate_duplicate_parser = subcommands.add_parser("adjudicate-duplicate-exclusion")
     adjudicate_duplicate_parser.add_argument("--team", required=True)
