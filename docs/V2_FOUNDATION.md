@@ -194,9 +194,19 @@ Munster is complete only when:
 
 After acceptance, freeze the schema, rules, reason codes, tests, and pipeline version before processing the remaining teams.
 
+## DB-Backed Reporting and the V1 Freeze (10 July 2026)
+
+The full lakehouse path is live and is the single source of truth for every published number: `ingestion` → `processing` (+ `audit`) → `curated` (typed builds) → `analysis.*_v1` views (metric definitions live once, in SQL) → `reporting.release_context`/`reporting.release_table_rows` (full-dashboard snapshots per approved release) → `reporting.latest_team_dashboard` (the one consumer view).
+
+- **Releases.** `pipeline release` reads the `analysis.*_v1` views directly, snapshots all six dashboard sections in one recorded transaction, and gates on: required migrations tracked, exactly one active and non-stale curated build, adjudicated duplicate exclusions reflected in that build, section-vs-headline reconciliation, a clean protected-alias scan, and a non-dirty code version. Six approved releases exist (connacht, edinburgh, glasgow, leinster, munster, ulster; season 2024-25); the superseded glasgow and Edinburgh releases are retired, not deleted. Per-release evidence (labels, curated build ids, view version, code version, operator, row counts) and the Phase 6 end-to-end reconciliation live in Git-ignored `data/reporting/phase6_acceptance_evidence_2026-07-10.json`.
+- **Edinburgh restatement.** Edinburgh was re-released under the current frozen rules with Abdel's explicit approval of the number change (recorded injuries 140→115, time-loss 92→75, days lost 1,867→1,663, incidence 13.7→11.2, burden 278.4→248.0; denominator unchanged). The exclusion attribution is recorded in the release's `injury_cohort_filters` and the diff record retained with the release evidence.
+- **Website.** `lib/reporting.ts` queries `reporting.latest_team_dashboard` server-side through the `web_reader` role (SELECT on that single view and nothing else; definer-rights + security_barrier is the one reviewed window through the deny-all RLS posture). Team pages prerender at deploy and revalidate hourly; a missing credential or missing approved release fails closed to the locked shell; an unreachable database keeps the last good cached render. `content/reporting/*.json` is still exported by `release` as an emergency artifact and parity record, but the app no longer imports it. The `web_reader` credential lives only in Git-ignored `.env.local` and (at cutover) Vercel env settings.
+- **Frozen as of migrations `20260710130000` and `20260710150000`:** the `analysis.*_v1` view definitions, the `curated` schema, the controlled reason codes, the release gates, and the dashboard-JSON diff whitelist. Any change requires a new versioned migration (e.g. `_v2` views), a recorded adjudication of why, and a rerun plus re-release for every affected team/season — never an edit in place.
+- **Rollout.** The remaining ten teams follow this frozen path (`ingest` → `process-intake`/`process-exposure` → `build-curated` → `release`), one team at a time, each with per-team sign-off, as their intake files arrive.
+
 ## Next Step
 
-When the Munster file arrives, inspect its structure without changing it, calculate its checksum, complete its intake provenance manifest, identify the canonical injury/exposure fields, and draft the data dictionary and validation contract. Do not clean rows until the scientific protocol and the first ordered cleaning steps are approved.
+Process the remaining ten teams through the frozen DB-backed path as their pseudonymised intake files arrive, one team at a time with per-team sign-off. At cutover, put the `web_reader` credential into the Vercel project's env settings and confirm the production build prerenders from the database.
 
 ## Remaining Scope Decisions
 
