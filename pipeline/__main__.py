@@ -89,6 +89,52 @@ def load_fixture_team_aliases() -> dict[str, str]:
     return {str(name): str(alias) for name, alias in aliases.items()}
 
 
+# Phase 3.5 cohort-signal capture (Adjudication 4, 10 July 2026). Public
+# team-name key to look up in load_fixture_team_aliases() for each
+# reporting.teams.team_key, so process-intake can resolve "our own team's
+# protected alias" without an operator having to type it in by hand. Every
+# value here is a public club name (verified live against the real,
+# Git-ignored team_alias_map.json 'fixture_team_aliases' keys, 10 July
+# 2026); none of these values is itself the protected alias. Covers all 16
+# reporting.teams.team_key values (20260709120100_reporting_teams_dimension.sql).
+TEAM_KEY_ALIAS_LOOKUP_NAMES: dict[str, str] = {
+    "connacht": "Connacht",
+    "leinster": "Leinster",
+    "munster": "Munster",
+    "ulster": "Ulster",
+    "cardiff": "Cardiff",
+    "dragons": "Dragons RFC",
+    "ospreys": "Ospreys",
+    "scarlets": "Scarlets",
+    "bulls": "Bulls",
+    "lions": "Lions",
+    "sharks": "Hollywoodbets Sharks",
+    "stormers": "DHL Stormers",
+    "benetton": "Benetton",
+    "zebre": "Zebre Parma",
+    "edinburgh": "Edinburgh",
+    "glasgow": "Glasgow Warriors",
+}
+
+
+def own_team_alias_for(team_key: str, fixture_team_aliases: dict[str, str]) -> str:
+    """Resolve team_key's own protected league alias from the alias map, for
+    in-memory comparison only. Callers must never log, print, or persist the
+    returned value -- pass it straight into received_in_team_status() and
+    discard it.
+    """
+    lookup_name = TEAM_KEY_ALIAS_LOOKUP_NAMES.get(team_key)
+    if not lookup_name:
+        raise SystemExit(f"no TEAM_KEY_ALIAS_LOOKUP_NAMES entry configured for team_key {team_key!r}")
+    alias = fixture_team_aliases.get(lookup_name)
+    if not alias:
+        raise SystemExit(
+            f"protected team alias map has no fixture_team_aliases entry for {lookup_name!r} "
+            f"(team_key {team_key!r})"
+        )
+    return alias
+
+
 FIXTURE_DATE_CORRECTIONS = {
     "DHL Stormers v Vodacom Bulls": "2025-02-08",
     "Hollywoodbets Sharks v Emirates Lions": "2025-03-08",
@@ -684,6 +730,33 @@ def is_missing(value: str | None) -> bool:
     return clean_text(value).lower() in MISSING_VALUES
 
 
+# Single source of truth for the "explicit non-URC Match Type" marker scan.
+# Shared by injury_cohort_exclusion_reasons() (the dashboard's live exclusion
+# check) and urc_match_scope() (the Phase 3.5 curated-column reproduction of
+# the same check, added so the signal is queryable without re-running the
+# Python dashboard code). Keep this list in exactly one place.
+NON_URC_MATCH_TYPE_MARKERS = (
+    "academy",
+    "club",
+    "cup",
+    "friendly",
+    "international",
+    "national",
+    "premiership",
+    "pro team a",
+    "super rugby",
+    "top 14",
+    "u18",
+    "u19",
+    "u20",
+    "u21",
+    "under 18",
+    "under 19",
+    "under 20",
+    "under 21",
+)
+
+
 def injury_cohort_exclusion_reasons(row: dict[str, str], expected_team: str = "") -> list[str]:
     reasons = []
     received_in_team = clean_text(row.get("Received/Injured In Team"))
@@ -691,29 +764,51 @@ def injury_cohort_exclusion_reasons(row: dict[str, str], expected_team: str = ""
         reasons.append("received_or_injured_in_other_team")
 
     match_type = clean_text(row.get("Match Type")).casefold()
-    non_urc_markers = (
-        "academy",
-        "club",
-        "cup",
-        "friendly",
-        "international",
-        "national",
-        "premiership",
-        "pro team a",
-        "super rugby",
-        "top 14",
-        "u18",
-        "u19",
-        "u20",
-        "u21",
-        "under 18",
-        "under 19",
-        "under 20",
-        "under 21",
-    )
-    if not is_missing(match_type) and any(marker in match_type for marker in non_urc_markers):
+    if not is_missing(match_type) and any(marker in match_type for marker in NON_URC_MATCH_TYPE_MARKERS):
         reasons.append("explicit_non_urc_match_type")
     return reasons
+
+
+# Phase 3.5 cohort-signal capture (Adjudication 4, 10 July 2026). Both
+# functions below are pure and row-local: they never receive or return the
+# protected alias itself beyond the single in-memory comparison in
+# received_in_team_status(), and their output is one of a small controlled
+# set of category strings, safe to store in curated.injuries and to log.
+#
+# received_in_team_status reproduces injury_cohort_exclusion_reasons()'s
+# "received_or_injured_in_other_team" check as a stored category rather than
+# a live re-scan: own_team only on an exact (casefold) match to the team's
+# own protected alias; 'club' is broken out from the general 'other_team'
+# bucket for audit readability even though (matching the current dashboard
+# rule, which excludes anything that is not blank and not the exact own
+# alias) both are treated as "not this team's own player" downstream.
+def received_in_team_status(row: dict[str, str], own_team_alias: str) -> tuple[str, str]:
+    value = clean_text(row.get("Received/Injured In Team"))
+    if is_missing(value):
+        return "missing", "source_missing_or_unknown"
+    if value.casefold() == "club":
+        return "club", "matched_club_marker"
+    if value.casefold() == own_team_alias.casefold():
+        return "own_team", "matched_own_team_alias"
+    return "other_team", "did_not_match_own_team_alias_or_club_marker"
+
+
+# urc_match_scope reproduces injury_cohort_exclusion_reasons()'s
+# "explicit_non_urc_match_type" check (the NON_URC_MATCH_TYPE_MARKERS scan)
+# as a stored category. 'training' and 'urc' are both "retained" outcomes
+# under the current rule (as is any other non-missing, non-marker text, e.g.
+# 'Other' -- the current rule does not positively verify URC competition
+# text, it only excludes on an explicit non-URC marker hit; 'urc' here means
+# "not excluded by the marker scan", not "confirmed URC").
+def urc_match_scope(row: dict[str, str]) -> tuple[str, str]:
+    match_type = clean_text(row.get("Match Type")).casefold()
+    if is_missing(match_type):
+        return "unknown", "source_missing_or_unknown"
+    if match_type == "training":
+        return "training", "mapped_from_match_type_training"
+    if any(marker in match_type for marker in NON_URC_MATCH_TYPE_MARKERS):
+        return "non_urc_marker", "matched_non_urc_match_type_marker"
+    return "urc", "no_non_urc_marker_matched"
 
 
 def activity_context(row: dict[str, str]) -> tuple[str, str]:
@@ -1961,6 +2056,7 @@ def build_processing_state(
     window_start: datetime,
     window_end: datetime,
     duplicate_signature_rows: set[int],
+    own_team_alias: str | None = None,
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
     source_row_number = int(row["standardised_row_number"])
     injured_at = parse_uk_date(row.get("Date Injured", ""))
@@ -1978,6 +2074,13 @@ def build_processing_state(
     body, body_origin = body_location(row)
     problem, problem_origin = problem_type(row)
     injury, injury_origin = injury_type(row)
+    # Phase 3.5 cohort-signal capture (Adjudication 4): own_team_alias is
+    # only ever used for this one in-memory comparison and is discarded
+    # immediately after; only the resulting category is stored below.
+    received_status, received_status_origin = received_in_team_status(
+        row, own_team_alias if own_team_alias else ""
+    )
+    match_scope, match_scope_origin = urc_match_scope(row)
     if derived_return_date and is_closed is False:
         return_date_origin = f"{return_date_origin}_unclosed_censored"
 
@@ -2002,6 +2105,8 @@ def build_processing_state(
         "body_location": body,
         "problem_type": problem,
         "injury_type": injury,
+        "received_in_team_status": received_status,
+        "urc_match_scope": match_scope,
         "field_origins": {
             "is_closed": is_closed_origin,
             "days_injured": days_injured_origin,
@@ -2012,6 +2117,8 @@ def build_processing_state(
             "body_location": body_origin,
             "problem_type": problem_origin,
             "injury_type": injury_origin,
+            "received_in_team_status": received_status_origin,
+            "urc_match_scope": match_scope_origin,
         },
         "provisional_qc_window": {
             "start": window_start.date().isoformat(),
@@ -2072,6 +2179,24 @@ def build_processing_state(
                 "reason_code": "controlled_inference" if action == "infer" else "canonical_mapping",
                 "rationale": f"{field_name} set by {origin}; source value preserved.",
                 "review_status": "needs_review" if action == "infer" else "not_required",
+            }
+        )
+    for cohort_signal_field, cohort_signal_value, cohort_signal_origin in (
+        ("received_in_team_status", received_status, received_status_origin),
+        ("urc_match_scope", match_scope, match_scope_origin),
+    ):
+        events.append(
+            {
+                "field_name": cohort_signal_field,
+                "old_value": None,
+                "new_value": cohort_signal_value,
+                "action": "derive",
+                "reason_code": "cohort_signal_derivation",
+                "rationale": (
+                    f"{cohort_signal_field} set by {cohort_signal_origin}; source column value preserved "
+                    "upstream, the protected team alias itself is never stored here."
+                ),
+                "review_status": "not_required",
             }
         )
     if duplicate_flags["candidate_duplicate_injury_signature"]:
@@ -2145,6 +2270,20 @@ def process_intake(args: argparse.Namespace) -> None:
     duplicate_signature_rows = duplicate_rows_for(DUPLICATE_SIGNATURE_FIELDS)
     standing_adjudications = fetch_standing_eligibility_adjudications(args.team, args.season, file_hash)
 
+    # Phase 3.5 cohort-signal capture (Adjudication 4): resolved once per
+    # process-intake run, then discarded after this point -- passed only
+    # into the pure per-row classifier, never logged, never written to SQL
+    # params, never entering record_state. Requires the migration that seeds
+    # the 'cohort_signal_derivation' reason code (mirrors the
+    # adjudication_reapplied precondition below).
+    if not query_sql("select 1 from audit.reason_codes where code = 'cohort_signal_derivation'"):
+        raise SystemExit(
+            "process-intake requires reason code 'cohort_signal_derivation' to be seeded first; "
+            "run the Phase 3.5 cohort-signal-columns migration before rerunning process-intake"
+        )
+    cohort_signal_team_key = resolve_team_key(args.team)
+    own_team_alias = own_team_alias_for(cohort_signal_team_key, load_fixture_team_aliases())
+
     record_sql = []
     event_sql = []
     output_states: list[dict[str, object]] = []
@@ -2161,6 +2300,7 @@ def process_intake(args: argparse.Namespace) -> None:
             window_start=window_start,
             window_end=window_end,
             duplicate_signature_rows=duplicate_signature_rows,
+            own_team_alias=own_team_alias,
         )
         for exclusion in analysis_exclusions.get(source_row_number, []):
             reason = clean_text(exclusion.get("reason"))
@@ -3580,6 +3720,7 @@ def build_curated(args: argparse.Namespace) -> None:
         date_injured, days_injured, derived_return_date, is_closed,
         activity_context, contact_context, recurrence_status, severity_category,
         body_location, injury_type, problem_type, eligibility_status,
+        received_in_team_status, urc_match_scope,
         field_origins, source_locator, curated_build_id
       )
       select
@@ -3598,6 +3739,13 @@ def build_curated(args: argparse.Namespace) -> None:
         rv.record_state ->> 'injury_type',
         rv.record_state ->> 'problem_type',
         rv.eligibility_status,
+        -- Phase 3.5 cohort-signal capture (Adjudication 4): absent for any
+        -- record_version written before this migration (jsonb ->> on a
+        -- missing key returns NULL), which is exactly the NULL-safe
+        -- non-excluding default analysis.injury_cohort_v1 relies on for
+        -- teams that have not been reprocessed.
+        rv.record_state ->> 'received_in_team_status',
+        rv.record_state ->> 'urc_match_scope',
         coalesce(rv.record_state -> 'field_origins', '{{}}'::jsonb),
         coalesce(rv.record_state -> 'source_locator', '{{}}'::jsonb),
         (select id from new_build)
@@ -5246,6 +5394,96 @@ def self_check(args: argparse.Namespace) -> None:
         "explicit_non_urc_match_type"
     ]
     assert injury_cohort_exclusion_reasons({"Match Type": "Unclear competition label"}) == []
+
+    # Phase 3.5 cohort-signal capture (Adjudication 4): offline, pure-function
+    # coverage. None of these assertions touches the real, Git-ignored
+    # team_alias_map.json -- every "own_team_alias" below is a fake test value.
+    assert set(TEAM_KEY_ALIAS_LOOKUP_NAMES) == {
+        "connacht", "leinster", "munster", "ulster",
+        "cardiff", "dragons", "ospreys", "scarlets",
+        "bulls", "lions", "sharks", "stormers",
+        "benetton", "zebre", "edinburgh", "glasgow",
+    }
+    assert own_team_alias_for("connacht", {"Connacht": "Team Q"}) == "Team Q"
+    try:
+        own_team_alias_for("connacht", {"Some Other Team": "Team Q"})
+        raise AssertionError("own_team_alias_for should refuse a map with no entry for the lookup name")
+    except SystemExit:
+        pass
+    try:
+        own_team_alias_for("not-a-real-team-key", {"Connacht": "Team Q"})
+        raise AssertionError("own_team_alias_for should refuse an unconfigured team_key")
+    except SystemExit:
+        pass
+
+    assert received_in_team_status({"Received/Injured In Team": "Team Q"}, "Team Q") == (
+        "own_team", "matched_own_team_alias"
+    )
+    assert received_in_team_status({"Received/Injured In Team": "team q"}, "Team Q")[0] == "own_team"
+    assert received_in_team_status({"Received/Injured In Team": "Team R"}, "Team Q")[0] == "other_team"
+    assert received_in_team_status({"Received/Injured In Team": "Club"}, "Team Q")[0] == "club"
+    assert received_in_team_status({"Received/Injured In Team": "Edinburgh A"}, "Team Q")[0] == "other_team"
+    assert received_in_team_status({"Received/Injured In Team": "N/A"}, "Team Q")[0] == "missing"
+    assert received_in_team_status({"Received/Injured In Team": ""}, "Team Q")[0] == "missing"
+    assert received_in_team_status({}, "Team Q")[0] == "missing"
+
+    assert urc_match_scope({"Match Type": "URC"})[0] == "urc"
+    assert urc_match_scope({"Match Type": "United Rugby Championship"})[0] == "urc"
+    assert urc_match_scope({"Match Type": "Other"})[0] == "urc"
+    assert urc_match_scope({"Match Type": "training"}) == ("training", "mapped_from_match_type_training")
+    assert urc_match_scope({"Match Type": "Challenge Cup"})[0] == "non_urc_marker"
+    assert urc_match_scope({"Match Type": "Pro team A game"})[0] == "non_urc_marker"
+    assert urc_match_scope({"Match Type": "NAG U20"})[0] == "non_urc_marker"
+    assert urc_match_scope({"Match Type": "N/A"})[0] == "unknown"
+    assert urc_match_scope({})[0] == "unknown"
+
+    cohort_signal_state, cohort_signal_events = build_processing_state(
+        {
+            **{field: "fixture" for field in LOCATOR_FIELDS},
+            "standardised_row_number": "2",
+            "player_uid": "player_1",
+            "injury_uid": "injury_1",
+            "Date Injured": "02/07/2024",
+            "Days Injured": "10",
+            "Confirmed Return Date": "",
+            "Occasion category": "Game",
+            "Match Type": "URC",
+            "Received/Injured In Team": "Team Q",
+        },
+        window_start=datetime(2024, 7, 1),
+        window_end=datetime(2025, 6, 30),
+        duplicate_signature_rows=set(),
+        own_team_alias="Team Q",
+    )
+    assert cohort_signal_state["received_in_team_status"] == "own_team"
+    assert cohort_signal_state["urc_match_scope"] == "urc"
+    assert cohort_signal_state["field_origins"]["received_in_team_status"] == "matched_own_team_alias"
+    assert any(
+        event["field_name"] == "received_in_team_status" and event["reason_code"] == "cohort_signal_derivation"
+        for event in cohort_signal_events
+    )
+    assert any(
+        event["field_name"] == "urc_match_scope" and event["reason_code"] == "cohort_signal_derivation"
+        for event in cohort_signal_events
+    )
+    # Backward-compatible default: an omitted own_team_alias must still
+    # populate both new keys (conservatively, as other_team) rather than
+    # raise or silently skip them.
+    default_state, _ = build_processing_state(
+        {
+            **{field: "fixture" for field in LOCATOR_FIELDS},
+            "standardised_row_number": "2",
+            "player_uid": "player_1",
+            "injury_uid": "injury_1",
+            "Date Injured": "02/07/2024",
+            "Received/Injured In Team": "Team Q",
+        },
+        window_start=datetime(2024, 7, 1),
+        window_end=datetime(2025, 6, 30),
+        duplicate_signature_rows=set(),
+    )
+    assert default_state["received_in_team_status"] == "other_team"
+
     assert severity_category(10, True)[0] == "eight_to_twenty_eight_days"
     assert contact_context({"Is Contact": "NA", "Injury Tissue Type/s": "Muscle Strain/Spasm", "Nature of onset": "Acute"}) == (
         "non_contact",
@@ -5724,6 +5962,63 @@ def self_check(args: argparse.Namespace) -> None:
     # Formula-once rule: the /1000h rate formula exists exactly once, in
     # analysis.rate_per_1000_v1 (comment-on statements stripped above).
     assert analysis_sql_no_comments.count("* 1000") == 1
+
+    # Phase 3.5 migration contracts (text-level, offline).
+    cohort_signal_columns_path = (
+        REPO_ROOT / "supabase" / "migrations" / "20260710110000_cohort_signal_columns.sql"
+    )
+    cohort_signal_columns_text = cohort_signal_columns_path.read_text()
+    assert "add column received_in_team_status text" in cohort_signal_columns_text
+    assert "add column urc_match_scope text" in cohort_signal_columns_text
+    assert "'own_team', 'other_team', 'club', 'missing'" in cohort_signal_columns_text
+    assert "'urc', 'non_urc_marker', 'training', 'unknown'" in cohort_signal_columns_text
+    assert "cohort_signal_derivation" in cohort_signal_columns_text
+
+    cohort_amendment_path = (
+        REPO_ROOT / "supabase" / "migrations" / "20260710120000_injury_cohort_v1_amendment.sql"
+    )
+    cohort_amendment_text = cohort_amendment_path.read_text()
+    assert "create or replace view analysis.injury_cohort_v1" in cohort_amendment_text
+    # NULL-safe: both new filters must let a NULL signal pass unconditionally
+    # (a team not yet reprocessed keeps its old cohort output byte-identical).
+    assert "i.received_in_team_status is null or i.received_in_team_status not in ('other_team', 'club')" in cohort_amendment_text
+    assert "i.urc_match_scope is null or i.urc_match_scope <> 'non_urc_marker'" in cohort_amendment_text
+    # Every pre-existing output column must still be present, in order,
+    # ahead of the two new trailing columns -- create-or-replace on a view
+    # can append columns but never reorder or drop one.
+    original_injury_cohort_columns = [
+        "i.id as injury_id",
+        "i.team_key",
+        "i.season",
+        "i.source_row_id",
+        "i.record_version_id",
+        "i.curated_build_id",
+        "i.player_uid",
+        "i.injury_uid",
+        "i.date_injured",
+        "i.days_injured",
+        "as days_lost",
+        "as is_time_loss",
+        "i.is_closed",
+        "i.activity_context",
+        "as setting_label",
+        "i.contact_context",
+        "i.recurrence_status",
+        "as severity_category",
+        "as severity_label",
+        "as body_location",
+        "as body_location_label",
+        "as injury_type",
+        "as injury_type_label",
+        "i.problem_type",
+        "i.eligibility_status",
+        "w.coverage_start",
+        "w.coverage_end",
+    ]
+    positions = [cohort_amendment_text.index(marker) for marker in original_injury_cohort_columns]
+    assert positions == sorted(positions), "amendment must preserve the original column order"
+    assert cohort_amendment_text.index("i.received_in_team_status") > positions[-1]
+    assert cohort_amendment_text.index("i.urc_match_scope") > positions[-1]
 
     # Phase 3.2 parity harness: coercion, render, and diff round-trip.
     assert as_number("12") == 12 and isinstance(as_number("12"), int)
