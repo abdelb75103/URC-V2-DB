@@ -1422,6 +1422,90 @@ def clean_exposure(args: argparse.Namespace) -> None:
     )
 
 
+def fetch_standing_eligibility_adjudications(
+    team: str, season: str, file_hash: str
+) -> dict[int, dict[str, Any]]:
+    """Read-only lookup of audit.adjudications rows that carry a standing
+    analysis_eligibility_status override for source rows in this exact
+    ingested file, keyed by source_row_number. Only field_name =
+    'analysis_eligibility_status' decisions carry an eligibility override
+    (e.g. the duplicate_adjudicated_exclusion decision written by
+    adjudicate-duplicate-exclusion); other adjudication field_names such as
+    'duplicate_review' record a reviewed decision without overriding
+    eligibility and are intentionally excluded by the `decision ?
+    'analysis_eligibility_status'` filter below, so they are correctly
+    treated as no-ops here.
+
+    Called by process_intake/process_exposure so a rerun reapplies a prior
+    human adjudication instead of silently reverting
+    processing.record_versions.eligibility_status to whatever the current
+    build_processing_state/cleaning_action computes -- the audit trail
+    contract requires manual corrections to be reapplied by the pipeline,
+    never lost on rerun.
+    """
+    lookup_params = SqlParams()
+    rows = query_sql(
+        f"""
+        select sr.source_row_number, a.id as adjudication_id, a.decision, a.rationale
+        from audit.adjudications a
+        join ingestion.source_rows sr on sr.id = a.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        where sf.team = {lookup_params.text(team)}
+          and sf.season = {lookup_params.text(season)}
+          and sf.file_sha256 = {lookup_params.text(file_hash)}
+          and a.field_name = 'analysis_eligibility_status'
+          and a.decision ? 'analysis_eligibility_status'
+        order by a.decided_at, sr.source_row_number
+        """,
+        lookup_params.values,
+    )
+    # decided_at ascending + dict overwrite: the most recent standing decision
+    # per source row wins if a row is ever re-adjudicated.
+    return {int(row["source_row_number"]): row for row in rows}
+
+
+def apply_standing_adjudication(
+    state: dict[str, Any],
+    events: list[dict[str, Any]],
+    adjudication: dict[str, Any] | None,
+) -> bool:
+    """Overlay a standing audit.adjudications decision onto a freshly
+    computed record state, appending a 'reapply' record_events entry when
+    the adjudicated status differs from what was just computed. Returns True
+    if a reapplication happened. Shared by process_intake and
+    process_exposure so a rerun never silently drops a decision made through
+    the audit.adjudications table (see fetch_standing_eligibility_adjudications).
+    Pure/offline so self_check can exercise it without a DB connection.
+    """
+    if adjudication is None:
+        return False
+    decision = adjudication["decision"]
+    adjudicated_status = clean_text(str(decision.get("analysis_eligibility_status", "")))
+    if not adjudicated_status:
+        return False
+    pre_status = clean_text(str(state.get("analysis_eligibility_status", "")))
+    if adjudicated_status == pre_status:
+        return False
+    state.update(decision)
+    state["analysis_eligibility_status"] = adjudicated_status
+    decision_rationale = clean_text(str(decision.get("rationale") or adjudication.get("rationale") or ""))
+    events.append(
+        {
+            "field_name": "analysis_eligibility_status",
+            "old_value": pre_status or None,
+            "new_value": adjudicated_status,
+            "action": "reapply",
+            "reason_code": "adjudication_reapplied",
+            "rationale": (
+                f"Standing audit.adjudications decision {adjudication['adjudication_id']} "
+                f"reapplied on rerun: {decision_rationale}"
+            ),
+            "review_status": "adjudicated",
+        }
+    )
+    return True
+
+
 def process_exposure(args: argparse.Namespace) -> None:
     path = Path(args.file)
     rows = read_rows(path)
@@ -1439,6 +1523,8 @@ def process_exposure(args: argparse.Namespace) -> None:
     output_states: list[dict[str, object]] = []
     params = SqlParams()
     provenance = run_provenance()
+    standing_adjudications = fetch_standing_eligibility_adjudications(args.team, args.season, file_hash)
+    reapplied_adjudication_rows = 0
 
     for index, row in enumerate(rows, start=2):
         raw_id = raw_record_id(args.team, args.season, file_hash, index)
@@ -1474,6 +1560,10 @@ def process_exposure(args: argparse.Namespace) -> None:
                 if field in row
             },
         }
+        reapply_events: list[dict[str, object]] = []
+        if apply_standing_adjudication(state, reapply_events, standing_adjudications.get(index)):
+            reapplied_adjudication_rows += 1
+            eligibility = clean_text(str(state["analysis_eligibility_status"]))
         output_states.append(state)
         record_sql.append(
             f"""
@@ -1501,6 +1591,19 @@ def process_exposure(args: argparse.Namespace) -> None:
                 where sr.raw_record_id = {params.text(raw_id)};
                 """
             )
+        for event in reapply_events:
+            event_sql.append(
+                f"""
+                insert into audit.record_events
+                  (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+                select step.id, sr.id, {params.text(event["field_name"])}, {params.jsonb(event["old_value"])},
+                  {params.jsonb(event["new_value"])}, {params.text(event["action"])},
+                  {params.text(event["reason_code"])}, {params.text(event["rationale"])},
+                  {params.text(args.step_version)}, {params.text(event["review_status"])}
+                from ingestion.source_rows sr, current_step step
+                where sr.raw_record_id = {params.text(raw_id)};
+                """
+            )
 
     output_hash = sha256_json(output_states)
     exposure_reason_codes = sorted(reason_counts)
@@ -1508,6 +1611,13 @@ def process_exposure(args: argparse.Namespace) -> None:
         f"insert into audit.reason_codes (code, description) values ({params.text(reason)}, {params.text('Exposure exclusion reason emitted by the versioned cleaning protocol.')}) on conflict (code) do update set description = excluded.description;"
         for reason in exposure_reason_codes
     )
+    if reapplied_adjudication_rows and not query_sql(
+        "select 1 from audit.reason_codes where code = 'adjudication_reapplied'"
+    ):
+        raise SystemExit(
+            "process-exposure would reapply a standing audit.adjudications decision but reason code "
+            "'adjudication_reapplied' is not seeded; run migration 20260710000137_adjudication_reapplication first"
+        )
 
     sql = f"""
       insert into audit.reason_codes (code, description) values
@@ -1559,6 +1669,7 @@ def process_exposure(args: argparse.Namespace) -> None:
               'exclusion_reason_counts': reason_counts,
               'exposure_grain_counts': grain_counts,
               'scope_status_counts': scope_counts,
+              'reapplied_adjudication_rows': reapplied_adjudication_rows,
             }
           })},
           {params.text(file_hash)}, {params.text(output_hash)}, now()
@@ -1582,6 +1693,7 @@ def process_exposure(args: argparse.Namespace) -> None:
                 "exposure_grain_counts": grain_counts,
                 "scope_status_counts": scope_counts,
                 "record_events": len(event_sql),
+                "reapplied_adjudication_rows": reapplied_adjudication_rows,
             },
             indent=2,
         )
@@ -2031,6 +2143,7 @@ def process_intake(args: argparse.Namespace) -> None:
         }
 
     duplicate_signature_rows = duplicate_rows_for(DUPLICATE_SIGNATURE_FIELDS)
+    standing_adjudications = fetch_standing_eligibility_adjudications(args.team, args.season, file_hash)
 
     record_sql = []
     event_sql = []
@@ -2040,6 +2153,7 @@ def process_intake(args: argparse.Namespace) -> None:
     changed_rows = 0
     event_count = 0
     review_required_rows = 0
+    reapplied_adjudication_rows = 0
     for row in rows:
         source_row_number = int(row["standardised_row_number"])
         state, events = build_processing_state(
@@ -2064,6 +2178,14 @@ def process_intake(args: argparse.Namespace) -> None:
                     "review_status": exclusion.get("review_status") or "pipeline_decision",
                 }
             )
+        adjudication = standing_adjudications.get(source_row_number)
+        if adjudication is not None and source_row_number in analysis_exclusions:
+            raise SystemExit(
+                f"row {source_row_number} has both a CSV analysis-audit exclusion and a standing "
+                "audit.adjudications decision; resolve the conflict manually before rerunning"
+            )
+        if apply_standing_adjudication(state, events, adjudication):
+            reapplied_adjudication_rows += 1
         output_states.append(state)
         if state["analysis_eligibility_status"] == "review_required":
             review_required_rows += 1
@@ -2109,6 +2231,13 @@ def process_intake(args: argparse.Namespace) -> None:
         f"insert into audit.reason_codes (code, description) values ({params.text(reason)}, {params.text('Final team analysis cohort exclusion emitted by the versioned dashboard pipeline.')}) on conflict (code) do update set description = excluded.description;"
         for reason in analysis_reason_codes
     )
+    if reapplied_adjudication_rows and not query_sql(
+        "select 1 from audit.reason_codes where code = 'adjudication_reapplied'"
+    ):
+        raise SystemExit(
+            "process-intake would reapply a standing audit.adjudications decision but reason code "
+            "'adjudication_reapplied' is not seeded; run migration 20260710000137_adjudication_reapplication first"
+        )
     sql = f"""
       insert into audit.reason_codes (code, description) values
         ('locator_enriched_intake', 'Intake row includes provisional source row locator and stable opaque UIDs.'),
@@ -2164,6 +2293,7 @@ def process_intake(args: argparse.Namespace) -> None:
               'review_required_rows': review_required_rows,
               'record_events': event_count,
               'duplicate_signature_rows': len(duplicate_signature_rows),
+              'reapplied_adjudication_rows': reapplied_adjudication_rows,
             }
           })},
           {params.text(file_hash)}, {params.text(output_hash)}, now()
@@ -2185,6 +2315,7 @@ def process_intake(args: argparse.Namespace) -> None:
                 "review_required_rows": review_required_rows,
                 "record_events": event_count,
                 "duplicate_signature_rows": len(duplicate_signature_rows),
+                "reapplied_adjudication_rows": reapplied_adjudication_rows,
             },
             indent=2,
         )
@@ -2601,6 +2732,397 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
     print(json.dumps({"team": args.team, "excluded_row": args.row_number, "raw_record_id": raw_id}, indent=2))
 
 
+def reapply_adjudications(args: argparse.Namespace) -> None:
+    """Backfill command for the reapplication gap fixed in process_intake/
+    process_exposure (see fetch_standing_eligibility_adjudications and
+    apply_standing_adjudication): for every standing audit.adjudications
+    decision (field_name = 'analysis_eligibility_status') belonging to
+    team/season, compares the adjudicated status against the *current*
+    latest processing.record_versions.eligibility_status for that source
+    row. Rows already matching are left untouched -- no write, no new
+    pipeline_run, this command is a true no-op when nothing has drifted.
+    Only rows where a prior rerun silently reverted the adjudicated status
+    get one new record_versions row each (version_number = current max + 1,
+    never editing the existing row in place) plus a record_events row
+    (action 'reapply', reason_code 'adjudication_reapplied'), all under one
+    recorded pipeline run.
+    """
+    team = clean_text(args.team)
+    season = clean_text(args.season)
+    if not team or not season:
+        raise SystemExit("--team and --season are required")
+
+    lookup_params = SqlParams()
+    drifted = query_sql(
+        f"""
+        select distinct on (sr.id)
+          sr.id as source_row_id,
+          sr.source_row_number,
+          sf.file_name,
+          a.id as adjudication_id,
+          a.decision,
+          a.rationale,
+          latest.version_number as latest_version_number,
+          latest.eligibility_status as latest_eligibility_status
+        from audit.adjudications a
+        join ingestion.source_rows sr on sr.id = a.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        join lateral (
+          select rv.version_number, rv.eligibility_status
+          from processing.record_versions rv
+          where rv.source_row_id = sr.id
+          order by rv.version_number desc
+          limit 1
+        ) latest on true
+        where sf.team = {lookup_params.text(team)}
+          and sf.season = {lookup_params.text(season)}
+          and a.field_name = 'analysis_eligibility_status'
+          and a.decision ? 'analysis_eligibility_status'
+          and (a.decision ->> 'analysis_eligibility_status') <> latest.eligibility_status
+        order by sr.id, a.decided_at desc
+        """,
+        lookup_params.values,
+    )
+
+    if not drifted:
+        print(
+            json.dumps(
+                {
+                    "team": team,
+                    "season": season,
+                    "status": "no_op",
+                    "reason": (
+                        "no standing audit.adjudications decision (field_name = "
+                        "analysis_eligibility_status) differs from the current latest "
+                        "processing.record_versions.eligibility_status for its source row; "
+                        "nothing to reapply"
+                    ),
+                    "drifted_rows": 0,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    reason_code_seeded = query_sql(
+        "select 1 from audit.reason_codes where code = 'adjudication_reapplied'"
+    )
+    if not reason_code_seeded:
+        raise SystemExit(
+            "reapply-adjudications found drifted rows but reason code 'adjudication_reapplied' is "
+            "not seeded; run migration 20260710000137_adjudication_reapplication first"
+        )
+
+    params = SqlParams()
+    provenance = run_provenance()
+    output_hash = sha256_json(
+        [
+            {
+                "source_row_id": row["source_row_id"],
+                "new_version_number": int(row["latest_version_number"]) + 1,
+                "decision": row["decision"],
+            }
+            for row in drifted
+        ]
+    )
+
+    record_sql = []
+    event_sql = []
+    for row in drifted:
+        source_row_id_p = params.text(row["source_row_id"])
+        new_version = int(row["latest_version_number"]) + 1
+        decision = row["decision"]
+        adjudicated_status = decision.get("analysis_eligibility_status")
+        rationale = clean_text(str(decision.get("rationale") or row["rationale"] or ""))
+        record_sql.append(
+            f"""
+            insert into processing.record_versions
+              (source_row_id, step_run_id, version_number, record_state, eligibility_status)
+            select {source_row_id_p}::uuid, step.id, {new_version},
+              coalesce(previous.record_state, '{{}}'::jsonb) || {params.jsonb(decision)},
+              {params.text(adjudicated_status)}
+            from current_step step
+            left join lateral (
+              select rv.record_state
+              from processing.record_versions rv
+              where rv.source_row_id = {source_row_id_p}::uuid
+              order by rv.version_number desc
+              limit 1
+            ) previous on true
+            ;
+            """
+        )
+        event_sql.append(
+            f"""
+            insert into audit.record_events
+              (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+            select step.id, {source_row_id_p}::uuid, 'analysis_eligibility_status',
+              {params.jsonb(row["latest_eligibility_status"])}, {params.jsonb(adjudicated_status)}, 'reapply',
+              'adjudication_reapplied',
+              {params.text(f'Standing audit.adjudications decision {row["adjudication_id"]} reapplied by reapply-adjudications backfill: {rationale}')},
+              {params.text(args.step_version)}, 'adjudicated'
+            from current_step step;
+            """
+        )
+
+    sql = f"""
+      do $$
+      begin
+        if not exists (select 1 from audit.reason_codes where code = 'adjudication_reapplied') then
+          raise exception 'reapply-adjudications requires reason code adjudication_reapplied to be seeded by migration first';
+        end if;
+      end $$;
+
+      create temp table current_run on commit drop as
+      with run as (
+        insert into audit.pipeline_runs
+          (command, team, season, status, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
+        values (
+          'reapply-adjudications', {params.text(team)}, {params.text(season)}, 'succeeded',
+          {params.text(output_hash)},
+          {params.jsonb({'drifted_rows': len(drifted), 'step_version': args.step_version})},
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
+        )
+        returning id
+      )
+      select id from run;
+
+      create temp table current_step on commit drop as
+      with step as (
+        insert into audit.step_runs
+          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, ended_at)
+        select id, 'adjudication_reapplication', {params.text(args.step_version)}, 'adjudication_reapplied',
+          {len(drifted)}, {len(drifted)},
+          {params.jsonb({team: {'reapplied_rows': len(drifted)}})}, now()
+        from current_run
+        returning id
+      )
+      select id from step;
+
+      {"".join(record_sql)}
+      {"".join(event_sql)}
+    """
+    run_sql(sql, params.values)
+    print(
+        json.dumps(
+            {
+                "team": team,
+                "season": season,
+                "status": "reapplied",
+                "drifted_rows": len(drifted),
+                "rows": [
+                    {
+                        "source_row_number": row["source_row_number"],
+                        "file": row["file_name"],
+                        "new_version_number": int(row["latest_version_number"]) + 1,
+                        "new_eligibility_status": row["decision"].get("analysis_eligibility_status"),
+                    }
+                    for row in drifted
+                ],
+            },
+            indent=2,
+        )
+    )
+
+
+def find_missing_standing_adjudications(season: str) -> list[dict[str, Any]]:
+    """Read-only: source rows whose latest processing.record_versions row is an
+    adjudicated duplicate exclusion written by a duplicate_adjudication step,
+    but which have no standing eligibility decision in audit.adjudications.
+    These are adjudication runs that predate the audit.adjudications insert in
+    adjudicate-duplicate-exclusion (added in commit 6e4c50f); the reapplication
+    safety net cannot protect them on a future rerun until backfilled. Every
+    reported value is copied from recorded evidence: the record_version state
+    (which for these historical rows is exactly the decision JSON the
+    adjudicate command wrote), the step_run, the pipeline run parameters, and
+    the record_events rationale.
+    """
+    lookup_params = SqlParams()
+    return query_sql(
+        f"""
+        select
+          sf.team, sf.season, sf.file_name, sr.source_row_number,
+          sr.id as source_row_id,
+          rv.version_number, rv.record_state, rv.step_run_id,
+          pr.id as pipeline_run_id, pr.parameters as run_parameters,
+          ev.rationale as original_rationale
+        from processing.record_versions rv
+        join ingestion.source_rows sr on sr.id = rv.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        join audit.step_runs st on st.id = rv.step_run_id
+        join audit.pipeline_runs pr on pr.id = st.pipeline_run_id
+        left join audit.record_events ev on ev.step_run_id = st.id
+          and ev.source_row_id = sr.id
+          and ev.field_name = 'analysis_eligibility_status'
+        where sf.season = {lookup_params.text(season)}
+          and rv.eligibility_status = 'excluded_duplicate_adjudicated'
+          and st.step_name = 'duplicate_adjudication'
+          and pr.command = 'adjudicate-duplicate-exclusion'
+          and rv.version_number = (
+            select max(rv2.version_number)
+            from processing.record_versions rv2
+            where rv2.source_row_id = rv.source_row_id
+          )
+          and not exists (
+            select 1 from audit.adjudications a
+            where a.source_row_id = sr.id
+              and a.field_name = 'analysis_eligibility_status'
+          )
+        order by sf.team, sr.source_row_number
+        """,
+        lookup_params.values,
+    )
+
+
+def backfill_standing_adjudications(args: argparse.Namespace) -> None:
+    """Backfill audit.adjudications rows for adjudicated duplicate exclusions
+    whose runs predate the adjudications-table insert in
+    adjudicate-duplicate-exclusion (commit 6e4c50f). Copies each decision
+    verbatim from the recorded evidence (the historical record_version state
+    is exactly the decision JSON the adjudicate command wrote), points
+    consumed_by_step_run_id at the existing duplicate_adjudication step_run,
+    and changes no record state -- processing.record_versions and curated
+    rows are untouched. With --plan, prints the exact rows that would be
+    inserted and exits without writing. The reviewer of the original runs was
+    not recorded in their parameters, so the reviewer value is backfill
+    attribution, marked as such in the rationale; do not treat it as a
+    recorded fact about the original run.
+    """
+    season = clean_text(args.season)
+    if not season:
+        raise SystemExit("--season is required")
+    reviewer = clean_text(args.reviewer)
+    if not reviewer:
+        raise SystemExit("--reviewer is required")
+
+    candidates = find_missing_standing_adjudications(season)
+    planned = []
+    for row in candidates:
+        decision = row["record_state"]
+        adjudicated_status = clean_text(str(decision.get("analysis_eligibility_status", "")))
+        if adjudicated_status != "excluded_duplicate_adjudicated":
+            raise SystemExit(
+                f"backfill candidate {row['team']} row {row['source_row_number']} has unexpected "
+                f"record_state (analysis_eligibility_status={adjudicated_status!r}); refusing to backfill"
+            )
+        flat = json.dumps(row)
+        if re.search(r"\bTeam [A-Z]\b", flat):
+            raise SystemExit(
+                f"backfill candidate {row['team']} row {row['source_row_number']} contains a protected "
+                "Team A-Z alias value; redact before backfilling"
+            )
+        original_rationale = clean_text(
+            str(row["original_rationale"] or decision.get("rationale") or "")
+        )
+        planned.append(
+            {
+                "team": row["team"],
+                "season": row["season"],
+                "file_name": row["file_name"],
+                "source_row_number": row["source_row_number"],
+                "source_row_id": row["source_row_id"],
+                "field_name": "analysis_eligibility_status",
+                "decision": decision,
+                "rationale": (
+                    "Evidence-based backfill of a standing decision that predates the "
+                    "audit.adjudications insert in adjudicate-duplicate-exclusion: original run "
+                    f"{row['pipeline_run_id']} (adjudicate-duplicate-exclusion, version "
+                    f"{row['version_number']}) recorded this decision in pipeline run parameters, "
+                    f"record events, and record version state. Original rationale: {original_rationale} "
+                    "Reviewer value is backfill attribution; the original run predates reviewer recording."
+                ),
+                "reviewer": reviewer,
+                "consumed_by_step_run_id": row["step_run_id"],
+            }
+        )
+
+    if args.plan or not planned:
+        print(
+            json.dumps(
+                {
+                    "season": season,
+                    "status": "plan" if planned else "no_op",
+                    "missing_standing_adjudications": len(planned),
+                    "rows": planned,
+                },
+                indent=2,
+            )
+        )
+        return
+
+    params = SqlParams()
+    provenance = run_provenance()
+    output_hash = sha256_json(planned)
+    teams = sorted({row["team"] for row in planned})
+    counts_by_team = {team: {"backfilled_adjudications": sum(1 for row in planned if row["team"] == team)} for team in teams}
+
+    insert_sql = []
+    for row in planned:
+        insert_sql.append(
+            f"""
+            insert into audit.adjudications
+              (source_row_id, field_name, decision, rationale, reviewer, consumed_by_step_run_id)
+            select {params.text(row["source_row_id"])}::uuid, 'analysis_eligibility_status',
+              {params.jsonb(row["decision"])}, {params.text(row["rationale"])},
+              {params.text(row["reviewer"])}, {params.text(row["consumed_by_step_run_id"])}::uuid
+            where not exists (
+              select 1 from audit.adjudications existing
+              where existing.source_row_id = {params.text(row["source_row_id"])}::uuid
+                and existing.field_name = 'analysis_eligibility_status'
+            );
+            """
+        )
+
+    sql = f"""
+      do $$
+      begin
+        if not exists (select 1 from audit.reason_codes where code = 'standing_adjudication_backfill') then
+          raise exception 'backfill-standing-adjudications requires reason code standing_adjudication_backfill to be seeded by migration first';
+        end if;
+      end $$;
+
+      create temp table current_run on commit drop as
+      with run as (
+        insert into audit.pipeline_runs
+          (command, season, status, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
+        values (
+          'backfill-standing-adjudications', {params.text(season)}, 'succeeded',
+          {params.text(output_hash)},
+          {params.jsonb({'teams': teams, 'backfilled_rows': len(planned), 'reviewer': args.reviewer})},
+          now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
+        )
+        returning id
+      )
+      select id from run;
+
+      insert into audit.step_runs
+        (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, output_hash, ended_at)
+      select id, 'standing_adjudication_backfill', {params.text(args.step_version)}, 'standing_adjudication_backfill',
+        {len(planned)}, {len(planned)}, {params.jsonb(counts_by_team)}, {params.text(output_hash)}, now()
+      from current_run;
+
+      {"".join(insert_sql)}
+    """
+    run_sql(sql, params.values)
+    print(
+        json.dumps(
+            {
+                "season": season,
+                "status": "backfilled",
+                "rows": [
+                    {
+                        "team": row["team"],
+                        "source_row_number": row["source_row_number"],
+                        "consumed_by_step_run_id": row["consumed_by_step_run_id"],
+                    }
+                    for row in planned
+                ],
+            },
+            indent=2,
+        )
+    )
+
+
 def redact_protected_team_aliases(args: argparse.Namespace) -> None:
     """Retroactively purge exact 'Team A'-'Team Z' league-alias values left in
     live rows (a gap predating alias redaction at ingest time). Replaces
@@ -2991,11 +3513,22 @@ def build_curated(args: argparse.Namespace) -> None:
         if (select count(*) from audit.reason_codes where code in ('curated_projection', 'curated_denominator_derivation')) <> 2 then
           raise exception 'build-curated requires reason codes curated_projection and curated_denominator_derivation to be seeded by migration first';
         end if;
-        if (select count(distinct sf.id) from ingestion.source_files sf where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {injury_pattern_p}) <> 1 then
-          raise exception 'build-curated requires exactly one injury source file for team=% season=%', {team_p}, {season_p};
+        -- Count only PROCESSED source files: files with at least one
+        -- processing.record_versions row. A superseded mis-ingested
+        -- registration with zero record_versions (kept immutably, per the
+        -- never-delete rule) must not block the build; two PROCESSED
+        -- injury/exposure files still fail as genuinely ambiguous. The
+        -- projection inserts and the version-set hash join through
+        -- record_versions, so an unprocessed registration cannot reach
+        -- curated rows either way; this guard is the only place that
+        -- counted raw registrations.
+        if (select count(distinct sf.id) from ingestion.source_files sf where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {injury_pattern_p}
+            and exists (select 1 from ingestion.source_rows sr join processing.record_versions rv on rv.source_row_id = sr.id where sr.source_file_id = sf.id)) <> 1 then
+          raise exception 'build-curated requires exactly one processed injury source file for team=% season=%', {team_p}, {season_p};
         end if;
-        if (select count(distinct sf.id) from ingestion.source_files sf where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}) <> 1 then
-          raise exception 'build-curated requires exactly one exposure source file for team=% season=%', {team_p}, {season_p};
+        if (select count(distinct sf.id) from ingestion.source_files sf where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}
+            and exists (select 1 from ingestion.source_rows sr join processing.record_versions rv on rv.source_row_id = sr.id where sr.source_file_id = sf.id)) <> 1 then
+          raise exception 'build-curated requires exactly one processed exposure source file for team=% season=%', {team_p}, {season_p};
         end if;
         if not exists (select 1 from curated.fixtures where season = {season_p}) then
           raise exception 'curated.fixtures has no rows for season=%; run load-curated-fixtures first', {season_p};
@@ -4407,6 +4940,53 @@ def self_check(args: argparse.Namespace) -> None:
     assert state["body_location"] == "ankle"
     assert any(event["field_name"] == "derived_return_date" for event in events)
 
+    # Standing-adjudication reapplication (offline, pure): a rerun must never
+    # silently revert an adjudicated eligibility_status.
+    reapply_state = {"analysis_eligibility_status": "included_pending_protocol"}
+    reapply_events: list[dict[str, Any]] = []
+    assert apply_standing_adjudication(reapply_state, reapply_events, None) is False
+    assert reapply_state == {"analysis_eligibility_status": "included_pending_protocol"}
+    assert reapply_events == []
+    # duplicate_review-style decisions carry no eligibility override: no-op.
+    assert (
+        apply_standing_adjudication(
+            reapply_state,
+            reapply_events,
+            {
+                "adjudication_id": "fixture-review",
+                "decision": {"decision": "not_duplicate_distinct_injury"},
+                "rationale": "retain both rows",
+            },
+        )
+        is False
+    )
+    assert reapply_state == {"analysis_eligibility_status": "included_pending_protocol"}
+    assert reapply_events == []
+    exclusion_adjudication = {
+        "adjudication_id": "fixture-exclusion",
+        "decision": {
+            "analysis_eligibility_status": "excluded_duplicate_adjudicated",
+            "decision": "exclude_duplicate",
+            "excluded_standardised_row_number": 2,
+            "duplicate_of_standardised_row_number": 3,
+            "rationale": "adjudicated duplicate of row 3",
+        },
+        "rationale": "adjudicated duplicate of row 3",
+    }
+    assert apply_standing_adjudication(reapply_state, reapply_events, exclusion_adjudication) is True
+    assert reapply_state["analysis_eligibility_status"] == "excluded_duplicate_adjudicated"
+    assert reapply_state["decision"] == "exclude_duplicate"
+    assert len(reapply_events) == 1
+    assert reapply_events[0]["action"] == "reapply"
+    assert reapply_events[0]["reason_code"] == "adjudication_reapplied"
+    assert reapply_events[0]["review_status"] == "adjudicated"
+    assert reapply_events[0]["old_value"] == "included_pending_protocol"
+    assert reapply_events[0]["new_value"] == "excluded_duplicate_adjudicated"
+    assert "fixture-exclusion" in reapply_events[0]["rationale"]
+    # Idempotent: reapplying when the status already matches is a no-op.
+    assert apply_standing_adjudication(reapply_state, reapply_events, exclusion_adjudication) is False
+    assert len(reapply_events) == 1
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         from openpyxl import Workbook
@@ -4909,6 +5489,19 @@ def main() -> None:
     adjudicate_duplicate_parser.add_argument("--step-version", default=INJURY_PROCESSING_RULE_VERSION)
     adjudicate_duplicate_parser.add_argument("--version-number", type=int, default=2)
     adjudicate_duplicate_parser.set_defaults(func=adjudicate_duplicate_exclusion)
+
+    reapply_adjudications_parser = subcommands.add_parser("reapply-adjudications")
+    reapply_adjudications_parser.add_argument("--team", required=True)
+    reapply_adjudications_parser.add_argument("--season", default="2024-25")
+    reapply_adjudications_parser.add_argument("--step-version", default=INJURY_PROCESSING_RULE_VERSION)
+    reapply_adjudications_parser.set_defaults(func=reapply_adjudications)
+
+    backfill_adjudications_parser = subcommands.add_parser("backfill-standing-adjudications")
+    backfill_adjudications_parser.add_argument("--season", default="2024-25")
+    backfill_adjudications_parser.add_argument("--reviewer", default="Abdel Babiker")
+    backfill_adjudications_parser.add_argument("--step-version", default="backfill_2026-07-10_v1")
+    backfill_adjudications_parser.add_argument("--plan", action="store_true")
+    backfill_adjudications_parser.set_defaults(func=backfill_standing_adjudications)
 
     def add_team_dashboard_args(command: argparse.ArgumentParser) -> None:
         command.add_argument("--team", default="Munster")
