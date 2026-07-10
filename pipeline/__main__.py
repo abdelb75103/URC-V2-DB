@@ -3368,6 +3368,8 @@ def retire_releases(args: argparse.Namespace) -> None:
 CURATED_LAYER_MIGRATION_VERSION = "20260709233356"
 CURATED_BUILD_RULE_VERSION = "curated_build_2026-07-10_v1"
 CURATED_FIXTURE_LOAD_RULE_VERSION = "curated_fixture_load_2026-07-10_v1"
+ANALYSIS_VIEWS_MIGRATION_VERSION = "20260710100000"
+ANALYSIS_VIEW_VERSION_SUFFIX = "v1"
 # Fixed by docs/EXPOSURE_CLEANING_PROTOCOL.md: "Calculate fixture match
 # exposure as 20 player-hours per team per match." Not a tunable parameter
 # for the curated layer (unlike build_fixture_exposure's CLI-overridable
@@ -4273,6 +4275,393 @@ def exposure_analysis_date(row: dict[str, str], grain: str) -> date | None:
         or row.get("cleaned_date", "")
         or row.get("week_start_date", "")
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.2 parity harness (verify-analysis-parity)
+#
+# Renders the analysis.*_v1 views into the exact dashboard JSON shape that
+# build_team_dashboard() writes (the TeamDashboardData sections consumed by
+# lib/reporting.ts) and diffs field-by-field against the committed
+# content/reporting/<team_key>_dashboard_<season>.json. Read-only: queries
+# views, writes nothing to the DB, and writes its diff log only to the
+# Git-ignored data/reporting/ path. Display rounding is applied HERE with
+# the pipeline's own rounded() helper, matching the analysis_views_v1
+# migration contract that views return raw numerics.
+# ---------------------------------------------------------------------------
+
+DASHBOARD_PARITY_SECTIONS = [
+    "headline",
+    "setting_split",
+    "monthly",
+    "body_locations",
+    "injury_types",
+    "severity_distribution",
+    "coverage",
+]
+
+
+def as_number(value: object) -> int | float | None:
+    """Coerce a query_sql() value (pg numeric/bigint arrive as JSON strings,
+    float8 as numbers) into a Python number; integral floats become ints so
+    rendered counts serialize like build_team_dashboard()'s ints."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise SystemExit(f"as_number called on boolean {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else value
+    text = str(value).strip()
+    if not text:
+        return None
+    number = float(text)
+    return int(number) if number.is_integer() else number
+
+
+def as_float(value: object) -> float | None:
+    number = as_number(value)
+    return None if number is None else float(number)
+
+
+def render_analysis_dashboard_sections(
+    *,
+    headline_row: dict[str, Any],
+    setting_rows: list[dict[str, Any]],
+    monthly_rows: list[dict[str, Any]],
+    body_location_rows: list[dict[str, Any]],
+    injury_type_rows: list[dict[str, Any]],
+    severity_rows: list[dict[str, Any]],
+    coverage_row: dict[str, Any],
+    group_limit: int = 10,
+) -> dict[str, Any]:
+    """Render analysis.*_v1 view rows into the dashboard JSON section shape.
+
+    Static label/unit/formula strings are copied verbatim from
+    build_team_dashboard() so full-shape parity is checked; every number
+    comes from the views, with rounded() applied only here.
+    """
+    time_loss = as_number(headline_row["time_loss_injuries"]) or 0
+    recorded = as_number(headline_row["recorded_injuries"]) or 0
+    days_lost_total = as_number(headline_row["days_lost_total"]) or 0
+    hours_rounded = rounded(as_float(headline_row["exposure_hours"]))
+    headline = [
+        {
+            "key": "recorded_injuries",
+            "label": "Recorded injuries in coverage window",
+            "value": recorded,
+            "unit": "injuries",
+            "formula": "count(injury rows with Date Injured inside exposure coverage window)",
+        },
+        {
+            "key": "time_loss_injuries",
+            "label": "Time-loss injuries",
+            "value": time_loss,
+            "unit": "injuries",
+            "formula": "count(injury rows where Days Injured > 0)",
+        },
+        {
+            "key": "incidence_per_1000h",
+            "label": "Incidence",
+            "value": rounded(as_float(headline_row["incidence_per_1000h"])),
+            "unit": "per 1,000 player-hours",
+            "numerator": time_loss,
+            "denominator": hours_rounded,
+            "formula": "time-loss injuries / exposure hours * 1000",
+        },
+        {
+            "key": "severity_mean_days",
+            "label": "Mean severity",
+            "value": rounded(as_float(headline_row["mean_severity_days"])),
+            "unit": "days lost per injury",
+            "numerator": days_lost_total,
+            "denominator": time_loss,
+            "formula": "days lost / time-loss injuries",
+        },
+        {
+            "key": "severity_median_days",
+            "label": "Median severity",
+            "value": rounded(as_float(headline_row["median_severity_days"])),
+            "unit": "days lost per injury",
+            "formula": "median(Days Injured) for time-loss injuries",
+        },
+        {
+            "key": "burden_per_1000h",
+            "label": "Burden",
+            "value": rounded(as_float(headline_row["burden_per_1000h"])),
+            "unit": "days lost per 1,000 player-hours",
+            "numerator": days_lost_total,
+            "denominator": hours_rounded,
+            "formula": "days lost / exposure hours * 1000",
+        },
+    ]
+
+    setting_split = sorted(
+        (
+            {
+                "label": row["label"],
+                "time_loss_injuries": as_number(row["time_loss_injuries"]),
+                "days_lost": as_number(row["days_lost"]),
+                "mean_severity_days": rounded(as_float(row["mean_severity_days"])),
+            }
+            for row in setting_rows
+        ),
+        key=lambda item: (-item["time_loss_injuries"], -item["days_lost"], item["label"]),
+    )
+
+    monthly = [
+        {
+            "month": row["month_label"],
+            "exposure_hours": rounded(as_float(row["exposure_hours"])),
+            "distance_km": rounded(as_float(row["distance_km"])),
+            "time_loss_injuries": as_number(row["time_loss_injuries"]),
+            "days_lost": as_number(row["days_lost"]),
+            "incidence_per_1000h": rounded(as_float(row["incidence_per_1000h"])),
+            "burden_per_1000h": rounded(as_float(row["burden_per_1000h"])),
+        }
+        for row in sorted(monthly_rows, key=lambda item: str(item["month_start"]))
+    ]
+
+    def render_group_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        ranked = sorted(rows, key=lambda item: int(item["rank"]))
+        return [
+            {
+                "label": row["label"],
+                "time_loss_injuries": as_number(row["time_loss_injuries"]),
+                "days_lost": as_number(row["days_lost"]),
+                "incidence_per_1000h": rounded(as_float(row["incidence_per_1000h"])),
+                "burden_per_1000h": rounded(as_float(row["burden_per_1000h"])),
+                "mean_severity_days": rounded(as_float(row["mean_severity_days"])),
+            }
+            for row in ranked[:group_limit]
+        ]
+
+    severity_distribution = [
+        {
+            "key": row["key"],
+            "label": row["label"],
+            "recorded_injuries": as_number(row["recorded_injuries"]),
+            "time_loss_injuries": as_number(row["time_loss_injuries"]),
+            "days_lost": as_number(row["days_lost"]),
+        }
+        for row in sorted(severity_rows, key=lambda item: int(item["band_order"]))
+    ]
+
+    coverage = {
+        "exposure_rows": as_number(coverage_row["exposure_rows"]),
+        "exposed_players": as_number(coverage_row["exposed_players"]),
+        "weeks": as_number(coverage_row["weeks"]),
+        "exposure_periods": as_number(coverage_row["exposure_periods"]),
+        "exposure_grain": coverage_row["exposure_grain"],
+        "hours": rounded(as_float(coverage_row["hours"])),
+        "distance_km": rounded(as_float(coverage_row["distance_km"])),
+        "included_exposure_status": coverage_row["included_exposure_status"],
+        "scope_status_counts": {
+            key: as_number(value)
+            for key, value in (coverage_row["scope_status_counts"] or {}).items()
+        },
+    }
+
+    return {
+        "headline": headline,
+        "setting_split": setting_split,
+        "monthly": monthly,
+        "body_locations": render_group_rows(body_location_rows),
+        "injury_types": render_group_rows(injury_type_rows),
+        "severity_distribution": severity_distribution,
+        "coverage": coverage,
+    }
+
+
+def parity_values_equal(committed: object, rendered: object) -> bool:
+    if committed is None or rendered is None:
+        return committed is None and rendered is None
+    committed_numeric = isinstance(committed, (int, float)) and not isinstance(committed, bool)
+    rendered_numeric = isinstance(rendered, (int, float)) and not isinstance(rendered, bool)
+    if committed_numeric and rendered_numeric:
+        return abs(float(committed) - float(rendered)) <= 1e-9
+    return committed == rendered
+
+
+def diff_dashboard_sections(committed: dict[str, Any], rendered: dict[str, Any]) -> list[dict[str, Any]]:
+    """Field-by-field diff of the seven dashboard parity sections. Returns
+    one result row per compared field: status PASS or DIFF, with a `kind`
+    on every DIFF (value_mismatch / missing_in_rendered / extra_in_rendered
+    / row_count / type_mismatch). Values here are approved aggregates and
+    IOC bucket labels only; never player-level or protected values.
+    """
+    results: list[dict[str, Any]] = []
+
+    def record(section: str, path: str, committed_value: object, rendered_value: object, status: str, kind: str | None = None) -> None:
+        row: dict[str, Any] = {
+            "section": section,
+            "path": path,
+            "status": status,
+            "committed": committed_value,
+            "rendered": rendered_value,
+        }
+        if kind:
+            row["kind"] = kind
+        results.append(row)
+
+    def walk(section: str, path: str, committed_value: object, rendered_value: object) -> None:
+        if isinstance(committed_value, dict) and isinstance(rendered_value, dict):
+            for key in sorted(set(committed_value) | set(rendered_value)):
+                child_path = f"{path}.{key}"
+                if key not in rendered_value:
+                    record(section, child_path, committed_value[key], None, "DIFF", "missing_in_rendered")
+                elif key not in committed_value:
+                    record(section, child_path, None, rendered_value[key], "DIFF", "extra_in_rendered")
+                else:
+                    walk(section, child_path, committed_value[key], rendered_value[key])
+            return
+        if isinstance(committed_value, list) and isinstance(rendered_value, list):
+            if len(committed_value) != len(rendered_value):
+                record(section, f"{path}.length", len(committed_value), len(rendered_value), "DIFF", "row_count")
+            for index in range(max(len(committed_value), len(rendered_value))):
+                child_path = f"{path}[{index}]"
+                if index >= len(rendered_value):
+                    record(section, child_path, committed_value[index], None, "DIFF", "missing_in_rendered")
+                elif index >= len(committed_value):
+                    record(section, child_path, None, rendered_value[index], "DIFF", "extra_in_rendered")
+                else:
+                    walk(section, child_path, committed_value[index], rendered_value[index])
+            return
+        if isinstance(committed_value, (dict, list)) != isinstance(rendered_value, (dict, list)):
+            record(section, path, committed_value, rendered_value, "DIFF", "type_mismatch")
+            return
+        if parity_values_equal(committed_value, rendered_value):
+            record(section, path, committed_value, rendered_value, "PASS")
+        else:
+            record(section, path, committed_value, rendered_value, "DIFF", "value_mismatch")
+
+    for section in DASHBOARD_PARITY_SECTIONS:
+        walk(section, section, committed.get(section), rendered.get(section))
+    return results
+
+
+def verify_analysis_parity(args: argparse.Namespace) -> None:
+    """Read-only Phase 3.2 gate: analysis.*_v1 views vs committed dashboard
+    JSON. Writes only the diff log under Git-ignored data/reporting/.
+    """
+    team = clean_text(args.team)
+    season = clean_text(args.season)
+    team_key = resolve_team_key(team)
+
+    migration = query_sql(
+        f"select 1 as ok from supabase_migrations.schema_migrations where version = '{ANALYSIS_VIEWS_MIGRATION_VERSION}'"
+    )
+    if not migration:
+        raise SystemExit(
+            f"verify-analysis-parity requires migration {ANALYSIS_VIEWS_MIGRATION_VERSION}_analysis_views_v1 "
+            "to be applied to the live target first"
+        )
+
+    def team_rows(sql_template: str) -> list[dict[str, Any]]:
+        params = SqlParams()
+        return query_sql(
+            sql_template.format(team_key=params.text(team_key), season=params.text(season)),
+            params.values,
+        )
+
+    headline_rows = team_rows(
+        "select * from analysis.headline_metrics_v1 where team_key = {team_key} and season = {season}"
+    )
+    if len(headline_rows) != 1:
+        raise SystemExit(
+            f"expected exactly one analysis.headline_metrics_v1 row for team_key={team_key!r} "
+            f"season={season!r}, found {len(headline_rows)}; is there an active curated build?"
+        )
+    coverage_rows = team_rows(
+        "select * from analysis.coverage_v1 where team_key = {team_key} and season = {season}"
+    )
+    if len(coverage_rows) != 1:
+        raise SystemExit(
+            f"expected exactly one analysis.coverage_v1 row for team_key={team_key!r} season={season!r}, "
+            f"found {len(coverage_rows)}"
+        )
+    setting_rows = team_rows(
+        "select * from analysis.setting_split_v1 where team_key = {team_key} and season = {season} "
+        "order by time_loss_injuries desc, days_lost desc, label asc"
+    )
+    monthly_rows = team_rows(
+        "select * from analysis.monthly_v1 where team_key = {team_key} and season = {season} order by month_start"
+    )
+    body_location_rows = team_rows(
+        "select * from analysis.body_locations_v1 where team_key = {team_key} and season = {season} order by rank"
+    )
+    injury_type_rows = team_rows(
+        "select * from analysis.injury_types_v1 where team_key = {team_key} and season = {season} order by rank"
+    )
+    severity_rows = team_rows(
+        "select * from analysis.severity_distribution_v1 where team_key = {team_key} and season = {season} "
+        "order by band_order"
+    )
+
+    rendered = render_analysis_dashboard_sections(
+        headline_row=headline_rows[0],
+        setting_rows=setting_rows,
+        monthly_rows=monthly_rows,
+        body_location_rows=body_location_rows,
+        injury_type_rows=injury_type_rows,
+        severity_rows=severity_rows,
+        coverage_row=coverage_rows[0],
+    )
+
+    committed_path = REPO_ROOT / "content" / "reporting" / f"{team_key}_dashboard_{season}.json"
+    if not committed_path.exists():
+        raise SystemExit(f"no committed dashboard JSON at {committed_path}")
+    committed = json.loads(committed_path.read_text())
+
+    results = diff_dashboard_sections(committed, rendered)
+    diffs = [row for row in results if row["status"] == "DIFF"]
+    section_diff_counts: dict[str, int] = defaultdict(int)
+    for row in diffs:
+        section_diff_counts[row["section"]] += 1
+
+    log = {
+        "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "command": "verify-analysis-parity",
+        "team": team,
+        "team_key": team_key,
+        "season": season,
+        "committed_dashboard": str(committed_path.relative_to(REPO_ROOT)),
+        "committed_dashboard_sha256": sha256_file(committed_path),
+        "analysis_views_migration": ANALYSIS_VIEWS_MIGRATION_VERSION,
+        "analysis_view_version": ANALYSIS_VIEW_VERSION_SUFFIX,
+        "summary": {
+            "overall": "PARITY" if not diffs else "DIFFS",
+            "fields_compared": len(results),
+            "pass": len(results) - len(diffs),
+            "diff": len(diffs),
+            "diffs_by_section": dict(sorted(section_diff_counts.items())),
+        },
+        "diffs": diffs,
+        "results": results,
+    }
+    log_path = REPO_ROOT / "data" / "reporting" / f"{team_key}_analysis_parity_{season}.json"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(json.dumps(log, indent=2) + "\n")
+
+    print(
+        json.dumps(
+            {
+                "team": team,
+                "team_key": team_key,
+                "season": season,
+                "overall": log["summary"]["overall"],
+                "fields_compared": log["summary"]["fields_compared"],
+                "pass": log["summary"]["pass"],
+                "diff": log["summary"]["diff"],
+                "diffs_by_section": log["summary"]["diffs_by_section"],
+                "diff_log": str(log_path.relative_to(REPO_ROOT)),
+            },
+            indent=2,
+        )
+    )
+    if diffs:
+        raise SystemExit(1)
 
 
 def build_team_dashboard(args: argparse.Namespace) -> None:
@@ -5301,6 +5690,173 @@ def self_check(args: argparse.Namespace) -> None:
         "unknown_or_censored",
     }
 
+    # Phase 3.1 analysis_views_v1 migration contract (text-level, offline).
+    analysis_migration_path = (
+        REPO_ROOT / "supabase" / "migrations" / f"{ANALYSIS_VIEWS_MIGRATION_VERSION}_analysis_views_v1.sql"
+    )
+    analysis_migration_text = analysis_migration_path.read_text()
+    analysis_sql = "\n".join(
+        line for line in analysis_migration_text.splitlines() if not line.lstrip().startswith("--")
+    )
+    analysis_sql_no_comments = re.sub(r"comment on (view|function)[^;]*;", "", analysis_sql)
+    expected_analysis_views = [
+        "injury_cohort_v1",
+        "exposure_hours_v1",
+        "headline_metrics_v1",
+        "monthly_v1",
+        "setting_split_v1",
+        "body_locations_v1",
+        "injury_types_v1",
+        "severity_distribution_v1",
+        "coverage_v1",
+    ]
+    for view_name in expected_analysis_views:
+        assert f"create view analysis.{view_name}" in analysis_sql, view_name
+        assert view_name.endswith(f"_{ANALYSIS_VIEW_VERSION_SUFFIX}")
+    # security_invoker on all 9 views, matching public.dashboard_team_metrics.
+    assert analysis_sql.count("security_invoker = true") == len(expected_analysis_views)
+    assert "create function analysis.rate_per_1000_v1" in analysis_sql
+    # Curated-only read rule: analysis views must never read processing/
+    # ingestion/audit schemas, and from reporting only the teams dimension.
+    for forbidden_schema in ("processing.", "ingestion.", "audit."):
+        assert forbidden_schema not in analysis_sql_no_comments, forbidden_schema
+    assert set(re.findall(r"reporting\.(\w+)", analysis_sql_no_comments)) <= {"teams"}
+    # Formula-once rule: the /1000h rate formula exists exactly once, in
+    # analysis.rate_per_1000_v1 (comment-on statements stripped above).
+    assert analysis_sql_no_comments.count("* 1000") == 1
+
+    # Phase 3.2 parity harness: coercion, render, and diff round-trip.
+    assert as_number("12") == 12 and isinstance(as_number("12"), int)
+    assert as_number("12.5") == 12.5
+    assert as_number(12.0) == 12 and isinstance(as_number(12.0), int)
+    assert as_number(None) is None and as_number("") is None
+    assert parity_values_equal(16, 16.0)
+    assert parity_values_equal(None, None)
+    assert not parity_values_equal(None, 0)
+    assert not parity_values_equal(1, 2)
+    assert parity_values_equal("match", "match")
+
+    parity_headline_row = {
+        "recorded_injuries": "3",
+        "time_loss_injuries": "2",
+        "days_lost_total": "30",
+        "mean_severity_days": "15",
+        "median_severity_days": 15.0,
+        "exposure_hours": "100",
+        "incidence_per_1000h": "20",
+        "burden_per_1000h": "300",
+    }
+    parity_group_row = {
+        "label": "Thigh",
+        "time_loss_injuries": "2",
+        "days_lost": "30",
+        "incidence_per_1000h": "20",
+        "burden_per_1000h": "300",
+        "mean_severity_days": "15",
+        "rank": "1",
+    }
+    parity_rendered = render_analysis_dashboard_sections(
+        headline_row=parity_headline_row,
+        setting_rows=[
+            {"label": "training", "time_loss_injuries": "1", "days_lost": "5", "mean_severity_days": "5"},
+            {"label": "match", "time_loss_injuries": "1", "days_lost": "25", "mean_severity_days": "25"},
+        ],
+        monthly_rows=[
+            {
+                "month_start": "2024-10-01",
+                "month_label": "Oct 2024",
+                "exposure_hours": "40",
+                "distance_km": "20",
+                "time_loss_injuries": "1",
+                "days_lost": "25",
+                "incidence_per_1000h": "25",
+                "burden_per_1000h": "625",
+                }
+            ,
+            {
+                "month_start": "2024-09-01",
+                "month_label": "Sep 2024",
+                "exposure_hours": "60",
+                "distance_km": "30",
+                "time_loss_injuries": "1",
+                "days_lost": "5",
+                "incidence_per_1000h": None,
+                "burden_per_1000h": None,
+            },
+        ],
+        body_location_rows=[parity_group_row],
+        injury_type_rows=[{**parity_group_row, "label": "Muscle injury"}],
+        severity_rows=[
+            {
+                "key": "eight_to_twenty_eight_days",
+                "label": "8-28 days",
+                "recorded_injuries": "2",
+                "time_loss_injuries": "2",
+                "days_lost": "30",
+                "band_order": "4",
+            },
+            {
+                "key": "zero_days_medical_attention_only",
+                "label": "Medical attention",
+                "recorded_injuries": "1",
+                "time_loss_injuries": "0",
+                "days_lost": "0",
+                "band_order": "0",
+            },
+        ],
+        coverage_row={
+            "exposure_rows": "10",
+            "exposed_players": "5",
+            "weeks": "0",
+            "exposure_periods": "10",
+            "exposure_grain": "session",
+            "hours": "100",
+            "distance_km": "50",
+            "included_exposure_status": "included",
+            "scope_status_counts": {"in_scope_explicit": 10},
+        },
+    )
+    assert [item["key"] for item in parity_rendered["headline"]] == [
+        "recorded_injuries",
+        "time_loss_injuries",
+        "incidence_per_1000h",
+        "severity_mean_days",
+        "severity_median_days",
+        "burden_per_1000h",
+    ]
+    assert parity_rendered["headline"][0]["value"] == 3
+    assert parity_rendered["headline"][2]["value"] == 20.0
+    assert parity_rendered["headline"][2]["numerator"] == 2
+    assert parity_rendered["headline"][2]["denominator"] == 100.0
+    # Months re-sorted chronologically; setting split sorted like
+    # build_group_rows (-time_loss, -days_lost, label).
+    assert [row["month"] for row in parity_rendered["monthly"]] == ["Sep 2024", "Oct 2024"]
+    assert parity_rendered["monthly"][0]["incidence_per_1000h"] is None
+    assert [row["label"] for row in parity_rendered["setting_split"]] == ["match", "training"]
+    # Severity bands re-sorted into the dashboard's fixed band order.
+    assert [row["key"] for row in parity_rendered["severity_distribution"]] == [
+        "zero_days_medical_attention_only",
+        "eight_to_twenty_eight_days",
+    ]
+    assert parity_rendered["coverage"]["scope_status_counts"] == {"in_scope_explicit": 10}
+
+    parity_self_diff = diff_dashboard_sections(
+        json.loads(json.dumps(parity_rendered)), parity_rendered
+    )
+    assert parity_self_diff and all(row["status"] == "PASS" for row in parity_self_diff)
+    parity_mutated = json.loads(json.dumps(parity_rendered))
+    parity_mutated["headline"][1]["value"] = 99
+    parity_mutated["coverage"].pop("exposure_grain")
+    parity_mutated["coverage"]["scope_status"] = "scope_unknown_included"
+    parity_diffs = [
+        row for row in diff_dashboard_sections(parity_mutated, parity_rendered) if row["status"] == "DIFF"
+    ]
+    assert {(row["path"], row["kind"]) for row in parity_diffs} == {
+        ("headline[1].value", "value_mismatch"),
+        ("coverage.exposure_grain", "extra_in_rendered"),
+        ("coverage.scope_status", "missing_in_rendered"),
+    }, parity_diffs
+
     if os.environ.get("SUPABASE_DB_URL"):
         run_sql(protected_alias_scan_sql("self-check"))
         print("self-check: live protected-alias scan passed (0 hits)")
@@ -5556,6 +6112,11 @@ def main() -> None:
     reconcile_curated_parser.add_argument("--team", required=True)
     reconcile_curated_parser.add_argument("--season", default="2024-25")
     reconcile_curated_parser.set_defaults(func=reconcile_curated)
+
+    verify_parity_parser = subcommands.add_parser("verify-analysis-parity")
+    verify_parity_parser.add_argument("--team", required=True)
+    verify_parity_parser.add_argument("--season", default="2024-25")
+    verify_parity_parser.set_defaults(func=verify_analysis_parity)
 
     check_parser = subcommands.add_parser("self-check")
     check_parser.set_defaults(func=self_check)
