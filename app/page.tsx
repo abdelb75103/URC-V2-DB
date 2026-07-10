@@ -1,8 +1,6 @@
-import Link from 'next/link';
 import { Hero } from '@/components/hero';
 import { TeamTile } from '@/components/team-tile';
 import { teams } from '@/config/teams';
-import { unions } from '@/config/unions';
 import { StaticImages } from '@/lib/placeholder-images';
 
 export default function Home() {
@@ -30,26 +28,10 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Unions */}
-        <section className="mt-12 w-full">
-          <h2 className="mb-4 text-lg font-semibold text-foreground">Union Dashboards</h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-            {unions.map((union) => (
-              <Link
-                key={union.id}
-                href={`/union/${union.id}`}
-                className="group flex items-center justify-center rounded-lg border border-border/60 bg-card/60 px-3 py-4 text-center text-sm font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
-              >
-                {union.name}
-              </Link>
-            ))}
-          </div>
-        </section>
-
         <p className="mx-auto mt-10 max-w-2xl text-center text-xs leading-relaxed text-muted-foreground">
           Only aggregates that have passed governance-approved disclosure control are
-          published. Munster is the pilot; remaining teams and unions unlock as their
-          cleared aggregates are released.
+          published. Munster is the pilot; remaining teams unlock as their cleared
+          aggregates are released.
         </p>
       </div>
     </div>

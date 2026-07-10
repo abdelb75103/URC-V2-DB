@@ -82,14 +82,14 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 
 ## Privacy and Data Safety
 
-- The source material states that URC is the data controller and UCD is the data processor; verify the current approved governance, ethics, and Data Processing Agreement before implementation.
+- URC is the data controller and UCD is the data processor. The URC/UCD governance, ethics, and DPA approval covering hosted Supabase storage of pseudonymised player-level data is confirmed and recorded (Abdel, 9 July 2026). Loading pseudonymised data into the approved live Supabase target is permitted.
 - Treat player names, dates of birth, IDs, and medical/injury records as sensitive. Do not place direct identifiers in Git, logs, screenshots, fixtures, dashboard URLs, or reports.
 - Store pseudonym mappings separately with restricted access. Analysis tables should use stable pseudonymous IDs.
 - Keep the re-identification codebook only in encrypted UCD-managed storage. Never place it in Supabase, Git, Vercel, logs, fixtures, screenshots, or exports.
 - Treat the team-to-league-alias map as protected metadata; team-scoped outputs must not expose league aliases.
 - The alias map lives only in Git-ignored `data/intake/team_alias_map.json` (authoritative backup in encrypted UCD storage); never hardcode name-to-alias pairs in code, docs, or anything committed to Git.
+- Treat exact placeholder strings such as `Team A` through `Team Z` as protected aliases too. Redact them from database `source_values`, not only from committed exports, and after live loads query for alias-pattern hits before release closeout.
 - Do not copy source data into this repository until the intended storage, encryption, access controls, backup, retention, and deletion process is confirmed.
-- Do not load player-level data into hosted Supabase until the applicable URC/UCD governance, ethics, DPA, region, retention, and backup approval is recorded.
 - Confirm the target database and environment before any write or migration. Never assume a local connection is non-production.
 
 ## Web and Deployment Contracts
@@ -108,12 +108,11 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 - Canonical injury and exposure schemas and approved code lists.
 - Final case, time-loss, severity, censoring, competition, and exposure definitions.
 - Device/vendor-specific validity rules and the treatment of weekly reporters.
-- UCD governance approval for Supabase hosting, Ireland region, retention, backups, and the shared-password access model.
-- Whether V2 includes union-scoped dashboards/passwords or explicitly removes the five legacy union routes.
+- Union dashboard placement is decided: unions are listed on the standalone `/unions` page and are not shown in the main dashboard grid. The union access model (union-scoped passwords and approved union aggregates) is still to be decided.
 
 ## Local Commands
 
-- All of `data/` (pseudonymised intake, protected alias map, raw generated reporting exports) is Git-ignored. The pipeline writes reporting exports to Git-ignored `data/reporting/`; that path is the raw, unreviewed output. A reviewed aggregate that is approved for dashboard/reporting use is promoted by copying it to the committed `content/reporting/` path, which is the only reporting data allowed into Git/Vercel. `lib/reporting.ts` imports `content/reporting/munster_dashboard_2024-25.json` at build time, so a fresh clone can `npm run build` without restoring `data/`. Do not suppress small aggregate counts unless Abdel explicitly adds that rule later. At cutover this import must be replaced by reads from approved reporting views.
+- All of `data/` (pseudonymised intake, protected alias map, raw generated reporting exports) is Git-ignored. The pipeline writes reporting exports to Git-ignored `data/reporting/`; that path is the raw, unreviewed output. A reviewed aggregate that is approved for dashboard/reporting use is promoted by copying it to the committed `content/reporting/` path, which is the only reporting data allowed into Git/Vercel. `content/reporting/*.json` is a public app payload: do not pass internal `source_files`, `pipeline_evidence`, hashes, or audit paths across the client boundary. `lib/reporting.ts` imports committed dashboard JSON at build time, so a fresh clone can `npm run build` without restoring `data/`. Do not suppress small aggregate counts unless Abdel explicitly adds that rule later. At cutover this import must be replaced by reads from approved reporting views.
 - Install dependencies: `npm install`
 - Run the website: `npm run dev`
 - Build check: `npm run build`

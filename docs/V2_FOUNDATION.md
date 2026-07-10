@@ -21,7 +21,7 @@ The system must produce academically defensible cleaned datasets, analysis, dash
 - Shared passwords are stored as server-side hashes in Vercel secrets. Successful unlocks create signed, expiring, HttpOnly, team-scoped cookies.
 - The primary analysis window is the earliest official URC fixture through the URC final, inclusive. The same league-wide dates apply to every team. Preseason is excluded; late reporting is recorded as missing coverage rather than changing a team's study window.
 - The existing website remains live and unchanged during the V2 build.
-- No player-level data, including pseudonymised data, enters hosted Supabase until the applicable URC/UCD governance, ethics, DPA, region, retention, and backup approval is recorded. Structural inspection and data-dictionary work may proceed inside approved UCD storage.
+- The URC/UCD governance, ethics, and DPA approval covering hosted Supabase storage of pseudonymised player-level data is confirmed and recorded (Abdel, 9 July 2026). Pseudonymised data may be loaded into the approved live Supabase target; the re-identification codebook still never leaves encrypted UCD storage.
 
 ## Repository and Deployment
 
@@ -92,6 +92,8 @@ Every run records:
 - Release ID connecting every dashboard/report metric to its cohort definition, numerator, denominator, analytical query/view version, and pipeline run.
 
 Rows are never physically deleted. Exclusions change analytical eligibility and remain queryable. Unchanged rows are recoverable from ordered stage membership and hashes; the audit does not create redundant no-change events.
+
+Pipeline runs recorded before 10 July 2026 predate provenance capture: their code commit, dependency lock, and operator fields are null (not backfilled), while their rule versions remain recorded per step.
 
 ## Cleaning and Inference Policy
 
@@ -172,7 +174,7 @@ Improve selectively:
 
 Do not change routes, navigation labels, logos, legal/consent copy, or the recognizable visual language without explicit approval. Validate changes at 390, 1280, and 1440 pixels before release.
 
-The current site also contains union dashboards for IRFU, WRU, SARU, FIR, and SRU. Union dashboards are not yet accepted into V2's access model. Before reporting/session implementation, explicitly either approve union-scoped aggregate views and shared passwords with cross-team governance approval, or approve removal of those routes from V2.
+The current site also contains union dashboards for IRFU, WRU, SARU, FIR, and SRU. Decided 9 July 2026: unions are listed on the standalone `/unions` page and removed from the main dashboard grid. Union-scoped aggregate views and shared passwords are not yet accepted into V2's access model; approve them (with cross-team governance sign-off) before any union dashboard goes live.
 
 ## Munster Pilot Acceptance Gate
 
@@ -194,11 +196,11 @@ After acceptance, freeze the schema, rules, reason codes, tests, and pipeline ve
 
 ## Next Step
 
-When the Munster file arrives, inspect its structure without changing it, calculate its checksum, complete its intake provenance manifest, identify the canonical injury/exposure fields, and draft the data dictionary and validation contract. Do not upload player-level data to hosted Supabase until governance approval is recorded. Do not clean rows until the scientific protocol and the first ordered cleaning steps are approved.
+When the Munster file arrives, inspect its structure without changing it, calculate its checksum, complete its intake provenance manifest, identify the canonical injury/exposure fields, and draft the data dictionary and validation contract. Do not clean rows until the scientific protocol and the first ordered cleaning steps are approved.
 
 ## Remaining Scope Decisions
 
-- Include union dashboards with union-scoped aggregate access, or explicitly remove the five union routes.
+- Union placement is decided (standalone `/unions` page, off the main grid); the union access model (union-scoped passwords and approved union aggregates) remains open.
 - Keep the synthetic demo team in the recognizable 17-tile grid, or remove it with approval.
 - Retain `/about` as an unlinked compatibility route, redirect it to `/about-us`, or remove it after checking external links.
 - Approve the aggregate small-cell disclosure threshold and release-review process.
