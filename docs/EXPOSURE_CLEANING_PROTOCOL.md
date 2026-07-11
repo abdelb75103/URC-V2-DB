@@ -14,8 +14,10 @@ If competition/session/context fields are blank, missing, or ambiguous, retain t
 
 ## Exposure Grain
 
-- Teams I, J, K, and L report weekly exposure. Treat the source date as `week_start_date`.
-- All other teams report per-session exposure. Treat the source date as `session_date`.
+- The operator must classify each intake explicitly as `weekly` or `session` with the required `--reporting-grain` argument to `prepare-exposure`, `clean-exposure`, and `process-exposure`.
+- Never infer exposure grain from a team name, protected team alias, file path, or prior-team default.
+- `prepare-exposure` records the declared grain in every prepared row, the QC file, and the intake manifest. `clean-exposure` verifies that declaration, applies the selected rule set to every row, and records the grain in the cleaned output and cleaning evidence. `process-exposure` refuses a cleaned file whose row grain does not exactly match the explicit argument and records the selected grain in the audit run parameters.
+- For weekly exposure, treat the source date as `week_start_date`. For session exposure, treat it as `session_date`.
 - Do not apply per-session duration/distance limits to weekly reporters.
 
 ## Match and Training Denominators

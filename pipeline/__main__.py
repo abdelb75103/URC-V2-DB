@@ -13,7 +13,9 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -43,7 +45,8 @@ EXPOSURE_LOCATOR_FIELDS = [
     "source_locator_status",
 ]
 
-EXPOSURE_WEEKLY_TEAM_ALIASES = ["Team I", "Team J", "Team K", "Team L"]
+EXPOSURE_REPORTING_GRAINS = ("weekly", "session")
+EXPOSURE_DECLARED_GRAIN_FIELD = "declared_exposure_grain"
 
 EDINBURGH_URC_OPPONENTS = [
     "benetton",
@@ -1062,7 +1065,18 @@ def read_xlsx_rows(path: Path, sheet_name: str) -> tuple[list[str], list[dict[st
     return headers, rows
 
 
+def required_exposure_reporting_grain(args: argparse.Namespace) -> str:
+    grain = clean_text(getattr(args, "reporting_grain", ""))
+    if grain not in EXPOSURE_REPORTING_GRAINS:
+        raise SystemExit(
+            "exposure reporting grain must be supplied explicitly as one of: "
+            + ", ".join(EXPOSURE_REPORTING_GRAINS)
+        )
+    return grain
+
+
 def prepare_exposure(args: argparse.Namespace) -> None:
+    reporting_grain = required_exposure_reporting_grain(args)
     workbook_path = Path(args.file)
     output_path = Path(args.output)
     qc_path = Path(args.qc_output)
@@ -1071,6 +1085,10 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         raise SystemExit(f"no exposure rows found: {workbook_path}")
     if args.player_column not in headers:
         raise SystemExit(f"missing player column: {args.player_column}")
+    if EXPOSURE_DECLARED_GRAIN_FIELD in headers:
+        raise SystemExit(
+            f"source exposure workbook must not contain reserved pipeline column: {EXPOSURE_DECLARED_GRAIN_FIELD}"
+        )
 
     source_hash = sha256_file(workbook_path)
     source_columns = list(headers)
@@ -1138,11 +1156,12 @@ def prepare_exposure(args: argparse.Namespace) -> None:
                 "standardised_row_number": str(output_row_number),
                 "source_locator_status": "provisional_reference_locator",
                 "player_uid": player_uid,
+                EXPOSURE_DECLARED_GRAIN_FIELD: reporting_grain,
             }
         )
         prepared_rows.append(prepared)
 
-    fieldnames = source_columns + EXPOSURE_LOCATOR_FIELDS + ["player_uid"]
+    fieldnames = source_columns + EXPOSURE_LOCATOR_FIELDS + ["player_uid", EXPOSURE_DECLARED_GRAIN_FIELD]
     write_rows(output_path, prepared_rows, fieldnames)
     output_hash = sha256_file(output_path)
 
@@ -1172,28 +1191,18 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         for key, row_numbers in player_date_counts.items()
         if len(row_numbers) > 1
     ]
-    team_aliases = sorted(
-        {
-            clean_cell(row.get("Team"))
-            for row in rows
-            if clean_cell(row.get("Team"))
-        }
-    )
     exposure_reporting_grain = {
-        "weekly_team_aliases": EXPOSURE_WEEKLY_TEAM_ALIASES,
-        "per_session_reporting": "all_other_teams",
-        "current_file_team_aliases": team_aliases,
-        "current_file_reporting_grain": (
-            "weekly"
-            if team_aliases and all(alias in EXPOSURE_WEEKLY_TEAM_ALIASES for alias in team_aliases)
-            else "per_session_or_mixed"
-        ),
-        "note": "Teams I, J, K, and L reported exposure weekly; all other teams reported exposure per session.",
+        "current_file_reporting_grain": reporting_grain,
+        "selection_source": "required_cli_argument",
+        "allowed_values": list(EXPOSURE_REPORTING_GRAINS),
+        "note": "Reporting grain is an explicit intake attribute; source team aliases do not determine it.",
     }
 
     qc = {
         "file": str(output_path),
         "file_sha256": output_hash,
+        "team": args.team,
+        "season": args.season,
         "source_workbook": str(workbook_path),
         "source_workbook_sha256": source_hash,
         "source_sheet": args.sheet,
@@ -1232,6 +1241,8 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         manifest_path = Path(args.manifest)
         manifest = json.loads(manifest_path.read_text())
         manifest["exposure_intake"] = {
+            "team": args.team,
+            "season": args.season,
             "source_workbook": str(workbook_path),
             "source_workbook_sha256": source_hash,
             "source_sheet": args.sheet,
@@ -1253,12 +1264,15 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         json.dumps(
             {
                 "prepared": str(output_path),
+                "team": args.team,
+                "season": args.season,
                 "rows": len(prepared_rows),
                 "sha256": output_hash,
                 "qc": str(qc_path),
                 "date_min": qc["date_min"],
                 "date_max": qc["date_max"],
                 "player_uid_count": qc["player_uid_count"],
+                "reporting_grain": reporting_grain,
             },
             indent=2,
         )
@@ -1309,6 +1323,32 @@ def clean_exposure(args: argparse.Namespace) -> None:
     if not rows:
         raise SystemExit("no exposure rows found")
 
+    reporting_grain = required_exposure_reporting_grain(args)
+    declared_grains = {
+        clean_text(row.get(EXPOSURE_DECLARED_GRAIN_FIELD))
+        for row in rows
+        if clean_text(row.get(EXPOSURE_DECLARED_GRAIN_FIELD))
+    }
+    declared_grain_rows = sum(
+        1 for row in rows if clean_text(row.get(EXPOSURE_DECLARED_GRAIN_FIELD))
+    )
+    invalid_declared_grains = declared_grains - set(EXPOSURE_REPORTING_GRAINS)
+    if invalid_declared_grains:
+        raise SystemExit(
+            "cleaned exposure intake contains invalid declared exposure grain value(s): "
+            + ", ".join(sorted(invalid_declared_grains))
+        )
+    if declared_grains and declared_grains != {reporting_grain}:
+        raise SystemExit(
+            "--reporting-grain does not match the grain declared during prepare-exposure: "
+            + ", ".join(sorted(declared_grains))
+        )
+    if declared_grain_rows != len(rows):
+        raise SystemExit(
+            "prepared exposure grain declaration is missing from one or more rows; "
+            "rerun prepare-exposure before cleaning"
+        )
+
     exact_seen: dict[str, int] = {}
     cleaned_rows: list[dict[str, str]] = []
     counts: dict[str, int] = {}
@@ -1325,8 +1365,7 @@ def clean_exposure(args: argparse.Namespace) -> None:
         raise SystemExit("exposure analysis window start must not be after its end")
 
     for row in rows:
-        team_alias = clean_text(row.get("Team"))
-        grain = "weekly" if team_alias in EXPOSURE_WEEKLY_TEAM_ALIASES else "session"
+        grain = reporting_grain
         grain_counts[grain] = grain_counts.get(grain, 0) + 1
         minutes = parse_minutes(row.get("minutes total"))
         distance = parse_float(row.get("distance total"))
@@ -1442,6 +1481,12 @@ def clean_exposure(args: argparse.Namespace) -> None:
         "date_max": max(dates).date().isoformat() if dates else None,
         "date_order": args.date_order,
         "team": getattr(args, "team", ""),
+        "season": getattr(args, "season", ""),
+        "reporting_grain": reporting_grain,
+        "reporting_grain_evidence": {
+            "selection_source": "required_cli_argument",
+            "prepared_row_declaration": "matched_all_rows",
+        },
         "analysis_window": {
             "start": window_start.isoformat() if window_start else None,
             "end": window_end.isoformat() if window_end else None,
@@ -1476,7 +1521,7 @@ def clean_exposure(args: argparse.Namespace) -> None:
                 "retain warm-up and top-up exposure",
                 "retain game-labelled exposure only when the bracketed opponent fuzzy-matches one of the other 15 URC teams",
             ] if clean_text(getattr(args, "team", "")).lower() == "edinburgh" else [],
-            "weekly_teams": EXPOSURE_WEEKLY_TEAM_ALIASES,
+            "reporting_grain_selection": "Required explicit weekly/session intake attribute; never inferred from a team alias.",
             "weekly_exclusions": ["minutes < 5", "minutes > 1100", "distance > 40000m"],
             "session_exclusions": ["minutes < 5", "distance < 200m", "minutes > 220", "distance > 20000m", "distance/minute > 1000"],
             "global_exclusions": ["exact duplicate copy", "missing player/date/minutes/distance", "negative minutes/distance", "minutes = 0 and distance = 0", "outside official analysis window"],
@@ -1488,6 +1533,8 @@ def clean_exposure(args: argparse.Namespace) -> None:
         manifest_path = Path(args.manifest)
         manifest = json.loads(manifest_path.read_text())
         manifest["exposure_cleaning"] = {
+            "team": args.team,
+            "season": args.season,
             "cleaned_file": str(output_path),
             "cleaned_file_sha256": output_hash,
             "qc_file": str(qc_path),
@@ -1497,6 +1544,8 @@ def clean_exposure(args: argparse.Namespace) -> None:
             "action_counts": counts,
             "exclusion_reason_counts": reasons,
             "exposure_grain_counts": grain_counts,
+            "reporting_grain": reporting_grain,
+            "reporting_grain_evidence": qc["reporting_grain_evidence"],
             "scope_rule_version": qc["rules"]["scope_rule_version"],
             "canonical_schema_version": qc["rules"]["canonical_schema_version"],
             "analysis_window": qc["analysis_window"],
@@ -1511,6 +1560,7 @@ def clean_exposure(args: argparse.Namespace) -> None:
                 "exclusion_reason_counts": reasons,
                 "qc": str(qc_path),
                 "sha256": output_hash,
+                "reporting_grain": reporting_grain,
             },
             indent=2,
         )
@@ -1606,6 +1656,14 @@ def process_exposure(args: argparse.Namespace) -> None:
     rows = read_rows(path)
     if not rows:
         raise SystemExit("no cleaned exposure rows found")
+    reporting_grain = required_exposure_reporting_grain(args)
+    observed_grains = {clean_text(row.get("exposure_grain")) for row in rows}
+    if observed_grains != {reporting_grain}:
+        observed_label = ", ".join(sorted(grain or "<blank>" for grain in observed_grains))
+        raise SystemExit(
+            f"--reporting-grain {reporting_grain!r} does not match cleaned exposure row grain(s): "
+            f"{observed_label}"
+        )
     file_hash = sha256_file(path)
     version_number = args.version_number
     included_rows = sum(1 for row in rows if row.get("cleaning_action") == "include")
@@ -1745,6 +1803,7 @@ def process_exposure(args: argparse.Namespace) -> None:
             'step': args.step_name,
             'step_version': args.step_version,
             'version_number': version_number,
+            'reporting_grain': reporting_grain,
           })},
           now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
@@ -1786,6 +1845,7 @@ def process_exposure(args: argparse.Namespace) -> None:
                 "excluded_from_primary_rows": excluded_rows,
                 "exclusion_reason_counts": reason_counts,
                 "exposure_grain_counts": grain_counts,
+                "reporting_grain": reporting_grain,
                 "scope_status_counts": scope_counts,
                 "record_events": len(event_sql),
                 "reapplied_adjudication_rows": reapplied_adjudication_rows,
@@ -2668,20 +2728,56 @@ def adjudicated_duplicate_row_numbers(team_key: str, season: str) -> list[int]:
     return sorted(int(row["source_row_number"]) for row in rows)
 
 
+def combine_cohort_filter_reason_counts(
+    audit_reason_rows: list[dict[str, Any]],
+    curated_counts: dict[str, int],
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Deduplicate current audit evidence and merge it with curated counts.
+
+    Repeated events for one source row/reason count once. Audit evidence is
+    authoritative for a reason it contains; curated evidence fills reasons
+    absent from audit so a hybrid team never loses a current curated-only
+    exclusion. Returns (merged_counts, audit_counts) so callers can preserve
+    the existing injured_in_team_applied evidence rule.
+    """
+    unique_audit_evidence = {
+        (clean_text(str(row.get("source_row_id", ""))), clean_text(str(row.get("reason_code", ""))))
+        for row in audit_reason_rows
+        if clean_text(str(row.get("source_row_id", "")))
+        and clean_text(str(row.get("reason_code", ""))) in DASHBOARD_COHORT_FILTER_REASON_CODES
+    }
+    audit_counts: dict[str, int] = {}
+    for _, reason_code in unique_audit_evidence:
+        audit_counts[reason_code] = audit_counts.get(reason_code, 0) + 1
+
+    merged_counts = {
+        reason_code: int(count)
+        for reason_code, count in curated_counts.items()
+        if reason_code in DASHBOARD_COHORT_FILTER_REASON_CODES and int(count) > 0
+    }
+    merged_counts.update(audit_counts)
+    return dict(sorted(merged_counts.items())), dict(sorted(audit_counts.items()))
+
+
 def release_cohort_filter_flags(team_key: str, season: str) -> dict[str, Any]:
     """Adjudication 2 (data/reporting/analysis_parity_adjudications_2026-07-10.json):
     reproduces the dashboard's coverage.injury_cohort_filters block from
     audit/curated evidence at release time, outside any analysis.*_v1 view.
 
-    Two disjoint evidence paths, audit evidence first (Adjudication 2's
-    named mechanism), curated cohort signals as the fallback:
+    Two evidence paths are merged per reason, with audit evidence overriding
+    the same reason and curated cohort signals filling reasons absent from
+    audit:
 
     - Audit path (glasgow): its old dashboard-run exclusions were folded
       into eligibility_status by its analysis-audit-file reapplication, and
       the per-reason detail lives only in audit.record_events
-      (field_name='analysis_eligibility_status', action='exclude'). Using
-      this path when it has rows reproduces glasgow's committed
-      injury_cohort_filters block exactly.
+      (field_name='analysis_eligibility_status', action='exclude'). Only
+      the latest record-version step carrying dashboard exclusion reasons is
+      eligible while the active record remains excluded, and repeated
+      source-row/reason events count once. This drops stale reasons after a
+      later inclusion/review status, selects a newer reason set after a later
+      re-exclusion, and preserves multi-filter lineage through an
+      adjudication-only excluded version.
     - Curated path (edinburgh and every team processed after Phase 3.5,
       plus the four Irish teams, which have no such audit exclude events):
       the cohort exclusions actually applied by
@@ -2702,19 +2798,41 @@ def release_cohort_filter_flags(team_key: str, season: str) -> dict[str, Any]:
     reason_params = SqlParams()
     reason_rows = query_sql(
         f"""
-        select ev.reason_code, count(*) as n
-        from audit.record_events ev
-        join ingestion.source_rows sr on sr.id = ev.source_row_id
-        join ingestion.source_files sf on sf.id = sr.source_file_id
-        join reporting.team_key_aliases a on a.alias = sf.team
-        where a.team_key = {reason_params.text(team_key)} and sf.season = {reason_params.text(season)}
+        select distinct ev.source_row_id, ev.reason_code
+        from curated.injuries i
+        join curated.builds b on b.id = i.curated_build_id
+        join processing.record_versions current_rv on current_rv.id = i.record_version_id
+        join lateral (
+          select historical_rv.step_run_id, historical_rv.eligibility_status
+          from processing.record_versions historical_rv
+          where historical_rv.source_row_id = i.source_row_id
+            and historical_rv.version_number <= current_rv.version_number
+            and historical_rv.eligibility_status in ('excluded_from_analysis', 'excluded_duplicate_adjudicated')
+            and exists (
+              select 1
+              from audit.record_events historical_ev
+              where historical_ev.step_run_id = historical_rv.step_run_id
+                and historical_ev.source_row_id = historical_rv.source_row_id
+                and historical_ev.field_name = 'analysis_eligibility_status'
+                and historical_ev.action = 'exclude'
+                and historical_ev.reason_code in ({reason_list_sql})
+                and historical_ev.new_value #>> '{{}}' = historical_rv.eligibility_status
+            )
+          order by historical_rv.version_number desc, historical_rv.created_at desc, historical_rv.id desc
+          limit 1
+        ) applicable on true
+        join audit.record_events ev
+          on ev.step_run_id = applicable.step_run_id
+          and ev.source_row_id = i.source_row_id
+        where b.team_key = {reason_params.text(team_key)} and b.season = {reason_params.text(season)}
+          and b.status = 'active'
+          and current_rv.eligibility_status in ('excluded_from_analysis', 'excluded_duplicate_adjudicated')
           and ev.field_name = 'analysis_eligibility_status' and ev.action = 'exclude'
           and ev.reason_code in ({reason_list_sql})
-        group by ev.reason_code
+          and ev.new_value #>> '{{}}' = applicable.eligibility_status
         """,
         reason_params.values,
     )
-    audit_counts = {row["reason_code"]: int(row["n"]) for row in reason_rows}
 
     curated_params = SqlParams()
     curated_rows = query_sql(
@@ -2757,13 +2875,15 @@ def release_cohort_filter_flags(team_key: str, season: str) -> dict[str, Any]:
     }
     received_signal_computed = int(curated_rows[0]["received_in_team_status_computed"]) > 0
 
-    exclusion_reason_counts = audit_counts if audit_counts else curated_counts
+    exclusion_reason_counts, audit_counts = combine_cohort_filter_reason_counts(
+        reason_rows, curated_counts
+    )
     return {
         "injured_in_team_applied": (
             "received_or_injured_in_other_team" in audit_counts or received_signal_computed
         ),
         "explicit_non_urc_match_type_applied": True,
-        "exclusion_reason_counts": dict(sorted(exclusion_reason_counts.items())),
+        "exclusion_reason_counts": exclusion_reason_counts,
     }
 
 
@@ -2823,47 +2943,12 @@ def render_release_table_rows(rendered: dict[str, Any], monthly_rows: list[dict[
     return table_rows
 
 
-def export_release_dashboard_json(release_label: str) -> dict[str, Any]:
-    """Reads the just-written reporting.release_context / release_table_rows
-    snapshot back out of the DB and assembles it into the exact
-    TeamDashboardData shape lib/reporting.ts expects, with source_files /
-    pipeline_evidence never populated in the first place (unlike the old
-    JSON-file-driven release()) -- stripped again here defensively so a
-    future accidental column addition can never leak internal paths/hashes.
+def assemble_release_dashboard(ctx: dict[str, Any], table_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build the public TeamDashboardData document from one release context
+    and its flattened rows. Both read-only preflight and post-write export
+    use this exact serializer so their strict diff can differ only at the
+    generated_at timestamp.
     """
-    ctx_params = SqlParams()
-    ctx_rows = query_sql(
-        f"""
-        select
-          rc.team_display_name, rc.season,
-          to_char(rc.generated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as generated_at,
-          rc.analysis_window_start::text as analysis_window_start,
-          rc.analysis_window_end::text as analysis_window_end,
-          rc.analysis_window_basis, rc.method, rc.coverage, rc.prior_season, rc.limitations
-        from reporting.release_context rc
-        join reporting.aggregate_releases r on r.id = rc.release_id
-        where r.release_label = {ctx_params.text(release_label)}
-        """,
-        ctx_params.values,
-    )
-    if len(ctx_rows) != 1:
-        raise SystemExit(f"expected exactly one release_context row for release_label={release_label!r}")
-    ctx = ctx_rows[0]
-
-    rows_params = SqlParams()
-    table_rows = query_sql(
-        f"""
-        select r.section, r.row_key, r.label, r.month, r.value, r.numerator, r.denominator,
-          r.unit, r.formula, r.exposure_hours, r.distance_km, r.time_loss_injuries, r.recorded_injuries,
-          r.days_lost, r.incidence_per_1000h, r.burden_per_1000h, r.mean_severity_days
-        from reporting.release_table_rows r
-        join reporting.aggregate_releases rel on rel.id = r.release_id
-        where rel.release_label = {rows_params.text(release_label)}
-        order by r.section, r.ordinal
-        """,
-        rows_params.values,
-    )
-
     sections: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in table_rows:
         section = row["section"]
@@ -2929,6 +3014,71 @@ def export_release_dashboard_json(release_label: str) -> dict[str, Any]:
         "limitations": ctx["limitations"],
     }
     return without_keys(dashboard, {"source_files", "pipeline_evidence"})
+
+
+def write_json_atomic(path: Path, value: object) -> None:
+    """Write JSON by same-directory replace so a failed write keeps `path`."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            json.dump(value, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        mode = (path.stat().st_mode & 0o777) if path.exists() else 0o644
+        os.chmod(temporary_path, mode)
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def export_release_dashboard_json(release_label: str) -> dict[str, Any]:
+    """Read the just-written release snapshot back from the DB and assemble
+    the public dashboard through the same serializer as release preflight.
+    """
+    ctx_params = SqlParams()
+    ctx_rows = query_sql(
+        f"""
+        select
+          rc.team_display_name, rc.season,
+          to_char(rc.generated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as generated_at,
+          rc.analysis_window_start::text as analysis_window_start,
+          rc.analysis_window_end::text as analysis_window_end,
+          rc.analysis_window_basis, rc.method, rc.coverage, rc.prior_season, rc.limitations
+        from reporting.release_context rc
+        join reporting.aggregate_releases r on r.id = rc.release_id
+        where r.release_label = {ctx_params.text(release_label)}
+        """,
+        ctx_params.values,
+    )
+    if len(ctx_rows) != 1:
+        raise SystemExit(f"expected exactly one release_context row for release_label={release_label!r}")
+
+    rows_params = SqlParams()
+    table_rows = query_sql(
+        f"""
+        select r.section, r.row_key, r.label, r.month, r.value, r.numerator, r.denominator,
+          r.unit, r.formula, r.exposure_hours, r.distance_km, r.time_loss_injuries, r.recorded_injuries,
+          r.days_lost, r.incidence_per_1000h, r.burden_per_1000h, r.mean_severity_days
+        from reporting.release_table_rows r
+        join reporting.aggregate_releases rel on rel.id = r.release_id
+        where rel.release_label = {rows_params.text(release_label)}
+        order by r.section, r.ordinal
+        """,
+        rows_params.values,
+    )
+    return assemble_release_dashboard(ctx_rows[0], table_rows)
 
 
 # ---------------------------------------------------------------------------
@@ -3040,6 +3190,40 @@ def diff_json_documents(old: object, new: object) -> list[dict[str, Any]]:
     return results
 
 
+def classify_preflight_release_diffs(diffs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Strict first-release comparison: generated_at is the only permitted
+    difference between the reviewed preflight candidate and release output.
+    """
+    allowed = []
+    blocked = []
+    for diff in diffs:
+        if diff["path"] == "generated_at" and diff["kind"] == "value_mismatch":
+            allowed.append(
+                {
+                    **diff,
+                    "whitelist_reason": "release timestamp is regenerated after preflight approval",
+                }
+            )
+        else:
+            blocked.append(diff)
+    return allowed, blocked
+
+
+def classify_historical_release_diffs(
+    diffs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Classify a re-release against the frozen historical whitelist."""
+    allowed = []
+    blocked = []
+    for diff in diffs:
+        reason = classify_dashboard_json_diff(diff["path"], diff["kind"])
+        if reason is None:
+            blocked.append(diff)
+        else:
+            allowed.append({**diff, "whitelist_reason": reason})
+    return allowed, blocked
+
+
 def diff_dashboard_json(args: argparse.Namespace) -> None:
     """Phase 4.3 planning tool: pure file diff (no DB access) between an old
     (previously-committed) and new (just-exported) dashboard JSON,
@@ -3058,16 +3242,14 @@ def diff_dashboard_json(args: argparse.Namespace) -> None:
     new_doc = json.loads(new_path.read_text())
 
     diffs = diff_json_documents(old_doc, new_doc)
-    blocked = []
-    allowed = []
-    for diff in diffs:
-        reason = classify_dashboard_json_diff(diff["path"], diff["kind"])
-        if reason is None:
-            blocked.append(diff)
-        else:
-            allowed.append({**diff, "whitelist_reason": reason})
+    strict_preflight_release = bool(getattr(args, "preflight_release", False))
+    if strict_preflight_release:
+        allowed, blocked = classify_preflight_release_diffs(diffs)
+    else:
+        allowed, blocked = classify_historical_release_diffs(diffs)
 
     result = {
+        "mode": "preflight_release" if strict_preflight_release else "historical_release",
         "old": str(old_path),
         "new": str(new_path),
         "total_diffs": len(diffs),
@@ -3082,6 +3264,255 @@ def diff_dashboard_json(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+def release_promotion_statement(
+    release_label: str,
+    curated_build_id: str,
+    team_key: str,
+    season: str,
+    verified_candidate: dict[str, Any],
+    expected_previous_release_id: str | None,
+) -> tuple[str, list[object]]:
+    """Build the atomic approval statement.
+
+    The public consumer payload is reconstructed through
+    reporting.latest_team_dashboard *after* the guarded draft-to-approved
+    update, then compared with the already verified draft candidate before
+    either approval or audit success can commit.
+    """
+    params = SqlParams()
+    label_sql = params.text(release_label)
+    curated_build_sql = params.text(curated_build_id)
+    candidate_sql = params.jsonb(verified_candidate)
+    team_key_sql = params.text(team_key)
+    season_sql = params.text(season)
+    expected_previous_release_sql = params.text(expected_previous_release_id)
+    sql = f"""
+      do $$
+      declare
+        changed integer;
+        run_id uuid;
+        target_release_id uuid;
+        actual_previous_release_id uuid;
+        consumer_dashboard jsonb;
+      begin
+        -- Serialize promotions per team. This lock plus the predecessor
+        -- recheck prevents two processes that read the same history from
+        -- both approving a successor.
+        perform 1
+        from reporting.teams t
+        where t.team_key = {team_key_sql}
+        for update;
+        if not found then
+          raise exception 'release promotion requires an existing reporting team';
+        end if;
+
+        select r.id, r.pipeline_run_id into target_release_id, run_id
+        from reporting.aggregate_releases r
+        where r.release_label = {label_sql} and r.status = 'draft'
+        for update;
+        if target_release_id is null or run_id is null then
+          raise exception 'release promotion requires exactly one draft release';
+        end if;
+
+        select rc.release_id into actual_previous_release_id
+        from reporting.release_context rc
+        join reporting.aggregate_releases r on r.id = rc.release_id
+        join audit.pipeline_runs pr on pr.id = r.pipeline_run_id
+        where rc.team_key = {team_key_sql}
+          and rc.season = {season_sql}
+          and (
+            r.status = 'approved'
+            or (r.status = 'retired' and pr.status = 'succeeded')
+          )
+        order by
+          case when r.status = 'approved' then 0 else 1 end,
+          r.approved_at desc nulls last,
+          r.created_at desc,
+          r.id desc
+        limit 1;
+        if actual_previous_release_id is distinct from {expected_previous_release_sql}::uuid then
+          raise exception 'release promotion refused: accepted predecessor changed; rerun release';
+        end if;
+
+        if not exists (
+          select 1 from curated.builds
+          where id = {curated_build_sql}::uuid and status = 'active'
+        ) then
+          raise exception 'release promotion refused: curated build is no longer active';
+        end if;
+
+        update reporting.aggregate_releases
+        set status = 'approved', approved_at = clock_timestamp()
+        where id = target_release_id
+          and status = 'draft'
+          and pipeline_run_id = run_id;
+        get diagnostics changed = row_count;
+        if changed <> 1 then
+          raise exception 'release promotion failed to approve exactly one draft';
+        end if;
+
+        update reporting.aggregate_releases r
+        set status = 'retired'
+        where r.id <> target_release_id
+          and r.status = 'approved'
+          and exists (
+            select 1
+            from reporting.release_context rc
+            where rc.release_id = r.id
+              and rc.team_key = {team_key_sql}
+              and rc.season = {season_sql}
+          );
+
+        select jsonb_build_object(
+          'generated_at', to_char(d.generated_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+          'team', d.team,
+          'season', d.season,
+          'analysis_window', d.analysis_window,
+          'method', d.method,
+          'coverage', d.coverage,
+          'headline', d.headline,
+          'setting_split', d.setting_split,
+          'monthly', d.monthly,
+          'body_locations', d.body_locations,
+          'injury_types', d.injury_types,
+          'severity_distribution', d.severity_distribution,
+          'prior_season', d.prior_season,
+          'limitations', d.limitations
+        ) into consumer_dashboard
+        from reporting.latest_team_dashboard d
+        where d.release_id = target_release_id
+          and d.team_key = {team_key_sql}
+          and d.season = {season_sql};
+
+        if consumer_dashboard is null then
+          raise exception 'release promotion failed: consumer view did not resolve the approved release';
+        end if;
+        if consumer_dashboard is distinct from {candidate_sql} then
+          raise exception 'release promotion failed: consumer view payload differs from verified draft candidate';
+        end if;
+
+        update audit.pipeline_runs
+        set status = 'succeeded', ended_at = now()
+        where id = run_id and status = 'started';
+        get diagnostics changed = row_count;
+        if changed <> 1 then
+          raise exception 'release promotion requires one started pipeline run';
+        end if;
+
+        update audit.step_runs
+        set ended_at = now()
+        where pipeline_run_id = run_id
+          and step_name = 'release_full_dashboard'
+          and ended_at is null;
+        get diagnostics changed = row_count;
+        if changed <> 1 then
+          raise exception 'release promotion requires one open release step';
+        end if;
+      end $$;
+    """
+    return sql, params.values
+
+
+def execute_release_promotion(
+    release_label: str,
+    curated_build_id: str,
+    team_key: str,
+    season: str,
+    verified_candidate: dict[str, Any],
+    expected_previous_release_id: str | None,
+    runner: Any = None,
+) -> None:
+    """Execute the atomic promotion; runner injection keeps tests offline."""
+    sql, params = release_promotion_statement(
+        release_label,
+        curated_build_id,
+        team_key,
+        season,
+        verified_candidate,
+        expected_previous_release_id,
+    )
+    (runner or run_sql)(sql, params)
+
+
+def release_failure_cleanup_statement(
+    release_label: str,
+    team_key: str,
+    season: str,
+    previous_release_id: str | None,
+    previous_release_status: str | None,
+    failure_stage: str,
+) -> tuple[str, list[object]]:
+    """Retire a failed attempt and restore the prior public release safely.
+
+    If promotion committed but local artifact export failed, the exact prior
+    approved predecessor is re-approved under the same team lock. A failed
+    draft never displaced it, and a later concurrent successor prevents the
+    restoration branch from firing.
+    """
+    params = SqlParams()
+    label_sql = params.text(release_label)
+    team_key_sql = params.text(team_key)
+    season_sql = params.text(season)
+    previous_release_id_sql = params.text(previous_release_id)
+    previous_release_status_sql = params.text(previous_release_status)
+    failure_parameters_sql = params.jsonb({"failure_stage": failure_stage})
+    sql = f"""
+      do $$
+      declare
+        failed_release_id uuid;
+        latest_approved_id uuid;
+      begin
+        perform 1
+        from reporting.teams t
+        where t.team_key = {team_key_sql}
+        for update;
+
+        select r.id into failed_release_id
+        from reporting.aggregate_releases r
+        where r.release_label = {label_sql};
+
+        select rc.release_id into latest_approved_id
+        from reporting.release_context rc
+        join reporting.aggregate_releases r on r.id = rc.release_id
+        where rc.team_key = {team_key_sql}
+          and rc.season = {season_sql}
+          and r.status = 'approved'
+        order by r.approved_at desc nulls last, r.created_at desc, r.id desc
+        limit 1;
+
+        update reporting.aggregate_releases r
+        set status = 'retired'
+        where r.id = failed_release_id
+          and r.status in ('draft', 'approved');
+
+        if latest_approved_id = failed_release_id
+           and {previous_release_status_sql} = 'approved'
+           and {previous_release_id_sql}::uuid is not null then
+          update reporting.aggregate_releases r
+          set status = 'approved'
+          where r.id = {previous_release_id_sql}::uuid
+            and r.status = 'retired';
+        end if;
+      end $$;
+
+      update audit.pipeline_runs pr
+      set status = 'failed', ended_at = now(),
+          parameters = pr.parameters || {failure_parameters_sql}
+      from reporting.aggregate_releases r
+      where r.release_label = {label_sql}
+        and pr.id = r.pipeline_run_id
+        and pr.status in ('started', 'succeeded');
+
+      update audit.step_runs sr
+      set ended_at = coalesce(sr.ended_at, now())
+      from reporting.aggregate_releases r
+      where r.release_label = {label_sql}
+        and sr.pipeline_run_id = r.pipeline_run_id
+        and sr.step_name = 'release_full_dashboard';
+    """
+    return sql, params.values
+
+
 def release(args: argparse.Namespace) -> None:
     """Phase 4 release: reads analysis.*_v1 views directly (no JSON/CSV
     input), snapshots every dashboard section into reporting.release_context
@@ -3094,6 +3525,42 @@ def release(args: argparse.Namespace) -> None:
     season = clean_text(args.season)
     if not team or not season:
         raise SystemExit("--team and --season are required")
+    preflight = bool(getattr(args, "preflight", False))
+    preflight_file_arg = clean_text(getattr(args, "preflight_file", "") or "")
+    preflight_reviewer = clean_text(getattr(args, "preflight_reviewer", "") or "")
+    previous_dashboard_file_arg = clean_text(getattr(args, "previous_dashboard_file", "") or "")
+    if preflight and (preflight_file_arg or previous_dashboard_file_arg):
+        raise SystemExit(
+            "--preflight cannot be combined with --preflight-file or --previous-dashboard-file"
+        )
+    if preflight_file_arg and previous_dashboard_file_arg:
+        raise SystemExit("--preflight-file and --previous-dashboard-file cannot be used together")
+    if preflight_file_arg and not preflight_reviewer:
+        raise SystemExit("--preflight-reviewer is required with --preflight-file")
+    if preflight_reviewer and not preflight_file_arg:
+        raise SystemExit("--preflight-reviewer requires --preflight-file")
+
+    # Cache and parse a supplied historical artifact before the command makes
+    # even its first database query. Whether it is required is decided from
+    # accepted full-release history below; no file read can race with a later
+    # overwrite once release evaluation has started.
+    previous_dashboard_path: Path | None = None
+    previous_dashboard: dict[str, Any] | None = None
+    previous_dashboard_sha256: str | None = None
+    if previous_dashboard_file_arg:
+        previous_dashboard_path = Path(previous_dashboard_file_arg)
+        if not previous_dashboard_path.exists():
+            raise SystemExit(f"previous dashboard JSON not found: {previous_dashboard_path}")
+        previous_dashboard_bytes = previous_dashboard_path.read_bytes()
+        try:
+            previous_dashboard = json.loads(previous_dashboard_bytes)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(
+                f"previous dashboard JSON is invalid: {previous_dashboard_path}: {exc}"
+            ) from exc
+        if not isinstance(previous_dashboard, dict):
+            raise SystemExit(f"previous dashboard JSON must be an object: {previous_dashboard_path}")
+        previous_dashboard_sha256 = hashlib.sha256(previous_dashboard_bytes).hexdigest()
 
     provenance = run_provenance()
     if provenance["code_version"].endswith("-dirty"):
@@ -3120,6 +3587,67 @@ def release(args: argparse.Namespace) -> None:
     missing = sorted(set(required_migrations) - applied)
     if missing:
         raise SystemExit(f"release requires migrations {', '.join(missing)} to be applied and tracked first")
+
+    history_params = SqlParams()
+    history_rows = query_sql(
+        f"""
+        select
+          r.id as release_id,
+          r.release_label,
+          r.status as release_status,
+          count(*) over ()::int as release_count
+        from reporting.release_context rc
+        join reporting.aggregate_releases r on r.id = rc.release_id
+        join audit.pipeline_runs pr on pr.id = r.pipeline_run_id
+        where rc.team_key = {history_params.text(team_key)}
+          and rc.season = {history_params.text(season)}
+          and (
+            r.status = 'approved'
+            or (r.status = 'retired' and pr.status = 'succeeded')
+          )
+        order by
+          case when r.status = 'approved' then 0 else 1 end,
+          r.approved_at desc nulls last,
+          r.created_at desc,
+          r.id desc
+        limit 1
+        """,
+        history_params.values,
+    )
+    prior_release_count = int(history_rows[0]["release_count"]) if history_rows else 0
+    is_first_release = prior_release_count == 0
+    previous_release_label = history_rows[0]["release_label"] if history_rows else None
+    previous_release_id = history_rows[0]["release_id"] if history_rows else None
+    previous_release_status = history_rows[0]["release_status"] if history_rows else None
+    if preflight and not is_first_release:
+        raise SystemExit(
+            "--preflight is only for a team's first release; re-releases must use "
+            "--previous-dashboard-file with the previously accepted dashboard snapshot"
+        )
+    if is_first_release and previous_dashboard is not None:
+        raise SystemExit(
+            "--previous-dashboard-file is only valid for a re-release; first releases require "
+            "--preflight-file and --preflight-reviewer"
+        )
+    if not is_first_release and preflight_file_arg:
+        raise SystemExit(
+            "--preflight-file is only valid for a first release; re-releases require "
+            "--previous-dashboard-file"
+        )
+    if not preflight and not is_first_release:
+        if previous_dashboard is None or previous_release_label is None:
+            raise SystemExit(
+                "re-release for this team/season requires --previous-dashboard-file pointing to the "
+                "latest accepted dashboard snapshot"
+            )
+        approved_previous_dashboard = export_release_dashboard_json(previous_release_label)
+        approved_binding_diffs = diff_json_documents(previous_dashboard, approved_previous_dashboard)
+        if approved_binding_diffs:
+            paths = ", ".join(diff["path"] for diff in approved_binding_diffs[:10])
+            raise SystemExit(
+                "release refuses to run: --previous-dashboard-file does not exactly match the latest "
+                f"accepted full release ({paths})"
+            )
 
     # --- Active curated build, and a freshness gate (strengthens the old
     # file-hash gate: refuses to release from a curated build that is stale
@@ -3362,7 +3890,9 @@ def release(args: argparse.Namespace) -> None:
             "rows": table_rows,
         }
     )
-    label = f"{team_key}-{season}-{release_content_hash[:12]}-approved"
+    # Each attempt gets an immutable label. A failed draft is retired rather
+    # than deleted, so a nonce is required to make an identical retry safe.
+    label = f"{team_key}-{season}-{release_content_hash[:12]}-{uuid.uuid4().hex[:12]}"
 
     context_record = {
         "team_key": team_key, "season": season, "team_display_name": team_display_name,
@@ -3373,6 +3903,129 @@ def release(args: argparse.Namespace) -> None:
         "method": method, "coverage": coverage, "injury_cohort_filters": cohort_filters,
         "prior_season": prior_season, "limitations": limitations,
     }
+
+    candidate_dashboard = assemble_release_dashboard(context_record, table_rows)
+    output_arg = clean_text(getattr(args, "output", "") or "")
+    if preflight:
+        # Run the final protected-alias gate under the read-only query runner.
+        # Every operation above is also query-only; this branch exits before
+        # SqlParams for inserts are built and before run_sql() is reachable.
+        query_sql(protected_alias_scan_sql("release preflight gate"))
+        preflight_path = (
+            Path(output_arg)
+            if output_arg
+            else REPO_ROOT / "data" / "reporting" /
+            f"{team_key}_dashboard_{season}_{release_content_hash[:12]}_preflight.json"
+        )
+        resolved_preflight_path = preflight_path.resolve()
+        public_reporting_dir = (REPO_ROOT / "content" / "reporting").resolve()
+        if resolved_preflight_path.is_relative_to(public_reporting_dir):
+            raise SystemExit(
+                "release preflight refuses to write under content/reporting; "
+                "use the default Git-ignored data/reporting candidate path"
+            )
+        write_json_atomic(preflight_path, candidate_dashboard)
+        print(
+            json.dumps(
+                {
+                    "mode": "preflight",
+                    "database_writes": 0,
+                    "release_content_hash": release_content_hash,
+                    "team_key": team_key,
+                    "season": season,
+                    "first_release": is_first_release,
+                    "prior_release_count": prior_release_count,
+                    "curated_build_id": curated_build_id,
+                    "rows_candidate": len(table_rows),
+                    "counts_by_section": dict(counts_by_section),
+                    "candidate_path": str(preflight_path),
+                    "candidate_sha256": sha256_file(preflight_path),
+                    "next": "review and sign off this candidate before running release with --preflight-file",
+                },
+                indent=2,
+            )
+        )
+        return
+
+    export_path = (
+        Path(output_arg)
+        if output_arg
+        else Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
+    )
+    reviewed_preflight_path: Path | None = None
+    reviewed_candidate: dict[str, Any] | None = None
+    reviewed_preflight_sha256: str | None = None
+    historical_diff = None
+    if preflight_file_arg:
+        reviewed_preflight_path = Path(preflight_file_arg)
+        if not reviewed_preflight_path.exists():
+            raise SystemExit(f"reviewed preflight candidate not found: {reviewed_preflight_path}")
+        if reviewed_preflight_path.resolve() == export_path.resolve():
+            raise SystemExit("--output and --preflight-file must resolve to different files")
+        reviewed_preflight_bytes = reviewed_preflight_path.read_bytes()
+        try:
+            reviewed_candidate = json.loads(reviewed_preflight_bytes)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(
+                f"reviewed preflight candidate is invalid JSON: {reviewed_preflight_path}: {exc}"
+            ) from exc
+        if not isinstance(reviewed_candidate, dict):
+            raise SystemExit(
+                f"reviewed preflight candidate must be a JSON object: {reviewed_preflight_path}"
+            )
+        reviewed_preflight_sha256 = hashlib.sha256(reviewed_preflight_bytes).hexdigest()
+        prewrite_diffs = diff_json_documents(reviewed_candidate, candidate_dashboard)
+        _, prewrite_blocked = classify_preflight_release_diffs(prewrite_diffs)
+        if prewrite_blocked:
+            paths = ", ".join(diff["path"] for diff in prewrite_blocked[:10])
+            raise SystemExit(
+                "release refuses to run: current analysis/audit evidence differs from the reviewed "
+                f"preflight candidate outside generated_at ({paths}); generate and review a new preflight"
+            )
+    elif is_first_release:
+        raise SystemExit(
+                "first release for this team/season requires a reviewed preflight candidate; run release "
+                "--preflight, review/sign off the Git-ignored candidate, then rerun release with --preflight-file"
+            )
+    else:
+        if previous_dashboard is None or previous_dashboard_path is None:
+            raise AssertionError("re-release previous-dashboard gate was not established before analysis")
+        if previous_dashboard_path.resolve() == export_path.resolve():
+            raise SystemExit(
+                "--output and --previous-dashboard-file must resolve to different files; snapshot the "
+                "previously approved dashboard before re-release"
+            )
+        historical_diffs = diff_json_documents(previous_dashboard, candidate_dashboard)
+        historical_allowed, historical_blocked = classify_historical_release_diffs(historical_diffs)
+        historical_diff = {
+            "overall": "BLOCKED" if historical_blocked else "ALLOWED_ONLY",
+            "allowed": len(historical_allowed),
+            "blocked": len(historical_blocked),
+            "allowed_paths": [diff["path"] for diff in historical_allowed],
+            "blocked_paths": [diff["path"] for diff in historical_blocked],
+        }
+        if historical_blocked:
+            paths = ", ".join(diff["path"] for diff in historical_blocked[:10])
+            raise SystemExit(
+                "release refuses to run: current candidate differs from the previous approved dashboard "
+                f"outside the historical whitelist ({paths})"
+            )
+
+    release_parameters = {
+        "release": label,
+        "team_key": team_key,
+        "curated_build_id": curated_build_id,
+        "analysis_view_version": ANALYSIS_VIEW_VERSION_SUFFIX,
+        "first_release": is_first_release,
+    }
+    if reviewed_preflight_sha256 is not None:
+        release_parameters["reviewed_preflight_sha256"] = reviewed_preflight_sha256
+        release_parameters["preflight_reviewer"] = preflight_reviewer
+    if previous_dashboard_sha256 is not None:
+        release_parameters["previous_dashboard_sha256"] = previous_dashboard_sha256
+        release_parameters["previous_release_id"] = previous_release_id
+        release_parameters["previous_release_label"] = previous_release_label
+        release_parameters["previous_release_status"] = previous_release_status
 
     params = SqlParams()
     context_insert = f"""
@@ -3428,22 +4081,22 @@ def release(args: argparse.Namespace) -> None:
       create temp table current_release on commit drop as
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
-        values ('release', {params.text(team)}, {params.text(season)}, 'succeeded',
+        values ('release', {params.text(team)}, {params.text(season)}, 'started',
           {params.text(curated_build_id)}, {params.text(release_content_hash)},
-          {params.jsonb({'release': label, 'team_key': team_key, 'curated_build_id': curated_build_id, 'analysis_view_version': ANALYSIS_VIEW_VERSION_SUFFIX})}, now(),
+          {params.jsonb(release_parameters)}, null,
           {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])})
         returning id
       ),
       step as (
-        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team, ended_at)
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team)
         select id, 'release_full_dashboard', {params.text(FULL_DASHBOARD_RELEASE_RULE_VERSION)}, 'full_dashboard_release',
-          {len(table_rows)}, {len(table_rows)}, {params.jsonb(dict(counts_by_section))}, now()
+          {len(table_rows)}, {len(table_rows)}, {params.jsonb(dict(counts_by_section))}
         from run
         returning pipeline_run_id
       ),
       release as (
         insert into reporting.aggregate_releases (release_label, status, pipeline_run_id, approved_at)
-        select {params.text(label)}, 'approved', id, now()
+        select {params.text(label)}, 'draft', id, null
         from run
         returning id
       )
@@ -3453,30 +4106,6 @@ def release(args: argparse.Namespace) -> None:
 
       {rows_insert}
     """
-    run_sql(sql, params.values)
-
-    # --- Post-write verification: reporting.latest_team_dashboard resolves
-    # to exactly this release and its section row counts reconcile with what
-    # was just written. --------------------------------------------------
-    verify_params = SqlParams()
-    verify_rows = query_sql(
-        f"""
-        select
-          jsonb_array_length(headline) as headline_n, jsonb_array_length(setting_split) as setting_split_n,
-          jsonb_array_length(monthly) as monthly_n, jsonb_array_length(body_locations) as body_locations_n,
-          jsonb_array_length(injury_types) as injury_types_n,
-          jsonb_array_length(severity_distribution) as severity_distribution_n
-        from reporting.latest_team_dashboard
-        where team_key = {verify_params.text(team_key)} and season = {verify_params.text(season)}
-        """,
-        verify_params.values,
-    )
-    if len(verify_rows) != 1:
-        raise SystemExit(
-            f"post-release verification failed: reporting.latest_team_dashboard returned "
-            f"{len(verify_rows)} row(s) for team_key={team_key!r} season={season!r}, expected 1"
-        )
-    verify = verify_rows[0]
     expected_counts = {
         "headline_n": counts_by_section.get("headline", 0),
         "setting_split_n": counts_by_section.get("setting_split", 0),
@@ -3485,22 +4114,131 @@ def release(args: argparse.Namespace) -> None:
         "injury_types_n": counts_by_section.get("injury_types", 0),
         "severity_distribution_n": counts_by_section.get("severity_distribution", 0),
     }
-    for key, expected in expected_counts.items():
-        if int(verify[key]) != expected:
-            raise SystemExit(
-                f"post-release verification failed: reporting.latest_team_dashboard.{key}={verify[key]!r} "
-                f"but {expected} rows were written for this release"
-            )
+    preflight_diff = None
+    draft_created = False
+    release_stage = "draft_insert"
+    try:
+        # Transaction 1 creates an invisible draft snapshot and leaves its
+        # pipeline run/step open. Draft rows cannot appear in the consumer
+        # view, which filters aggregate_releases to status='approved'.
+        run_sql(sql, params.values)
+        draft_created = True
+        release_stage = "draft_verify"
 
-    output_arg = clean_text(getattr(args, "output", "") or "")
-    export_path = (
-        Path(output_arg)
-        if output_arg
-        else Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
-    )
-    dashboard_json = export_release_dashboard_json(label)
-    export_path.parent.mkdir(parents=True, exist_ok=True)
-    export_path.write_text(json.dumps(dashboard_json, indent=2) + "\n")
+        draft_params = SqlParams()
+        draft_rows = query_sql(
+            f"""
+            select
+              r.status as release_status,
+              pr.status as pipeline_run_status,
+              count(distinct rc.id)::int as context_n,
+              count(rt.id) filter (where rt.section = 'headline')::int as headline_n,
+              count(rt.id) filter (where rt.section = 'setting_split')::int as setting_split_n,
+              count(rt.id) filter (where rt.section = 'monthly')::int as monthly_n,
+              count(rt.id) filter (where rt.section = 'body_locations')::int as body_locations_n,
+              count(rt.id) filter (where rt.section = 'injury_types')::int as injury_types_n,
+              count(rt.id) filter (where rt.section = 'severity_distribution')::int as severity_distribution_n
+            from reporting.aggregate_releases r
+            join audit.pipeline_runs pr on pr.id = r.pipeline_run_id
+            left join reporting.release_context rc on rc.release_id = r.id
+            left join reporting.release_table_rows rt on rt.release_id = r.id
+            where r.release_label = {draft_params.text(label)}
+            group by r.status, pr.status
+            """,
+            draft_params.values,
+        )
+        if len(draft_rows) != 1:
+            raise SystemExit(f"draft verification found {len(draft_rows)} release rows, expected 1")
+        draft_verify = draft_rows[0]
+        if draft_verify["release_status"] != "draft" or draft_verify["pipeline_run_status"] != "started":
+            raise SystemExit(
+                "draft verification expected release status=draft and pipeline run status=started, "
+                f"found {draft_verify['release_status']!r}/{draft_verify['pipeline_run_status']!r}"
+            )
+        if int(draft_verify["context_n"]) != 1:
+            raise SystemExit(
+                f"draft verification expected one release_context row, found {draft_verify['context_n']!r}"
+            )
+        for key, expected in expected_counts.items():
+            if int(draft_verify[key]) != expected:
+                raise SystemExit(
+                    f"draft verification failed: release_table_rows {key}={draft_verify[key]!r}, expected {expected}"
+                )
+
+        dashboard_json = export_release_dashboard_json(label)
+        serialization_diffs = diff_json_documents(candidate_dashboard, dashboard_json)
+        if serialization_diffs:
+            paths = ", ".join(diff["path"] for diff in serialization_diffs[:10])
+            raise SystemExit(f"draft serialization differs from the assembled candidate ({paths})")
+
+        if reviewed_candidate is not None:
+            reviewed_diffs = diff_json_documents(reviewed_candidate, dashboard_json)
+            allowed_reviewed, blocked_reviewed = classify_preflight_release_diffs(reviewed_diffs)
+            preflight_diff = {
+                "overall": "BLOCKED" if blocked_reviewed else "ALLOWED_ONLY",
+                "allowed": len(allowed_reviewed),
+                "blocked": len(blocked_reviewed),
+                "allowed_paths": [diff["path"] for diff in allowed_reviewed],
+                "blocked_paths": [diff["path"] for diff in blocked_reviewed],
+            }
+            if blocked_reviewed:
+                paths = ", ".join(diff["path"] for diff in blocked_reviewed[:10])
+                raise SystemExit(
+                    "draft release differs from the reviewed preflight candidate outside generated_at "
+                    f"({paths})"
+                )
+
+        if previous_dashboard is not None:
+            historical_diffs = diff_json_documents(previous_dashboard, dashboard_json)
+            historical_allowed, historical_blocked = classify_historical_release_diffs(historical_diffs)
+            historical_diff = {
+                "overall": "BLOCKED" if historical_blocked else "ALLOWED_ONLY",
+                "allowed": len(historical_allowed),
+                "blocked": len(historical_blocked),
+                "allowed_paths": [diff["path"] for diff in historical_allowed],
+                "blocked_paths": [diff["path"] for diff in historical_blocked],
+            }
+            if historical_blocked:
+                paths = ", ".join(diff["path"] for diff in historical_blocked[:10])
+                raise SystemExit(
+                    "draft release differs from the previous approved dashboard outside the historical "
+                    f"whitelist ({paths})"
+                )
+
+        # Transaction 2 promotes only this exact, still-draft snapshot and
+        # reconstructs its exact public JSON through the consumer view inside
+        # that same transaction. Approval and audit success cannot commit
+        # unless the consumer payload equals this verified draft candidate.
+        release_stage = "promote"
+        execute_release_promotion(
+            label,
+            curated_build_id,
+            team_key,
+            season,
+            dashboard_json,
+            previous_release_id,
+        )
+
+        release_stage = "export"
+        write_json_atomic(export_path, dashboard_json)
+    except BaseException:
+        if draft_created:
+            cleanup_sql, cleanup_values = release_failure_cleanup_statement(
+                label,
+                team_key,
+                season,
+                previous_release_id,
+                previous_release_status,
+                release_stage,
+            )
+            try:
+                run_sql(cleanup_sql, cleanup_values)
+            except BaseException as cleanup_error:
+                print(
+                    f"WARNING: failed to retire release attempt {label!r} after {release_stage}: {cleanup_error}",
+                    file=sys.stderr,
+                )
+        raise
 
     print(
         json.dumps(
@@ -3512,6 +4250,8 @@ def release(args: argparse.Namespace) -> None:
                 "rows_written": len(table_rows),
                 "counts_by_section": dict(counts_by_section),
                 "export_path": str(export_path),
+                "preflight_diff": preflight_diff,
+                "historical_diff": historical_diff,
             },
             indent=2,
         )
@@ -4768,12 +5508,31 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
     print(json.dumps({"status": "loaded", "season": season, "rows": len(fixture_rows), "file": str(path), "file_sha256": file_hash}, indent=2))
 
 
+def dashboard_file_for_gate(args: argparse.Namespace, team_key: str, season: str) -> Path:
+    """Resolve an optional dashboard candidate for read-only gates.
+
+    Existing/re-release checks default to the committed public artifact. A
+    first-release check can instead pass its Git-ignored preflight candidate.
+    Relative explicit paths are repository-root-relative so the commands do
+    not depend on the caller's current working directory.
+    """
+    dashboard_file = clean_text(getattr(args, "dashboard_file", "") or "")
+    path = (
+        Path(dashboard_file).expanduser()
+        if dashboard_file
+        else REPO_ROOT / "content" / "reporting" / f"{team_key}_dashboard_{season}.json"
+    )
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    return path.resolve()
+
+
 def reconcile_curated(args: argparse.Namespace) -> None:
     """Read-only reconciliation gate: compares curated.injuries/exposure/
     team_exposure_denominators for the active build against (a)
-    processing.record_versions and (b) the committed dashboard JSON. Never
-    writes and never auto-fixes; every mismatch is printed with enough
-    detail to adjudicate.
+    processing.record_versions and (b) either --dashboard-file or the default
+    committed dashboard JSON. Never writes and never auto-fixes; every
+    mismatch is printed with enough detail to adjudicate.
     """
     team = clean_text(args.team)
     season = clean_text(args.season)
@@ -4871,7 +5630,7 @@ def reconcile_curated(args: argparse.Namespace) -> None:
             {"training_hours": float(denom["training_hours"])},
         )
 
-    dashboard_path = REPO_ROOT / "content" / "reporting" / f"{team_key}_dashboard_2024-25.json"
+    dashboard_path = dashboard_file_for_gate(args, team_key, season)
     if not dashboard_path.exists():
         check("dashboard_json_exists", False, {"detail": f"missing {dashboard_path}"})
     else:
@@ -5181,12 +5940,13 @@ def exposure_analysis_date(row: dict[str, str], grain: str) -> date | None:
 #
 # Renders the analysis.*_v1 views into the exact dashboard JSON shape that
 # build_team_dashboard() writes (the TeamDashboardData sections consumed by
-# lib/reporting.ts) and diffs field-by-field against the committed
-# content/reporting/<team_key>_dashboard_<season>.json. Read-only: queries
-# views, writes nothing to the DB, and writes its diff log only to the
-# Git-ignored data/reporting/ path. Display rounding is applied HERE with
-# the pipeline's own rounded() helper, matching the analysis_views_v1
-# migration contract that views return raw numerics.
+# lib/reporting.ts), adds only the audit/curated-evidence-backed
+# coverage.injury_cohort_filters block used by release, and diffs every field
+# against the committed content/reporting/<team_key>_dashboard_<season>.json.
+# Read-only: queries views/evidence, writes nothing to the DB, and writes its
+# diff log only to the Git-ignored data/reporting/ path. Display rounding is
+# applied HERE with the pipeline's own rounded() helper, matching the
+# analysis_views_v1 migration contract that views return raw numerics.
 # ---------------------------------------------------------------------------
 
 DASHBOARD_PARITY_SECTIONS = [
@@ -5441,8 +6201,12 @@ def diff_dashboard_sections(committed: dict[str, Any], rendered: dict[str, Any])
 
 
 def verify_analysis_parity(args: argparse.Namespace) -> None:
-    """Read-only Phase 3.2 gate: analysis.*_v1 views vs committed dashboard
-    JSON. Writes only the diff log under Git-ignored data/reporting/.
+    """Read-only Phase 3.2 gate: analysis.*_v1 views plus the release-time
+    cohort-filter evidence vs either --dashboard-file or the default committed
+    dashboard JSON. The analysis renderer remains curated-view-only; this gate
+    separately derives and exactly compares coverage.injury_cohort_filters
+    through the same helper as release. Writes only the diff log under
+    Git-ignored data/reporting/.
     """
     team = clean_text(args.team)
     season = clean_text(args.season)
@@ -5507,10 +6271,11 @@ def verify_analysis_parity(args: argparse.Namespace) -> None:
         severity_rows=severity_rows,
         coverage_row=coverage_rows[0],
     )
+    rendered["coverage"]["injury_cohort_filters"] = release_cohort_filter_flags(team_key, season)
 
-    committed_path = REPO_ROOT / "content" / "reporting" / f"{team_key}_dashboard_{season}.json"
+    committed_path = dashboard_file_for_gate(args, team_key, season)
     if not committed_path.exists():
-        raise SystemExit(f"no committed dashboard JSON at {committed_path}")
+        raise SystemExit(f"no dashboard JSON at {committed_path}")
     committed = json.loads(committed_path.read_text())
 
     results = diff_dashboard_sections(committed, rendered)
@@ -5525,7 +6290,11 @@ def verify_analysis_parity(args: argparse.Namespace) -> None:
         "team": team,
         "team_key": team_key,
         "season": season,
-        "committed_dashboard": str(committed_path.relative_to(REPO_ROOT)),
+        "committed_dashboard": (
+            str(committed_path.relative_to(REPO_ROOT))
+            if committed_path.is_relative_to(REPO_ROOT)
+            else str(committed_path)
+        ),
         "committed_dashboard_sha256": sha256_file(committed_path),
         "analysis_views_migration": ANALYSIS_VIEWS_MIGRATION_VERSION,
         "analysis_view_version": ANALYSIS_VIEW_VERSION_SUFFIX,
@@ -6051,6 +6820,48 @@ def quiet_call(func: Any, args: argparse.Namespace) -> None:
         func(args)
 
 
+def add_exposure_cli_parsers(subcommands: Any) -> None:
+    exposure_parser = subcommands.add_parser("prepare-exposure")
+    exposure_parser.add_argument("--team", required=True)
+    exposure_parser.add_argument("--season", required=True)
+    exposure_parser.add_argument("--file", required=True)
+    exposure_parser.add_argument("--sheet", default="Standardized Data")
+    exposure_parser.add_argument("--codebook", required=True)
+    exposure_parser.add_argument("--output", required=True)
+    exposure_parser.add_argument("--qc-output", required=True)
+    exposure_parser.add_argument("--manifest", required=True)
+    exposure_parser.add_argument("--reporting-grain", choices=EXPOSURE_REPORTING_GRAINS, required=True)
+    exposure_parser.add_argument("--player-column", default="name")
+    exposure_parser.add_argument("--date-column", default="session date")
+    exposure_parser.add_argument("--minutes-column", default="minutes total")
+    exposure_parser.add_argument("--distance-column", default="distance total")
+    exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="month-first")
+    exposure_parser.set_defaults(func=prepare_exposure)
+
+    clean_exposure_parser = subcommands.add_parser("clean-exposure")
+    clean_exposure_parser.add_argument("--file", required=True)
+    clean_exposure_parser.add_argument("--team", required=True)
+    clean_exposure_parser.add_argument("--season", required=True)
+    clean_exposure_parser.add_argument("--output", required=True)
+    clean_exposure_parser.add_argument("--qc-output", required=True)
+    clean_exposure_parser.add_argument("--manifest", required=True)
+    clean_exposure_parser.add_argument("--reporting-grain", choices=EXPOSURE_REPORTING_GRAINS, required=True)
+    clean_exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="month-first")
+    clean_exposure_parser.add_argument("--window-start", default="")
+    clean_exposure_parser.add_argument("--window-end", default="")
+    clean_exposure_parser.set_defaults(func=clean_exposure)
+
+    process_exposure_parser = subcommands.add_parser("process-exposure")
+    process_exposure_parser.add_argument("--team", required=True)
+    process_exposure_parser.add_argument("--season", required=True)
+    process_exposure_parser.add_argument("--file", required=True)
+    process_exposure_parser.add_argument("--reporting-grain", choices=EXPOSURE_REPORTING_GRAINS, required=True)
+    process_exposure_parser.add_argument("--step-name", default="exposure_cleaning")
+    process_exposure_parser.add_argument("--step-version", default=EXPOSURE_PROCESSING_RULE_VERSION)
+    process_exposure_parser.add_argument("--version-number", type=int, default=101)
+    process_exposure_parser.set_defaults(func=process_exposure)
+
+
 def self_check(args: argparse.Namespace) -> None:
     assert sha256_json({"b": 2, "a": 1}) == sha256_json({"a": 1, "b": 2})
     assert without_keys(
@@ -6063,6 +6874,56 @@ def self_check(args: argparse.Namespace) -> None:
     assert params.text("value") == "(select value #>> '{}' from _pipeline_params where idx = 1)"
     assert params.jsonb({"key": "value"}) == "(select value from _pipeline_params where idx = 2)"
     assert params.values == ["value", {"key": "value"}]
+
+    # Generic exposure commands must identify their target and paths explicitly,
+    # and must never infer reporting grain from protected source aliases.
+    exposure_cli_parser = argparse.ArgumentParser(add_help=False)
+    exposure_cli_subcommands = exposure_cli_parser.add_subparsers(required=True)
+    add_exposure_cli_parsers(exposure_cli_subcommands)
+    exposure_cli_cases = {
+        "prepare-exposure": [
+            ("--team", "Example Club"),
+            ("--season", "2024-25"),
+            ("--file", "source.xlsx"),
+            ("--codebook", "codebook.csv"),
+            ("--output", "prepared.csv"),
+            ("--qc-output", "prepare-qc.json"),
+            ("--manifest", "manifest.json"),
+            ("--reporting-grain", "weekly"),
+        ],
+        "clean-exposure": [
+            ("--team", "Example Club"),
+            ("--season", "2024-25"),
+            ("--file", "prepared.csv"),
+            ("--output", "cleaned.csv"),
+            ("--qc-output", "clean-qc.json"),
+            ("--manifest", "manifest.json"),
+            ("--reporting-grain", "session"),
+        ],
+        "process-exposure": [
+            ("--team", "Example Club"),
+            ("--season", "2024-25"),
+            ("--file", "cleaned.csv"),
+            ("--reporting-grain", "weekly"),
+        ],
+    }
+    for command, option_pairs in exposure_cli_cases.items():
+        valid_argv = [command] + [item for pair in option_pairs for item in pair]
+        parsed = exposure_cli_parser.parse_args(valid_argv)
+        assert parsed.reporting_grain in EXPOSURE_REPORTING_GRAINS
+        for omitted_option, _ in option_pairs:
+            omitted_argv = [command] + [
+                item
+                for option_pair in option_pairs
+                if option_pair[0] != omitted_option
+                for item in option_pair
+            ]
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    exposure_cli_parser.parse_args(omitted_argv)
+                    raise AssertionError(f"{command} should require {omitted_option}")
+                except SystemExit as exc:
+                    assert exc.code == 2
 
     provenance = run_provenance()
     assert re.fullmatch(r"[0-9a-f]{40}(-dirty)?", provenance["code_version"]), provenance["code_version"]
@@ -6396,6 +7257,54 @@ def self_check(args: argparse.Namespace) -> None:
         )
         assert [row["source_row_number"] for row in read_rows(prepared_csv)] == ["2", "4"]
 
+        exposure_workbook_path = tmp_path / "exposure.xlsx"
+        exposure_workbook = Workbook()
+        exposure_sheet = exposure_workbook.active
+        exposure_sheet.title = "Standardized Data"
+        exposure_sheet.append(["Team", "name", "session date", "minutes total", "distance total"])
+        exposure_sheet.append(["source-team-label", "player", "07/01/2024", "120", "10000"])
+        exposure_workbook.save(exposure_workbook_path)
+        exposure_workbook.close()
+        exposure_codebook = tmp_path / "exposure_codebook.csv"
+        write_rows(
+            exposure_codebook,
+            [{"Standard_Column_Name": column} for column in ["name", "session date", "minutes total", "distance total"]],
+            ["Standard_Column_Name"],
+        )
+        exposure_manifest = tmp_path / "manifest.json"
+        exposure_manifest.write_text("{}\n")
+        prepared_exposure_file = tmp_path / "prepared_exposure.csv"
+        prepared_exposure_qc = tmp_path / "prepared_exposure_qc.json"
+        quiet_call(
+            prepare_exposure,
+            argparse.Namespace(
+                team="Example Club",
+                season="2024-25",
+                file=str(exposure_workbook_path),
+                sheet="Standardized Data",
+                codebook=str(exposure_codebook),
+                output=str(prepared_exposure_file),
+                qc_output=str(prepared_exposure_qc),
+                manifest=str(exposure_manifest),
+                reporting_grain="weekly",
+                player_column="name",
+                date_column="session date",
+                minutes_column="minutes total",
+                distance_column="distance total",
+                date_order="month-first",
+            ),
+        )
+        prepared_exposure_rows = read_rows(prepared_exposure_file)
+        assert {row[EXPOSURE_DECLARED_GRAIN_FIELD] for row in prepared_exposure_rows} == {"weekly"}
+        prepare_exposure_qc = json.loads(prepared_exposure_qc.read_text())
+        assert prepare_exposure_qc["team"] == "Example Club"
+        assert prepare_exposure_qc["season"] == "2024-25"
+        assert prepare_exposure_qc["exposure_reporting_grain"]["current_file_reporting_grain"] == "weekly"
+        prepared_manifest = json.loads(exposure_manifest.read_text())
+        assert prepared_manifest["exposure_intake"]["team"] == "Example Club"
+        assert prepared_manifest["exposure_intake"]["season"] == "2024-25"
+        assert prepared_manifest["exposure_intake"]["exposure_reporting_grain"]["selection_source"] == "required_cli_argument"
+
         exposure_source = tmp_path / "exposure.csv"
         exposure_clean = tmp_path / "exposure_clean.csv"
         exposure_qc = tmp_path / "exposure_qc.json"
@@ -6403,43 +7312,46 @@ def self_check(args: argparse.Namespace) -> None:
             exposure_source,
             [
                 {
-                    "Team": "Team I",
+                    "Team": "source-team-label",
                     "Competition": "",
                     "session type": "",
                     "If match, surface?": "",
                     "name": "player",
                     "session date": "07/01/2024",
-                    "minutes total": "120",
-                    "distance total": "10000",
+                    "minutes total": "300",
+                    "distance total": "25000",
                     "player_uid": "player_1",
                     "source_row_number": "2",
                     "source_row_sha256": "row_a",
+                    EXPOSURE_DECLARED_GRAIN_FIELD: "weekly",
                 },
                 {
-                    "Team": "Team I",
+                    "Team": "source-team-label",
                     "Competition": "academy",
                     "session type": "",
                     "If match, surface?": "",
                     "name": "player",
                     "session date": "07/08/2024",
-                    "minutes total": "120",
-                    "distance total": "10000",
+                    "minutes total": "300",
+                    "distance total": "25000",
                     "player_uid": "player_1",
                     "source_row_number": "3",
                     "source_row_sha256": "row_b",
+                    EXPOSURE_DECLARED_GRAIN_FIELD: "weekly",
                 },
                 {
-                    "Team": "Team I",
+                    "Team": "source-team-label",
                     "Competition": "",
                     "session type": "",
                     "If match, surface?": "",
                     "name": "player",
                     "session date": "07/01/2024",
-                    "minutes total": "120",
-                    "distance total": "10000",
+                    "minutes total": "300",
+                    "distance total": "25000",
                     "player_uid": "player_1",
                     "source_row_number": "4",
                     "source_row_sha256": "row_a",
+                    EXPOSURE_DECLARED_GRAIN_FIELD: "weekly",
                 },
             ],
             [
@@ -6454,6 +7366,7 @@ def self_check(args: argparse.Namespace) -> None:
                 "player_uid",
                 "source_row_number",
                 "source_row_sha256",
+                EXPOSURE_DECLARED_GRAIN_FIELD,
             ],
         )
         quiet_call(
@@ -6465,6 +7378,8 @@ def self_check(args: argparse.Namespace) -> None:
                 manifest=None,
                 date_order="month-first",
                 team="Edinburgh",
+                season="2024-25",
+                reporting_grain="weekly",
                 window_start="2024-07-06",
                 window_end="2024-07-10",
             ),
@@ -6477,9 +7392,86 @@ def self_check(args: argparse.Namespace) -> None:
             "exclude_from_primary",
         ], cleaning_actions
         assert cleaned[2]["exclusion_reason"] == "exact_duplicate_copy"
+        assert {row["exposure_grain"] for row in cleaned} == {"weekly"}
         assert cleaned[0]["week_start_date"] == "2024-07-01"
-        assert json.loads(exposure_qc.read_text())["included_minutes_total"] == 240.0
-        assert json.loads(exposure_qc.read_text())["analysis_window"]["start"] == "2024-07-06"
+        weekly_qc = json.loads(exposure_qc.read_text())
+        # These rows exceed the session caps but remain valid under the
+        # explicitly selected weekly rule set.
+        assert weekly_qc["included_minutes_total"] == 600.0
+        assert weekly_qc["analysis_window"]["start"] == "2024-07-06"
+        assert weekly_qc["reporting_grain"] == "weekly"
+        assert weekly_qc["reporting_grain_evidence"]["prepared_row_declaration"] == "matched_all_rows"
+        prepared_grain_rows = read_rows(exposure_source)
+        missing_grain_cases = {
+            "zero": [
+                {key: value for key, value in row.items() if key != EXPOSURE_DECLARED_GRAIN_FIELD}
+                for row in prepared_grain_rows
+            ],
+            "partial": [
+                {
+                    **row,
+                    EXPOSURE_DECLARED_GRAIN_FIELD: (
+                        row[EXPOSURE_DECLARED_GRAIN_FIELD] if index == 0 else ""
+                    ),
+                }
+                for index, row in enumerate(prepared_grain_rows)
+            ],
+        }
+        for case_name, case_rows in missing_grain_cases.items():
+            missing_grain_source = tmp_path / f"{case_name}_declared_grain.csv"
+            write_rows(missing_grain_source, case_rows, list(case_rows[0]))
+            try:
+                quiet_call(
+                    clean_exposure,
+                    argparse.Namespace(
+                        file=str(missing_grain_source),
+                        output=str(tmp_path / f"{case_name}_declared_grain_clean.csv"),
+                        qc_output=str(tmp_path / f"{case_name}_declared_grain_qc.json"),
+                        manifest=None,
+                        date_order="month-first",
+                        team="Edinburgh",
+                        season="2024-25",
+                        reporting_grain="weekly",
+                        window_start="",
+                        window_end="",
+                    ),
+                )
+                raise AssertionError(f"clean-exposure should reject {case_name} prepared grain declarations")
+            except SystemExit as exc:
+                assert "rerun prepare-exposure before cleaning" in str(exc)
+        try:
+            quiet_call(
+                clean_exposure,
+                argparse.Namespace(
+                    file=str(exposure_source),
+                    output=str(tmp_path / "mismatched_clean.csv"),
+                    qc_output=str(tmp_path / "mismatched_clean_qc.json"),
+                    manifest=None,
+                    date_order="month-first",
+                    team="Edinburgh",
+                    season="2024-25",
+                    reporting_grain="session",
+                    window_start="",
+                    window_end="",
+                ),
+            )
+            raise AssertionError("clean-exposure should reject a prepared-row grain mismatch")
+        except SystemExit as exc:
+            assert "does not match the grain declared during prepare-exposure" in str(exc)
+        with contextlib.redirect_stderr(io.StringIO()):
+            try:
+                process_exposure(
+                    argparse.Namespace(
+                        file=str(exposure_clean),
+                        team="Edinburgh",
+                        season="2024-25",
+                        reporting_grain="session",
+                        version_number=101,
+                    )
+                )
+                raise AssertionError("process-exposure should reject a reporting-grain mismatch")
+            except SystemExit as exc:
+                assert "does not match cleaned exposure row grain" in str(exc)
 
         injury_source = tmp_path / "injury.csv"
         dashboard_output = tmp_path / "dashboard.json"
@@ -6534,10 +7526,10 @@ def self_check(args: argparse.Namespace) -> None:
             ),
         )
         dashboard = json.loads(dashboard_output.read_text())
-        assert dashboard["coverage"]["hours"] == 4.0
+        assert dashboard["coverage"]["hours"] == 10.0
         assert dashboard["headline"][0]["value"] == 1
-        assert dashboard["headline"][2]["value"] == 250.0
-        assert dashboard["headline"][5]["value"] == 2500.0
+        assert dashboard["headline"][2]["value"] == 100.0
+        assert dashboard["headline"][5]["value"] == 1000.0
         analysis_rows = read_rows(analysis_source_output)
         assert len(analysis_rows) == 2
         assert list(analysis_rows[0]) == [
@@ -6594,7 +7586,7 @@ def self_check(args: argparse.Namespace) -> None:
             session_exposure_source,
             [
                 {
-                    "Team": "Team A",
+                    "Team": "source-team-label",
                     "Competition": "",
                     "session type": "",
                     "If match, surface?": "",
@@ -6604,7 +7596,21 @@ def self_check(args: argparse.Namespace) -> None:
                     "distance total": "8000",
                     "player_uid": "player_1",
                     "source_row_number": "2",
-                }
+                    EXPOSURE_DECLARED_GRAIN_FIELD: "session",
+                },
+                {
+                    "Team": "source-team-label",
+                    "Competition": "",
+                    "session type": "",
+                    "If match, surface?": "",
+                    "name": "player_2",
+                    "session date": "07/02/2024",
+                    "minutes total": "300",
+                    "distance total": "25000",
+                    "player_uid": "player_2",
+                    "source_row_number": "3",
+                    EXPOSURE_DECLARED_GRAIN_FIELD: "session",
+                },
             ],
             [
                 "Team",
@@ -6617,6 +7623,7 @@ def self_check(args: argparse.Namespace) -> None:
                 "distance total",
                 "player_uid",
                 "source_row_number",
+                EXPOSURE_DECLARED_GRAIN_FIELD,
             ],
         )
         quiet_call(
@@ -6628,6 +7635,8 @@ def self_check(args: argparse.Namespace) -> None:
                 manifest=None,
                 date_order="month-first",
                 team="Edinburgh",
+                season="2024-25",
+                reporting_grain="session",
             ),
         )
         quiet_call(
@@ -6641,6 +7650,13 @@ def self_check(args: argparse.Namespace) -> None:
             ),
         )
         session_dashboard = json.loads(dashboard_output.read_text())
+        session_cleaned = read_rows(session_exposure_clean)
+        assert {row["exposure_grain"] for row in session_cleaned} == {"session"}
+        assert [row["cleaning_action"] for row in session_cleaned] == ["include", "exclude_from_primary"]
+        assert session_cleaned[1]["exclusion_reason"] == "session_minutes_above_220;session_distance_above_20000m"
+        session_qc = json.loads(session_exposure_qc.read_text())
+        assert session_qc["reporting_grain"] == "session"
+        assert session_qc["reporting_grain_evidence"]["prepared_row_declaration"] == "matched_all_rows"
         assert session_dashboard["coverage"]["exposure_grain"] == "session"
         assert session_dashboard["coverage"]["weeks"] == 0
         assert session_dashboard["analysis_window"]["end"] == "2024-07-02"
@@ -6781,6 +7797,19 @@ def self_check(args: argparse.Namespace) -> None:
     assert not parity_values_equal(None, 0)
     assert not parity_values_equal(1, 2)
     assert parity_values_equal("match", "match")
+    assert dashboard_file_for_gate(
+        argparse.Namespace(dashboard_file=""), "munster", "2025-26"
+    ) == REPO_ROOT / "content" / "reporting" / "munster_dashboard_2025-26.json"
+    assert dashboard_file_for_gate(
+        argparse.Namespace(dashboard_file="data/reporting/first_release_preflight.json"),
+        "munster",
+        "2024-25",
+    ) == REPO_ROOT / "data" / "reporting" / "first_release_preflight.json"
+    assert dashboard_file_for_gate(
+        argparse.Namespace(dashboard_file="/tmp/first_release_preflight.json"),
+        "munster",
+        "2024-25",
+    ) == Path("/tmp/first_release_preflight.json").resolve()
 
     parity_headline_row = {
         "recorded_injuries": "3",
@@ -6885,23 +7914,77 @@ def self_check(args: argparse.Namespace) -> None:
         "eight_to_twenty_eight_days",
     ]
     assert parity_rendered["coverage"]["scope_status_counts"] == {"in_scope_explicit": 10}
+    # The view renderer remains curated-only. verify-analysis-parity adds the
+    # release-time evidence block separately, then treats it like every other
+    # field: an exact match passes and any changed flag/count fails.
+    assert "injury_cohort_filters" not in parity_rendered["coverage"]
+    parity_reference = json.loads(json.dumps(parity_rendered))
+    parity_reference["coverage"]["injury_cohort_filters"] = {
+        "injured_in_team_applied": True,
+        "explicit_non_urc_match_type_applied": True,
+        "exclusion_reason_counts": {"explicit_non_urc_match_type": 2},
+    }
 
     parity_self_diff = diff_dashboard_sections(
-        json.loads(json.dumps(parity_rendered)), parity_rendered
+        json.loads(json.dumps(parity_reference)), parity_reference
     )
     assert parity_self_diff and all(row["status"] == "PASS" for row in parity_self_diff)
-    parity_mutated = json.loads(json.dumps(parity_rendered))
+    parity_mutated = json.loads(json.dumps(parity_reference))
     parity_mutated["headline"][1]["value"] = 99
     parity_mutated["coverage"].pop("exposure_grain")
     parity_mutated["coverage"]["scope_status"] = "scope_unknown_included"
+    parity_mutated["coverage"]["injury_cohort_filters"]["injured_in_team_applied"] = False
     parity_diffs = [
-        row for row in diff_dashboard_sections(parity_mutated, parity_rendered) if row["status"] == "DIFF"
+        row for row in diff_dashboard_sections(parity_mutated, parity_reference) if row["status"] == "DIFF"
     ]
     assert {(row["path"], row["kind"]) for row in parity_diffs} == {
         ("headline[1].value", "value_mismatch"),
         ("coverage.exposure_grain", "extra_in_rendered"),
+        ("coverage.injury_cohort_filters.injured_in_team_applied", "value_mismatch"),
         ("coverage.scope_status", "missing_in_rendered"),
     }, parity_diffs
+
+    # Release-time cohort-filter evidence: repeated rerun events for the same
+    # source row/reason count once; audit overrides only its own reason while
+    # current curated evidence fills other reasons in a hybrid payload.
+    cohort_rerun_rows = [
+        {"source_row_id": "row-1", "reason_code": "received_or_injured_in_other_team"},
+        {"source_row_id": "row-1", "reason_code": "received_or_injured_in_other_team"},
+        {"source_row_id": "row-2", "reason_code": "received_or_injured_in_other_team"},
+        {"source_row_id": "row-1", "reason_code": "explicit_non_urc_match_type"},
+        {"source_row_id": "row-1", "reason_code": "not_a_dashboard_reason"},
+    ]
+    cohort_merged, cohort_audit = combine_cohort_filter_reason_counts(
+        cohort_rerun_rows,
+        {
+            "received_or_injured_in_other_team": 99,
+            "non_injury_problem_type": 3,
+        },
+    )
+    assert cohort_audit == {
+        "explicit_non_urc_match_type": 1,
+        "received_or_injured_in_other_team": 2,
+    }
+    assert cohort_merged == {
+        "explicit_non_urc_match_type": 1,
+        "non_injury_problem_type": 3,
+        "received_or_injured_in_other_team": 2,
+    }
+    assert combine_cohort_filter_reason_counts(
+        [], {"adjudicated_duplicate": 1}
+    ) == ({"adjudicated_duplicate": 1}, {})
+    cohort_lineage_contract = "\n".join(
+        value for value in release_cohort_filter_flags.__code__.co_consts if isinstance(value, str)
+    )
+    assert "join processing.record_versions current_rv on current_rv.id = i.record_version_id" in cohort_lineage_contract
+    assert "historical_rv.version_number <= current_rv.version_number" in cohort_lineage_contract
+    assert "historical_rv.eligibility_status = current_rv.eligibility_status" not in cohort_lineage_contract
+    assert "current_rv.eligibility_status in ('excluded_from_analysis', 'excluded_duplicate_adjudicated')" in cohort_lineage_contract
+    assert "historical_rv.eligibility_status in ('excluded_from_analysis', 'excluded_duplicate_adjudicated')" in cohort_lineage_contract
+    assert "historical_ev.new_value #>> '{}' = historical_rv.eligibility_status" in cohort_lineage_contract
+    assert "order by historical_rv.version_number desc" in cohort_lineage_contract
+    assert "ev.step_run_id = applicable.step_run_id" in cohort_lineage_contract
+    assert "ev.new_value #>> '{}' = applicable.eligibility_status" in cohort_lineage_contract
 
     # Phase 4 release/export helpers (pure functions only; DB-backed release
     # gates are exercised live, not here).
@@ -6950,6 +8033,69 @@ def self_check(args: argparse.Namespace) -> None:
     setting_fixture_rows = [row for row in release_table_rows_fixture if row["section"] == "setting_split"]
     assert setting_fixture_rows[0]["row_key"] == "match"
 
+    preflight_context_fixture = {
+        "generated_at": "2026-07-11T10:00:00Z",
+        "team_display_name": "Example RFC",
+        "season": "2024-25",
+        "analysis_window_start": "2024-07-01",
+        "analysis_window_end": "2025-06-30",
+        "analysis_window_basis": "fixture coverage",
+        "method": ["fixture method"],
+        "coverage": {"hours": 100},
+        "prior_season": {"status": "not_loaded_in_v2"},
+        "limitations": ["fixture limitation"],
+        "source_files": {"must_not": "leak"},
+    }
+    preflight_dashboard_fixture = assemble_release_dashboard(
+        preflight_context_fixture,
+        release_table_rows_fixture,
+    )
+    assert preflight_dashboard_fixture["generated_at"] == "2026-07-11T10:00:00Z"
+    assert preflight_dashboard_fixture["headline"][1]["numerator"] == 3
+    assert "source_files" not in preflight_dashboard_fixture
+    with tempfile.TemporaryDirectory() as atomic_tmp:
+        atomic_target = Path(atomic_tmp) / "dashboard.json"
+        atomic_target.write_text('{"version":"previous"}\n')
+        write_json_atomic(atomic_target, {"version": "next"})
+        assert json.loads(atomic_target.read_text()) == {"version": "next"}
+        stable_bytes = atomic_target.read_bytes()
+        try:
+            write_json_atomic(atomic_target, {"not_json": object()})
+            raise AssertionError("atomic JSON write should propagate serialization failure")
+        except TypeError:
+            pass
+        assert atomic_target.read_bytes() == stable_bytes
+        assert not list(atomic_target.parent.glob(f".{atomic_target.name}.*.tmp"))
+    # Guard the release/preflight assembly seam: an earlier broad patch
+    # accidentally placed these locals in process_exposure, which compiles
+    # but fails only when that live path executes.
+    assert "release_parameters" not in process_exposure.__code__.co_varnames
+    assert {
+        "is_first_release", "reviewed_preflight_path", "reviewed_candidate",
+        "preflight_reviewer", "previous_dashboard", "previous_dashboard_sha256",
+        "historical_diff", "release_parameters", "draft_created", "release_stage",
+    } <= set(release.__code__.co_varnames)
+    release_source_contract = "\n".join(
+        value for value in release.__code__.co_consts if isinstance(value, str)
+    )
+    assert "or (r.status = 'retired' and pr.status = 'succeeded')" in release_source_contract
+    assert "'draft', id, null" in release_source_contract
+    assert "previous_dashboard_sha256" in release_source_contract
+    assert "release_failure_cleanup_statement" in release.__code__.co_names
+    released_dashboard_fixture = json.loads(json.dumps(preflight_dashboard_fixture))
+    released_dashboard_fixture["generated_at"] = "2026-07-11T10:05:00Z"
+    allowed_preflight, blocked_preflight = classify_preflight_release_diffs(
+        diff_json_documents(preflight_dashboard_fixture, released_dashboard_fixture)
+    )
+    assert [diff["path"] for diff in allowed_preflight] == ["generated_at"]
+    assert not blocked_preflight
+    released_dashboard_fixture["method"] = ["changed after review"]
+    _, blocked_preflight_changed = classify_preflight_release_diffs(
+        diff_json_documents(preflight_dashboard_fixture, released_dashboard_fixture)
+    )
+    assert [diff["path"] for diff in blocked_preflight_changed] == ["method[0]"]
+    assert "data/" in (REPO_ROOT / ".gitignore").read_text().splitlines()
+
     # Phase 4.3 old-vs-new dashboard JSON diff tool.
     old_dashboard_fixture = {
         "generated_at": "2026-01-01T00:00:00Z",
@@ -6968,24 +8114,96 @@ def self_check(args: argparse.Namespace) -> None:
         "headline": [{"key": "recorded_injuries", "value": 10}],
     }
     fixture_diffs = diff_json_documents(old_dashboard_fixture, new_dashboard_fixture)
-    fixture_blocked = [
-        d for d in fixture_diffs if classify_dashboard_json_diff(d["path"], d["kind"]) is None
-    ]
+    fixture_allowed, fixture_blocked = classify_historical_release_diffs(fixture_diffs)
+    assert fixture_allowed
     assert not fixture_blocked, fixture_blocked
     new_dashboard_fixture_bad = json.loads(json.dumps(new_dashboard_fixture))
     new_dashboard_fixture_bad["headline"][0]["value"] = 11
     fixture_diffs_bad = diff_json_documents(old_dashboard_fixture, new_dashboard_fixture_bad)
-    fixture_blocked_bad = [
-        d for d in fixture_diffs_bad if classify_dashboard_json_diff(d["path"], d["kind"]) is None
-    ]
+    _, fixture_blocked_bad = classify_historical_release_diffs(fixture_diffs_bad)
     assert [d["path"] for d in fixture_blocked_bad] == ["headline[0].value"], fixture_blocked_bad
     new_dashboard_fixture_renamed = json.loads(json.dumps(new_dashboard_fixture))
     new_dashboard_fixture_renamed["team"] = "Glasgow"
     fixture_diffs_renamed = diff_json_documents(old_dashboard_fixture, new_dashboard_fixture_renamed)
-    fixture_blocked_renamed = [
-        d for d in fixture_diffs_renamed if classify_dashboard_json_diff(d["path"], d["kind"]) is None
-    ]
+    _, fixture_blocked_renamed = classify_historical_release_diffs(fixture_diffs_renamed)
     assert [d["path"] for d in fixture_blocked_renamed] == ["team"], fixture_blocked_renamed
+
+    # Promotion is one SQL transaction: approve the pinned draft, reconstruct
+    # the complete public JSON through the consumer view, compare it with the
+    # verified candidate parameter, and only then close the audit run/step.
+    promotion_sql, promotion_params = release_promotion_statement(
+        "example-2024-25-hash-attempt",
+        "00000000-0000-0000-0000-000000000001",
+        "example",
+        "2024-25",
+        preflight_dashboard_fixture,
+        "00000000-0000-0000-0000-000000000000",
+    )
+    assert "from reporting.teams t" in promotion_sql
+    assert "for update" in promotion_sql
+    assert "accepted predecessor changed" in promotion_sql
+    assert "set status = 'approved', approved_at = clock_timestamp()" in promotion_sql
+    assert "set status = 'retired'" in promotion_sql
+    assert "from reporting.latest_team_dashboard d" in promotion_sql
+    assert "where d.release_id = target_release_id" in promotion_sql
+    assert "consumer_dashboard is distinct from" in promotion_sql
+    assert "consumer view payload differs from verified draft candidate" in promotion_sql
+    assert promotion_sql.index("set status = 'approved'") < promotion_sql.index(
+        "from reporting.latest_team_dashboard d"
+    ) < promotion_sql.index("set status = 'succeeded'")
+    assert preflight_dashboard_fixture in promotion_params
+
+    mocked_promotion_calls: list[tuple[str, list[object]]] = []
+
+    def successful_promotion_runner(sql_text: str, values: list[object]) -> None:
+        mocked_promotion_calls.append((sql_text, values))
+
+    execute_release_promotion(
+        "example-2024-25-hash-attempt",
+        "00000000-0000-0000-0000-000000000001",
+        "example",
+        "2024-25",
+        preflight_dashboard_fixture,
+        "00000000-0000-0000-0000-000000000000",
+        runner=successful_promotion_runner,
+    )
+    assert len(mocked_promotion_calls) == 1
+    assert mocked_promotion_calls[0][0] == promotion_sql
+    assert mocked_promotion_calls[0][1] == promotion_params
+
+    def failing_promotion_runner(_sql_text: str, _values: list[object]) -> None:
+        raise RuntimeError("mocked transactional consumer mismatch")
+
+    try:
+        execute_release_promotion(
+            "example-2024-25-hash-attempt",
+            "00000000-0000-0000-0000-000000000001",
+            "example",
+            "2024-25",
+            preflight_dashboard_fixture,
+            "00000000-0000-0000-0000-000000000000",
+            runner=failing_promotion_runner,
+        )
+        raise AssertionError("promotion runner failure must propagate to release cleanup")
+    except RuntimeError as exc:
+        assert str(exc) == "mocked transactional consumer mismatch"
+
+    cleanup_sql, cleanup_params = release_failure_cleanup_statement(
+        "example-2024-25-hash-attempt",
+        "example",
+        "2024-25",
+        "00000000-0000-0000-0000-000000000000",
+        "approved",
+        "export",
+    )
+    assert "from reporting.teams t" in cleanup_sql
+    assert "latest_approved_id = failed_release_id" in cleanup_sql
+    assert "set status = 'retired'" in cleanup_sql
+    assert "set status = 'approved'" in cleanup_sql
+    assert "set status = 'failed', ended_at = now()" in cleanup_sql
+    assert "00000000-0000-0000-0000-000000000000" in cleanup_params
+    assert "approved" in cleanup_params
+    assert {"failure_stage": "export"} in cleanup_params
 
     if os.environ.get("SUPABASE_DB_URL"):
         run_sql(protected_alias_scan_sql("self-check"))
@@ -7030,71 +8248,7 @@ def main() -> None:
     export_parser.add_argument("--output", required=True)
     export_parser.set_defaults(func=export_xlsx_sheet)
 
-    exposure_parser = subcommands.add_parser("prepare-exposure")
-    exposure_parser.add_argument("--team", default="Munster")
-    exposure_parser.add_argument("--season", default="2024-25")
-    exposure_parser.add_argument(
-        "--file",
-        default="/Users/abdelbabiker/Desktop/URC/Munster/Munster standardised_Exposure data.xlsx",
-    )
-    exposure_parser.add_argument("--sheet", default="Standardized Data")
-    exposure_parser.add_argument(
-        "--codebook",
-        default="/Users/abdelbabiker/Desktop/URC/Munster/mapping-codebook-Munster Exp.csv",
-    )
-    exposure_parser.add_argument(
-        "--output",
-        default="data/intake/2024-25/munster/munster_exposure_intake_locator_enriched_2024-25.csv",
-    )
-    exposure_parser.add_argument(
-        "--qc-output",
-        default="data/intake/2024-25/munster/munster_exposure_qc_2024-25.json",
-    )
-    exposure_parser.add_argument(
-        "--manifest",
-        default="data/intake/2024-25/munster/intake_manifest.draft.json",
-    )
-    exposure_parser.add_argument("--player-column", default="name")
-    exposure_parser.add_argument("--date-column", default="session date")
-    exposure_parser.add_argument("--minutes-column", default="minutes total")
-    exposure_parser.add_argument("--distance-column", default="distance total")
-    exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="month-first")
-    exposure_parser.set_defaults(func=prepare_exposure)
-
-    clean_exposure_parser = subcommands.add_parser("clean-exposure")
-    clean_exposure_parser.add_argument(
-        "--file",
-        default="data/intake/2024-25/munster/munster_exposure_intake_locator_enriched_2024-25.csv",
-    )
-    clean_exposure_parser.add_argument("--team", default="Munster")
-    clean_exposure_parser.add_argument(
-        "--output",
-        default="data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
-    )
-    clean_exposure_parser.add_argument(
-        "--qc-output",
-        default="data/intake/2024-25/munster/munster_exposure_cleaning_qc_2024-25.json",
-    )
-    clean_exposure_parser.add_argument(
-        "--manifest",
-        default="data/intake/2024-25/munster/intake_manifest.draft.json",
-    )
-    clean_exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="month-first")
-    clean_exposure_parser.add_argument("--window-start", default="")
-    clean_exposure_parser.add_argument("--window-end", default="")
-    clean_exposure_parser.set_defaults(func=clean_exposure)
-
-    process_exposure_parser = subcommands.add_parser("process-exposure")
-    process_exposure_parser.add_argument("--team", default="Munster")
-    process_exposure_parser.add_argument("--season", default="2024-25")
-    process_exposure_parser.add_argument(
-        "--file",
-        default="data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
-    )
-    process_exposure_parser.add_argument("--step-name", default="exposure_cleaning")
-    process_exposure_parser.add_argument("--step-version", default=EXPOSURE_PROCESSING_RULE_VERSION)
-    process_exposure_parser.add_argument("--version-number", type=int, default=101)
-    process_exposure_parser.set_defaults(func=process_exposure)
+    add_exposure_cli_parsers(subcommands)
 
     fixture_exposure_parser = subcommands.add_parser("build-fixture-exposure")
     fixture_exposure_parser.add_argument(
@@ -7162,11 +8316,36 @@ def main() -> None:
     release_parser.add_argument("--team", required=True)
     release_parser.add_argument("--season", default="2024-25")
     release_parser.add_argument("--output", default="")
+    release_parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="render the release candidate through all read-only gates and exit before any DB write",
+    )
+    release_parser.add_argument(
+        "--preflight-file",
+        default="",
+        help="reviewed preflight candidate required before a team's first release",
+    )
+    release_parser.add_argument(
+        "--preflight-reviewer",
+        default="",
+        help="reviewer name required whenever --preflight-file is supplied",
+    )
+    release_parser.add_argument(
+        "--previous-dashboard-file",
+        default="",
+        help="latest accepted full-dashboard snapshot required for every re-release",
+    )
     release_parser.set_defaults(func=release)
 
     diff_dashboard_json_parser = subcommands.add_parser("diff-dashboard-json")
     diff_dashboard_json_parser.add_argument("--old", required=True)
     diff_dashboard_json_parser.add_argument("--new", required=True)
+    diff_dashboard_json_parser.add_argument(
+        "--preflight-release",
+        action="store_true",
+        help="allow only a generated_at change between reviewed preflight and release export",
+    )
     diff_dashboard_json_parser.set_defaults(func=diff_dashboard_json)
 
     adjudicate_duplicate_parser = subcommands.add_parser("adjudicate-duplicate-exclusion")
@@ -7246,11 +8425,21 @@ def main() -> None:
     reconcile_curated_parser = subcommands.add_parser("reconcile-curated")
     reconcile_curated_parser.add_argument("--team", required=True)
     reconcile_curated_parser.add_argument("--season", default="2024-25")
+    reconcile_curated_parser.add_argument(
+        "--dashboard-file",
+        default="",
+        help="dashboard JSON to reconcile; defaults to content/reporting/<team_key>_dashboard_<season>.json",
+    )
     reconcile_curated_parser.set_defaults(func=reconcile_curated)
 
     verify_parity_parser = subcommands.add_parser("verify-analysis-parity")
     verify_parity_parser.add_argument("--team", required=True)
     verify_parity_parser.add_argument("--season", default="2024-25")
+    verify_parity_parser.add_argument(
+        "--dashboard-file",
+        default="",
+        help="dashboard JSON to compare; defaults to content/reporting/<team_key>_dashboard_<season>.json",
+    )
     verify_parity_parser.set_defaults(func=verify_analysis_parity)
 
     check_parser = subcommands.add_parser("self-check")
