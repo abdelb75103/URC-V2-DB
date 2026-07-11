@@ -2541,9 +2541,138 @@ def trace_row(args: argparse.Namespace) -> None:
     print(json.dumps(result, indent=2))
 
 
+def validate_intake_profile_manifest(
+    manifest: dict[str, Any], manifest_path: Path, input_sha256: str, team: str, season: str
+) -> None:
+    if not isinstance(manifest, dict):
+        raise SystemExit("ingest manifest must be a JSON object")
+    profile = manifest.get("intake_profile")
+    if not isinstance(profile, dict):
+        raise SystemExit("ingest manifest requires an intake_profile object")
+
+    def required_text(field: str) -> str:
+        value = profile.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise SystemExit(f"intake_profile.{field} is required")
+        return value.strip()
+
+    decision = required_text("decision")
+    if required_text("team") != team or required_text("season") != season:
+        raise SystemExit("intake profile team/season does not match ingest target")
+    if decision not in {"compatible", "adapter_required"}:
+        raise SystemExit(f"intake profile decision blocks ingest: {decision}")
+    if required_text("ai_review_status") != "completed":
+        raise SystemExit("intake_profile.ai_review_status must be completed")
+    required_text("ai_reviewed_by")
+    required_text("profile_version")
+    if required_text("approved_by") != "Abdel Babiker":
+        raise SystemExit("intake profile must be approved by Abdel Babiker")
+    if profile.get("unresolved_adjudication_ids") != []:
+        raise SystemExit("intake profile has unresolved adjudications")
+
+    reviewed_at = required_text("ai_reviewed_at")
+    approved_at = required_text("approved_at")
+    try:
+        reviewed_time = datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
+        approved_time = datetime.fromisoformat(approved_at.replace("Z", "+00:00"))
+        if reviewed_time.tzinfo is None or approved_time.tzinfo is None:
+            raise ValueError
+        if approved_time < reviewed_time:
+            raise ValueError
+        latest_allowed = datetime.now(UTC) + timedelta(minutes=5)
+        if reviewed_time.astimezone(UTC) > latest_allowed or approved_time.astimezone(UTC) > latest_allowed:
+            raise ValueError
+    except ValueError as exc:
+        raise SystemExit(
+            "intake profile review/approval timestamps must be timezone-aware ISO values "
+            "with approval at or after review and neither value in the future"
+        ) from exc
+
+    approved_inputs = profile.get("approved_input_sha256s")
+    if not isinstance(approved_inputs, list) or input_sha256 not in approved_inputs:
+        raise SystemExit("current intake checksum is not covered by profile approval")
+
+    def verify_file(path_field: str, sha_field: str) -> Path:
+        evidence_path = Path(required_text(path_field))
+        if not evidence_path.is_absolute():
+            evidence_path = manifest_path.parent / evidence_path
+        expected_sha = required_text(sha_field)
+        if not evidence_path.is_file():
+            raise SystemExit(f"intake profile evidence file not found: {evidence_path}")
+        if sha256_file(evidence_path) != expected_sha:
+            raise SystemExit(f"intake profile evidence checksum mismatch: {evidence_path}")
+        return evidence_path
+
+    profile_path = verify_file("profile_path", "profile_sha256")
+    try:
+        profile_document = json.loads(profile_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("intake profile evidence must be valid JSON") from exc
+    bound_fields = (
+        "team", "season", "profile_version", "decision", "mapping_path", "mapping_sha256",
+        "mapping_version", "ai_review_status", "ai_reviewed_by", "ai_reviewed_at", "approved_by",
+        "approved_at", "unresolved_adjudication_ids", "approved_input_sha256s",
+    )
+    if not isinstance(profile_document, dict) or any(
+        profile_document.get(field) != profile.get(field) for field in bound_fields
+    ):
+        raise SystemExit("intake profile approval fields do not match checksummed profile JSON")
+    mapping_values = [
+        profile.get(field) for field in ("mapping_path", "mapping_sha256", "mapping_version")
+    ]
+    if any(value is not None for value in mapping_values):
+        if not all(isinstance(value, str) and value.strip() for value in mapping_values):
+            raise SystemExit("intake profile mapping fields must all be set or all be null")
+        mapping_path = verify_file("mapping_path", "mapping_sha256")
+        try:
+            mapping_document = json.loads(mapping_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit("intake mapping evidence must be valid JSON") from exc
+        mappings = mapping_document.get("mappings") if isinstance(mapping_document, dict) else None
+        if (
+            not isinstance(mapping_document, dict)
+            or mapping_document.get("mapping_version") != profile["mapping_version"]
+            or not isinstance(mappings, list)
+            or not mappings
+        ):
+            raise SystemExit(
+                "intake mapping must match mapping_version and contain non-empty mapping objects"
+            )
+        evidence_classes = {
+            "source_reported", "deterministic_derivation", "protocol_defined_inference",
+            "manual_adjudication",
+        }
+        for entry in mappings:
+            source_evidence = entry.get("source_evidence") if isinstance(entry, dict) else None
+            if (
+                not isinstance(entry, dict)
+                or not all(
+                    isinstance(entry.get(field), str) and entry[field].strip()
+                    for field in ("canonical_field", "canonical_value")
+                )
+                or entry.get("evidence_class") not in evidence_classes
+                or not isinstance(source_evidence, dict)
+                or not source_evidence
+                or not all(
+                    isinstance(key, str) and key.strip()
+                    and isinstance(value, str) and value.strip()
+                    for key, value in source_evidence.items()
+                )
+            ):
+                raise SystemExit(
+                    "each intake mapping requires canonical_field, canonical_value, "
+                    "source_evidence, and a controlled evidence_class"
+                )
+    elif decision == "adapter_required":
+        raise SystemExit("adapter_required intake profile requires a versioned mapping file")
+
+
 def ingest(args: argparse.Namespace) -> None:
     path = Path(args.file)
     file_hash = sha256_file(path)
+    manifest_path = Path(args.manifest)
+    source_manifest = json.loads(manifest_path.read_text())
+    validate_intake_profile_manifest(source_manifest, manifest_path, file_hash, args.team, args.season)
     rows = read_rows(path)
     excluded_source_fields = {
         clean_text(field)
@@ -2563,7 +2692,6 @@ def ingest(args: argparse.Namespace) -> None:
     redacted_source_value_keys.update(
         clean_text(value).casefold() for value in load_fixture_team_aliases().values()
     )
-    source_manifest = json.loads(Path(args.manifest).read_text()) if args.manifest else {}
     manifest = {
         "manifest": without_keys(source_manifest, redacted_manifest_keys),
         "original_path": str(path),
@@ -6875,6 +7003,140 @@ def self_check(args: argparse.Namespace) -> None:
     assert params.jsonb({"key": "value"}) == "(select value from _pipeline_params where idx = 2)"
     assert params.values == ["value", {"key": "value"}]
 
+    with tempfile.TemporaryDirectory() as profile_tmp:
+        profile_dir = Path(profile_tmp)
+        intake_file = profile_dir / "intake.csv"
+        intake_file.write_text("player_uid\nply_example\n")
+        input_sha = sha256_file(intake_file)
+        reviewed_at = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
+        approved_at = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+        profile_document = {
+            "team": "Example Club", "season": "2024-25", "decision": "compatible",
+            "profile_version": "1", "mapping_path": None, "mapping_sha256": None,
+            "mapping_version": None, "ai_review_status": "completed", "ai_reviewed_by": "Codex",
+            "ai_reviewed_at": reviewed_at, "approved_by": "Abdel Babiker",
+            "approved_at": approved_at, "unresolved_adjudication_ids": [],
+            "approved_input_sha256s": [input_sha],
+        }
+        profile_file = profile_dir / "team_intake_profile.json"
+        profile_file.write_text(json.dumps(profile_document) + "\n")
+        valid_profile = {
+            **profile_document,
+            "profile_path": str(profile_file), "profile_sha256": sha256_file(profile_file),
+        }
+        manifest_path = profile_dir / "manifest.json"
+
+        def expect_profile_rejection(manifest: dict[str, Any], expected: str) -> None:
+            try:
+                validate_intake_profile_manifest(
+                    manifest, manifest_path, input_sha, "Example Club", "2024-25"
+                )
+                raise AssertionError(f"profile gate should reject: {expected}")
+            except SystemExit as exc:
+                assert expected in str(exc)
+
+        validate_intake_profile_manifest(
+            {"intake_profile": valid_profile}, manifest_path, input_sha, "Example Club", "2024-25"
+        )
+        expect_profile_rejection({}, "requires an intake_profile object")
+        for field, value, expected in [
+            ("approved_input_sha256s", ["0" * 64], "current intake checksum is not covered"),
+            ("profile_sha256", "0" * 64, "evidence checksum mismatch"),
+            ("decision", "adjudication_required", "decision blocks ingest"),
+            ("decision", "protocol_incompatible", "decision blocks ingest"),
+            ("ai_review_status", "pending", "ai_review_status must be completed"),
+            ("ai_reviewed_by", "Other model", "approval fields do not match"),
+            ("approved_at", (datetime.now(UTC) + timedelta(days=1)).isoformat(), "neither value in the future"),
+            ("unresolved_adjudication_ids", ["adj-1"], "has unresolved adjudications"),
+            ("team", "Other Club", "team/season does not match ingest target"),
+        ]:
+            expect_profile_rejection({"intake_profile": {**valid_profile, field: value}}, expected)
+
+        adapter_profile_file = profile_dir / "adapter_profile.json"
+        adapter_document = {**profile_document, "decision": "adapter_required"}
+        adapter_profile_file.write_text(json.dumps(adapter_document) + "\n")
+        adapter_without_mapping = {
+            **adapter_document, "profile_path": str(adapter_profile_file),
+            "profile_sha256": sha256_file(adapter_profile_file),
+        }
+        expect_profile_rejection(
+            {"intake_profile": adapter_without_mapping}, "requires a versioned mapping file"
+        )
+        mapping_file = profile_dir / "source_to_canonical_mapping.json"
+        mapping_file.write_text(
+            json.dumps({"mapping_version": "1", "mappings": [{"source": "Knee", "target": "knee"}]})
+            + "\n"
+        )
+        mapped_adapter_profile_file = profile_dir / "mapped_adapter_profile.json"
+
+        def mapped_adapter_manifest() -> dict[str, Any]:
+            document = {
+                **adapter_document, "mapping_path": str(mapping_file),
+                "mapping_sha256": sha256_file(mapping_file), "mapping_version": "1",
+            }
+            mapped_adapter_profile_file.write_text(json.dumps(document) + "\n")
+            return {
+                "intake_profile": {
+                    **document, "profile_path": str(mapped_adapter_profile_file),
+                    "profile_sha256": sha256_file(mapped_adapter_profile_file),
+                }
+            }
+
+        expect_profile_rejection(
+            mapped_adapter_manifest(), "each intake mapping requires canonical_field"
+        )
+        mapping_file.write_text(json.dumps({
+            "mapping_version": "1",
+            "mappings": [{
+                "canonical_field": "body_location", "canonical_value": "knee",
+                "source_evidence": {"Body Part": "Knee"}, "evidence_class": "source_reported",
+            }],
+        }) + "\n")
+        validate_intake_profile_manifest(
+            mapped_adapter_manifest(),
+            manifest_path,
+            input_sha,
+            "Example Club",
+            "2024-25",
+        )
+        mismatched_profile_file = profile_dir / "mismatched_profile.json"
+        mismatched_profile_file.write_text(
+            json.dumps({**profile_document, "decision": "protocol_incompatible"}) + "\n"
+        )
+        expect_profile_rejection(
+            {
+                "intake_profile": {
+                    **valid_profile,
+                    "profile_path": str(mismatched_profile_file),
+                    "profile_sha256": sha256_file(mismatched_profile_file),
+                }
+            },
+            "approval fields do not match checksummed profile JSON",
+        )
+        invalid_manifest_path = profile_dir / "invalid_manifest.json"
+        invalid_manifest_path.write_text("{}\n")
+        original_read_rows = read_rows
+
+        def fail_if_rows_are_loaded(_path: Path) -> list[dict[str, str]]:
+            raise AssertionError("ingest loaded rows before validating the profile gate")
+
+        globals()["read_rows"] = fail_if_rows_are_loaded
+        try:
+            quiet_call(
+                ingest,
+                argparse.Namespace(
+                    file=str(intake_file),
+                    manifest=str(invalid_manifest_path),
+                    team="Example Club",
+                    season="2024-25",
+                ),
+            )
+            raise AssertionError("ingest should enforce the profile gate before database access")
+        except SystemExit as exc:
+            assert "requires an intake_profile object" in str(exc)
+        finally:
+            globals()["read_rows"] = original_read_rows
+
     # Generic exposure commands must identify their target and paths explicitly,
     # and must never infer reporting grain from protected source aliases.
     exposure_cli_parser = argparse.ArgumentParser(add_help=False)
@@ -8225,7 +8487,7 @@ def main() -> None:
     ingest_parser.add_argument("--team", required=True)
     ingest_parser.add_argument("--season", required=True)
     ingest_parser.add_argument("--file", required=True)
-    ingest_parser.add_argument("--manifest")
+    ingest_parser.add_argument("--manifest", required=True)
     ingest_parser.add_argument("--exclude-source-fields", default="")
     ingest_parser.add_argument("--redact-manifest-keys", default="")
     ingest_parser.add_argument("--redact-source-values", default="")

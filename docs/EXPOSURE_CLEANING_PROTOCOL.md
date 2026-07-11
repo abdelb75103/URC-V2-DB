@@ -1,6 +1,6 @@
 # Exposure Cleaning Protocol
 
-Status: draft Munster pilot rule set, 6 July 2026
+Status: companion for the frozen shared/core V1 exposure rules, 10 July 2026. Accepted team-specific rules and analysis-window handling remain versioned in the pipeline and audit evidence.
 
 ## Core Rule
 
@@ -14,6 +14,7 @@ If competition/session/context fields are blank, missing, or ambiguous, retain t
 
 ## Exposure Grain
 
+- Leinster, Munster, Connacht, and Ulster are the four known weekly exposure reporters. This is retained operational evidence, not permission to infer grain from a team name: reconfirm it from each current file/profile and record the evidence.
 - The operator must classify each intake explicitly as `weekly` or `session` with the required `--reporting-grain` argument to `prepare-exposure`, `clean-exposure`, and `process-exposure`.
 - Never infer exposure grain from a team name, protected team alias, file path, or prior-team default.
 - `prepare-exposure` records the declared grain in every prepared row, the QC file, and the intake manifest. `clean-exposure` verifies that declaration, applies the selected rule set to every row, and records the grain in the cleaned output and cleaning evidence. `process-exposure` refuses a cleaned file whose row grain does not exactly match the explicit argument and records the selected grain in the audit run parameters.
