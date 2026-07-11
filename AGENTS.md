@@ -137,11 +137,3 @@ The canonical schemas, code lists, and case/time-loss/severity/exposure definiti
 - Pipeline CLI: `npm run pipeline -- <subcommand>` or `python3 -m pipeline <subcommand>`. Rollout sequence: `ingest`, `process-intake`, `process-exposure`, `build-curated`, `release`, `diff-dashboard-json`. Support: `adjudicate-duplicate-exclusion`, `reapply-adjudications`, `verify-analysis-parity`, `reconcile-curated`, `trace-row`, `retire-releases`, `self-check` (`npm run pipeline:check`).
 
 No hosted Supabase, GitHub, or Vercel action is part of the local spine unless Abdel explicitly approves that exact external target/action.
-
-## Run Closeout
-
-At the end of every URC V2 work run, after the summary and verification, state:
-
-- `Next`: the immediate next step for the pipeline, database, website, or governance path.
-- `Manual`: what Abdel must provide or approve, such as Munster intake files, governance/DPA approval, live Supabase credentials/target, or an external GitHub/Vercel/Supabase action. Say `Manual: none` if nothing is needed.
-- `Can do`: what the agent can do next, and the exact blocker to remove if any, such as "I can run the migration after approval of the live `SUPABASE_DB_URL`/Supabase project" or "I can create the private repo after approval of the target account/name".
