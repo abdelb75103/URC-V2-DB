@@ -1,6 +1,6 @@
 # DB-Backed Reporting Plan
 
-Status: proposed, 9 July 2026. Plan only — nothing here has been executed.
+Status: COMPLETE — all phases (0–6) implemented and accepted, 10 July 2026. This document is retained as the historical plan; the authoritative record of what was built is `docs/V2_FOUNDATION.md` § "DB-Backed Reporting and the V1 Freeze (10 July 2026)". The "current state" below describes 9 July 2026 and is superseded.
 
 Goal: make the database the single source of truth for every published number. Metric
 definitions live once, as versioned SQL views over curated tables. The website reads

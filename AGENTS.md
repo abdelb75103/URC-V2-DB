@@ -4,7 +4,7 @@
 
 This repository rebuilds the URC injury and exposure-data workflow as a database-backed, reproducible research pipeline. It will support cleaned season datasets, analysis, dashboards, league and club reports, and a defensible methodology section. The legacy workflow relied on spreadsheets, manual pastes, and hard-coded outputs; use it for context only, not as the source of truth.
 
-Munster is the pilot. Freeze its accepted workflow and schema, then apply that same version to the other 15 teams. Reuse the Year 1 workflow for Year 2 so cross-season comparisons are based on consistent definitions and processing. The accepted foundation is in `docs/V2_FOUNDATION.md`.
+The Munster pilot is complete and the workflow is frozen (10 July 2026): the `curated` schema, `analysis.*_v1` view definitions, controlled reason codes, release gates, and dashboard-JSON diff whitelist. Six approved 2024-25 releases exist (Connacht, Edinburgh, Glasgow, Leinster, Munster, Ulster). The current phase is: (a) roll the same frozen path out to the remaining ten teams, one at a time with per-team sign-off, as intake files arrive; and (b) the Vercel cutover, which is Abdel's explicit manual call because Edinburgh's public numbers change at that deploy. Reuse the Year 1 workflow for Year 2 so cross-season comparisons are based on consistent definitions and processing. The accepted foundation and the freeze record are in `docs/V2_FOUNDATION.md` (§ "DB-Backed Reporting and the V1 Freeze"). Any rule change requires a new versioned migration (e.g. `_v2` views), a recorded adjudication of why, and a rerun plus re-release for every affected team/season — never an edit in place.
 
 ## Source Archive
 
@@ -17,9 +17,14 @@ Munster is the pilot. Freeze its accepted workflow and schema, then apply that s
 
 ## Target Data Flow
 
-`immutable raw files -> ingestion manifest -> raw database records -> standardised staging records -> validated analysis records/views -> dashboard and reports`
+This is a lakehouse (medallion) layout on Supabase Postgres, live since 10 July 2026:
 
-- The database and versioned analysis views are the analytical source of truth.
+`immutable intake files -> ingestion (source_files, source_rows) -> processing (record_versions) -> curated (builds, injuries, exposure, fixtures, code_lists, team_exposure_denominators) -> analysis.*_v1 views -> reporting releases (aggregate_releases, release_context, release_table_rows) -> reporting.latest_team_dashboard -> website`
+
+The cross-cutting `audit` schema (`pipeline_runs`, `step_runs`, `record_events`, `adjudications`, `reason_codes`) is written at every step; nothing moves between layers without a recorded run.
+
+- The database and versioned analysis views are the analytical source of truth. Metric definitions (incidence, severity, burden, coverage, stratifications) live once, in the frozen `analysis.*_v1` SQL views — never reimplemented in Python, the website, or exports.
+- Releases are keyed by team + season; superseded releases are retired, never deleted, so year-on-year comparison and restatement history are queries, not re-cleans.
 - Supabase Postgres stores all pseudonymised ingestion, processing, audit, curated, and reporting layers. The browser never connects directly to Supabase.
 - This project writes straight to the live Supabase/Postgres database; there is no Docker/local Supabase workflow. The live DB connection is stored in `.env.local` as `SUPABASE_DB_URL`/`DATABASE_URL`; load it for approved pipeline commands without printing secret values. Do not run `supabase start`, `supabase migration up --local`, or `supabase db query --local`. Treat every database write, migration, ingest, processing run, adjudication, or release as live-impact work requiring explicit approval of the exact hosted target.
 - The formal V2 audit boundary starts at the supplied canonical, pseudonymised intake file. Record its preparer, timestamp, mapping/codebook version, checksum, secure original-file locator/checksum where available, row reconciliation, and carried source-row locators; do not claim upstream reproducibility without its retained script/evidence.
@@ -65,20 +70,26 @@ Primary methodological references:
 - [World Rugby injury surveillance resources](https://www.world.rugby/the-game/player-welfare/medical/injury/surveillance)
 - [2024 team-sport injury and illness surveillance framework](https://doi.org/10.1186/s40621-024-00504-6)
 
-## Pilot and Rollout
+## Rollout (pilot complete, rules frozen)
 
-For Munster, complete and review this vertical slice before batch processing:
+The Munster vertical slice and the DB-backed reporting build (Phases 0–6 of `docs/DB_BACKED_REPORTING_PLAN.md`) are accepted; per-release evidence and end-to-end reconciliation live in Git-ignored `data/reporting/phase6_acceptance_evidence_2026-07-10.json`. For each remaining team, as its pseudonymised intake file arrives, run the frozen sequence one step at a time with Abdel's per-team sign-off:
 
-1. Register immutable source files and provenance.
-2. Map raw fields to the canonical schema without losing source values.
-3. Run validation, cleaning, exclusions, and adjudication with row-level audit events.
-4. Load validated records and create analysis views.
-5. Reproduce agreed injury/exposure metrics and a small report/dashboard slice.
-6. Reconcile sampled records and aggregates to source evidence.
-7. Generate the cleaning log and methodology inputs from recorded runs.
-8. Freeze the schema, rules, reason codes, tests, and pipeline version before applying it to the remaining teams.
+1. `ingest` — register the immutable intake file with checksum and provenance.
+2. `process-intake` / `process-exposure` — standardise under the frozen rules.
+3. `build-curated` — apply adjudications; the release gate requires exactly one active, non-stale build.
+4. Commit any implementation changes first (`release` refuses a dirty Git tree), then `release --team <LegacyName> --season <season>`.
+5. Diff gate: snapshot the team's old JSON from HEAD, then `diff-dashboard-json --old ... --new ...` must return ALLOWED_ONLY. The whitelist covers only `generated_at`, internal-key stripping, coverage shape, and regenerated method/limitations narrative; any numeric, label, team-name, or analysis-window drift blocks the release.
+6. Commit that team's `content/reporting/*.json` before the next team's release.
+7. After live loads, query for protected-alias pattern hits before closeout.
 
-Any later rule change must be versioned, justified, rerun for every affected team/season, and reflected in the methodology.
+Any later rule change must be versioned (`_v2` views via a new migration), justified through a recorded adjudication, rerun for every affected team/season, and reflected in the methodology.
+
+Standing watch-outs learned during the pilot:
+
+- `reporting.team_metric_aggregates` and `reporting.latest_team_metric_aggregates` are the legacy headline path; new releases deliberately do not populate them. Do not "fix" that.
+- Teams released before the Phase 3.5 cohort amendment have `record_versions` predating current rule versions but exact release parity — do not reprocess them without a new recorded adjudication.
+- The `web_reader` role is created NOLOGIN by migration; LOGIN and password were set out-of-band. To rotate: write the new password to a chmod-600 scratch SQL file, apply, delete the file, update `.env.local` — never echo it.
+- Python: `Path("")` is truthy — a release-export bug came from `Path(x or "") or default` (fixed in `0e27bf1`); do not reintroduce that pattern.
 
 ## Privacy and Data Safety
 
@@ -105,10 +116,13 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 
 ## Decisions Still Required
 
-- Canonical injury and exposure schemas and approved code lists.
-- Final case, time-loss, severity, censoring, competition, and exposure definitions.
-- Device/vendor-specific validity rules and the treatment of weekly reporters.
-- Union dashboard placement is decided: unions are listed on the standalone `/unions` page and are not shown in the main dashboard grid. The union access model (union-scoped passwords and approved union aggregates) is still to be decided.
+The canonical schemas, code lists, and case/time-loss/severity/exposure definitions are decided and frozen in the `_v1` views and `curated.code_lists` (10 July 2026); they are no longer open. Still open:
+
+- Union access model (union-scoped passwords and approved union aggregates). Placement is decided: unions live on the standalone `/unions` page, not the main dashboard grid.
+- Keep or remove the synthetic demo team tile in the 17-tile grid.
+- `/about` route: retain as unlinked compatibility route, redirect to `/about-us`, or remove.
+- Small-cell disclosure rule — currently small counts are NOT suppressed; any suppression needs Abdel's explicit approval.
+- Device/vendor-specific exposure validity rules for teams whose intake requires them (weekly reporters keep their native grain per the frozen rules).
 
 ## Local Commands
 
@@ -117,7 +131,8 @@ Any later rule change must be versioned, justified, rerun for every affected tea
 - Run the website: `npm run dev`
 - Build check: `npm run build`
 - Database writes/migrations: run only against the explicitly approved live Supabase/Postgres target; confirm the exact project/connection before running.
-- Pipeline CLI: `npm run pipeline -- ingest|run|release`
+- DB access: parse `.env.local` yourself (never `source` it, never print values). Use `SUPABASE_DB_URL_POOLER` — the direct host times out; pipeline child processes need `SUPABASE_DB_URL` set to the pooler value. Read-only queries: `node pipeline/sql_query.mjs <sql-file>` (file-path argument — inline SQL hits ENAMETOOLONG). Writes: `node pipeline/sql_exec.mjs`, which does NOT self-register migrations; insert the tracking row manually after applying one.
+- Pipeline CLI: `npm run pipeline -- <subcommand>` or `python3 -m pipeline <subcommand>`. Rollout sequence: `ingest`, `process-intake`, `process-exposure`, `build-curated`, `release`, `diff-dashboard-json`. Support: `adjudicate-duplicate-exclusion`, `reapply-adjudications`, `verify-analysis-parity`, `reconcile-curated`, `trace-row`, `retire-releases`, `self-check` (`npm run pipeline:check`).
 
 No hosted Supabase, GitHub, or Vercel action is part of the local spine unless Abdel explicitly approves that exact external target/action.
 
