@@ -28,10 +28,10 @@ export const teams: Team[] = [
   { id: 'ospreys', name: 'Ospreys', crest: `${CREST}/OspreysRugby.svg.png`, accent: '#000000', accentSecondary: '#FFFFFF', status: 'locked' },
   { id: 'scarlets', name: 'Scarlets', crest: `${CREST}/ScarletsRugby.svg.png`, accent: '#D2232A', accentSecondary: '#FFFFFF', status: 'locked' },
   // South Africa
-  { id: 'bulls', name: 'Bulls', crest: `${CREST}/BullsRugby.svg.png`, accent: '#009DDC', accentSecondary: '#FFFFFF', status: 'locked' },
-  { id: 'lions', name: 'Lions', crest: `${CREST}/LionsRugbylogo.svg.png`, accent: '#D2232A', accentSecondary: '#FFFFFF', status: 'locked' },
-  { id: 'sharks', name: 'Sharks', crest: `${CREST}/SharksRugby.svg.png`, accent: '#000000', accentSecondary: '#FFFFFF', status: 'locked' },
-  { id: 'stormers', name: 'Stormers', crest: `${CREST}/StormersRugby.svg.png`, accent: '#005596', accentSecondary: '#FFFFFF', status: 'locked' },
+  { id: 'bulls', name: 'Bulls', crest: `${CREST}/BullsRugby.svg.png`, accent: '#009DDC', accentSecondary: '#FFFFFF', status: 'live' },
+  { id: 'lions', name: 'Lions', crest: `${CREST}/LionsRugbylogo.svg.png`, accent: '#D2232A', accentSecondary: '#FFFFFF', status: 'live' },
+  { id: 'sharks', name: 'Sharks', crest: `${CREST}/SharksRugby.svg.png`, accent: '#000000', accentSecondary: '#FFFFFF', status: 'live' },
+  { id: 'stormers', name: 'Stormers', crest: `${CREST}/StormersRugby.svg.png`, accent: '#005596', accentSecondary: '#FFFFFF', status: 'live' },
   // Italy
   { id: 'benetton', name: 'Benetton', crest: `${CREST}/BenettonRugby.svg.png`, accent: '#009639', accentSecondary: '#FFFFFF', status: 'locked' },
   { id: 'zebre', name: 'Zebre', crest: `${CREST}/ZebreRugby.svg.png`, accent: '#FFC72C', accentSecondary: '#000000', status: 'locked' },
