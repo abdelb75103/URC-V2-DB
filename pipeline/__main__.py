@@ -69,6 +69,7 @@ EDINBURGH_URC_OPPONENTS = [
 EDINBURGH_EXPOSURE_SCOPE_RULE_VERSION = "edinburgh_exposure_scope_2026-07-07_v2"
 EXPOSURE_CANONICAL_SCHEMA_VERSION = "exposure_core_2026-07-07_v1"
 INJURY_PROCESSING_RULE_VERSION = "injury_processing_2026-07-07_v1"
+INPUT_REPRESENTATION_CORRECTION_RULE_VERSION = "input_representation_correction_2026-07-13_v1"
 EXPOSURE_PROCESSING_RULE_VERSION = "exposure_processing_2026-07-07_v1"
 URC_OPPONENT_FUZZY_CUTOFF = 0.78
 
@@ -1086,6 +1087,8 @@ def adapt_injury_intake(args: argparse.Namespace) -> None:
     headers, rows = read_xlsx_rows(source_path, args.sheet)
     output_path = Path(args.output)
     audit_path = Path(args.audit_output)
+    team_key = clean_text(args.team).lower()
+    injury_date_order = clean_text(getattr(args, "date_order", "day-first")) or "day-first"
     required = {"DOB", "Problem type", "Occasion category", "Is Contact", "Match Type"}
     missing = sorted(required - set(headers))
     if missing:
@@ -1094,7 +1097,6 @@ def adapt_injury_intake(args: argparse.Namespace) -> None:
     fixture_dates: set[date] = set()
     fixture_path_text = clean_text(getattr(args, "fixture_file", ""))
     if fixture_path_text:
-        team_key = clean_text(args.team).lower()
         public_team_name = TEAM_KEY_ALIAS_LOOKUP_NAMES.get(team_key)
         if not public_team_name:
             raise SystemExit(f"unknown canonical team key for fixture adapter: {team_key}")
@@ -1115,12 +1117,34 @@ def adapt_injury_intake(args: argparse.Namespace) -> None:
     events: list[dict[str, object]] = []
     dob_blanked = 0
     populated = 0
+    dates_normalized = 0
     for row in rows:
         source_row_number = int(row["_source_row_number"])
         adapted = {header: clean_cell(row.get(header)) for header in headers if header}
         if adapted.get("DOB"):
             adapted["DOB"] = ""
             dob_blanked += 1
+
+        for field in ("Date Injured", "Confirmed Return Date"):
+            source_value = adapted.get(field, "")
+            parsed_date = parse_flexible_date(source_value, injury_date_order)
+            if not parsed_date:
+                continue
+            canonical_value = parsed_date.strftime("%d/%m/%Y")
+            if canonical_value == source_value:
+                continue
+            adapted[field] = canonical_value
+            dates_normalized += 1
+            events.append(
+                {
+                    "source_row_number": source_row_number,
+                    "field": field,
+                    "old_value": source_value,
+                    "new_value": canonical_value,
+                    "action": "deterministic_normalization",
+                    "rule": f"{injury_date_order}_date_to_canonical_dd_mm_yyyy",
+                }
+            )
 
         def fill(field: str, value: str, rule: str) -> None:
             nonlocal populated
@@ -1166,7 +1190,8 @@ def adapt_injury_intake(args: argparse.Namespace) -> None:
 
     write_rows(output_path, output_rows, [header for header in headers if header])
     audit = {
-        "rule_version": "sa_injury_boundary_adapter_2026-07-13_v1",
+        "rule_version": "sa_injury_boundary_adapter_2026-07-13_v2",
+        "date_order": injury_date_order,
         "team": args.team,
         "season": args.season,
         "source_file": str(source_path),
@@ -1180,6 +1205,7 @@ def adapt_injury_intake(args: argparse.Namespace) -> None:
         "fixture_dates_available": len(fixture_dates),
         "action_counts": {
             "blank_dob": dob_blanked,
+            "normalize_date": dates_normalized,
             "populate_approved_blank_field": populated,
         },
         "events": events,
@@ -1908,6 +1934,107 @@ def apply_standing_adjudication(
     return True
 
 
+def reconcile_registered_intake_rows(
+    corrected_rows: list[dict[str, str]],
+    registered_rows: list[dict[str, Any]],
+    *,
+    source_date_order: str,
+    adapter_qc_sha256: str,
+) -> list[dict[str, str]]:
+    """Bind a corrected processing artifact to one immutable registered source."""
+    if len(corrected_rows) != len(registered_rows):
+        raise SystemExit(
+            "corrected processing artifact row count does not match the registered source file"
+        )
+    reconciled: list[dict[str, str]] = []
+    identity_fields = (
+        "source_file_sha256", "source_sheet", "source_row_number",
+        "standardised_row_number", "source_locator_status", "player_uid",
+    )
+    correction_fields = {"Date Injured", "Confirmed Return Date", "Match Type"}
+    regenerated_metadata = {"standardised_file_sha256", "injury_uid"}
+    for corrected, registered in zip(corrected_rows, registered_rows, strict=True):
+        source_values = registered.get("source_values")
+        if not isinstance(source_values, dict):
+            raise SystemExit("registered source row is missing its preserved source_values")
+        row_number = clean_text(corrected.get("standardised_row_number")) or "<unknown>"
+        for field in identity_fields:
+            if clean_text(corrected.get(field)) != clean_text(source_values.get(field)):
+                raise SystemExit(
+                    f"corrected processing artifact does not match registered source row {row_number} "
+                    f"on {field}"
+                )
+        for field, corrected_value in corrected.items():
+            if field in correction_fields or field in regenerated_metadata or field in identity_fields:
+                continue
+            registered_value = clean_text(source_values.get(field))
+            if registered_value == "[REDACTED_PROTECTED_METADATA]":
+                continue
+            if clean_text(corrected_value) != registered_value:
+                raise SystemExit(
+                    f"corrected processing artifact changes disallowed field {field} on source row {row_number}"
+                )
+
+        merged = {key: clean_text(value) for key, value in source_values.items()}
+        correction_events: list[dict[str, object]] = []
+        for field in ("Date Injured", "Confirmed Return Date"):
+            registered_value = clean_text(source_values.get(field))
+            parsed = parse_flexible_date(registered_value, source_date_order)
+            expected = parsed.strftime("%d/%m/%Y") if parsed else registered_value
+            corrected_value = clean_text(corrected.get(field))
+            if corrected_value != expected:
+                raise SystemExit(
+                    f"corrected processing artifact has a non-deterministic {field} on source row {row_number}"
+                )
+            merged[field] = corrected_value
+            if corrected_value != registered_value:
+                correction_events.append(
+                    {
+                        "field_name": field,
+                        "old_value": registered_value or None,
+                        "new_value": corrected_value or None,
+                        "action": "derive",
+                        "reason_code": "deterministic_derivation",
+                        "rationale": (
+                            f"Approved {source_date_order} source-date normalization from adapter QC "
+                            f"sha256={adapter_qc_sha256}; immutable source value retained upstream."
+                        ),
+                        "review_status": "not_required",
+                    }
+                )
+
+        registered_match_type = clean_text(source_values.get("Match Type"))
+        corrected_match_type = clean_text(corrected.get("Match Type"))
+        if corrected_match_type != registered_match_type and not (
+            not registered_match_type and corrected_match_type == "URC"
+        ):
+            raise SystemExit(
+                f"corrected processing artifact has a disallowed Match Type change on source row {row_number}"
+            )
+        merged["Match Type"] = corrected_match_type
+        if corrected_match_type != registered_match_type:
+            correction_events.append(
+                {
+                    "field_name": "Match Type",
+                    "old_value": registered_match_type or None,
+                    "new_value": corrected_match_type,
+                    "action": "map",
+                    "reason_code": "canonical_mapping",
+                    "rationale": (
+                        "Fixture-derived URC match classification from the checksummed corrected fixture file; "
+                        f"adapter QC sha256={adapter_qc_sha256}."
+                    ),
+                    "review_status": "not_required",
+                }
+            )
+        merged["_registered_source_confirmed_return_date"] = clean_text(
+            source_values.get("Confirmed Return Date")
+        )
+        merged["_bridge_correction_events"] = correction_events  # type: ignore[assignment]
+        reconciled.append(merged)
+    return reconciled
+
+
 def process_exposure(args: argparse.Namespace) -> None:
     path = Path(args.file)
     rows = read_rows(path)
@@ -2411,7 +2538,10 @@ def build_processing_state(
         "injury_uid": row["injury_uid"],
         "date_injured": injured_at.date().isoformat() if injured_at else None,
         "days_injured_source": days_injured,
-        "source_confirmed_return_date": row.get("Confirmed Return Date", "").strip() or None,
+        "source_confirmed_return_date": clean_text(
+            row.get("_registered_source_confirmed_return_date")
+            or row.get("Confirmed Return Date")
+        ) or None,
         "derived_return_date": derived_return_date,
         "return_date_origin": return_date_origin,
         "is_closed": is_closed,
@@ -2450,7 +2580,7 @@ def build_processing_state(
         },
     }
 
-    events: list[dict[str, object]] = []
+    events: list[dict[str, object]] = list(row.get("_bridge_correction_events", []))
     if derived_return_date:
         events.append(
             {
@@ -2555,6 +2685,100 @@ def process_intake(args: argparse.Namespace) -> None:
     window_start = datetime.strptime(args.window_start, "%Y-%m-%d")
     window_end = datetime.strptime(args.window_end, "%Y-%m-%d")
     file_hash = sha256_file(path)
+    registered_source_file_sha256 = clean_text(
+        getattr(args, "registered_source_file_sha256", "")
+    )
+    registered_file_hash = registered_source_file_sha256 or file_hash
+    manifest_arg = clean_text(getattr(args, "manifest", ""))
+    if registered_source_file_sha256:
+        if not manifest_arg:
+            raise SystemExit(
+                "--manifest is required with --registered-source-file-sha256"
+            )
+        manifest_path = Path(manifest_arg)
+        manifest = json.loads(manifest_path.read_text())
+        validate_intake_profile_manifest(
+            manifest, manifest_path, file_hash, args.team, args.season
+        )
+        adapter_qc_arg = clean_text(getattr(args, "adapter_qc_file", ""))
+        if not adapter_qc_arg:
+            raise SystemExit("--adapter-qc-file is required with --registered-source-file-sha256")
+        adapter_qc_path = Path(adapter_qc_arg)
+        adapter_qc = json.loads(adapter_qc_path.read_text())
+        adapter_qc_sha256 = sha256_file(adapter_qc_path)
+        source_date_order = clean_text(adapter_qc.get("date_order"))
+        standardised_hashes = {
+            clean_text(row.get("standardised_file_sha256")) for row in rows
+        }
+        correction = manifest.get("processing_correction")
+        expected_correction = {
+            "schema_version": "registered_source_correction_v1",
+            "registered_source_file_sha256": registered_source_file_sha256,
+            "processing_artifact_sha256": file_hash,
+            "adapter_qc_sha256": adapter_qc_sha256,
+            "adapter_rule_version": "sa_injury_boundary_adapter_2026-07-13_v2",
+            "allowed_fields": ["Date Injured", "Confirmed Return Date", "Match Type"],
+            "approved_by": "Abdel Babiker",
+        }
+        if not isinstance(correction, dict) or any(
+            correction.get(key) != value for key, value in expected_correction.items()
+        ):
+            raise SystemExit("manifest processing_correction does not bind the exact approved bridge")
+        if (
+            correction.get("reason_code") != "input_representation_correction"
+            or not clean_text(correction.get("rationale"))
+        ):
+            raise SystemExit("manifest processing_correction requires its controlled reason and rationale")
+        try:
+            correction_approved_at = datetime.fromisoformat(
+                clean_text(correction.get("approved_at")).replace("Z", "+00:00")
+            )
+            if (
+                correction_approved_at.tzinfo is None
+                or correction_approved_at.astimezone(UTC) > datetime.now(UTC) + timedelta(minutes=5)
+            ):
+                raise ValueError
+        except ValueError as exc:
+            raise SystemExit(
+                "manifest processing_correction approved_at must be a valid non-future timezone-aware value"
+            ) from exc
+        if (
+            adapter_qc.get("rule_version") != "sa_injury_boundary_adapter_2026-07-13_v2"
+            or clean_text(adapter_qc.get("team")).casefold() != clean_text(args.team).casefold()
+            or clean_text(adapter_qc.get("season")) != args.season
+            or source_date_order not in {"month-first", "day-first"}
+            or standardised_hashes != {clean_text(adapter_qc.get("output_file_sha256"))}
+            or clean_text(adapter_qc.get("fixture_file_sha256")) != URC_FIXTURES_2024_25_CORRECTED_SHA256
+            or int(adapter_qc.get("output_rows", -1)) != len(rows)
+        ):
+            raise SystemExit("adapter QC does not match the corrected processing artifact")
+        if args.step_version != INPUT_REPRESENTATION_CORRECTION_RULE_VERSION:
+            raise SystemExit(
+                "registered-source correction requires --step-version "
+                f"{INPUT_REPRESENTATION_CORRECTION_RULE_VERSION}"
+            )
+        bridge_params = SqlParams()
+        registered_rows = query_sql(
+            f"""
+            select sr.source_row_number, sr.source_values
+            from ingestion.source_rows sr
+            join ingestion.source_files sf on sf.id = sr.source_file_id
+            where sf.team = {bridge_params.text(args.team)}
+              and sf.season = {bridge_params.text(args.season)}
+              and sf.file_sha256 = {bridge_params.text(registered_source_file_sha256)}
+            order by sr.source_row_number
+            """,
+            bridge_params.values,
+        )
+        rows = reconcile_registered_intake_rows(
+            rows,
+            registered_rows,
+            source_date_order=source_date_order,
+            adapter_qc_sha256=adapter_qc_sha256,
+        )
+    else:
+        adapter_qc_path = None
+        adapter_qc_sha256 = None
     analysis_audit_file = clean_text(getattr(args, "analysis_audit_file", ""))
     analysis_audit_path = Path(analysis_audit_file) if analysis_audit_file else None
     analysis_audit_rows = read_rows(analysis_audit_path) if analysis_audit_path else []
@@ -2585,7 +2809,9 @@ def process_intake(args: argparse.Namespace) -> None:
         }
 
     duplicate_signature_rows = duplicate_rows_for(DUPLICATE_SIGNATURE_FIELDS)
-    standing_adjudications = fetch_standing_eligibility_adjudications(args.team, args.season, file_hash)
+    standing_adjudications = fetch_standing_eligibility_adjudications(
+        args.team, args.season, registered_file_hash
+    )
 
     # Phase 3.5 cohort-signal capture (Adjudication 4): resolved once per
     # process-intake run, then discarded after this point -- passed only
@@ -2648,7 +2874,7 @@ def process_intake(args: argparse.Namespace) -> None:
             review_required_rows += 1
         if events:
             changed_rows += 1
-        raw_id = raw_record_id(args.team, args.season, file_hash, source_row_number)
+        raw_id = raw_record_id(args.team, args.season, registered_file_hash, source_row_number)
         record_sql.append(
             f"""
             insert into processing.record_versions
@@ -2710,10 +2936,10 @@ def process_intake(args: argparse.Namespace) -> None:
 
       do $$
       begin
-        if (select count(*) from ingestion.source_rows sr join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)}) <> {len(rows)} then
+        if (select count(*) from ingestion.source_rows sr join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(registered_file_hash)}) <> {len(rows)} then
           raise exception 'process-intake requires every source row to be registered';
         end if;
-        if exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)} and rv.version_number = {args.version_number}) then
+        if exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(registered_file_hash)} and rv.version_number = {args.version_number}) then
           raise exception 'process-intake version already exists';
         end if;
       end $$;
@@ -2733,6 +2959,12 @@ def process_intake(args: argparse.Namespace) -> None:
             'step_version': args.step_version,
             'window_start': args.window_start,
             'window_end': args.window_end,
+            'processing_artifact_sha256': file_hash,
+            'registered_source_file_sha256': registered_file_hash,
+            'profile_manifest': str(Path(manifest_arg)) if manifest_arg else None,
+            'profile_manifest_sha256': sha256_file(Path(manifest_arg)) if manifest_arg else None,
+            'adapter_qc_file': str(adapter_qc_path) if adapter_qc_path else None,
+            'adapter_qc_sha256': adapter_qc_sha256,
           })},
           now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
@@ -2773,6 +3005,7 @@ def process_intake(args: argparse.Namespace) -> None:
                 "record_events": event_count,
                 "duplicate_signature_rows": len(duplicate_signature_rows),
                 "reapplied_adjudication_rows": reapplied_adjudication_rows,
+                "registered_source_file_sha256": registered_file_hash,
             },
             indent=2,
         )
@@ -3609,6 +3842,56 @@ def classify_historical_release_diffs(
     return allowed, blocked
 
 
+def validate_release_restatement_envelope(
+    envelope: dict[str, Any],
+    *,
+    team_key: str,
+    season: str,
+    previous_dashboard_sha256: str,
+    release_content_hash: str,
+    blocked_diffs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Validate one exact, reviewer-approved exception to historical drift."""
+    expected = {
+        "schema_version": "release_restatement_v1",
+        "team_key": team_key,
+        "season": season,
+        "previous_dashboard_sha256": previous_dashboard_sha256,
+        "release_content_hash": release_content_hash,
+        "blocked_diffs_sha256": sha256_json(blocked_diffs),
+        "reason_code": "input_representation_correction",
+        "approved_by": "Abdel Babiker",
+    }
+    for field, value in expected.items():
+        if envelope.get(field) != value:
+            label = "blocked diff checksum" if field == "blocked_diffs_sha256" else field
+            raise SystemExit(f"release restatement {label} does not match the current correction")
+    if not clean_text(envelope.get("rationale")):
+        raise SystemExit("release restatement rationale is required")
+    try:
+        approved_at = datetime.fromisoformat(
+            clean_text(envelope.get("approved_at")).replace("Z", "+00:00")
+        )
+        if approved_at.tzinfo is None or approved_at.astimezone(UTC) > datetime.now(UTC) + timedelta(minutes=5):
+            raise ValueError
+    except ValueError as exc:
+        raise SystemExit("release restatement approved_at must be a valid non-future timezone-aware value") from exc
+    return envelope
+
+
+def validate_release_restatement(
+    path: Path,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    try:
+        envelope = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"release restatement must be valid JSON: {path}") from exc
+    if not isinstance(envelope, dict):
+        raise SystemExit("release restatement must be a JSON object")
+    return validate_release_restatement_envelope(envelope, **kwargs)
+
+
 def diff_dashboard_json(args: argparse.Namespace) -> None:
     """Phase 4.3 planning tool: pure file diff (no DB access) between an old
     (previously-committed) and new (just-exported) dashboard JSON,
@@ -3914,16 +4197,33 @@ def release(args: argparse.Namespace) -> None:
     preflight_file_arg = clean_text(getattr(args, "preflight_file", "") or "")
     preflight_reviewer = clean_text(getattr(args, "preflight_reviewer", "") or "")
     previous_dashboard_file_arg = clean_text(getattr(args, "previous_dashboard_file", "") or "")
-    if preflight and (preflight_file_arg or previous_dashboard_file_arg):
-        raise SystemExit(
-            "--preflight cannot be combined with --preflight-file or --previous-dashboard-file"
-        )
+    restatement_file_arg = clean_text(getattr(args, "restatement_file", "") or "")
+    if preflight and preflight_file_arg:
+        raise SystemExit("--preflight cannot be combined with --preflight-file")
     if preflight_file_arg and previous_dashboard_file_arg:
         raise SystemExit("--preflight-file and --previous-dashboard-file cannot be used together")
+    if restatement_file_arg and (preflight or not previous_dashboard_file_arg):
+        raise SystemExit("--restatement-file requires a non-preflight re-release with --previous-dashboard-file")
     if preflight_file_arg and not preflight_reviewer:
         raise SystemExit("--preflight-reviewer is required with --preflight-file")
     if preflight_reviewer and not preflight_file_arg:
         raise SystemExit("--preflight-reviewer requires --preflight-file")
+
+    restatement_path: Path | None = None
+    cached_restatement: dict[str, Any] | None = None
+    cached_restatement_sha256: str | None = None
+    if restatement_file_arg:
+        restatement_path = Path(restatement_file_arg)
+        if not restatement_path.exists():
+            raise SystemExit(f"release restatement not found: {restatement_path}")
+        restatement_bytes = restatement_path.read_bytes()
+        cached_restatement_sha256 = hashlib.sha256(restatement_bytes).hexdigest()
+        try:
+            cached_restatement = json.loads(restatement_bytes)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"release restatement must be valid JSON: {restatement_path}") from exc
+        if not isinstance(cached_restatement, dict):
+            raise SystemExit("release restatement must be a JSON object")
 
     # Cache and parse a supplied historical artifact before the command makes
     # even its first database query. Whether it is required is decided from
@@ -4004,11 +4304,6 @@ def release(args: argparse.Namespace) -> None:
     previous_release_label = history_rows[0]["release_label"] if history_rows else None
     previous_release_id = history_rows[0]["release_id"] if history_rows else None
     previous_release_status = history_rows[0]["release_status"] if history_rows else None
-    if preflight and not is_first_release:
-        raise SystemExit(
-            "--preflight is only for a team's first release; re-releases must use "
-            "--previous-dashboard-file with the previously accepted dashboard snapshot"
-        )
     if is_first_release and previous_dashboard is not None:
         raise SystemExit(
             "--previous-dashboard-file is only valid for a re-release; first releases require "
@@ -4019,7 +4314,7 @@ def release(args: argparse.Namespace) -> None:
             "--preflight-file is only valid for a first release; re-releases require "
             "--previous-dashboard-file"
         )
-    if not preflight and not is_first_release:
+    if not is_first_release:
         if previous_dashboard is None or previous_release_label is None:
             raise SystemExit(
                 "re-release for this team/season requires --previous-dashboard-file pointing to the "
@@ -4290,6 +4585,19 @@ def release(args: argparse.Namespace) -> None:
     }
 
     candidate_dashboard = assemble_release_dashboard(context_record, table_rows)
+    historical_diff = None
+    historical_blocked: list[dict[str, Any]] = []
+    if previous_dashboard is not None:
+        historical_diffs = diff_json_documents(previous_dashboard, candidate_dashboard)
+        historical_allowed, historical_blocked = classify_historical_release_diffs(historical_diffs)
+        historical_diff = {
+            "overall": "BLOCKED" if historical_blocked else "ALLOWED_ONLY",
+            "allowed": len(historical_allowed),
+            "blocked": len(historical_blocked),
+            "allowed_paths": [diff["path"] for diff in historical_allowed],
+            "blocked_paths": [diff["path"] for diff in historical_blocked],
+            "blocked_diffs_sha256": sha256_json(historical_blocked),
+        }
     output_arg = clean_text(getattr(args, "output", "") or "")
     if preflight:
         # Run the final protected-alias gate under the read-only query runner.
@@ -4323,9 +4631,15 @@ def release(args: argparse.Namespace) -> None:
                     "curated_build_id": curated_build_id,
                     "rows_candidate": len(table_rows),
                     "counts_by_section": dict(counts_by_section),
+                    "historical_diff": historical_diff,
                     "candidate_path": str(preflight_path),
                     "candidate_sha256": sha256_file(preflight_path),
-                    "next": "review and sign off this candidate before running release with --preflight-file",
+                    "next": (
+                        "bind the exact blocked diff to an approved restatement, then rerun release with "
+                        "--previous-dashboard-file and --restatement-file"
+                        if historical_blocked
+                        else "review and sign off this candidate before running release"
+                    ),
                 },
                 indent=2,
             )
@@ -4340,7 +4654,7 @@ def release(args: argparse.Namespace) -> None:
     reviewed_preflight_path: Path | None = None
     reviewed_candidate: dict[str, Any] | None = None
     reviewed_preflight_sha256: str | None = None
-    historical_diff = None
+    release_restatement: dict[str, Any] | None = None
     if preflight_file_arg:
         reviewed_preflight_path = Path(preflight_file_arg)
         if not reviewed_preflight_path.exists():
@@ -4380,21 +4694,26 @@ def release(args: argparse.Namespace) -> None:
                 "--output and --previous-dashboard-file must resolve to different files; snapshot the "
                 "previously approved dashboard before re-release"
             )
-        historical_diffs = diff_json_documents(previous_dashboard, candidate_dashboard)
-        historical_allowed, historical_blocked = classify_historical_release_diffs(historical_diffs)
-        historical_diff = {
-            "overall": "BLOCKED" if historical_blocked else "ALLOWED_ONLY",
-            "allowed": len(historical_allowed),
-            "blocked": len(historical_blocked),
-            "allowed_paths": [diff["path"] for diff in historical_allowed],
-            "blocked_paths": [diff["path"] for diff in historical_blocked],
-        }
         if historical_blocked:
-            paths = ", ".join(diff["path"] for diff in historical_blocked[:10])
-            raise SystemExit(
-                "release refuses to run: current candidate differs from the previous approved dashboard "
-                f"outside the historical whitelist ({paths})"
+            if not restatement_file_arg or previous_dashboard_sha256 is None:
+                paths = ", ".join(diff["path"] for diff in historical_blocked[:10])
+                raise SystemExit(
+                    "release refuses to run: current candidate differs from the previous approved dashboard "
+                    f"outside the historical whitelist ({paths}); an exact approved --restatement-file is required"
+                )
+            if cached_restatement is None:
+                raise AssertionError("restatement bytes were not cached before release evaluation")
+            release_restatement = validate_release_restatement_envelope(
+                cached_restatement,
+                team_key=team_key,
+                season=season,
+                previous_dashboard_sha256=previous_dashboard_sha256,
+                release_content_hash=release_content_hash,
+                blocked_diffs=historical_blocked,
             )
+            historical_diff["overall"] = "APPROVED_RESTATEMENT"
+        elif restatement_file_arg:
+            raise SystemExit("--restatement-file is unnecessary because the re-release has no blocked drift")
 
     release_parameters = {
         "release": label,
@@ -4411,6 +4730,9 @@ def release(args: argparse.Namespace) -> None:
         release_parameters["previous_release_id"] = previous_release_id
         release_parameters["previous_release_label"] = previous_release_label
         release_parameters["previous_release_status"] = previous_release_status
+    if release_restatement is not None:
+        release_parameters["release_restatement"] = release_restatement
+        release_parameters["restatement_file_sha256"] = cached_restatement_sha256
 
     params = SqlParams()
     context_insert = f"""
@@ -4583,7 +4905,19 @@ def release(args: argparse.Namespace) -> None:
                 "allowed_paths": [diff["path"] for diff in historical_allowed],
                 "blocked_paths": [diff["path"] for diff in historical_blocked],
             }
-            if historical_blocked:
+            if historical_blocked and release_restatement is not None and previous_dashboard_sha256 is not None:
+                if cached_restatement is None:
+                    raise AssertionError("restatement bytes were not cached before draft verification")
+                validate_release_restatement_envelope(
+                    cached_restatement,
+                    team_key=team_key,
+                    season=season,
+                    previous_dashboard_sha256=previous_dashboard_sha256,
+                    release_content_hash=release_content_hash,
+                    blocked_diffs=historical_blocked,
+                )
+                historical_diff["overall"] = "APPROVED_RESTATEMENT"
+            elif historical_blocked:
                 paths = ", ".join(diff["path"] for diff in historical_blocked[:10])
                 raise SystemExit(
                     "draft release differs from the previous approved dashboard outside the historical "
@@ -8782,6 +9116,9 @@ def main() -> None:
     injury_adapter_parser.add_argument("--output", required=True)
     injury_adapter_parser.add_argument("--audit-output", required=True)
     injury_adapter_parser.add_argument("--fixture-file", default="")
+    injury_adapter_parser.add_argument(
+        "--date-order", choices=["month-first", "day-first"], default="day-first"
+    )
     injury_adapter_parser.set_defaults(func=adapt_injury_intake)
 
     add_exposure_cli_parsers(subcommands)
@@ -8834,6 +9171,13 @@ def main() -> None:
     process_parser.add_argument("--step-version", default=INJURY_PROCESSING_RULE_VERSION)
     process_parser.add_argument("--version-number", type=int, default=1)
     process_parser.add_argument("--analysis-audit-file", default="")
+    process_parser.add_argument("--manifest", default="")
+    process_parser.add_argument(
+        "--registered-source-file-sha256",
+        default="",
+        help="bind an approved corrected processing artifact to an already registered immutable source",
+    )
+    process_parser.add_argument("--adapter-qc-file", default="")
     process_parser.set_defaults(func=process_intake)
 
     trace_parser = subcommands.add_parser("trace-row")
@@ -8871,6 +9215,11 @@ def main() -> None:
         "--previous-dashboard-file",
         default="",
         help="latest accepted full-dashboard snapshot required for every re-release",
+    )
+    release_parser.add_argument(
+        "--restatement-file",
+        default="",
+        help="exact checksummed approval envelope for a re-release with non-whitelisted corrected values",
     )
     release_parser.set_defaults(func=release)
 

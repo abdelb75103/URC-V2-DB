@@ -12,9 +12,11 @@ from openpyxl import Workbook
 
 from pipeline.__main__ import (
     adapt_injury_intake,
+    build_processing_state,
     clean_exposure,
     export_xlsx_sheet,
     prepare_exposure,
+    reconcile_registered_intake_rows,
 )
 
 
@@ -34,6 +36,104 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 
 
 class SouthAfricaIntakeAdapterTests(unittest.TestCase):
+    def test_corrected_artifact_reuses_registered_source_identity(self) -> None:
+        locator = {
+            "source_file_sha256": "archive-sha", "source_sheet": "Standardized Data",
+            "source_row_number": "2", "standardised_row_number": "2",
+            "source_locator_status": "provisional_reference_locator", "player_uid": "ply_same",
+        }
+        corrected = {**locator, "injury_uid": "inj_corrected", "Date Injured": "04/10/2024"}
+        registered = {
+            "source_row_number": 2,
+            "source_values": {
+                **locator, "injury_uid": "inj_registered", "Date Injured": "04/10/2024",
+            },
+        }
+
+        row = reconcile_registered_intake_rows(
+            [corrected], [registered], source_date_order="day-first", adapter_qc_sha256="qc-sha"
+        )[0]
+
+        self.assertEqual("04/10/2024", row["Date Injured"])
+        self.assertEqual("inj_registered", row["injury_uid"])
+
+    def test_corrected_artifact_rejects_locator_drift(self) -> None:
+        corrected = {
+            "source_file_sha256": "archive-sha", "source_sheet": "Standardized Data",
+            "source_row_number": "3", "standardised_row_number": "2",
+            "source_locator_status": "provisional_reference_locator", "player_uid": "ply_same",
+        }
+        registered = {
+            "source_row_number": 2,
+            "source_values": {**corrected, "source_row_number": "2"},
+        }
+
+        with self.assertRaisesRegex(SystemExit, "source row 2 on source_row_number"):
+            reconcile_registered_intake_rows(
+                [corrected], [registered], source_date_order="day-first", adapter_qc_sha256="qc-sha"
+            )
+
+    def test_corrected_artifact_rejects_disallowed_clinical_drift(self) -> None:
+        locator = {
+            "source_file_sha256": "archive-sha", "source_sheet": "Standardized Data",
+            "source_row_number": "2", "standardised_row_number": "2",
+            "source_locator_status": "provisional_reference_locator", "player_uid": "ply_same",
+        }
+        corrected = {**locator, "injury_uid": "new", "Days Injured": "99"}
+        registered = {
+            "source_row_number": 2,
+            "source_values": {**locator, "injury_uid": "old", "Days Injured": "10"},
+        }
+
+        with self.assertRaisesRegex(SystemExit, "disallowed field Days Injured"):
+            reconcile_registered_intake_rows(
+                [corrected], [registered], source_date_order="month-first", adapter_qc_sha256="qc-sha"
+            )
+
+    def test_bulls_adapter_normalizes_month_first_dates_to_canonical_day_first(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "injury.xlsx"
+            output = root / "injury.csv"
+            audit = root / "audit.json"
+            write_book(
+                source,
+                [
+                    "PlayerID", "DOB", "Problem type", "Occasion category",
+                    "Is Contact", "Match Type", "Date Injured", "Confirmed Return Date",
+                ],
+                [["opaque-player", None, "Injury", "TRAINING", "Non-contact", "", "10/04/24", "10/14/24"]],
+            )
+
+            adapt_injury_intake(
+                argparse.Namespace(
+                    team="bulls", season="2024-25", file=str(source),
+                    sheet="Standardized Data", output=str(output),
+                    audit_output=str(audit), fixture_file="", date_order="month-first",
+                )
+            )
+
+            row = read_csv(output)[0]
+            self.assertEqual("04/10/2024", row["Date Injured"])
+            self.assertEqual("14/10/2024", row["Confirmed Return Date"])
+            row.update(
+                {
+                    "standardised_row_number": "2", "player_uid": "ply_test", "injury_uid": "inj_test",
+                    **{field: "" for field in (
+                        "source_archive_path", "source_file_sha256", "source_sheet",
+                        "source_row_number", "standardised_file_sha256", "source_locator_status",
+                    )},
+                }
+            )
+            state, _ = build_processing_state(
+                row,
+                window_start=datetime(2024, 7, 1),
+                window_end=datetime(2025, 6, 30),
+                duplicate_signature_rows=set(),
+            )
+            self.assertEqual("2024-10-04", state["date_injured"])
+            self.assertEqual("2024-10-14", state["derived_return_date"])
+
     def test_session_duration_rule_is_recorded_even_when_distance_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
