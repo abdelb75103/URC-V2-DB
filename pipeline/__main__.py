@@ -47,6 +47,7 @@ EXPOSURE_LOCATOR_FIELDS = [
 
 EXPOSURE_REPORTING_GRAINS = ("weekly", "session")
 EXPOSURE_DECLARED_GRAIN_FIELD = "declared_exposure_grain"
+EXPOSURE_ORIGIN_FIELDS = ["minutes_total_origin", "distance_total_origin"]
 
 EDINBURGH_URC_OPPONENTS = [
     "benetton",
@@ -647,6 +648,28 @@ def parse_minutes(value: object) -> float | None:
     return hours * 60 + minutes + seconds / 60
 
 
+def parse_exposure_timestamp(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    text = clean_text(str(value) if value is not None else "")
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        pass
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M",
+        "%I:%M:%S %p", "%I:%M %p", "%H:%M:%S", "%H:%M",
+    ):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            pass
+    return None
+
+
 def effective_days_injured_with_origin(row: dict[str, str]) -> tuple[int | None, str]:
     days = parse_int(clean_text(row.get("Days Injured")))
     if days is not None and days >= 0:
@@ -727,6 +750,12 @@ def clean_cell(value: object) -> str:
     if isinstance(value, datetime):
         return value.date().isoformat()
     return str(value).strip()
+
+
+def clean_exposure_cell(value: object, *, preserve_time: bool = False) -> str:
+    if isinstance(value, datetime) and preserve_time:
+        return value.isoformat(sep=" ")
+    return clean_cell(value)
 
 
 def is_missing(value: str | None) -> bool:
@@ -1016,10 +1045,22 @@ def prepare_intake(args: argparse.Namespace) -> None:
 
 def export_xlsx_sheet(args: argparse.Namespace) -> None:
     headers, rows = read_xlsx_rows(Path(args.file), args.sheet)
+    blank_columns = list(getattr(args, "blank_column", []) or [])
+    missing_blank_columns = sorted(set(blank_columns) - set(headers))
+    if missing_blank_columns:
+        raise SystemExit(
+            "cannot blank missing workbook column(s): " + ", ".join(missing_blank_columns)
+        )
     output_path = Path(args.output)
     write_rows(
         output_path,
-        [{header: clean_cell(row.get(header)) for header in headers if header} for row in rows],
+        [
+            {
+                header: "" if header in blank_columns else clean_cell(row.get(header))
+                for header in headers if header
+            }
+            for row in rows
+        ],
         [header for header in headers if header],
     )
     print(
@@ -1028,7 +1069,137 @@ def export_xlsx_sheet(args: argparse.Namespace) -> None:
                 "exported": str(output_path),
                 "rows": len(rows),
                 "columns": len([header for header in headers if header]),
+                "blanked_columns": blank_columns,
+                "blanked_value_counts": {
+                    header: sum(1 for row in rows if clean_cell(row.get(header)))
+                    for header in blank_columns
+                },
                 "sha256": sha256_file(output_path),
+            },
+            indent=2,
+        )
+    )
+
+
+def adapt_injury_intake(args: argparse.Namespace) -> None:
+    source_path = Path(args.file)
+    headers, rows = read_xlsx_rows(source_path, args.sheet)
+    output_path = Path(args.output)
+    audit_path = Path(args.audit_output)
+    required = {"DOB", "Problem type", "Occasion category", "Is Contact", "Match Type"}
+    missing = sorted(required - set(headers))
+    if missing:
+        raise SystemExit("injury adapter missing standard column(s): " + ", ".join(missing))
+
+    fixture_dates: set[date] = set()
+    fixture_path_text = clean_text(getattr(args, "fixture_file", ""))
+    if fixture_path_text:
+        team_key = clean_text(args.team).lower()
+        public_team_name = TEAM_KEY_ALIAS_LOOKUP_NAMES.get(team_key)
+        if not public_team_name:
+            raise SystemExit(f"unknown canonical team key for fixture adapter: {team_key}")
+        team_alias = load_fixture_team_aliases().get(public_team_name)
+        if not team_alias:
+            raise SystemExit(f"fixture alias is unavailable for canonical team key: {team_key}")
+        for fixture in read_rows(Path(fixture_path_text)):
+            if team_alias not in {
+                clean_text(fixture.get("home_team_alias")),
+                clean_text(fixture.get("away_team_alias")),
+            }:
+                continue
+            parsed = parse_flexible_date(fixture.get("corrected_date"), "day-first")
+            if parsed:
+                fixture_dates.add(parsed.date())
+
+    output_rows: list[dict[str, str]] = []
+    events: list[dict[str, object]] = []
+    dob_blanked = 0
+    populated = 0
+    for row in rows:
+        source_row_number = int(row["_source_row_number"])
+        adapted = {header: clean_cell(row.get(header)) for header in headers if header}
+        if adapted.get("DOB"):
+            adapted["DOB"] = ""
+            dob_blanked += 1
+
+        def fill(field: str, value: str, rule: str) -> None:
+            nonlocal populated
+            if adapted.get(field) or not value:
+                return
+            adapted[field] = value
+            populated += 1
+            events.append(
+                {
+                    "source_row_number": source_row_number,
+                    "field": field,
+                    "old_value": None,
+                    "new_value": value,
+                    "action": "deterministic_derivation",
+                    "rule": rule,
+                }
+            )
+
+        fallback_occasion = adapted.get("Match vs Training", "").upper()
+        if fallback_occasion in {"GAME", "TRAINING"}:
+            fill("Occasion category", fallback_occasion, "explicit_match_vs_training_value")
+
+        if adapted.get("Orchard Code") or adapted.get("Injury Tissue Type/s"):
+            fill("Problem type", "Injury", "injury_code_or_tissue_evidence")
+        elif adapted.get("Illness Code"):
+            fill("Problem type", "Illness", "illness_code_evidence")
+
+        mechanism = adapted.get("Mechanism of Injury", "").casefold().strip()
+        if re.search(r"\(non[ -]?contact\)\s*$", mechanism):
+            fill("Is Contact", "Non-contact", "explicit_mechanism_suffix")
+        elif re.search(r"\(contact\)\s*$", mechanism):
+            fill("Is Contact", "Contact", "explicit_mechanism_suffix")
+
+        injured_at = parse_flexible_date(adapted.get("Date Injured"), "day-first")
+        if (
+            fixture_dates
+            and adapted.get("Occasion category", "").casefold() in {"game", "match"}
+            and injured_at
+            and injured_at.date() in fixture_dates
+        ):
+            fill("Match Type", "URC", "unique_team_fixture_date_link")
+        output_rows.append(adapted)
+
+    write_rows(output_path, output_rows, [header for header in headers if header])
+    audit = {
+        "rule_version": "sa_injury_boundary_adapter_2026-07-13_v1",
+        "team": args.team,
+        "season": args.season,
+        "source_file": str(source_path),
+        "source_file_sha256": sha256_file(source_path),
+        "source_sheet": args.sheet,
+        "source_rows": len(rows),
+        "output_file": str(output_path),
+        "output_file_sha256": sha256_file(output_path),
+        "output_rows": len(output_rows),
+        "fixture_file_sha256": sha256_file(Path(fixture_path_text)) if fixture_path_text else None,
+        "fixture_dates_available": len(fixture_dates),
+        "action_counts": {
+            "blank_dob": dob_blanked,
+            "populate_approved_blank_field": populated,
+        },
+        "events": events,
+        "privacy": {
+            "dob_values_remaining": sum(1 for row in output_rows if row.get("DOB")),
+            "identifying_values_logged": False,
+        },
+        "row_reconciliation": "one output row per nonblank physical source row; original worksheet row retained by prepare-intake",
+    }
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    audit_path.write_text(json.dumps(audit, indent=2) + "\n")
+    print(
+        json.dumps(
+            {
+                "adapted": str(output_path),
+                "rows": len(output_rows),
+                "sha256": audit["output_file_sha256"],
+                "dob_values_blanked": dob_blanked,
+                "approved_blank_fields_populated": populated,
+                "audit": str(audit_path),
             },
             indent=2,
         )
@@ -1092,6 +1263,43 @@ def prepare_exposure(args: argparse.Namespace) -> None:
 
     source_hash = sha256_file(workbook_path)
     source_columns = list(headers)
+    derive_minutes = bool(getattr(args, "derive_minutes_from_timestamps", False))
+    start_timestamp_column = getattr(args, "start_timestamp_column", "session start date time")
+    end_timestamp_column = getattr(args, "end_timestamp_column", "session end date time")
+    if derive_minutes:
+        missing_timestamp_columns = [
+            column for column in (start_timestamp_column, end_timestamp_column)
+            if column not in headers
+        ]
+        if missing_timestamp_columns:
+            raise SystemExit(
+                "cannot derive exposure minutes; missing timestamp column(s): "
+                + ", ".join(missing_timestamp_columns)
+            )
+
+    distance_source_file = clean_text(getattr(args, "distance_source_file", ""))
+    distance_source_sheet = clean_text(getattr(args, "distance_source_sheet", ""))
+    distance_source_column = clean_text(getattr(args, "distance_source_column", ""))
+    distance_source_hash = ""
+    distance_by_source_row: dict[int, object] = {}
+    if any((distance_source_file, distance_source_sheet, distance_source_column)):
+        if not all((distance_source_file, distance_source_sheet, distance_source_column)):
+            raise SystemExit(
+                "distance restoration requires --distance-source-file, "
+                "--distance-source-sheet, and --distance-source-column"
+            )
+        distance_source_path = Path(distance_source_file)
+        distance_headers, distance_rows = read_xlsx_rows(
+            distance_source_path, distance_source_sheet
+        )
+        if distance_source_column not in distance_headers:
+            raise SystemExit(f"missing distance source column: {distance_source_column}")
+        distance_source_hash = sha256_file(distance_source_path)
+        distance_by_source_row = {
+            int(row["_source_row_number"]): row.get(distance_source_column)
+            for row in distance_rows
+        }
+
     prepared_rows: list[dict[str, str]] = []
     dates: list[datetime] = []
     date_parse_failures: list[int] = []
@@ -1102,11 +1310,17 @@ def prepare_exposure(args: argparse.Namespace) -> None:
     exact_hashes: set[str] = set()
     exact_duplicate_rows = 0
     player_date_counts: dict[str, list[int]] = {}
+    derived_minutes_rows = 0
+    unparseable_timestamp_rows: list[int] = []
+    restored_distance_rows = 0
 
     for output_row_number, row in enumerate(rows, start=2):
         source_row_number = int(row["_source_row_number"])
         source_payload = {
-            header: clean_cell(row.get(header))
+            header: clean_exposure_cell(
+                row.get(header),
+                preserve_time=header in {start_timestamp_column, end_timestamp_column},
+            )
             for header in headers
             if header
         }
@@ -1117,7 +1331,33 @@ def prepare_exposure(args: argparse.Namespace) -> None:
             exact_duplicate_rows += 1
         exact_hashes.add(source_row_hash)
 
-        player_value = clean_cell(row.get(args.player_column))
+        prepared_values = {
+            header: clean_exposure_cell(
+                row.get(header),
+                preserve_time=header in {start_timestamp_column, end_timestamp_column},
+            )
+            for header in source_columns
+        }
+        minutes_origin = "source_reported" if prepared_values.get(args.minutes_column) else "missing"
+        if derive_minutes and not prepared_values.get(args.minutes_column):
+            start = parse_exposure_timestamp(row.get(start_timestamp_column))
+            end = parse_exposure_timestamp(row.get(end_timestamp_column))
+            if start is None or end is None or end < start:
+                unparseable_timestamp_rows.append(source_row_number)
+            else:
+                prepared_values[args.minutes_column] = f"{(end - start).total_seconds() / 60:.6f}"
+                minutes_origin = "deterministic_end_minus_start"
+                derived_minutes_rows += 1
+
+        distance_origin = "source_reported" if prepared_values.get(args.distance_column) else "missing"
+        if not prepared_values.get(args.distance_column) and distance_by_source_row:
+            restored = clean_cell(distance_by_source_row.get(source_row_number))
+            if restored:
+                prepared_values[args.distance_column] = restored
+                distance_origin = "row_aligned_reference_source"
+                restored_distance_rows += 1
+
+        player_value = prepared_values.get(args.player_column, "")
         if not player_value:
             missing_player_rows.append(source_row_number)
         player_uid = stable_uid("ply", args.team, player_value)
@@ -1130,8 +1370,8 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         else:
             dates.append(parsed_date)
 
-        minutes = parse_minutes(row.get(args.minutes_column))
-        distance = parse_float(row.get(args.distance_column))
+        minutes = parse_minutes(prepared_values.get(args.minutes_column))
+        distance = parse_float(prepared_values.get(args.distance_column))
         if minutes is not None and minutes < 0:
             negative_minutes_rows.append(source_row_number)
         if distance is not None and distance < 0:
@@ -1141,12 +1381,11 @@ def prepare_exposure(args: argparse.Namespace) -> None:
             key = stable_uid("key", args.team, player_value, parsed_date.date().isoformat())
             player_date_counts.setdefault(key, []).append(source_row_number)
 
-        prepared = {
-            header: clean_cell(row.get(header))
-            for header in source_columns
-        }
+        prepared = dict(prepared_values)
         prepared.update(
             {
+                "minutes_total_origin": minutes_origin,
+                "distance_total_origin": distance_origin,
                 "source_archive_path": str(workbook_path),
                 "source_file_sha256": source_hash,
                 "source_sheet": args.sheet,
@@ -1161,7 +1400,10 @@ def prepare_exposure(args: argparse.Namespace) -> None:
         )
         prepared_rows.append(prepared)
 
-    fieldnames = source_columns + EXPOSURE_LOCATOR_FIELDS + ["player_uid", EXPOSURE_DECLARED_GRAIN_FIELD]
+    fieldnames = (
+        source_columns + EXPOSURE_ORIGIN_FIELDS + EXPOSURE_LOCATOR_FIELDS
+        + ["player_uid", EXPOSURE_DECLARED_GRAIN_FIELD]
+    )
     write_rows(output_path, prepared_rows, fieldnames)
     output_hash = sha256_file(output_path)
 
@@ -1228,6 +1470,21 @@ def prepare_exposure(args: argparse.Namespace) -> None:
             "missing_date_rows": missing_date_rows,
             "negative_minutes_rows": negative_minutes_rows,
             "negative_distance_rows": negative_distance_rows,
+            "unparseable_timestamp_rows": unparseable_timestamp_rows,
+        },
+        "adapter": {
+            "duration_rule": (
+                "end_timestamp_minus_start_timestamp"
+                if derive_minutes else "preserve_source_duration"
+            ),
+            "derived_minutes_rows": derived_minutes_rows,
+            "distance_alignment": (
+                "physical_source_row" if distance_by_source_row else "not_applicable"
+            ),
+            "distance_source_file_sha256": distance_source_hash or None,
+            "distance_source_sheet": distance_source_sheet or None,
+            "distance_source_column": distance_source_column or None,
+            "restored_distance_rows": restored_distance_rows,
         },
         "notes": [
             "The source player label column is already de-identified, is preserved, and is also used to derive player_uid.",
@@ -1257,6 +1514,7 @@ def prepare_exposure(args: argparse.Namespace) -> None:
             "date_order": args.date_order,
             "exposure_reporting_grain": exposure_reporting_grain,
             "source_locator_status": "provisional_reference_locator",
+            "adapter": qc["adapter"],
         }
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
 
@@ -1397,29 +1655,28 @@ def clean_exposure(args: argparse.Namespace) -> None:
             exclusion_reasons.append("missing_or_unparseable_minutes")
         if distance is None:
             exclusion_reasons.append("missing_or_unparseable_distance")
-        if minutes is not None and distance is not None:
-            if minutes < 0 or distance < 0:
-                exclusion_reasons.append("negative_minutes_or_distance")
-            if minutes == 0 and distance == 0:
-                exclusion_reasons.append("zero_minutes_and_zero_distance")
-            if grain == "weekly":
-                if minutes < 5:
-                    exclusion_reasons.append("weekly_minutes_below_5")
-                if minutes > 1100:
-                    exclusion_reasons.append("weekly_minutes_above_1100")
-                if distance > 40000:
-                    exclusion_reasons.append("weekly_distance_above_40000m")
-            else:
-                if minutes < 5:
-                    exclusion_reasons.append("session_minutes_below_5")
-                if distance < 200:
-                    exclusion_reasons.append("session_distance_below_200m")
-                if minutes > 220:
-                    exclusion_reasons.append("session_minutes_above_220")
-                if distance > 20000:
-                    exclusion_reasons.append("session_distance_above_20000m")
-                if minutes > 0 and (distance / minutes) > 1000:
-                    exclusion_reasons.append("session_impossible_distance_per_minute")
+        if (minutes is not None and minutes < 0) or (distance is not None and distance < 0):
+            exclusion_reasons.append("negative_minutes_or_distance")
+        if minutes == 0 and distance == 0:
+            exclusion_reasons.append("zero_minutes_and_zero_distance")
+        if grain == "weekly":
+            if minutes is not None and minutes < 5:
+                exclusion_reasons.append("weekly_minutes_below_5")
+            if minutes is not None and minutes > 1100:
+                exclusion_reasons.append("weekly_minutes_above_1100")
+            if distance is not None and distance > 40000:
+                exclusion_reasons.append("weekly_distance_above_40000m")
+        else:
+            if minutes is not None and minutes < 5:
+                exclusion_reasons.append("session_minutes_below_5")
+            if distance is not None and distance < 200:
+                exclusion_reasons.append("session_distance_below_200m")
+            if minutes is not None and minutes > 220:
+                exclusion_reasons.append("session_minutes_above_220")
+            if distance is not None and distance > 20000:
+                exclusion_reasons.append("session_distance_above_20000m")
+            if minutes is not None and distance is not None and minutes > 0 and (distance / minutes) > 1000:
+                exclusion_reasons.append("session_impossible_distance_per_minute")
         if scope_status == "out_of_scope_explicit":
             exclusion_reasons.append(scope_reason)
         if parsed_date and window_start and window_end:
@@ -6963,6 +7220,12 @@ def add_exposure_cli_parsers(subcommands: Any) -> None:
     exposure_parser.add_argument("--date-column", default="session date")
     exposure_parser.add_argument("--minutes-column", default="minutes total")
     exposure_parser.add_argument("--distance-column", default="distance total")
+    exposure_parser.add_argument("--derive-minutes-from-timestamps", action="store_true")
+    exposure_parser.add_argument("--start-timestamp-column", default="session start date time")
+    exposure_parser.add_argument("--end-timestamp-column", default="session end date time")
+    exposure_parser.add_argument("--distance-source-file", default="")
+    exposure_parser.add_argument("--distance-source-sheet", default="")
+    exposure_parser.add_argument("--distance-source-column", default="")
     exposure_parser.add_argument("--date-order", choices=["month-first", "day-first"], default="month-first")
     exposure_parser.set_defaults(func=prepare_exposure)
 
@@ -8508,7 +8771,18 @@ def main() -> None:
     export_parser.add_argument("--file", required=True)
     export_parser.add_argument("--sheet", default="Standardized Data")
     export_parser.add_argument("--output", required=True)
+    export_parser.add_argument("--blank-column", action="append", default=[])
     export_parser.set_defaults(func=export_xlsx_sheet)
+
+    injury_adapter_parser = subcommands.add_parser("adapt-injury-intake")
+    injury_adapter_parser.add_argument("--team", required=True)
+    injury_adapter_parser.add_argument("--season", required=True)
+    injury_adapter_parser.add_argument("--file", required=True)
+    injury_adapter_parser.add_argument("--sheet", default="Standardized Data")
+    injury_adapter_parser.add_argument("--output", required=True)
+    injury_adapter_parser.add_argument("--audit-output", required=True)
+    injury_adapter_parser.add_argument("--fixture-file", default="")
+    injury_adapter_parser.set_defaults(func=adapt_injury_intake)
 
     add_exposure_cli_parsers(subcommands)
 
