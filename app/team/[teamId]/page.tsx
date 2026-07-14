@@ -1,12 +1,10 @@
-import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getTeamById } from '@/config/teams';
 import { getTeamDashboard } from '@/lib/reporting';
-import { TEAM_SESSION_COOKIE } from '@/lib/team-session';
 import { LockedShell } from '@/components/locked-shell';
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 
-// Protected dashboards must never be prerendered or shared through ISR.
+// Dashboard availability follows approved reporting releases at request time.
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -30,11 +28,9 @@ export default async function TeamPage({
     );
   }
 
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(TEAM_SESSION_COOKIE)?.value;
   let dashboard;
   try {
-    dashboard = await getTeamDashboard(team.id, sessionToken);
+    dashboard = await getTeamDashboard(team.id);
   } catch {
     dashboard = undefined;
   }
@@ -45,10 +41,8 @@ export default async function TeamPage({
         subtitle="URC injury & exposure surveillance"
         crest={team.crest}
         accent={team.accent}
-        reason="Enter the shared team password to view this disclosure-controlled dashboard."
-        statusLabel="Team access required"
-        actionHref={`/unlock?teamId=${encodeURIComponent(team.id)}`}
-        actionLabel="Unlock dashboard"
+        reason="This approved dashboard could not be loaded. Please try again later."
+        statusLabel="Dashboard unavailable"
       />
     );
   }
