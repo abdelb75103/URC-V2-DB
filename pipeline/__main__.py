@@ -3386,6 +3386,8 @@ def run_step(args: argparse.Namespace) -> None:
 RELEASE_DASHBOARDS_MIGRATION_VERSION = "20260710130000"
 INJURY_COHORT_V1_AMENDMENT_MIGRATION_VERSION = "20260710120000"
 FULL_DASHBOARD_RELEASE_RULE_VERSION = "full_dashboard_release_2026-07-10_v1"
+LEAGUE_DASHBOARD_V2_MIGRATION_VERSION = "20260714130000"
+LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
 # The five dashboard cohort-exclusion reason codes analysis.coverage_v1
 # cannot reproduce under its curated-only read rule (see
@@ -5082,6 +5084,373 @@ def release(args: argparse.Namespace) -> None:
                 "export_path": str(export_path),
                 "preflight_diff": preflight_diff,
                 "historical_diff": historical_diff,
+            },
+            indent=2,
+        )
+    )
+
+
+def release_league(args: argparse.Namespace) -> None:
+    """Preflight and atomically publish the build-pinned 16-team V2 league dashboard."""
+    season = clean_text(args.season)
+    if not season:
+        raise SystemExit("--season is required")
+    preflight = bool(args.preflight)
+    preflight_file_arg = clean_text(args.preflight_file or "")
+    reviewer = clean_text(args.preflight_reviewer or "")
+    if preflight and preflight_file_arg:
+        raise SystemExit("--preflight cannot be combined with --preflight-file")
+    if preflight_file_arg and not reviewer:
+        raise SystemExit("--preflight-reviewer is required with --preflight-file")
+    if reviewer and not preflight_file_arg:
+        raise SystemExit("--preflight-reviewer requires --preflight-file")
+    if not preflight and not preflight_file_arg:
+        raise SystemExit("league release requires --preflight or a reviewed --preflight-file")
+
+    provenance = run_provenance()
+    if provenance["code_version"].endswith("-dirty"):
+        raise SystemExit(
+            "release-league refuses to run from an uncommitted working tree "
+            f"(code_version={provenance['code_version']})"
+        )
+
+    migration_rows = query_sql(
+        "select version from supabase_migrations.schema_migrations "
+        f"where version = '{LEAGUE_DASHBOARD_V2_MIGRATION_VERSION}'"
+    )
+    if len(migration_rows) != 1:
+        raise SystemExit(
+            f"release-league requires tracked migration {LEAGUE_DASHBOARD_V2_MIGRATION_VERSION}"
+        )
+
+    payload_params = SqlParams()
+    payload_rows = query_sql(
+        f"select dashboard from analysis.league_dashboard_payload_v2 "
+        f"where season = {payload_params.text(season)}",
+        payload_params.values,
+    )
+    if len(payload_rows) != 1 or not isinstance(payload_rows[0].get("dashboard"), dict):
+        raise SystemExit(
+            f"release-league expected one complete league payload for {season!r}, found {len(payload_rows)}"
+        )
+    dashboard = payload_rows[0]["dashboard"]
+    preflight_league_sha256 = sha256_json(dashboard)
+
+    team_payload_params = SqlParams()
+    team_payloads = query_sql(
+        f"select team_key, team_release_id::text, curated_build_id::text, dashboard "
+        f"from analysis.team_dashboard_payload_v2 "
+        f"where season = {team_payload_params.text(season)} order by team_key",
+        team_payload_params.values,
+    )
+    if len(team_payloads) != 16 or any(
+        not isinstance(row.get("dashboard"), dict) for row in team_payloads
+    ):
+        raise SystemExit(
+            f"release-league requires 16 complete team dashboard payloads, found {len(team_payloads)}"
+        )
+
+    member_params = SqlParams()
+    members = query_sql(
+        f"select team_key, team_release_id::text, curated_build_id::text "
+        f"from analysis.league_member_releases_v2 "
+        f"where season = {member_params.text(season)} order by team_key",
+        member_params.values,
+    )
+    if len(members) != 16:
+        raise SystemExit(f"release-league requires 16 approved member releases, found {len(members)}")
+    member_by_team = {member["team_key"]: member for member in members}
+    if set(member_by_team) != {row["team_key"] for row in team_payloads}:
+        raise SystemExit("league member roster and team dashboard payload roster differ")
+    for row in team_payloads:
+        member = member_by_team[row["team_key"]]
+        if (
+            row["team_release_id"] != member["team_release_id"]
+            or row["curated_build_id"] != member["curated_build_id"]
+        ):
+            raise SystemExit(
+                f"team dashboard payload identity differs from league member for {row['team_key']}"
+            )
+    member_input_hash = sha256_json(members)
+    public_bundle = {
+        "schema_version": "urc_dashboard_bundle_v2",
+        "season": season,
+        "league": dashboard,
+        "teams": [
+            {"team_key": row["team_key"], "dashboard": row["dashboard"]}
+            for row in team_payloads
+        ],
+    }
+    preflight_bundle_sha256 = sha256_json(public_bundle)
+
+    canonical_hash_params = SqlParams()
+    canonical_hash_rows = query_sql(
+        f"with league as ("
+        f"  select dashboard from analysis.league_dashboard_payload_v2 "
+        f"  where season = {canonical_hash_params.text(season)}"
+        f"), teams as ("
+        f"  select jsonb_agg(jsonb_build_object('team_key', team_key, 'dashboard', dashboard) "
+        f"    order by team_key) as dashboards, "
+        f"    jsonb_object_agg(team_key, encode(digest(convert_to(dashboard::text, 'UTF8'), "
+        f"      'sha256'), 'hex') order by team_key) as hashes "
+        f"  from analysis.team_dashboard_payload_v2 "
+        f"  where season = {canonical_hash_params.text(season)}"
+        f"), bundle as ("
+        f"  select league.dashboard, teams.hashes, jsonb_build_object("
+        f"    'schema_version', 'urc_dashboard_bundle_v2', "
+        f"    'season', {canonical_hash_params.text(season)}, "
+        f"    'league', league.dashboard, 'teams', teams.dashboards) as document "
+        f"  from league cross join teams"
+        f") select "
+        f"  encode(digest(convert_to(document::text, 'UTF8'), 'sha256'), 'hex') "
+        f"    as bundle_payload_sha256, "
+        f"  encode(digest(convert_to(dashboard::text, 'UTF8'), 'sha256'), 'hex') "
+        f"    as league_payload_sha256, hashes as team_payload_sha256s "
+        f"from bundle",
+        canonical_hash_params.values,
+    )
+    if len(canonical_hash_rows) != 1:
+        raise SystemExit("release-league could not compute canonical database payload hashes")
+    canonical_hashes = canonical_hash_rows[0]
+    bundle_payload_sha256 = clean_text(canonical_hashes.get("bundle_payload_sha256"))
+    league_payload_sha256 = clean_text(canonical_hashes.get("league_payload_sha256"))
+    team_payload_sha256s = canonical_hashes.get("team_payload_sha256s")
+    if (
+        len(bundle_payload_sha256) != 64
+        or len(league_payload_sha256) != 64
+        or not isinstance(team_payload_sha256s, dict)
+        or len(team_payload_sha256s) != 16
+    ):
+        raise SystemExit("release-league canonical database payload hashes are incomplete")
+
+    if preflight:
+        output_arg = clean_text(args.output or "")
+        output_path = (
+            Path(output_arg)
+            if output_arg
+            else Path("data/reporting")
+            / f"urc_dashboard_bundle_{season}_{preflight_bundle_sha256[:16]}_preflight.json"
+        )
+        if Path("content/reporting").resolve() in output_path.resolve().parents:
+            raise SystemExit("league preflight output must stay outside content/reporting")
+        write_json_atomic(output_path, public_bundle)
+        print(
+            json.dumps(
+                {
+                    "status": "preflight",
+                    "season": season,
+                    "member_count": len(members),
+                    "member_input_hash": member_input_hash,
+                    "preflight_league_sha256": preflight_league_sha256,
+                    "preflight_bundle_sha256": preflight_bundle_sha256,
+                    "database_league_payload_sha256": league_payload_sha256,
+                    "database_bundle_payload_sha256": bundle_payload_sha256,
+                    "output_path": str(output_path),
+                },
+                indent=2,
+            )
+        )
+        return
+
+    preflight_path = Path(preflight_file_arg)
+    if not preflight_path.exists():
+        raise SystemExit(f"league preflight file not found: {preflight_path}")
+    reviewed_bytes = preflight_path.read_bytes()
+    reviewed_sha256 = hashlib.sha256(reviewed_bytes).hexdigest()
+    try:
+        reviewed_bundle = json.loads(reviewed_bytes)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"league preflight file is invalid JSON: {preflight_path}") from exc
+    reviewed_diffs = diff_json_documents(reviewed_bundle, public_bundle)
+    if reviewed_diffs:
+        paths = ", ".join(diff["path"] for diff in reviewed_diffs[:10])
+        raise SystemExit(f"dashboard bundle differs from reviewed preflight ({paths})")
+
+    existing_params = SqlParams()
+    existing = query_sql(
+        f"select c.release_id from reporting.league_release_context_v2 c "
+        f"join reporting.aggregate_releases r on r.id = c.release_id "
+        f"where c.season = {existing_params.text(season)} and r.status = 'approved'",
+        existing_params.values,
+    )
+    if existing:
+        raise SystemExit(
+            "an approved league V2 release already exists for this season; "
+            "a versioned re-release workflow is required"
+        )
+
+    label = f"urc-{season}-v2-{bundle_payload_sha256[:12]}"
+    generated_at = clean_text(dashboard.get("generated_at"))
+    if not generated_at:
+        raise SystemExit("league payload generated_at is missing")
+    release_parameters = {
+        "analysis_version": "v2",
+        "member_count": len(members),
+        "member_input_hash": member_input_hash,
+        "member_release_ids": [member["team_release_id"] for member in members],
+        "member_curated_build_ids": [member["curated_build_id"] for member in members],
+        "hash_algorithm": "postgres_jsonb_text_sha256",
+        "team_dashboard_payload_sha256s": team_payload_sha256s,
+        "league_dashboard_payload_sha256": league_payload_sha256,
+        "bundle_payload_sha256": bundle_payload_sha256,
+        "preflight_json_sha256": preflight_bundle_sha256,
+        "reviewed_preflight_sha256": reviewed_sha256,
+        "preflight_reviewer": reviewer,
+        "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
+    }
+
+    params = SqlParams()
+    sql = f"""
+      {protected_alias_scan_sql('league release gate')}
+
+      do $$
+      begin
+        if exists (select 1 from reporting.aggregate_releases where release_label = {params.text(label)}) then
+          raise exception 'immutable league release label already exists';
+        end if;
+      end $$;
+
+      create temp table current_league_release on commit drop as
+      with run as (
+        insert into audit.pipeline_runs
+          (command, team, season, status, input_hash, output_hash, parameters,
+           code_version, dependency_lock_hash, operator)
+        values (
+          'release-league', 'URC Overall', {params.text(season)}, 'started',
+          {params.text(member_input_hash)}, {params.text(bundle_payload_sha256)},
+          {params.jsonb(release_parameters)}, {params.text(provenance['code_version'])},
+          {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
+        )
+        returning id
+      ), step as (
+        insert into audit.step_runs
+          (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count,
+           counts_by_team, input_hash, output_hash)
+        select id, 'release_league_dashboard', {params.text(LEAGUE_DASHBOARD_RELEASE_RULE_VERSION)},
+          'league_dashboard_release_v2', 16, 17,
+          {params.jsonb({member['team_key']: 1 for member in members})},
+          {params.text(member_input_hash)}, {params.text(bundle_payload_sha256)}
+        from run
+        returning pipeline_run_id
+      ), release as (
+        insert into reporting.aggregate_releases (release_label, status, pipeline_run_id)
+        select {params.text(label)}, 'draft', id from run
+        returning id, pipeline_run_id
+      )
+      select * from release;
+
+      insert into reporting.league_release_context_v2
+        (release_id, season, analysis_version, generated_at,
+         expected_member_count, match_exposure_decision, decision_reviewer, decision_recorded_at)
+      select id, {params.text(season)}, 'v2', {params.text(generated_at)}::timestamptz,
+        16, 'all_registered_season_fixtures_15_players_x_80_minutes_div_60',
+        'Abdel Babiker', date '2026-07-14'
+      from current_league_release;
+
+      insert into reporting.league_release_members_v2
+        (release_id, team_key, team_release_id, curated_build_id)
+      select current_league_release.id, member.team_key, member.team_release_id::uuid,
+        member.curated_build_id::uuid
+      from current_league_release,
+        jsonb_to_recordset({params.jsonb(members)}) as member(
+          team_key text, team_release_id text, curated_build_id text
+        );
+
+      insert into reporting.league_release_payloads_v2
+        (release_id, dashboard_payload)
+      select current_league_release.id, candidate.dashboard
+      from current_league_release
+      join analysis.league_dashboard_payload_v2 candidate
+        on candidate.season = {params.text(season)};
+
+      insert into reporting.team_dashboard_payloads_v2
+        (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
+      select current_league_release.id, candidate.team_key, candidate.team_release_id,
+        candidate.curated_build_id, candidate.dashboard
+      from current_league_release
+      join analysis.team_dashboard_payload_v2 candidate
+        on candidate.season = {params.text(season)}
+      join jsonb_to_recordset({params.jsonb(members)}) as expected(
+        team_key text, team_release_id text, curated_build_id text
+      ) on expected.team_key = candidate.team_key
+        and expected.team_release_id::uuid = candidate.team_release_id
+        and expected.curated_build_id::uuid = candidate.curated_build_id;
+
+      update reporting.aggregate_releases r
+      set status = 'approved', approved_at = now()
+      from current_league_release current
+      where r.id = current.id and r.status = 'draft';
+
+      do $$
+      declare
+        published_league_count integer;
+        published_team_count integer;
+        stored_league_hash text;
+        stored_team_hashes jsonb;
+      begin
+        select count(*) into published_league_count
+        from reporting.latest_league_dashboard_v2 d
+        where d.season = {params.text(season)};
+        if published_league_count <> 1 then
+          raise exception 'published league dashboard bundle must expose exactly one league row';
+        end if;
+
+        select count(*) into published_team_count
+        from reporting.latest_team_dashboard_v2 d
+        where d.season = {params.text(season)};
+        if published_team_count <> 16 then
+          raise exception 'published team dashboard bundle must expose exactly 16 teams';
+        end if;
+
+        select p.payload_sha256 into stored_league_hash
+        from reporting.league_release_payloads_v2 p
+        join current_league_release current on current.id = p.release_id;
+        if stored_league_hash is distinct from {params.text(league_payload_sha256)} then
+          raise exception 'stored league payload hash differs from the canonical candidate hash';
+        end if;
+
+        select jsonb_object_agg(p.team_key, p.payload_sha256 order by p.team_key)
+        into stored_team_hashes
+        from reporting.team_dashboard_payloads_v2 p
+        join current_league_release current on current.id = p.bundle_release_id;
+        if stored_team_hashes is distinct from {params.jsonb(team_payload_sha256s)} then
+          raise exception 'stored team payload hashes differ from the canonical candidate hashes';
+        end if;
+      end $$;
+
+      update audit.pipeline_runs pr
+      set status = 'succeeded', ended_at = now()
+      from current_league_release current
+      where pr.id = current.pipeline_run_id and pr.status = 'started';
+
+      update audit.step_runs sr
+      set ended_at = now()
+      from current_league_release current
+      where sr.pipeline_run_id = current.pipeline_run_id
+        and sr.step_name = 'release_league_dashboard';
+    """
+    output_arg = clean_text(args.output or "")
+    export_path = Path(output_arg) if output_arg else Path("content/reporting") / f"urc_dashboard_{season}.json"
+    if export_path.exists():
+        raise SystemExit(f"league release export already exists: {export_path}")
+    write_json_atomic(export_path, dashboard)
+    try:
+        run_sql(sql, params.values)
+    except BaseException:
+        export_path.unlink(missing_ok=True)
+        raise
+
+    print(
+        json.dumps(
+            {
+                "release_label": label,
+                "season": season,
+                "member_count": len(members),
+                "member_input_hash": member_input_hash,
+                "league_payload_sha256": league_payload_sha256,
+                "bundle_payload_sha256": bundle_payload_sha256,
+                "preflight_json_sha256": preflight_bundle_sha256,
+                "export_path": str(export_path),
             },
             indent=2,
         )
@@ -9346,6 +9715,26 @@ def main() -> None:
         help="exact checksummed approval envelope for a re-release with non-whitelisted corrected values",
     )
     release_parser.set_defaults(func=release)
+
+    league_release_parser = subcommands.add_parser("release-league")
+    league_release_parser.add_argument("--season", default="2024-25")
+    league_release_parser.add_argument("--output", default="")
+    league_release_parser.add_argument(
+        "--preflight",
+        action="store_true",
+        help="render the exact 16-team league release candidate without a database write",
+    )
+    league_release_parser.add_argument(
+        "--preflight-file",
+        default="",
+        help="reviewed league candidate required before first promotion",
+    )
+    league_release_parser.add_argument(
+        "--preflight-reviewer",
+        default="",
+        help="named reviewer required with --preflight-file",
+    )
+    league_release_parser.set_defaults(func=release_league)
 
     diff_dashboard_json_parser = subcommands.add_parser("diff-dashboard-json")
     diff_dashboard_json_parser.add_argument("--old", required=True)

@@ -1,15 +1,36 @@
+import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 import { LockedShell } from '@/components/locked-shell';
 import { StaticImages } from '@/lib/placeholder-images';
+import { getLeagueDashboard } from '@/lib/reporting';
 
-export const dynamic = 'force-static';
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-export default function UrcOverallPage() {
+export default async function UrcOverallPage() {
+  let dashboard;
+  try {
+    dashboard = await getLeagueDashboard();
+  } catch {
+    dashboard = undefined;
+  }
+
+  if (!dashboard) {
+    return (
+      <LockedShell
+        title="URC Overall"
+        subtitle="League-wide injury and exposure surveillance"
+        crest={StaticImages.urcLogo}
+        reason="The approved league dashboard could not be loaded. Please try again later."
+        statusLabel="Dashboard unavailable"
+      />
+    );
+  }
+
   return (
-    <LockedShell
-      title="URC Overall"
-      subtitle="League-wide injury & exposure aggregate"
+    <TeamDashboard
+      dashboard={dashboard}
       crest={StaticImages.urcLogo}
-      reason="The league-wide aggregate combines cleared team datasets. It unlocks once enough teams have passed the V2 workflow and a governance-approved league aggregate with disclosure control is released. Munster is the pilot dataset."
+      teamName="United Rugby Championship"
     />
   );
 }

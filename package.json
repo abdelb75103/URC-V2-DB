@@ -4,7 +4,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:dashboard-access": "node --test tests/team-dashboard-access.test.mjs",
+    "test:dashboard-access": "node --test tests/team-dashboard-access.test.mjs tests/league-dashboard-access.test.mjs",
     "pipeline": "python3 -m pipeline",
     "pipeline:check": "python3 -m pipeline self-check",
     "pipeline:alias-check": "python3 -m pipeline validate-alias-map"
