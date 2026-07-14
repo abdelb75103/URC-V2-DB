@@ -1,6 +1,7 @@
 import "server-only";
 import { Pool } from "pg";
 import { z } from "zod";
+import { isTeamSessionAuthorized } from "@/lib/team-auth";
 
 export type HeadlineMetric = {
   key: string;
@@ -182,18 +183,22 @@ function webReaderPool(): Pool | undefined {
  * relation) and validates it into TeamDashboardData.
  *
  * Fail-closed contract:
- * - No credential configured, or no approved release for the team ->
- *   undefined (callers render the locked shell).
- * - Database unreachable or payload fails validation -> throws, so an ISR
- *   revalidation fails and Next keeps serving the last good cached render
- *   instead of downgrading a live dashboard to a locked shell.
+ * - Missing/invalid/wrong-team session, no reader credential, or no approved
+ *   release -> undefined (the dynamic page renders the locked shell).
+ * - Database or payload errors throw; the dynamic page catches them and fails
+ *   closed without caching or rendering a dashboard payload.
  */
 export async function getTeamDashboard(
   teamId: string,
+  sessionToken: string | undefined,
   season = "2024-25"
 ): Promise<TeamDashboardData | undefined> {
   const pool = webReaderPool();
   if (!pool) return undefined;
+
+  // This check deliberately sits at the database boundary: callers cannot
+  // read a team dashboard with a missing, invalid, or differently scoped session.
+  if (!isTeamSessionAuthorized(teamId, sessionToken)) return undefined;
 
   const result = await pool.query(
     `select team, season, generated_at, analysis_window, method, coverage,

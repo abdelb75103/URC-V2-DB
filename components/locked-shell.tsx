@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Lock, ArrowLeft } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 interface LockedShellProps {
   title: string;
@@ -10,6 +11,8 @@ interface LockedShellProps {
   accent?: string;
   /** Short reason shown to the visitor. */
   reason?: string;
+  actionHref?: string;
+  actionLabel?: string;
 }
 
 export function LockedShell({
@@ -18,6 +21,8 @@ export function LockedShell({
   crest,
   accent = '#02D5F0',
   reason = 'This dashboard unlocks once a governance-approved, disclosure-controlled aggregate has been released for publication.',
+  actionHref,
+  actionLabel,
 }: LockedShellProps) {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pb-16 pt-8 sm:px-6">
@@ -55,6 +60,12 @@ export function LockedShell({
           </span>
 
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">{reason}</p>
+
+          {actionHref && actionLabel && (
+            <Button asChild size="lg">
+              <Link href={actionHref}>{actionLabel}</Link>
+            </Button>
+          )}
         </CardContent>
       </Card>
     </div>

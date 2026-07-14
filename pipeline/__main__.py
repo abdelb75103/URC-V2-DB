@@ -671,6 +671,22 @@ def parse_exposure_timestamp(value: object) -> datetime | None:
     return None
 
 
+def adapter_confirmed_return_date(row: dict[str, str]) -> tuple[datetime | None, str]:
+    value = clean_text(row.get("Adapter Canonical Confirmed Return Date"))
+    origin = clean_text(row.get("Adapter Canonical Confirmed Return Date Origin"))
+    if not value and not origin:
+        return None, ""
+    if not value or not (
+        origin.startswith("approved_mapping:") or origin.startswith("manual_adjudication:")
+    ):
+        raise SystemExit("invalid adapter canonical confirmed return date override")
+    returned_at = parse_date_value(value)
+    injured_at = parse_date_value(row.get("Date Injured", ""))
+    if returned_at is None or (injured_at and returned_at < injured_at):
+        raise SystemExit("invalid or unordered adapter canonical confirmed return date")
+    return returned_at, origin
+
+
 def effective_days_injured_with_origin(row: dict[str, str]) -> tuple[int | None, str]:
     days = parse_int(clean_text(row.get("Days Injured")))
     if days is not None and days >= 0:
@@ -678,6 +694,8 @@ def effective_days_injured_with_origin(row: dict[str, str]) -> tuple[int | None,
 
     injured_at = parse_date_value(row.get("Date Injured", ""))
     returned_at = parse_date_value(row.get("Confirmed Return Date", ""))
+    if returned_at is None:
+        returned_at, _ = adapter_confirmed_return_date(row)
     training_days = parse_int(clean_text(row.get("Training Days Missed")))
     if training_days == -1:
         return 0, "mapped_minus_one_training_days_to_same_day_zero"
@@ -715,6 +733,7 @@ def effective_confirmed_return_date(
 ) -> tuple[date | None, str]:
     injured_at = parse_date_value(row.get("Date Injured", ""))
     returned_at = parse_date_value(row.get("Confirmed Return Date", ""))
+    adapter_returned_at, adapter_return_origin = adapter_confirmed_return_date(row)
     if (
         injured_at
         and days is not None
@@ -725,6 +744,8 @@ def effective_confirmed_return_date(
         return injured_at + timedelta(days=days + 1), "derived_from_training_days_missed_date_conflict"
     if returned_at and (not injured_at or returned_at >= injured_at):
         return returned_at, "preserved_source_confirmed_return_date"
+    if adapter_returned_at:
+        return adapter_returned_at, adapter_return_origin
     closure_override = adapter_canonical_override(
         row,
         "Adapter Canonical Injury Closed",
@@ -838,6 +859,14 @@ def injury_cohort_exclusion_reasons(row: dict[str, str], expected_team: str = ""
 # rule, which excludes anything that is not blank and not the exact own
 # alias) both are treated as "not this team's own player" downstream.
 def received_in_team_status(row: dict[str, str], own_team_alias: str) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row,
+        "Adapter Canonical Received In Team Status",
+        "Adapter Canonical Received In Team Status Origin",
+        {"own_team", "other_team", "club", "missing"},
+    )
+    if override:
+        return override
     value = clean_text(row.get("Received/Injured In Team"))
     if is_missing(value):
         return "missing", "source_missing_or_unknown"
@@ -949,6 +978,9 @@ def injury_closed(row: dict[str, str]) -> tuple[bool | None, str]:
         return False, "mapped_from_is_injury_closed"
     if parse_date_value(clean_text(row.get("Confirmed Return Date"))) is not None:
         return True, "mapped_from_confirmed_return_date"
+    adapter_return, adapter_return_origin = adapter_confirmed_return_date(row)
+    if adapter_return is not None:
+        return True, adapter_return_origin
     time_loss = clean_text(row.get("TimeLoss vs Medical Attention")).lower()
     if time_loss == "time loss":
         return False, "unclosed_time_loss_without_return_date"

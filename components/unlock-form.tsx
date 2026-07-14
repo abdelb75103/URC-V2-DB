@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AlertCircle, Eye, EyeOff, LockKeyhole } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,42 +17,51 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { getTeamById } from '@/config/teams';
-import { getUnionById } from '@/config/unions';
 import { StaticImages } from '@/lib/placeholder-images';
 
 export function UnlockForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const teamId = searchParams.get('teamId');
-  const unionId = searchParams.get('unionId');
   const team = teamId ? getTeamById(teamId) : null;
-  const union = unionId ? getUnionById(unionId) : null;
 
-  const contextTitle = team
-    ? `${team.name} Dashboard`
-    : union
-      ? `${union.governingBody} Dashboard`
-      : 'Access Restricted';
+  const contextTitle = team ? `${team.name} Dashboard` : 'Access Restricted';
 
-  const imageUrl = team?.crest ?? union?.crest ?? StaticImages.urcLogo;
+  const imageUrl = team?.crest ?? StaticImages.urcLogo;
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // Real password verification (slow hash + signed, expiring HttpOnly cookie)
-    // is handled server-side at deployment and is intentionally not part of the
-    // static front-end build. See AGENTS.md — Web and Deployment Contracts.
-    setNotice(
-      'Password access is provisioned per team at deployment. This preview build does not verify credentials.'
-    );
+    if (!team) {
+      setNotice('Unable to unlock this dashboard.');
+      return;
+    }
+    const form = new FormData(e.currentTarget);
+    setSubmitting(true);
+    setNotice(null);
+    try {
+      const response = await fetch('/api/team-session/unlock', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ teamId: team.id, password: form.get('password') }),
+      });
+      if (!response.ok) throw new Error('unlock failed');
+      router.replace(`/team/${team.id}`);
+      router.refresh();
+    } catch {
+      setNotice('Unable to unlock this dashboard. Check the password and try again.');
+      setSubmitting(false);
+    }
   };
 
   return (
     <Card className="w-full max-w-sm">
       <form onSubmit={onSubmit}>
         <CardHeader className="text-center">
-          {team || union ? (
+          {team ? (
             <div className="mx-auto mb-4">
               <Image
                 src={imageUrl}
@@ -74,7 +83,7 @@ export function UnlockForm() {
           {notice && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Preview build</AlertTitle>
+              <AlertTitle>Access not granted</AlertTitle>
               <AlertDescription>{notice}</AlertDescription>
             </Alert>
           )}
@@ -87,6 +96,8 @@ export function UnlockForm() {
                 type={showPassword ? 'text' : 'password'}
                 required
                 autoFocus
+                maxLength={256}
+                autoComplete="current-password"
                 className="pr-10"
               />
               <Button
@@ -103,8 +114,8 @@ export function UnlockForm() {
           </div>
         </CardContent>
         <CardFooter>
-          <Button type="submit" className="w-full">
-            Unlock
+          <Button type="submit" className="h-11 w-full" disabled={submitting || !team}>
+            {submitting ? 'Unlocking…' : 'Unlock'}
           </Button>
         </CardFooter>
       </form>

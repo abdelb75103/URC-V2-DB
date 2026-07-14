@@ -1,18 +1,14 @@
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { getTeamById, teams } from '@/config/teams';
+import { getTeamById } from '@/config/teams';
 import { getTeamDashboard } from '@/lib/reporting';
+import { TEAM_SESSION_COOKIE } from '@/lib/team-session';
 import { LockedShell } from '@/components/locked-shell';
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 
-// Dashboards change only at approved releases: prerender every team page at
-// deploy, then revalidate hourly. If a revalidation cannot reach the
-// database, getTeamDashboard throws and Next keeps serving the last good
-// cached render.
-export const revalidate = 3600;
-
-export function generateStaticParams() {
-  return teams.map((team) => ({ teamId: team.id }));
-}
+// Protected dashboards must never be prerendered or shared through ISR.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function TeamPage({
   params,
@@ -34,10 +30,14 @@ export default async function TeamPage({
     );
   }
 
-  // Fail closed: a live-flagged team with no approved release in the
-  // database (or no reader credential in this environment) renders the
-  // locked shell rather than erroring or exposing anything.
-  const dashboard = await getTeamDashboard(team.id);
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get(TEAM_SESSION_COOKIE)?.value;
+  let dashboard;
+  try {
+    dashboard = await getTeamDashboard(team.id, sessionToken);
+  } catch {
+    dashboard = undefined;
+  }
   if (!dashboard) {
     return (
       <LockedShell
@@ -45,6 +45,9 @@ export default async function TeamPage({
         subtitle="URC injury & exposure surveillance"
         crest={team.crest}
         accent={team.accent}
+        reason="Enter the shared team password to view this disclosure-controlled dashboard."
+        actionHref={`/unlock?teamId=${encodeURIComponent(team.id)}`}
+        actionLabel="Unlock dashboard"
       />
     );
   }

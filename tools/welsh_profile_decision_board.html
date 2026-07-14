@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welsh Step 0 profile decisions</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071525;
+      --panel: #0c2034;
+      --panel-deep: #091a2b;
+      --line: #2b465d;
+      --text: #f1f7fb;
+      --muted: #b7c5d0;
+      --accent: #2fc0dc;
+      --accent-ink: #05202a;
+      --success: #83d2a1;
+      --warning: #f4c95d;
+      --error: #ffaaa4;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--bg); }
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button, textarea { font: inherit; }
+    button { touch-action: manipulation; }
+    .shell { width: min(1120px, 100%); margin: auto; padding: 28px 20px 64px; }
+    header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: end;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0 0 6px; font-size: clamp(25px, 4vw, 38px); line-height: 1.1; letter-spacing: -.025em; }
+    h2 { margin: 0; font-size: 19px; }
+    p { margin: 0; }
+    header p, .muted { color: var(--muted); }
+    .count { min-width: 138px; text-align: right; font-variant-numeric: tabular-nums; }
+    .count strong { display: block; color: var(--accent); font-size: 32px; line-height: 1; }
+    #status { min-height: 24px; margin: 16px 0 0; color: var(--success); }
+    .evidence {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      margin-top: 16px;
+      padding: 14px 16px;
+      background: var(--panel-deep);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .evidence strong { display: block; }
+    .evidence p { color: var(--muted); font-size: 13px; }
+    .evidence code { color: var(--accent); font-size: 12px; overflow-wrap: anywhere; }
+    .fixed-applications { margin-top: 18px; }
+    .fixed-application { padding: 18px 20px; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warning); border-radius: var(--radius); }
+    .fixed-application + .fixed-application { margin-top: 10px; }
+    .fixed-application h2 { margin-bottom: 6px; }
+    .fixed-application p { color: var(--muted); }
+    .fixed-application .application { margin-top: 8px; color: var(--text); }
+    .fixed-application .review-trigger { margin-top: 6px; font-size: 13px; }
+    .section { margin-top: 18px; padding: 20px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+    .eyebrow { display: block; margin-bottom: 4px; color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .finding { margin-top: 16px; padding: 14px; color: var(--muted); background: var(--panel-deep); border-left: 3px solid var(--warning); border-radius: 0 var(--radius) var(--radius) 0; }
+    .finding strong { display: block; color: var(--text); margin-bottom: 3px; }
+    .question { margin: 16px 0 12px; font-size: 18px; line-height: 1.4; }
+    .choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .choice {
+      min-height: 126px;
+      padding: 14px;
+      color: var(--text);
+      text-align: left;
+      background: transparent;
+      border: 1px solid #587186;
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+    .choice:hover { border-color: var(--accent); }
+    .choice:active { transform: translateY(1px); }
+    .choice:disabled { cursor: wait; opacity: .68; }
+    .choice:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+    .choice strong { display: block; margin-bottom: 5px; }
+    .choice span { display: block; color: var(--muted); font-size: 13px; }
+    .choice em { display: inline-block; margin-top: 8px; color: var(--accent); font-size: 11px; font-style: normal; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+    .choice.selected { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+    .choice.selected span, .choice.selected em { color: #183944; }
+    details { margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    summary { min-height: 56px; padding: 16px 20px; display: flex; justify-content: space-between; gap: 16px; align-items: center; cursor: pointer; font-weight: 750; }
+    summary::-webkit-details-marker { display: none; }
+    summary span { color: var(--muted); font-size: 13px; font-weight: 500; }
+    .inferred-list { margin: 0; padding: 0; list-style: none; }
+    .inferred { padding: 15px 20px; border-top: 1px solid var(--line); }
+    .inferred-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; margin-bottom: 5px; }
+    .inferred code { color: var(--accent); font-size: 12px; }
+    .inferred p { color: var(--muted); }
+    .basis { margin-top: 3px; font-size: 12px; }
+    textarea { display: block; width: 100%; min-height: 120px; margin-top: 12px; resize: vertical; padding: 12px; color: var(--text); background: var(--panel-deep); border: 1px solid #587186; border-radius: var(--radius); }
+    #note-status { min-height: 20px; margin-top: 7px; color: var(--success); font-size: 13px; }
+    .error { color: var(--error) !important; }
+    .warning { color: var(--warning) !important; }
+    .loading { padding: 22px 0; color: var(--muted); }
+    .skeleton { height: 164px; margin-top: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+    @media (max-width: 760px) {
+      .shell { padding: 20px 14px 48px; }
+      header, .evidence { grid-template-columns: 1fr; }
+      .count { text-align: left; }
+      .choices { grid-template-columns: 1fr; }
+      .choice { min-height: 44px; }
+      summary { align-items: flex-start; }
+      .inferred-head { grid-template-columns: 1fr; gap: 2px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Welsh Step 0 decisions</h1>
+        <p>Cardiff, Dragons, Ospreys, and Scarlets. New questions are separated from accepted prior answers.</p>
+      </div>
+      <div class="count"><strong id="remaining">...</strong><span>new decisions remaining</span></div>
+    </header>
+    <p id="status" role="status" aria-live="polite"></p>
+    <section class="evidence" aria-labelledby="evidence-heading">
+      <div><strong id="evidence-heading">Evidence binding</strong><p id="evidence-copy">Checking the four-team evidence set.</p></div>
+      <code id="fingerprint">Loading...</code>
+    </section>
+    <section class="fixed-applications" id="fixed-applications" aria-label="Fixed evidence applications"><div class="skeleton" aria-label="Loading fixed evidence applications"></div></section>
+    <section id="decisions" aria-label="New decisions"><div class="skeleton" aria-label="Loading decisions"></div></section>
+    <details>
+      <summary>Accepted prior answers applied here <span id="inferred-count"></span></summary>
+      <ul class="inferred-list" id="inferred"></ul>
+    </details>
+    <section class="section" aria-labelledby="note-heading">
+      <span class="eyebrow">Optional</span>
+      <h2 id="note-heading">Override or additional direction</h2>
+      <p class="muted">Use this if an inferred prior answer should not apply to one of the four Welsh teams. The note saves automatically.</p>
+      <textarea id="note" maxlength="5000" aria-describedby="note-help note-status" placeholder="Name the team, prior answer, and required change."></textarea>
+      <p id="note-help" class="muted">This note is bound to the same evidence fingerprint as the selections.</p>
+      <p id="note-status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script>
+    let state;
+    const decisions = document.querySelector('#decisions');
+    const status = document.querySelector('#status');
+    const note = document.querySelector('#note');
+    const noteStatus = document.querySelector('#note-status');
+    let noteTimer;
+    let noteSaves = Promise.resolve();
+
+    function escapeHtml(text) {
+      const node = document.createElement('span');
+      node.textContent = String(text);
+      return node.innerHTML;
+    }
+
+    function render() {
+      const selected = state.selections || {};
+      document.querySelector('#remaining').textContent = state.decisions.filter(item => !selected[item.id]).length;
+      document.querySelector('#fingerprint').textContent = state.evidence_fingerprint.slice(0, 12);
+      const artifacts = state.artifact_status;
+      const evidenceCopy = document.querySelector('#evidence-copy');
+      if (artifacts.missing.length) {
+        evidenceCopy.textContent = `${artifacts.present} of ${artifacts.expected} expected artifacts are present. Any newly written artifact will reset stale selections.`;
+        evidenceCopy.className = 'warning';
+      } else {
+        evidenceCopy.textContent = `All ${artifacts.expected} mechanical, mapping, adapter, and profile artifacts are fingerprinted.`;
+        evidenceCopy.className = '';
+      }
+
+      const fixedApplications = document.querySelector('#fixed-applications');
+      fixedApplications.innerHTML = state.fixed_applications.length
+        ? state.fixed_applications.map(item => `<article class="fixed-application">
+            <span class="eyebrow">${escapeHtml(item.team)} - fixed evidence application</span>
+            <h2>${escapeHtml(item.title)}</h2>
+            <p>${escapeHtml(item.finding)}</p>
+            <p class="application"><strong>Required handling:</strong> ${escapeHtml(item.application)}</p>
+            <p class="review-trigger">${escapeHtml(item.review_trigger)}</p>
+          </article>`).join('')
+        : '<article class="fixed-application"><h2>No fixed evidence limitations</h2><p>The current evidence set adds no mandatory applications.</p></article>';
+
+      if (!state.decisions.length) {
+        decisions.innerHTML = '<section class="section"><h2>No new decisions</h2><p class="muted">The current evidence set has no unresolved Welsh scientific questions.</p></section>';
+      } else {
+        decisions.innerHTML = state.decisions.map(item => `<article class="section">
+          <span class="eyebrow">${escapeHtml(item.team)} - new decision</span>
+          <div class="finding"><strong>What the profile found</strong><p>${escapeHtml(item.finding)}</p></div>
+          <h2 class="question">${escapeHtml(item.question)}</h2>
+          <div class="choices">${item.choices.map(choice => `<button type="button" class="choice ${selected[item.id]?.choice === choice.value ? 'selected' : ''}" aria-pressed="${selected[item.id]?.choice === choice.value}" data-id="${escapeHtml(item.id)}" data-choice="${escapeHtml(choice.value)}"><strong>${escapeHtml(choice.label)}</strong><span>${escapeHtml(choice.description)}</span>${choice.recommended ? '<em>Recommended</em>' : ''}</button>`).join('')}</div>
+        </article>`).join('');
+      }
+
+      document.querySelector('#inferred-count').textContent = `${state.inferred.length} prior answers`;
+      document.querySelector('#inferred').innerHTML = state.inferred.length
+        ? state.inferred.map(item => `<li class="inferred"><div class="inferred-head"><strong>${escapeHtml(item.decision)}</strong><code>${escapeHtml(item.id)}</code></div><p>${escapeHtml(item.application)}</p><p class="basis">Basis: ${escapeHtml(item.basis)}</p></li>`).join('')
+        : '<li class="inferred"><p>No prior answers apply to this evidence set.</p></li>';
+    }
+
+    function saveNote() {
+      clearTimeout(noteTimer);
+      if (!state || note.value === state.note) return noteSaves;
+      const value = note.value;
+      noteStatus.className = '';
+      noteStatus.textContent = 'Saving...';
+      noteSaves = noteSaves.catch(() => {}).then(async () => {
+        const response = await fetch('/api/note', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({note: value})
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Save failed');
+        state.note = result.note;
+        if (note.value === value) noteStatus.textContent = 'Saved';
+      }).catch(error => {
+        if (note.value === value) {
+          noteStatus.className = 'error';
+          noteStatus.textContent = error.message;
+        }
+      });
+      return noteSaves;
+    }
+
+    note.addEventListener('input', () => {
+      clearTimeout(noteTimer);
+      noteStatus.className = '';
+      noteStatus.textContent = 'Unsaved changes';
+      noteTimer = setTimeout(saveNote, 600);
+    });
+    note.addEventListener('blur', saveNote);
+
+    decisions.addEventListener('click', async event => {
+      const button = event.target.closest('button[data-id]');
+      if (!button) return;
+      button.disabled = true;
+      status.className = '';
+      status.textContent = 'Saving...';
+      try {
+        const current = state.selections[button.dataset.id]?.choice;
+        const choice = current === button.dataset.choice ? null : button.dataset.choice;
+        const response = await fetch('/api/select', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({decision_id: button.dataset.id, choice})
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Save failed');
+        state.selections = result.selections;
+        state.updated_at = result.updated_at;
+        render();
+        status.textContent = choice ? 'Decision saved' : 'Decision cleared';
+      } catch (error) {
+        status.className = 'error';
+        status.textContent = error.message;
+        button.disabled = false;
+      }
+    });
+
+    fetch('/api/state')
+      .then(async response => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Load failed');
+        return result;
+      })
+      .then(result => {
+        state = result;
+        note.value = result.note || '';
+        render();
+        if (result.invalidated_previous_state) {
+          status.className = 'warning';
+          status.textContent = 'Evidence changed. Previous selections and note were cleared.';
+        } else {
+          status.textContent = result.updated_at ? 'Previous selections loaded' : 'Ready for review';
+        }
+      })
+      .catch(error => {
+        document.querySelector('#remaining').textContent = '0';
+        decisions.innerHTML = '<section class="section"><h2>Decisions unavailable</h2><p class="muted">The local evidence or saved state could not be loaded.</p></section>';
+        status.className = 'error';
+        status.textContent = `Could not load decisions: ${error.message}`;
+        note.disabled = true;
+      });
+  </script>
+</body>
+</html>

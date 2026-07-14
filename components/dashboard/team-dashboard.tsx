@@ -2,7 +2,8 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, Info } from 'lucide-react';
+import { ArrowLeft, Info, LogOut } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import type { TeamDashboardData } from '@/lib/reporting';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -125,9 +126,13 @@ export function TeamDashboard({
             {`${dashboard.season} injury & exposure surveillance`}
           </p>
         </div>
-        <span className="ml-auto hidden rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-xs font-medium text-primary sm:inline">
-          V2 pilot
-        </span>
+        <form action="/api/team-session/logout" method="post" className="ml-auto">
+          <Button type="submit" variant="outline" className="h-11 px-3 sm:px-4">
+            <LogOut />
+            <span className="hidden sm:inline">Sign out</span>
+            <span className="sr-only sm:hidden">Sign out</span>
+          </Button>
+        </form>
       </div>
 
       <Tabs defaultValue="overview">
