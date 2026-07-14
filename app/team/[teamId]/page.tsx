@@ -46,6 +46,7 @@ export default async function TeamPage({
         crest={team.crest}
         accent={team.accent}
         reason="Enter the shared team password to view this disclosure-controlled dashboard."
+        statusLabel="Team access required"
         actionHref={`/unlock?teamId=${encodeURIComponent(team.id)}`}
         actionLabel="Unlock dashboard"
       />

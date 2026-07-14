@@ -11,6 +11,7 @@ interface LockedShellProps {
   accent?: string;
   /** Short reason shown to the visitor. */
   reason?: string;
+  statusLabel?: string;
   actionHref?: string;
   actionLabel?: string;
 }
@@ -21,6 +22,7 @@ export function LockedShell({
   crest,
   accent = '#02D5F0',
   reason = 'This dashboard unlocks once a governance-approved, disclosure-controlled aggregate has been released for publication.',
+  statusLabel = 'Awaiting governance-cleared data',
   actionHref,
   actionLabel,
 }: LockedShellProps) {
@@ -56,7 +58,7 @@ export function LockedShell({
 
           <span className="inline-flex items-center gap-2 rounded-full bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
             <Lock className="h-3.5 w-3.5" />
-            Awaiting governance-cleared data
+            {statusLabel}
           </span>
 
           <p className="max-w-md text-sm leading-relaxed text-muted-foreground">{reason}</p>

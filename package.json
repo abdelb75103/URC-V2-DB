@@ -4,7 +4,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:auth": "node --no-warnings --experimental-strip-types --test tests/team-session.test.mjs",
+    "test:auth": "node --no-warnings --experimental-strip-types --test tests/team-session.test.mjs tests/unlock-form-safety.test.mjs",
     "auth:hash-password": "node --no-warnings --experimental-strip-types scripts/hash-team-password.mjs",
     "pipeline": "python3 -m pipeline",
     "pipeline:check": "python3 -m pipeline self-check",

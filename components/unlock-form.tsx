@@ -59,7 +59,7 @@ export function UnlockForm() {
 
   return (
     <Card className="w-full max-w-sm">
-      <form onSubmit={onSubmit}>
+      <form action="/api/team-session/unlock" method="post" onSubmit={onSubmit}>
         <CardHeader className="text-center">
           {team ? (
             <div className="mx-auto mb-4">
