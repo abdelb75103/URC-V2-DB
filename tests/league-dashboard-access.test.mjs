@@ -24,3 +24,10 @@ test('team dashboard reads the v2 approved-build projection', async () => {
   assert.match(reporting, /setting_metrics/);
   assert.match(reporting, /injury_profiles/);
 });
+
+test('body map regions keep a reliable touch and pointer hit area', async () => {
+  const bodyMap = await readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8');
+
+  assert.match(bodyMap, /pointerEvents:\s*enabled \? 'bounding-box' : 'none'/);
+  assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
+});

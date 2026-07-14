@@ -188,6 +188,7 @@ function Region({
     stroke: active ? 'hsl(0 0% 94%)' : 'hsl(187 98% 70% / 0.45)',
     strokeWidth: active ? 2.5 : 1,
     opacity: dimmed ? 0.25 : 1,
+    pointerEvents: enabled ? 'bounding-box' : 'none',
     className: enabled
       ? 'cursor-pointer outline-none transition-[opacity,stroke] duration-150 focus-visible:stroke-white'
       : 'outline-none',
