@@ -70,6 +70,10 @@ function format(value: number | null) {
   return new Intl.NumberFormat('en-IE', { maximumFractionDigits: 1 }).format(value);
 }
 
+function formatAxisTick(value: number) {
+  return new Intl.NumberFormat('en-IE', { maximumFractionDigits: 1 }).format(value);
+}
+
 export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
   const data = rows
     .filter(
@@ -128,7 +132,7 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
                 dataKey="incidence_per_1000h"
                 domain={[0, maxIncidence]}
                 name="Incidence"
-                unit=" /1,000h"
+                tickFormatter={formatAxisTick}
                 tick={{ fill: AXIS, fontSize: 11 }}
                 tickLine={false}
                 axisLine={{ stroke: GRID }}
@@ -139,7 +143,7 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
                 dataKey="mean_severity_days"
                 domain={[0, maxSeverity]}
                 name="Mean severity"
-                unit=" days"
+                tickFormatter={formatAxisTick}
                 width={54}
                 tick={{ fill: AXIS, fontSize: 11 }}
                 tickLine={false}

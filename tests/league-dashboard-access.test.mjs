@@ -31,3 +31,11 @@ test('body map regions keep a reliable touch and pointer hit area', async () => 
   assert.match(bodyMap, /pointerEvents:\s*enabled \? 'bounding-box' : 'none'/);
   assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
 });
+
+test('impact chart formats floating point axis ticks for presentation', async () => {
+  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+
+  assert.match(charts, /function formatAxisTick/);
+  assert.equal((charts.match(/tickFormatter=\{formatAxisTick\}/g) ?? []).length, 2);
+  assert.doesNotMatch(charts, /unit=" \/1,000h"|unit=" days"/);
+});
