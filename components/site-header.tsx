@@ -91,7 +91,7 @@ export function SiteHeader() {
           <div className="lg:hidden">
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" className="h-11 w-11">
                   <Menu className="h-8 w-8 text-primary" />
                   <span className="sr-only">Open menu</span>
                 </Button>
