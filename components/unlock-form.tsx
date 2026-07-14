@@ -98,13 +98,13 @@ export function UnlockForm() {
                 autoFocus
                 maxLength={256}
                 autoComplete="current-password"
-                className="pr-10"
+                className="h-11 pr-11"
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="absolute right-0 top-0 h-full px-3 text-muted-foreground hover:text-foreground"
+                className="absolute right-0 top-0 h-full w-11 px-3 text-muted-foreground hover:text-foreground"
                 onClick={() => setShowPassword((s) => !s)}
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
               >

@@ -19,7 +19,6 @@ test('a valid team password verifies and a wrong password does not', async () =>
   assert.equal(await verifyTeamPassword('correct horse battery staple', hash), true);
   assert.equal(await verifyTeamPassword('wrong password', hash), false);
 });
-
 test('password hashes use only the strict versioned scrypt format', async () => {
   const hash = await hashTeamPassword('secret', Buffer.alloc(16, 9));
   const config = parseTeamPasswordConfig(

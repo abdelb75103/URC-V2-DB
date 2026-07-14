@@ -22,7 +22,6 @@ export function getTeamAuthSettings(): TeamAuthSettings | undefined {
     ? { passwords, signingKey, ttlSeconds }
     : undefined;
 }
-
 export function isTeamSessionAuthorized(
   teamId: string,
   token: string | undefined,

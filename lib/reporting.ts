@@ -193,6 +193,10 @@ export async function getTeamDashboard(
   sessionToken: string | undefined,
   season = "2024-25"
 ): Promise<TeamDashboardData | undefined> {
+  // This check deliberately sits at the database boundary: callers cannot
+  // read a team dashboard with a missing, invalid, or differently scoped session.
+  if (!isTeamSessionAuthorized(teamId, sessionToken)) return undefined;
+
   const pool = webReaderPool();
   if (!pool) return undefined;
 

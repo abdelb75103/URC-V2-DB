@@ -34,7 +34,6 @@ type TeamSessionPayload = {
 function isAcceptablePassword(password: string): boolean {
   return password.length > 0 && Buffer.byteLength(password, 'utf8') <= MAX_PASSWORD_BYTES;
 }
-
 function encodeBase64Url(value: Buffer | string): string {
   return Buffer.from(value).toString('base64url');
 }

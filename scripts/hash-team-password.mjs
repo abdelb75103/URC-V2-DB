@@ -6,7 +6,6 @@ if (process.argv.length !== 2 || process.stdin.isTTY) {
   console.error('Pipe one password on stdin; command-line arguments are not accepted.');
   process.exit(1);
 }
-
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 const password = Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '');
