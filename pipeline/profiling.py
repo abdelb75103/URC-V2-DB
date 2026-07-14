@@ -14,7 +14,7 @@ import re
 import sys
 import tempfile
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -364,6 +364,8 @@ def _safe_frequency(values: Sequence[Any]) -> tuple[dict[str, int], int]:
 
 
 def _duration_minutes(value: Any) -> float | None:
+    if isinstance(value, time):
+        return value.hour * 60 + value.minute + value.second / 60 + value.microsecond / 60_000_000
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         # Excel durations are fractions of a day; ordinary numeric inputs are minutes.
         return float(value) * 1440 if 0 <= float(value) < 1 else float(value)
@@ -1037,20 +1039,25 @@ def _validate_shapes(
             for column in _list(sheet.get("columns"), "inventory.sheet.columns", errors):
                 _object_shape(column, column_keys, column_keys, "inventory.column", errors)
 
-    mapping_keys = {
+    required_mapping_keys = {
         "mapping_version", "team", "team_key", "season", "status", "inventory_sha256",
         "evidence_sha256", "mappings",
     }
+    mapping_keys = required_mapping_keys | {"adapter_source_mappings"}
     mapping_entry_keys = {
         "canonical_field", "canonical_value", "evidence_class", "source_evidence",
         "specificity_change", "supporting_evidence", "evidence_source_id", "evidence_sheet",
         "rule", "protocol_rule_id", "adjudication_id",
     }
-    _object_shape(mapping, mapping_keys, mapping_keys, "mapping", errors)
-    if not all(isinstance(mapping.get(field), str) for field in mapping_keys - {"mappings"}):
+    _object_shape(mapping, mapping_keys, required_mapping_keys, "mapping", errors)
+    if not all(isinstance(mapping.get(field), str) for field in required_mapping_keys - {"mappings"}):
         _add(errors, "invalid_schema_type", "mapping identity/version fields must be strings")
-    for entry in _list(mapping.get("mappings"), "mapping.mappings", errors):
-        if _object_shape(entry, mapping_entry_keys, mapping_entry_keys, "mapping.entry", errors):
+    for collection in ("mappings", "adapter_source_mappings"):
+        if collection not in mapping:
+            continue
+        for entry in _list(mapping.get(collection), f"mapping.{collection}", errors):
+            if not _object_shape(entry, mapping_entry_keys, mapping_entry_keys, "mapping.entry", errors):
+                continue
             if not all(isinstance(entry.get(field), str) for field in (
                 "canonical_field", "canonical_value", "evidence_class", "specificity_change", "rule",
                 "evidence_source_id", "evidence_sheet",

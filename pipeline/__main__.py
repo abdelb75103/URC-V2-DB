@@ -725,6 +725,14 @@ def effective_confirmed_return_date(
         return injured_at + timedelta(days=days + 1), "derived_from_training_days_missed_date_conflict"
     if returned_at and (not injured_at or returned_at >= injured_at):
         return returned_at, "preserved_source_confirmed_return_date"
+    closure_override = adapter_canonical_override(
+        row,
+        "Adapter Canonical Injury Closed",
+        "Adapter Canonical Injury Closed Origin",
+        {"closed", "open", "unknown"},
+    )
+    if closure_override and not returned_at:
+        return None, "adapter_no_supported_return_date"
     if injured_at and returned_at and days_origin == "corrected_return_year_then_derived_excluding_injury_day":
         try:
             return returned_at.replace(year=returned_at.year + 1), "corrected_source_confirmed_return_year"
@@ -761,6 +769,20 @@ def clean_exposure_cell(value: object, *, preserve_time: bool = False) -> str:
 
 def is_missing(value: str | None) -> bool:
     return clean_text(value).lower() in MISSING_VALUES
+
+
+def adapter_canonical_override(
+    row: dict[str, str], value_field: str, origin_field: str, allowed: set[str]
+) -> tuple[str, str] | None:
+    value = clean_text(row.get(value_field))
+    origin = clean_text(row.get(origin_field))
+    if not value and not origin:
+        return None
+    if value not in allowed or not origin:
+        raise SystemExit(f"invalid adapter canonical override: {value_field}")
+    if not (origin.startswith("approved_mapping:") or origin.startswith("manual_adjudication:")):
+        raise SystemExit(f"invalid adapter canonical override origin: {origin_field}")
+    return value, origin
 
 
 # Single source of truth for the "explicit non-URC Match Type" marker scan.
@@ -845,6 +867,12 @@ def urc_match_scope(row: dict[str, str]) -> tuple[str, str]:
 
 
 def activity_context(row: dict[str, str]) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row, "Adapter Canonical Activity Context", "Adapter Canonical Activity Context Origin",
+        {"urc_match", "match", "training", "unknown"},
+    )
+    if override:
+        return override
     occasion = clean_text(row.get("Occasion category")).lower()
     match_type = clean_text(row.get("Match Type")).lower()
     if occasion in {"game", "match"} and match_type in {"united rugby championship", "urc"}:
@@ -857,6 +885,12 @@ def activity_context(row: dict[str, str]) -> tuple[str, str]:
 
 
 def contact_context(row: dict[str, str]) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row, "Adapter Canonical Contact Context", "Adapter Canonical Contact Context Origin",
+        {"contact", "non_contact", "unknown"},
+    )
+    if override:
+        return override
     value = clean_text(row.get("Is Contact")).lower()
     if value == "contact" or value.startswith("contact ("):
         return "contact", "mapped_from_is_contact"
@@ -870,6 +904,12 @@ def contact_context(row: dict[str, str]) -> tuple[str, str]:
 
 
 def recurrence_status(row: dict[str, str]) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row, "Adapter Canonical Recurrence Status", "Adapter Canonical Recurrence Status Origin",
+        {"first_episode", "recurrence", "unknown"},
+    )
+    if override:
+        return override
     value = clean_text(row.get("Recurrence")).lower()
     if value in {"first episode", "new injury (not recurrent)"}:
         return "first_episode", "mapped_from_recurrence"
@@ -895,6 +935,13 @@ def severity_category(days_injured: int | None, is_closed: bool | None) -> tuple
 
 
 def injury_closed(row: dict[str, str]) -> tuple[bool | None, str]:
+    override = adapter_canonical_override(
+        row, "Adapter Canonical Injury Closed", "Adapter Canonical Injury Closed Origin",
+        {"closed", "open", "unknown"},
+    )
+    if override:
+        value, origin = override
+        return {"closed": True, "open": False, "unknown": None}[value], origin
     value = clean_text(row.get("is_injury_closed"))
     if value == "1":
         return True, "mapped_from_is_injury_closed"
@@ -920,6 +967,12 @@ def effective_orchard_code(row: dict[str, str]) -> str:
 
 
 def body_location(row: dict[str, str]) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row, "Adapter Canonical Body Location", "Adapter Canonical Body Location Origin",
+        set(BODY_LOCATION_LABELS),
+    )
+    if override:
+        return override
     orchard_code = effective_orchard_code(row)
     if orchard_code:
         mapped_from_code = IOC_BODY_CODE_MAP.get(orchard_code[0].upper())
@@ -942,6 +995,12 @@ def body_location(row: dict[str, str]) -> tuple[str, str]:
 
 
 def problem_type(row: dict[str, str]) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row, "Adapter Canonical Problem Type", "Adapter Canonical Problem Type Origin",
+        {"injury", "illness", "unknown"},
+    )
+    if override:
+        return override
     source = clean_text(row.get("Problem type")).lower()
     if source in {"injury", "illness"}:
         return source, "mapped_from_problem_type"
@@ -953,6 +1012,12 @@ def problem_type(row: dict[str, str]) -> tuple[str, str]:
 
 
 def injury_type(row: dict[str, str]) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row, "Adapter Canonical Tissue Pathology", "Adapter Canonical Tissue Pathology Origin",
+        set(INJURY_TYPE_LABELS),
+    )
+    if override:
+        return override
     if clean_text(row.get("Problem type")).lower() == "illness":
         return "unknown", "not_applicable_to_illness"
     value = clean_text(row.get("Injury Tissue Type/s")).lower()
@@ -1277,7 +1342,12 @@ def prepare_exposure(args: argparse.Namespace) -> None:
     workbook_path = Path(args.file)
     output_path = Path(args.output)
     qc_path = Path(args.qc_output)
-    headers, rows = read_xlsx_rows(workbook_path, args.sheet)
+    if workbook_path.suffix.casefold() == ".csv":
+        rows = read_rows(workbook_path)
+        headers = list(rows[0]) if rows else []
+        rows = [{**row, "_source_row_number": index} for index, row in enumerate(rows, start=2)]
+    else:
+        headers, rows = read_xlsx_rows(workbook_path, args.sheet)
     if not rows:
         raise SystemExit(f"no exposure rows found: {workbook_path}")
     if args.player_column not in headers:
@@ -2033,6 +2103,25 @@ def reconcile_registered_intake_rows(
         merged["_bridge_correction_events"] = correction_events  # type: ignore[assignment]
         reconciled.append(merged)
     return reconciled
+
+
+def duplicate_source_row_numbers(
+    rows: list[dict[str, str]], columns: list[str], excluded_row_numbers: set[int] | None = None
+) -> set[int]:
+    excluded = excluded_row_numbers or set()
+    counts: dict[str, list[int]] = {}
+    for row in rows:
+        row_number = int(row["standardised_row_number"])
+        if row_number in excluded:
+            continue
+        key = "|".join(row.get(column, "").strip() for column in columns)
+        counts.setdefault(key, []).append(row_number)
+    return {
+        row_number
+        for key, row_numbers in counts.items()
+        if key and len(row_numbers) > 1
+        for row_number in row_numbers
+    }
 
 
 def process_exposure(args: argparse.Namespace) -> None:
@@ -2796,19 +2885,9 @@ def process_intake(args: argparse.Namespace) -> None:
     if unknown_audit_rows:
         raise SystemExit(f"analysis audit references unknown rows: {unknown_audit_rows[:20]}")
 
-    def duplicate_rows_for(columns: list[str]) -> set[int]:
-        counts: dict[str, list[int]] = {}
-        for row in rows:
-            key = "|".join(row.get(column, "").strip() for column in columns)
-            counts.setdefault(key, []).append(int(row["standardised_row_number"]))
-        return {
-            row_number
-            for key, row_numbers in counts.items()
-            if key and len(row_numbers) > 1
-            for row_number in row_numbers
-        }
-
-    duplicate_signature_rows = duplicate_rows_for(DUPLICATE_SIGNATURE_FIELDS)
+    duplicate_signature_rows = duplicate_source_row_numbers(
+        rows, DUPLICATE_SIGNATURE_FIELDS, set(analysis_exclusions)
+    )
     standing_adjudications = fetch_standing_eligibility_adjudications(
         args.team, args.season, registered_file_hash
     )
@@ -6516,6 +6595,18 @@ def format_uk_date(value: date | None) -> str:
     return value.strftime("%d/%m/%Y") if value else ""
 
 
+def fit_for_selection_status(row: dict[str, str], is_closed: bool | None, is_closed_origin: str) -> tuple[str, str]:
+    override = adapter_canonical_override(
+        row,
+        "Adapter Canonical Fit For Selection Status",
+        "Adapter Canonical Fit For Selection Status Origin",
+        {"fit", "not_fit", "unknown"},
+    )
+    if override:
+        return override
+    return {True: "fit", False: "not_fit"}.get(is_closed, "unknown"), is_closed_origin
+
+
 def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
     output = dict(row)
     injured_at = parse_date_value(row.get("Date Injured", ""))
@@ -6528,6 +6619,7 @@ def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
     body, body_origin = body_location(row)
     problem, problem_origin = problem_type(row)
     injury, injury_origin = injury_type(row)
+    fit_status, fit_status_origin = fit_for_selection_status(row, is_closed, is_closed_origin)
     return_date, return_date_origin = effective_confirmed_return_date(row, days, days_origin)
 
     output["Date Injured"] = format_uk_date(injured_at) or clean_text(row.get("Date Injured", ""))
@@ -6556,7 +6648,7 @@ def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
         output["Orchard Code"] = orchard_code
     output["Problem type"] = {"injury": "Injury", "illness": "Illness"}.get(problem, "Unknown")
     output["Injury Status"] = {True: "Closed", False: "Open/Ongoing"}.get(is_closed, "Unknown")
-    output["Fit for selection"] = {True: "Yes", False: "No"}.get(is_closed, "Unknown")
+    output["Fit for selection"] = {"fit": "Yes", "not_fit": "No"}.get(fit_status, "Unknown")
     output["Fit For Selection Date"] = ""
     output["Confirmed Return Date"] = format_uk_date(return_date) if is_closed is True else ""
     output["Occasion category"] = {"urc_match": "match", "match": "match", "training": "training"}.get(activity, "unknown")
@@ -6580,7 +6672,7 @@ def filled_injury_export_row(row: dict[str, str]) -> dict[str, str]:
     )
     output["Problem type origin"] = problem_origin
     output["Injury Status origin"] = is_closed_origin
-    output["Fit for selection origin"] = is_closed_origin
+    output["Fit for selection origin"] = fit_status_origin
     output["Confirmed Return Date origin"] = return_date_origin if is_closed is True and return_date else ""
     output["Occasion category origin"] = activity_origin
     output["Match Type origin"] = activity_origin
