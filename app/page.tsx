@@ -8,7 +8,7 @@ export default function Home() {
     id: 'urc',
     name: 'URC Overall',
     crest: StaticImages.urcLogo,
-    status: 'locked' as const,
+    status: 'live' as const,
   };
 
   return (

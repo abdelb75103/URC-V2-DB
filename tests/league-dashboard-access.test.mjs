@@ -17,6 +17,13 @@ test('league dashboard uses the approved database consumer view and fails closed
   assert.doesNotMatch(reporting, /reduce\(|incidence.*\/.*hours|burden.*\/.*hours/i);
 });
 
+test('published league dashboard is unlocked on the homepage', async () => {
+  const home = await readFile(new URL('../app/page.tsx', import.meta.url), 'utf8');
+
+  assert.match(home, /name: 'URC Overall'[\s\S]*status: 'live' as const/);
+  assert.match(home, /href="\/urc"/);
+});
+
 test('team dashboard reads the v2 approved-build projection', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
 
