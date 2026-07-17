@@ -9,6 +9,7 @@ import type {
   InjuryProfileRow,
   SeverityRow,
   SettingMetricRow,
+  TeamComparisonRow,
 } from "@/lib/reporting-types";
 
 export type { DashboardData, TeamDashboardData } from "@/lib/reporting-types";
@@ -217,6 +218,94 @@ export async function getLeagueDashboard(
   }
 
   return normalizeDashboardRow(dashboardRowSchema.parse(result.rows[0]), "league");
+}
+
+/**
+ * Reads the approved per-team projections needed for the league comparison and
+ * exposure tabs. No rates are recomputed here: each row is copied from the same
+ * immutable V2 team payload used by the team dashboard.
+ */
+export async function getTeamComparisons(
+  season = "2024-25"
+): Promise<TeamComparisonRow[]> {
+  const pool = webReaderPool();
+  if (!pool) return [];
+
+  const result = await pool.query(
+    `select team_key, team, coverage, setting_metrics
+     from reporting.latest_team_dashboard_v2
+     where season = $1
+     order by team_key`,
+    [season]
+  );
+
+  const rowSchema = z.object({
+    team_key: z.string(),
+    team: z.string(),
+    coverage: coverageSchema,
+    setting_metrics: z.array(settingMetricSchema),
+  });
+
+  const internalRows = result.rows.map((raw) => {
+    const row = rowSchema.parse(raw);
+    const metric = (setting: SettingMetricRow["setting"]) => {
+      const value = row.setting_metrics.find((item) => item.setting === setting);
+      if (!value) return null;
+      return {
+        ...stripNulls(value),
+        exposure_hours: value.exposure_hours ?? null,
+        incidence_per_1000h: value.incidence_per_1000h ?? null,
+        burden_per_1000h: value.burden_per_1000h ?? null,
+        mean_severity_days: value.mean_severity_days ?? null,
+      } as SettingMetricRow;
+    };
+
+    return {
+      internal_team_key: row.team_key,
+      exposure_hours: row.coverage.hours,
+      match_hours: row.coverage.match_hours ?? null,
+      training_hours: row.coverage.training_hours ?? null,
+      match: metric("match"),
+      training: metric("training"),
+    };
+  });
+
+  // Comparison labels are deliberately independent of the protected alias map.
+  // They are assigned only after real identifiers have served their server-side
+  // validation/tie-break purpose. Neither the real team key nor name crosses
+  // the server-component boundary into the browser payload. While team pages are
+  // passwordless, exact shared metrics still allow alias-to-team linkage by walking
+  // those pages; restoring team-scoped passwords closes that vector, leaving only
+  // each authorised team able to identify itself.
+  return internalRows
+    .sort((a, b) => b.exposure_hours - a.exposure_hours
+      || a.internal_team_key.localeCompare(b.internal_team_key))
+    .map(({ internal_team_key: _internalTeamKey, ...row }, index) => ({
+      ...row,
+      comparison_id: `comparison-${String(index + 1).padStart(2, "0")}`,
+      team_alias: `Club ${String(index + 1).padStart(2, "0")}`,
+    }));
+}
+
+export async function getLeagueSettingMetrics(
+  season = "2024-25"
+): Promise<SettingMetricRow[]> {
+  const pool = webReaderPool();
+  if (!pool) return [];
+  const result = await pool.query(
+    `select setting_metrics
+     from reporting.latest_league_dashboard_v2
+     where season = $1`,
+    [season]
+  );
+  if (result.rows.length !== 1) return [];
+  return z.array(settingMetricSchema).parse(result.rows[0].setting_metrics).map((item) => ({
+    ...stripNulls(item),
+    exposure_hours: item.exposure_hours ?? null,
+    incidence_per_1000h: item.incidence_per_1000h ?? null,
+    burden_per_1000h: item.burden_per_1000h ?? null,
+    mean_severity_days: item.mean_severity_days ?? null,
+  })) as SettingMetricRow[];
 }
 
 function normalizeDashboardRow(

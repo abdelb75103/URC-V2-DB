@@ -68,7 +68,7 @@ EDINBURGH_URC_OPPONENTS = [
 ]
 EDINBURGH_EXPOSURE_SCOPE_RULE_VERSION = "edinburgh_exposure_scope_2026-07-07_v2"
 EXPOSURE_CANONICAL_SCHEMA_VERSION = "exposure_core_2026-07-07_v1"
-INJURY_PROCESSING_RULE_VERSION = "injury_processing_2026-07-07_v1"
+INJURY_PROCESSING_RULE_VERSION = "injury_processing_2026-07-07_v2"
 INPUT_REPRESENTATION_CORRECTION_RULE_VERSION = "input_representation_correction_2026-07-13_v1"
 EXPOSURE_PROCESSING_RULE_VERSION = "exposure_processing_2026-07-07_v1"
 URC_OPPONENT_FUZZY_CUTOFF = 0.78
@@ -817,6 +817,8 @@ NON_URC_MATCH_TYPE_MARKERS = (
     "cup",
     "friendly",
     "international",
+    # This addition requires a recorded adjudication before any team is reprocessed under it.
+    "italian elite championship",
     "national",
     "premiership",
     "pro team a",
@@ -8396,6 +8398,7 @@ def self_check(args: argparse.Namespace) -> None:
     assert urc_match_scope({"Match Type": "Other"})[0] == "urc"
     assert urc_match_scope({"Match Type": "training"}) == ("training", "mapped_from_match_type_training")
     assert urc_match_scope({"Match Type": "Challenge Cup"})[0] == "non_urc_marker"
+    assert urc_match_scope({"Match Type": "Italian Elite Championship"})[0] == "non_urc_marker"
     assert urc_match_scope({"Match Type": "Pro team A game"})[0] == "non_urc_marker"
     assert urc_match_scope({"Match Type": "NAG U20"})[0] == "non_urc_marker"
     assert urc_match_scope({"Match Type": "N/A"})[0] == "unknown"

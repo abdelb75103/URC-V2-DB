@@ -1,6 +1,6 @@
 'use client';
 
-import type { KeyboardEvent } from 'react';
+import { useId, type KeyboardEvent } from 'react';
 import type { InjuryProfileRow } from '@/lib/reporting-types';
 
 export type LocationMetric = 'time_loss_injuries' | 'incidence_per_1000h' | 'burden_per_1000h';
@@ -52,13 +52,33 @@ export function BodyMap({
 }) {
   const byCode = new Map(rows.map((row) => [row.code, row]));
   const max = Math.max(...rows.map((row) => valueFor(row, metric)), 0);
+  const tooltipId = useId();
+  const activeRow = activeCode ? byCode.get(activeCode) : undefined;
+  const activeValue = valueFor(activeRow, metric);
+  const metricMeta = METRIC_LABELS[metric];
 
   return (
-    <div>
+    <div className="relative">
+      <div
+        id={tooltipId}
+        role="tooltip"
+        aria-live="polite"
+        className="mb-3 rounded-md border border-border bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-lg"
+      >
+        {activeRow ? (
+          <>
+            <span className="font-semibold text-foreground">{activeRow.label}</span>
+            <span className="mx-1 text-muted-foreground">:</span>
+            <span className="font-medium tabular-nums text-foreground">{activeValue.toLocaleString(undefined, { maximumFractionDigits: 1 })} {metricMeta.label}{metricMeta.unit}</span>
+            <span className="block mt-0.5 text-muted-foreground">Overall body-location cohort. n = {activeRow.time_loss_injuries} time-loss injuries. Tap, hover, or focus a region to inspect it.</span>
+          </>
+        ) : 'Tap, hover, or focus a highlighted body region to inspect its exact value.'}
+      </div>
       <svg
         viewBox="0 0 360 420"
         className="mx-auto h-auto w-full max-w-[420px]"
         aria-label="Interactive front and back body map"
+        aria-describedby={tooltipId}
       >
         <text x="90" y="18" textAnchor="middle" fill="hsl(0 0% 75%)" fontSize="12">Front</text>
         <text x="270" y="18" textAnchor="middle" fill="hsl(0 0% 75%)" fontSize="12">Back</text>
@@ -71,6 +91,7 @@ export function BodyMap({
           activeCode={activeCode}
           onHover={onHover}
           onSelect={onSelect}
+          tooltipId={tooltipId}
         />
         <BodyFigure
           view="back"
@@ -81,11 +102,12 @@ export function BodyMap({
           activeCode={activeCode}
           onHover={onHover}
           onSelect={onSelect}
+          tooltipId={tooltipId}
         />
       </svg>
       <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
         <span>Lower</span>
-        <span className="h-2.5 w-28 rounded-full bg-gradient-to-r from-cyan-950 via-cyan-600 to-cyan-200" aria-hidden="true" />
+        <span className="h-2.5 w-28 rounded-full bg-gradient-to-r from-yellow-300 via-orange-500 to-red-600" aria-hidden="true" />
         <span>Higher</span>
       </div>
     </div>
@@ -101,6 +123,7 @@ function BodyFigure({
   activeCode,
   onHover,
   onSelect,
+  tooltipId,
 }: {
   view: 'front' | 'back';
   x: number;
@@ -110,6 +133,7 @@ function BodyFigure({
   activeCode?: string;
   onHover: (code?: string) => void;
   onSelect: (code: string) => void;
+  tooltipId: string;
 }) {
   return (
     <g transform={`translate(${x} 30)`}>
@@ -128,11 +152,12 @@ function BodyFigure({
             value={value}
             metric={metric}
             enabled={Boolean(row)}
-            fill={`hsla(187, 98%, ${42 + ratio * 24}%, ${0.16 + ratio * 0.78})`}
+            fill={`hsla(${48 - ratio * 48}, 92%, 54%, ${0.22 + ratio * 0.76})`}
             active={activeCode === code}
             dimmed={Boolean(activeCode && activeCode !== code)}
             onHover={onHover}
             onSelect={onSelect}
+            tooltipId={tooltipId}
           />
         );
       })}
@@ -152,6 +177,7 @@ function Region({
   dimmed,
   onHover,
   onSelect,
+  tooltipId,
 }: {
   code: (typeof REGIONS)[number];
   view: 'front' | 'back';
@@ -164,12 +190,14 @@ function Region({
   dimmed: boolean;
   onHover: (code?: string) => void;
   onSelect: (code: string) => void;
+  tooltipId: string;
 }) {
   const interactionProps = enabled
     ? {
         role: 'button',
         tabIndex: 0,
         'aria-label': `${label}, ${view} view: ${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${METRIC_LABELS[metric].label}${METRIC_LABELS[metric].unit}`,
+        'aria-describedby': tooltipId,
         onMouseEnter: () => onHover(code),
         onMouseLeave: () => onHover(),
         onFocus: () => onHover(code),
@@ -185,7 +213,7 @@ function Region({
     : { 'aria-hidden': true as const };
   const common = {
     fill,
-    stroke: active ? 'hsl(0 0% 94%)' : 'hsl(187 98% 70% / 0.45)',
+    stroke: active ? 'hsl(0 0% 96%)' : 'hsl(34 95% 63% / 0.55)',
     strokeWidth: active ? 2.5 : 1,
     opacity: dimmed ? 0.25 : 1,
     pointerEvents: enabled ? 'bounding-box' : 'none',

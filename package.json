@@ -5,9 +5,11 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:dashboard-access": "node --test tests/team-dashboard-access.test.mjs tests/league-dashboard-access.test.mjs",
+    "test:dashboard-v3": "node --test tests/dashboard-v3-validation.test.mjs && python3 tests/test_dashboard_v3_preview.py",
     "pipeline": "python3 -m pipeline",
     "pipeline:check": "python3 -m pipeline self-check",
-    "pipeline:alias-check": "python3 -m pipeline validate-alias-map"
+    "pipeline:alias-check": "python3 -m pipeline validate-alias-map",
+    "dashboard:v3-preview": "node tools/generate-dashboard-v3-preview.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

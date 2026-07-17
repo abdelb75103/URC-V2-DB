@@ -78,6 +78,99 @@ export type InjuryProfileRow = {
   mean_severity_days: number | null;
 };
 
+export type MonthlySettingRow = {
+  month: string;
+  setting: 'all' | 'match' | 'training' | 'unknown';
+  recorded_injuries?: number;
+  time_loss_injuries: number;
+  rate_time_loss_injuries: number;
+  exposure_hours: number | null;
+  incidence_per_1000h: number | null;
+};
+
+export type DescriptiveConsequenceSummary = {
+  recorded_injuries: number;
+  time_loss_injuries: number;
+  medical_attention_only: number;
+  consequence_unknown: number;
+  undated_injuries: number;
+  outside_season_date_injuries: number;
+  rate_ineligible_time_loss_injuries: number;
+};
+
+export type DistributionRow = {
+  key: string;
+  label: string;
+  setting: 'all' | 'match' | 'training';
+  recorded_injuries: number;
+  time_loss_injuries: number;
+};
+
+export type ConsequenceSummary = {
+  recorded_injuries: number;
+  positive_day_cases: number;
+  zero_day_cases: number;
+  duration_unknown_or_censored: number;
+  source_reported_time_loss: number;
+  source_reported_time_loss_without_positive_days: number;
+  source_reported_medical_attention: number;
+  source_class_unknown: number;
+};
+
+export type InferenceCoverageCounts = {
+  source_reported: number;
+  mapped: number;
+  inferred: number;
+  adjudicated: number;
+  remaining_unknown: number;
+  unknown_before_v3: number;
+  classified: number;
+  total: number;
+};
+
+export type InferenceCoverage = {
+  cohort: 'attributed_descriptive_cases';
+  body_location: InferenceCoverageCounts;
+  tissue_pathology: InferenceCoverageCounts;
+  diagnosis: InferenceCoverageCounts;
+  contact_context: InferenceCoverageCounts;
+};
+
+export type DashboardSupplement = {
+  status: 'draft_not_for_release';
+  season: string;
+  team_key: string;
+  rule_version: string;
+  generated_at: string;
+  consequence_summary: ConsequenceSummary;
+  descriptive_consequence_summary: DescriptiveConsequenceSummary;
+  rate_setting_metrics: SettingMetricRow[];
+  severity_distribution: SeverityRow[];
+  match_scope_summary: {
+    positive_day_match_cases: number;
+    confirmed_urc_match_cases: number;
+    retained_generic_match_cases: number;
+  };
+  monthly_by_setting: MonthlySettingRow[];
+  contact_distribution: DistributionRow[];
+  common_injuries: InjuryProfileRow[];
+  diagnosis_coverage: {
+    classified_time_loss_injuries: number;
+    eligible_time_loss_injuries: number;
+  };
+  inference_coverage: InferenceCoverage;
+};
+
+export type TeamComparisonRow = {
+  comparison_id: string;
+  team_alias: string;
+  exposure_hours: number;
+  match_hours: number | null;
+  training_hours: number | null;
+  match: SettingMetricRow | null;
+  training: SettingMetricRow | null;
+};
+
 export type DashboardData = {
   scope: 'team' | 'league';
   generated_at: string;

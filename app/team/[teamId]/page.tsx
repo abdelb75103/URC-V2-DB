@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getTeamById } from '@/config/teams';
-import { getTeamDashboard } from '@/lib/reporting';
+import { getLeagueSettingMetrics, getTeamDashboard, getTeamComparisons } from '@/lib/reporting';
+import { getDashboardSupplement } from '@/lib/reporting-preview';
+import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
 import { LockedShell } from '@/components/locked-shell';
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 
@@ -29,10 +31,28 @@ export default async function TeamPage({
   }
 
   let dashboard;
+  let comparisons: TeamComparisonRow[] = [];
+  let leagueMetrics: SettingMetricRow[] = [];
+  let supplement: DashboardSupplement | undefined;
   try {
     dashboard = await getTeamDashboard(team.id);
   } catch {
     dashboard = undefined;
+  }
+  try {
+    comparisons = await getTeamComparisons();
+  } catch {
+    comparisons = [];
+  }
+  try {
+    leagueMetrics = await getLeagueSettingMetrics();
+  } catch {
+    leagueMetrics = [];
+  }
+  try {
+    supplement = await getDashboardSupplement(team.id);
+  } catch {
+    supplement = undefined;
   }
   if (!dashboard) {
     return (
@@ -47,5 +67,14 @@ export default async function TeamPage({
     );
   }
 
-  return <TeamDashboard dashboard={dashboard} crest={team.crest} teamName={team.name} />;
+  return (
+    <TeamDashboard
+      dashboard={dashboard}
+      crest={team.crest}
+      teamName={team.name}
+      comparisons={comparisons}
+      leagueMetrics={leagueMetrics}
+      supplement={supplement}
+    />
+  );
 }
