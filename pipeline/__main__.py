@@ -3597,6 +3597,7 @@ FULL_DASHBOARD_RELEASE_RULE_VERSION = "full_dashboard_release_2026-07-10_v1"
 LEAGUE_DASHBOARD_V2_MIGRATION_VERSION = "20260714130000"
 ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260720150000"
 SEASON_BOUND_REPORTING_MIGRATION_VERSION = "20260720170000"
+REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION = "20260720180000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-20_v3"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
@@ -5457,13 +5458,19 @@ def release_league(args: argparse.Namespace) -> None:
         if analysis_version == "v3"
         else ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION
     )
+    required_migrations = [required_migration]
+    if not preflight:
+        required_migrations.append(REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION)
     migration_rows = query_sql(
         "select version from supabase_migrations.schema_migrations "
-        f"where version = '{required_migration}'"
+        "where version = any(array["
+        + ", ".join(f"'{version}'" for version in required_migrations)
+        + "])"
     )
-    if len(migration_rows) != 1:
+    if {row["version"] for row in migration_rows} != set(required_migrations):
         raise SystemExit(
-            f"release-league requires tracked migration {required_migration}"
+            "release-league requires tracked migrations "
+            + ", ".join(required_migrations)
         )
 
     payload_params = SqlParams()
@@ -5803,6 +5810,7 @@ def release_league(args: argparse.Namespace) -> None:
         "preflight_json_sha256": preflight_bundle_sha256,
         "reviewed_preflight_sha256": reviewed_sha256,
         "preflight_reviewer": reviewer,
+        "payload_validation_migration": REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION,
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
     }
     if predecessor is not None:
@@ -5842,6 +5850,59 @@ def release_league(args: argparse.Namespace) -> None:
         {predecessor_lock_sql}
         if exists (select 1 from reporting.aggregate_releases where release_label = {params.text(label)}) then
           raise exception 'immutable league release label already exists';
+        end if;
+      end $$;
+
+      create temp table reviewed_league_members on commit drop as
+      select team_key, team_release_id::uuid as team_release_id,
+        curated_build_id::uuid as curated_build_id
+      from jsonb_to_recordset({params.jsonb(members)}) as member(
+        team_key text, team_release_id text, curated_build_id text
+      );
+
+      create temp table reviewed_league_team_payload_inputs on commit drop as
+      select team_key, dashboard
+      from jsonb_to_recordset({params.jsonb(public_bundle["teams"])}) as payload(
+        team_key text, dashboard jsonb
+      );
+
+      create temp table reviewed_league_team_payloads on commit drop as
+      select payload.team_key, member.team_release_id, member.curated_build_id,
+        payload.dashboard
+      from reviewed_league_team_payload_inputs payload
+      join reviewed_league_members member using (team_key);
+
+      do $$
+      declare
+        input_payload_count integer;
+        distinct_payload_count integer;
+        member_count integer;
+      begin
+        select count(*), count(distinct team_key)
+        into input_payload_count, distinct_payload_count
+        from reviewed_league_team_payload_inputs;
+        select count(*) into member_count from reviewed_league_members;
+        if input_payload_count <> 16 or distinct_payload_count <> 16 or member_count <> 16
+           or (select count(*) from reviewed_league_team_payloads) <> 16
+           or exists (
+             select 1 from reviewed_league_team_payload_inputs
+             where dashboard is null or jsonb_typeof(dashboard) <> 'object'
+           ) then
+          raise exception 'reviewed bundle must contain exactly 16 distinct object-valued team payloads';
+        end if;
+        if exists (
+          select 1 from reviewed_league_members member
+          full join (
+            select team_key, team_release_id, curated_build_id
+            from analysis.league_member_releases_v2
+            where season = {params.text(season)}
+          ) live
+            on live.team_key = member.team_key
+           and live.team_release_id = member.team_release_id
+           and live.curated_build_id = member.curated_build_id
+          where member.team_key is null or live.team_key is null
+        ) then
+          raise exception 'reviewed bundle member identities changed after preflight validation';
         end if;
       end $$;
 
@@ -5897,35 +5958,15 @@ def release_league(args: argparse.Namespace) -> None:
 
       insert into reporting.league_release_payloads_v2
         (release_id, dashboard_payload)
-      select current_league_release.id, candidate.dashboard
-      from current_league_release
-      join analysis.league_dashboard_release_candidates_v4 candidate
-        on candidate.season = {params.text(season)}
-       and candidate.analysis_version = {params.text(analysis_version)}
-       and candidate.classification_view_version = {params.text(classification_view_version)}
-       and candidate.classification_evidence_sha256 is not distinct from
-         {params.text(classification_evidence_sha256)}
-       and candidate.cohort_view_version = {params.text(cohort_view_version)}
-       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)};
+      select current_league_release.id, {params.jsonb(dashboard)}
+      from current_league_release;
 
       insert into reporting.team_dashboard_payloads_v2
         (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
-      select current_league_release.id, candidate.team_key, candidate.team_release_id,
-        candidate.curated_build_id, candidate.dashboard
+      select current_league_release.id, payload.team_key, payload.team_release_id,
+        payload.curated_build_id, payload.dashboard
       from current_league_release
-      join analysis.team_dashboard_release_candidates_v4 candidate
-        on candidate.season = {params.text(season)}
-       and candidate.analysis_version = {params.text(analysis_version)}
-       and candidate.classification_view_version = {params.text(classification_view_version)}
-       and candidate.classification_evidence_sha256 is not distinct from
-         {params.text(classification_evidence_sha256)}
-       and candidate.cohort_view_version = {params.text(cohort_view_version)}
-       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)}
-      join jsonb_to_recordset({params.jsonb(members)}) as expected(
-        team_key text, team_release_id text, curated_build_id text
-      ) on expected.team_key = candidate.team_key
-        and expected.team_release_id::uuid = candidate.team_release_id
-        and expected.curated_build_id::uuid = candidate.curated_build_id;
+      cross join reviewed_league_team_payloads payload;
 
       {predecessor_retire_sql}
 
@@ -5940,6 +5981,7 @@ def release_league(args: argparse.Namespace) -> None:
         published_team_count integer;
         stored_league_hash text;
         stored_team_hashes jsonb;
+        stored_bundle_hash text;
       begin
         select count(*) into published_league_count
         from reporting.latest_league_dashboard_v2 d
@@ -5968,6 +6010,27 @@ def release_league(args: argparse.Namespace) -> None:
         join current_league_release current on current.id = p.bundle_release_id;
         if stored_team_hashes is distinct from {params.jsonb(team_payload_sha256s)} then
           raise exception 'stored team payload hashes differ from the canonical candidate hashes';
+        end if;
+
+        select encode(digest(convert_to(jsonb_build_object(
+          'schema_version', 'urc_dashboard_bundle_v2',
+          'season', context.season,
+          'league', league.dashboard_payload,
+          'teams', teams.dashboards
+        )::text, 'UTF8'), 'sha256'), 'hex')
+        into stored_bundle_hash
+        from current_league_release current
+        join reporting.league_release_context_v2 context on context.release_id = current.id
+        join reporting.league_release_payloads_v2 league on league.release_id = current.id
+        cross join lateral (
+          select jsonb_agg(jsonb_build_object(
+            'team_key', payload.team_key, 'dashboard', payload.dashboard_payload
+          ) order by payload.team_key) as dashboards
+          from reporting.team_dashboard_payloads_v2 payload
+          where payload.bundle_release_id = current.id
+        ) teams;
+        if stored_bundle_hash is distinct from {params.text(bundle_payload_sha256)} then
+          raise exception 'stored bundle payload hash differs from the canonical candidate hash';
         end if;
       end $$;
 

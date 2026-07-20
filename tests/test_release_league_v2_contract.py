@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from pathlib import Path
 import unittest
 
 from pipeline.__main__ import release_league
@@ -42,10 +43,55 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
             self.source.index("published league dashboard bundle must expose exactly one league row"),
         )
 
-    def test_database_candidates_are_inserted_without_json_number_round_trip(self) -> None:
-        self.assertIn("join analysis.league_dashboard_release_candidates_v4 candidate", self.source)
-        self.assertIn("join analysis.team_dashboard_release_candidates_v4 candidate", self.source)
-        self.assertNotIn("select id, {params.jsonb(dashboard)}", self.source)
+    def test_promotion_inserts_reviewed_json_without_recomputing_candidates(self) -> None:
+        write_sql = self.source.split("sql = f\"\"\"", 1)[1].split(
+            "output_arg = clean_text(args.output or \"\")", 1
+        )[0]
+        self.assertIn("create temp table reviewed_league_members", write_sql)
+        self.assertIn("reviewed bundle member identities changed after preflight validation", write_sql)
+        self.assertIn("select current_league_release.id, {params.jsonb(dashboard)}", write_sql)
+        self.assertIn("cross join reviewed_league_team_payloads payload", write_sql)
+        self.assertIn("from analysis.league_member_releases_v2\n            where season = {params.text(season)}", write_sql)
+        self.assertNotIn("analysis.league_dashboard_release_candidates_v4 candidate", write_sql)
+        self.assertNotIn("analysis.team_dashboard_release_candidates_v4 candidate", write_sql)
+
+    def test_promotion_rehashes_the_stored_jsonb_bundle(self) -> None:
+        self.assertIn("stored_bundle_hash", self.source)
+        self.assertIn("stored bundle payload hash differs from the canonical candidate hash", self.source)
+        self.assertIn("REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION", self.source)
+
+    def test_payload_validation_migration_uses_hashes_and_member_identities(self) -> None:
+        migration = (
+            Path(__file__).resolve().parents[1]
+            / "supabase/migrations/20260720180000_reviewed_bundle_payload_validation.sql"
+        ).read_text()
+        self.assertIn("new.payload_sha256 is distinct from expected_hash", migration)
+        self.assertIn("payload.team_release_id = member.team_release_id", migration)
+        self.assertIn("payload.curated_build_id = member.curated_build_id", migration)
+        self.assertIn("live.season = context.season", migration)
+        self.assertIn("inserted_count <> 16", migration)
+        self.assertNotIn("analysis.league_dashboard_release_candidates_v4", migration)
+        self.assertNotIn("analysis.team_dashboard_release_candidates_v4", migration)
+
+    def test_rollback_only_hosted_contract_covers_validator_paths(self) -> None:
+        harness = (
+            Path(__file__).resolve().parents[1]
+            / "tests/reviewed_bundle_payload_validation_live.mjs"
+        ).read_text()
+        self.assertIn("await client.query(\"begin\")", harness)
+        self.assertIn("await client.query(migrationSql)", harness)
+        self.assertIn("await client.query(\"rollback\")", harness)
+        for scenario in (
+            "valid_v3",
+            "tampered_league_hash",
+            "tampered_team_hash",
+            "wrong_member_identity",
+            "fifteen_team_rows",
+            "seventeen_team_rows",
+        ):
+            self.assertIn(scenario, harness)
+        self.assertIn("live_with_extra_season", harness)
+        self.assertIn("valid_v2", harness)
 
     def test_export_is_written_before_promotion_and_removed_on_failure(self) -> None:
         self.assertLess(
