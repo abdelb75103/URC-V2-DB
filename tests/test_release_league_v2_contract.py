@@ -43,22 +43,28 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
             self.source.index("published league dashboard bundle must expose exactly one league row"),
         )
 
-    def test_promotion_inserts_reviewed_json_without_recomputing_candidates(self) -> None:
+    def test_promotion_reads_database_candidates_once_and_uses_fast_triggers(self) -> None:
         write_sql = self.source.split("sql = f\"\"\"", 1)[1].split(
             "output_arg = clean_text(args.output or \"\")", 1
         )[0]
         self.assertIn("create temp table reviewed_league_members", write_sql)
         self.assertIn("reviewed bundle member identities changed after preflight validation", write_sql)
-        self.assertIn("select current_league_release.id, {params.jsonb(dashboard)}", write_sql)
-        self.assertIn("cross join reviewed_league_team_payloads payload", write_sql)
         self.assertIn("from analysis.league_member_releases_v2\n            where season = {params.text(season)}", write_sql)
-        self.assertNotIn("analysis.league_dashboard_release_candidates_v4 candidate", write_sql)
-        self.assertNotIn("analysis.team_dashboard_release_candidates_v4 candidate", write_sql)
+        self.assertEqual(write_sql.count("analysis.league_dashboard_release_candidates_v4 candidate"), 1)
+        self.assertEqual(write_sql.count("analysis.team_dashboard_release_candidates_v4 candidate"), 1)
+        self.assertIn("join reviewed_league_members expected", write_sql)
+        self.assertNotIn("params.jsonb(dashboard)", write_sql)
 
     def test_promotion_rehashes_the_stored_jsonb_bundle(self) -> None:
         self.assertIn("stored_bundle_hash", self.source)
         self.assertIn("stored bundle payload hash differs from the canonical candidate hash", self.source)
         self.assertIn("REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION", self.source)
+
+    def test_preflight_preserves_postgres_canonical_numeric_text(self) -> None:
+        self.assertIn("document::text as bundle_payload_json", self.source)
+        self.assertIn("write_text_atomic(output_path, canonical_bundle_json", self.source)
+        self.assertIn("reviewed_canonical_sha256 != bundle_payload_sha256", self.source)
+        self.assertIn("reviewed preflight canonical hash", self.source)
 
     def test_payload_validation_migration_uses_hashes_and_member_identities(self) -> None:
         migration = (

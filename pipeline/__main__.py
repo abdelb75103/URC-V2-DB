@@ -3959,8 +3959,8 @@ def assemble_release_dashboard(ctx: dict[str, Any], table_rows: list[dict[str, A
     return without_keys(dashboard, {"source_files", "pipeline_evidence"})
 
 
-def write_json_atomic(path: Path, value: object) -> None:
-    """Write JSON by same-directory replace so a failed write keeps `path`."""
+def write_text_atomic(path: Path, value: str) -> None:
+    """Write text by same-directory replace so a failed write keeps `path`."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
     try:
@@ -3973,8 +3973,7 @@ def write_json_atomic(path: Path, value: object) -> None:
             delete=False,
         ) as handle:
             temporary_path = Path(handle.name)
-            json.dump(value, handle, indent=2)
-            handle.write("\n")
+            handle.write(value)
             handle.flush()
             os.fsync(handle.fileno())
         mode = (path.stat().st_mode & 0o777) if path.exists() else 0o644
@@ -3984,6 +3983,10 @@ def write_json_atomic(path: Path, value: object) -> None:
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+def write_json_atomic(path: Path, value: object) -> None:
+    write_text_atomic(path, json.dumps(value, indent=2) + "\n")
 
 
 def export_release_dashboard_json(release_label: str) -> dict[str, Any]:
@@ -5648,8 +5651,6 @@ def release_league(args: argparse.Namespace) -> None:
             for row in team_payloads
         ],
     }
-    preflight_bundle_sha256 = sha256_json(public_bundle)
-
     canonical_hash_params = SqlParams()
     canonical_hash_rows = query_sql(
         f"with league as ("
@@ -5682,7 +5683,8 @@ def release_league(args: argparse.Namespace) -> None:
         f"  encode(digest(convert_to(document::text, 'UTF8'), 'sha256'), 'hex') "
         f"    as bundle_payload_sha256, "
         f"  encode(digest(convert_to(dashboard::text, 'UTF8'), 'sha256'), 'hex') "
-        f"    as league_payload_sha256, hashes as team_payload_sha256s "
+        f"    as league_payload_sha256, hashes as team_payload_sha256s, "
+        f"  document::text as bundle_payload_json "
         f"from bundle",
         canonical_hash_params.values,
     )
@@ -5692,13 +5694,17 @@ def release_league(args: argparse.Namespace) -> None:
     bundle_payload_sha256 = clean_text(canonical_hashes.get("bundle_payload_sha256"))
     league_payload_sha256 = clean_text(canonical_hashes.get("league_payload_sha256"))
     team_payload_sha256s = canonical_hashes.get("team_payload_sha256s")
+    canonical_bundle_json = canonical_hashes.get("bundle_payload_json")
     if (
         len(bundle_payload_sha256) != 64
         or len(league_payload_sha256) != 64
         or not isinstance(team_payload_sha256s, dict)
         or len(team_payload_sha256s) != 16
+        or not isinstance(canonical_bundle_json, str)
     ):
         raise SystemExit("release-league canonical database payload hashes are incomplete")
+    preflight_league_sha256 = league_payload_sha256
+    preflight_bundle_sha256 = bundle_payload_sha256
 
     if preflight:
         output_arg = clean_text(args.output or "")
@@ -5710,7 +5716,7 @@ def release_league(args: argparse.Namespace) -> None:
         )
         if Path("content/reporting").resolve() in output_path.resolve().parents:
             raise SystemExit("league preflight output must stay outside content/reporting")
-        write_json_atomic(output_path, public_bundle)
+        write_text_atomic(output_path, canonical_bundle_json + "\n")
         print(
             json.dumps(
                 {
@@ -5738,10 +5744,22 @@ def release_league(args: argparse.Namespace) -> None:
         reviewed_bundle = json.loads(reviewed_bytes)
     except json.JSONDecodeError as exc:
         raise SystemExit(f"league preflight file is invalid JSON: {preflight_path}") from exc
+    reviewed_hash_params = SqlParams()
+    reviewed_hash_rows = query_sql(
+        f"select encode(digest(convert_to(({reviewed_hash_params.text(reviewed_bytes.decode('utf-8'))})::jsonb::text, "
+        f"'UTF8'), 'sha256'), 'hex') as bundle_payload_sha256",
+        reviewed_hash_params.values,
+    )
     reviewed_diffs = diff_json_documents(reviewed_bundle, public_bundle)
-    if reviewed_diffs:
-        paths = ", ".join(diff["path"] for diff in reviewed_diffs[:10])
-        raise SystemExit(f"dashboard bundle differs from reviewed preflight ({paths})")
+    reviewed_canonical_sha256 = (
+        clean_text(reviewed_hash_rows[0].get("bundle_payload_sha256"))
+        if len(reviewed_hash_rows) == 1 else ""
+    )
+    if reviewed_canonical_sha256 != bundle_payload_sha256:
+        paths = ", ".join(diff["path"] for diff in reviewed_diffs[:10]) or "$"
+        raise SystemExit(
+            f"dashboard bundle differs from reviewed preflight canonical hash ({paths})"
+        )
 
     existing_params = SqlParams()
     existing = query_sql(
@@ -5860,35 +5878,13 @@ def release_league(args: argparse.Namespace) -> None:
         team_key text, team_release_id text, curated_build_id text
       );
 
-      create temp table reviewed_league_team_payload_inputs on commit drop as
-      select team_key, dashboard
-      from jsonb_to_recordset({params.jsonb(public_bundle["teams"])}) as payload(
-        team_key text, dashboard jsonb
-      );
-
-      create temp table reviewed_league_team_payloads on commit drop as
-      select payload.team_key, member.team_release_id, member.curated_build_id,
-        payload.dashboard
-      from reviewed_league_team_payload_inputs payload
-      join reviewed_league_members member using (team_key);
-
       do $$
       declare
-        input_payload_count integer;
-        distinct_payload_count integer;
         member_count integer;
       begin
-        select count(*), count(distinct team_key)
-        into input_payload_count, distinct_payload_count
-        from reviewed_league_team_payload_inputs;
         select count(*) into member_count from reviewed_league_members;
-        if input_payload_count <> 16 or distinct_payload_count <> 16 or member_count <> 16
-           or (select count(*) from reviewed_league_team_payloads) <> 16
-           or exists (
-             select 1 from reviewed_league_team_payload_inputs
-             where dashboard is null or jsonb_typeof(dashboard) <> 'object'
-           ) then
-          raise exception 'reviewed bundle must contain exactly 16 distinct object-valued team payloads';
+        if member_count <> 16 then
+          raise exception 'reviewed bundle must contain exactly 16 distinct members';
         end if;
         if exists (
           select 1 from reviewed_league_members member
@@ -5958,15 +5954,34 @@ def release_league(args: argparse.Namespace) -> None:
 
       insert into reporting.league_release_payloads_v2
         (release_id, dashboard_payload)
-      select current_league_release.id, {params.jsonb(dashboard)}
-      from current_league_release;
+      select current_league_release.id, candidate.dashboard
+      from current_league_release
+      join analysis.league_dashboard_release_candidates_v4 candidate
+        on candidate.season = {params.text(season)}
+       and candidate.analysis_version = {params.text(analysis_version)}
+       and candidate.classification_view_version = {params.text(classification_view_version)}
+       and candidate.classification_evidence_sha256 is not distinct from
+         {params.text(classification_evidence_sha256)}
+       and candidate.cohort_view_version = {params.text(cohort_view_version)}
+       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)};
 
       insert into reporting.team_dashboard_payloads_v2
         (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
-      select current_league_release.id, payload.team_key, payload.team_release_id,
-        payload.curated_build_id, payload.dashboard
+      select current_league_release.id, candidate.team_key, candidate.team_release_id,
+        candidate.curated_build_id, candidate.dashboard
       from current_league_release
-      cross join reviewed_league_team_payloads payload;
+      join analysis.team_dashboard_release_candidates_v4 candidate
+        on candidate.season = {params.text(season)}
+       and candidate.analysis_version = {params.text(analysis_version)}
+       and candidate.classification_view_version = {params.text(classification_view_version)}
+       and candidate.classification_evidence_sha256 is not distinct from
+         {params.text(classification_evidence_sha256)}
+       and candidate.cohort_view_version = {params.text(cohort_view_version)}
+       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)}
+      join reviewed_league_members expected
+        on expected.team_key = candidate.team_key
+       and expected.team_release_id = candidate.team_release_id
+       and expected.curated_build_id = candidate.curated_build_id;
 
       {predecessor_retire_sql}
 
