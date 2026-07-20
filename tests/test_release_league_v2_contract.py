@@ -18,11 +18,11 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertIn("diff_json_documents(reviewed_bundle, public_bundle)", self.source)
 
     def test_release_snapshots_league_and_all_team_payloads(self) -> None:
-        self.assertIn("from analysis.team_dashboard_payload_v2", self.source)
+        self.assertIn("from analysis.team_dashboard_release_candidates_v4", self.source)
         self.assertIn("len(team_payloads) != 16", self.source)
         self.assertIn("insert into reporting.league_release_payloads_v2", self.source)
         self.assertIn("insert into reporting.team_dashboard_payloads_v2", self.source)
-        self.assertIn("'league_dashboard_release_v2', 16, 17", self.source)
+        self.assertIn("release_reason_code", self.source)
 
     def test_database_generates_payload_hashes(self) -> None:
         league_insert = self.source.split(
@@ -43,13 +43,16 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         )
 
     def test_database_candidates_are_inserted_without_json_number_round_trip(self) -> None:
-        self.assertIn("join analysis.league_dashboard_payload_v2 candidate", self.source)
-        self.assertIn("join analysis.team_dashboard_payload_v2 candidate", self.source)
+        self.assertIn("join analysis.league_dashboard_release_candidates_v4 candidate", self.source)
+        self.assertIn("join analysis.team_dashboard_release_candidates_v4 candidate", self.source)
         self.assertNotIn("select id, {params.jsonb(dashboard)}", self.source)
 
     def test_export_is_written_before_promotion_and_removed_on_failure(self) -> None:
-        self.assertLess(self.source.index("write_json_atomic(export_path"), self.source.index("run_sql(sql"))
-        self.assertIn("export_path.unlink(missing_ok=True)", self.source)
+        self.assertLess(
+            self.source.index("write_json_atomic(staged_export_path"),
+            self.source.index("run_sql(sql"),
+        )
+        self.assertIn("os.replace(staged_export_path, export_path)", self.source)
 
     def test_release_remains_commit_and_migration_gated(self) -> None:
         self.assertIn('provenance["code_version"].endswith("-dirty")', self.source)

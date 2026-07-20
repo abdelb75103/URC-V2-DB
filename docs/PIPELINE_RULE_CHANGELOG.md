@@ -82,8 +82,8 @@ Thigh muscle injuries are named as `Hamstring strain` (posterior) or `Quadriceps
 | Field | Value |
 |---|---|
 | Cohort rule | `season_bound_2024-07-01_2025-06-30_no_exposure_window` |
-| Status | `not-yet-in-pipeline` (differs deliberately from frozen `analysis.*_v1`) |
-| Carry-forward | `carries-forward` **once promoted**, with the season window re-parameterised per season |
+| Status | `implemented-in-pipeline` by migration `20260720170000`; immutable live bundle promotion recorded separately |
+| Carry-forward | `carries-forward`, with an explicitly registered season window per season |
 | Decision | Abdel, 19 July 2026 |
 
 **What changed.** Injuries dated inside the season sanity bound (2024-07-01 – 2025-06-30) are included even when outside a team's own exposure coverage window; exposure denominators are bounded by the same season window so numerator and denominator share one window. Undated but season-attributed injuries are included in counts and breakdowns, labelled, and excluded from monthly series.
@@ -91,6 +91,8 @@ Thigh muscle injuries are named as `Hamstring strain` (posterior) or `Quadriceps
 **Why.** The frozen `_v1` cohort restricted injuries to each team's exposure coverage window, which discarded in-season injuries from teams with partial exposure reporting. Binding both sides to one explicit season window keeps rates coherent while recovering those cases.
 
 **Year-2 note.** The window is a parameter, not a constant — Year 2 uses its own season bounds. Do not hard-code 2024-25 dates when promoting.
+
+**Implementation.** `analysis.reporting_season_windows_v3` registers each season's bounds; `analysis.injury_cohort_by_build_season_bound_v3` and its bounded exposure/dashboard successors recompute all team and league payload sections. The release context records the cohort version and a cohort-evidence hash transitively bound to the checksum and locator of `docs/evidence/season_bound_reporting_2024-25.json`. Frozen V1/V2 views and prior immutable releases remain unchanged.
 
 ---
 

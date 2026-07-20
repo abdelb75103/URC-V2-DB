@@ -1,0 +1,44 @@
+{
+  "evidence_version": "season_bound_reporting_2026-07-20_v1",
+  "decision_ref": "COHORT-01",
+  "reviewer": "Abdel Babiker",
+  "decision_recorded_at": "2026-07-19",
+  "confirmation_recorded_at": "2026-07-20",
+  "decision_source": "Direct project-task instruction to include injuries outside observed team exposure and publish all eligible injuries.",
+  "season": "2024-25",
+  "season_start": "2024-07-01",
+  "season_end": "2025-06-30",
+  "rule": {
+    "eligible_dated_injuries": "within_registered_season_window",
+    "eligible_undated_injuries": "season_attributed",
+    "team_exposure_window": "not_used",
+    "monthly_series": "dated_injuries_only",
+    "exposure": "included_curated_exposure_and_registered_fixtures_within_same_window",
+    "existing_exclusions_retained": [
+      "excluded_from_analysis",
+      "excluded_duplicate_adjudicated",
+      "non_injury_problem_type",
+      "received_from_other_team_or_club",
+      "non_urc_marker",
+      "italian_elite_championship"
+    ]
+  },
+  "pre_promotion_reconciliation": {
+    "approved_v2_recorded_injuries": 1765,
+    "season_bound_recorded_injuries": 2160,
+    "season_bound_positive_day_time_loss_injuries": 1120,
+    "added_by_season_bound_rule": 397,
+    "added_undated": 8,
+    "added_dated_outside_team_exposure": 389,
+    "v2_rows_not_in_season_bound_candidate": 2,
+    "net_recorded_injury_change": 395,
+    "canonical_exposure_hours": 76784.9492188
+  },
+  "verification_contract": {
+    "member_builds": 16,
+    "team_payloads": 16,
+    "league_payloads": 1,
+    "candidate_must_equal_version_bound_snapshot": true,
+    "predecessor_bundle_required_for_release": true
+  }
+}

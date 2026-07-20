@@ -3581,7 +3581,9 @@ INJURY_COHORT_V1_AMENDMENT_MIGRATION_VERSION = "20260710120000"
 FULL_DASHBOARD_RELEASE_RULE_VERSION = "full_dashboard_release_2026-07-10_v1"
 LEAGUE_DASHBOARD_V2_MIGRATION_VERSION = "20260714130000"
 ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260720150000"
+SEASON_BOUND_REPORTING_MIGRATION_VERSION = "20260720170000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
+SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-20_v3"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
 # The five dashboard cohort-exclusion reason codes analysis.coverage_v1
 # cannot reproduce under its curated-only read rule (see
@@ -5391,11 +5393,34 @@ def release_league(args: argparse.Namespace) -> None:
     preflight_file_arg = clean_text(args.preflight_file or "")
     reviewer = clean_text(args.preflight_reviewer or "")
     previous_bundle_file_arg = clean_text(getattr(args, "previous_bundle_file", ""))
+    analysis_version = clean_text(getattr(args, "analysis_version", "v2") or "v2")
     classification_view_version = clean_text(
         getattr(args, "classification_view_version", "v2") or "v2"
     )
-    if classification_view_version not in {"v2", "reporting_classification_2026-07-20_v1"}:
-        raise SystemExit("unsupported --classification-view-version")
+    cohort_view_version = clean_text(
+        getattr(args, "cohort_view_version", "v2") or "v2"
+    )
+    supported_release_variants = {
+        ("v2", "v2", "v2"),
+        ("v2", "reporting_classification_2026-07-20_v1", "v2"),
+        ("v3", "reporting_classification_2026-07-20_v1", "season_bound_2026-07-20_v1"),
+    }
+    if (analysis_version, classification_view_version, cohort_view_version) not in supported_release_variants:
+        raise SystemExit(
+            "unsupported analysis/classification/cohort version combination; "
+            "V3 requires accepted IA-02/ACL-01 classification and the season-bound cohort"
+        )
+    release_rule_version = (
+        SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+        if analysis_version == "v3"
+        else LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+    )
+    release_reason_code = (
+        "league_dashboard_release_v3"
+        if analysis_version == "v3"
+        else "league_dashboard_release_v2"
+    )
+    decision_recorded_at = "2026-07-19" if analysis_version == "v3" else "2026-07-14"
     if preflight and preflight_file_arg:
         raise SystemExit("--preflight cannot be combined with --preflight-file")
     if preflight_file_arg and not reviewer:
@@ -5412,7 +5437,11 @@ def release_league(args: argparse.Namespace) -> None:
             f"(code_version={provenance['code_version']})"
         )
 
-    required_migration = ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION
+    required_migration = (
+        SEASON_BOUND_REPORTING_MIGRATION_VERSION
+        if analysis_version == "v3"
+        else ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION
+    )
     migration_rows = query_sql(
         "select version from supabase_migrations.schema_migrations "
         f"where version = '{required_migration}'"
@@ -5424,10 +5453,12 @@ def release_league(args: argparse.Namespace) -> None:
 
     payload_params = SqlParams()
     payload_rows = query_sql(
-        f"select dashboard, classification_evidence_sha256 "
-        f"from analysis.league_dashboard_release_candidates_v3 "
+        f"select dashboard, classification_evidence_sha256, cohort_evidence_sha256 "
+        f"from analysis.league_dashboard_release_candidates_v4 "
         f"where season = {payload_params.text(season)} "
-        f"and classification_view_version = {payload_params.text(classification_view_version)}",
+        f"and analysis_version = {payload_params.text(analysis_version)} "
+        f"and classification_view_version = {payload_params.text(classification_view_version)} "
+        f"and cohort_view_version = {payload_params.text(cohort_view_version)}",
         payload_params.values,
     )
     if len(payload_rows) != 1 or not isinstance(payload_rows[0].get("dashboard"), dict):
@@ -5438,8 +5469,61 @@ def release_league(args: argparse.Namespace) -> None:
     classification_evidence_sha256 = clean_text(
         payload_rows[0].get("classification_evidence_sha256")
     ) or None
+    cohort_evidence_sha256 = clean_text(
+        payload_rows[0].get("cohort_evidence_sha256")
+    ) or None
     if classification_view_version != "v2" and not classification_evidence_sha256:
         raise SystemExit("accepted reporting classification evidence is missing")
+    if cohort_view_version != "v2" and not cohort_evidence_sha256:
+        raise SystemExit("accepted season-bound cohort evidence is missing")
+    if analysis_version == "v3":
+        semantic_params = SqlParams()
+        semantic_rows = query_sql(
+            f"""
+            with cohort as (
+              select c.*
+              from analysis.injury_cohort_by_build_season_bound_v3 c
+              join analysis.league_member_releases_v2 m
+                using (curated_build_id, team_key, season)
+              where c.season = {semantic_params.text(season)}
+            ), monthly as (
+              select coalesce(sum(exposure_hours), 0) as exposure_hours,
+                     coalesce(sum(time_loss_injuries), 0) as time_loss_injuries
+              from analysis.season_bound_league_monthly_v3
+              where season = {semantic_params.text(season)}
+            ), denominator as (
+              select exposure_hours
+              from analysis.season_bound_league_summary_v3
+              where season = {semantic_params.text(season)}
+            )
+            select
+              (select count(*) from cohort) as recorded_injuries,
+              (select count(*) from cohort where is_time_loss) as time_loss_injuries,
+              (select count(*) from cohort where is_undated) as undated_injuries,
+              (select count(*) from cohort where is_time_loss and not is_undated)
+                as dated_time_loss_injuries,
+              monthly.time_loss_injuries as monthly_time_loss_injuries,
+              denominator.exposure_hours,
+              monthly.exposure_hours as monthly_exposure_hours
+            from monthly cross join denominator
+            """,
+            semantic_params.values,
+        )
+        if len(semantic_rows) != 1:
+            raise SystemExit("season-bound semantic reconciliation returned no row")
+        semantic = semantic_rows[0]
+        headline_by_key = {
+            item.get("key"): item.get("value")
+            for item in dashboard.get("headline", [])
+            if isinstance(item, dict)
+        }
+        if (
+            headline_by_key.get("recorded_injuries") != semantic["recorded_injuries"]
+            or headline_by_key.get("time_loss_injuries") != semantic["time_loss_injuries"]
+            or semantic["monthly_time_loss_injuries"] != semantic["dated_time_loss_injuries"]
+            or semantic["monthly_exposure_hours"] != semantic["exposure_hours"]
+        ):
+            raise SystemExit("season-bound cohort, headline, or monthly reconciliation failed")
     classification_adjudications: list[dict[str, Any]] = []
     if classification_view_version != "v2":
         rule_params = SqlParams()
@@ -5460,16 +5544,35 @@ def release_league(args: argparse.Namespace) -> None:
             row["adjudication_ref"] for row in classification_adjudications
         } != {"IA-02", "ACL-01"}:
             raise SystemExit("exact IA-02/ACL-01 classification evidence is incomplete")
+    cohort_adjudications: list[dict[str, Any]] = []
+    if cohort_view_version != "v2":
+        cohort_params = SqlParams()
+        cohort_adjudications = query_sql(
+            f"""
+            select adjudication_ref, cohort_view_version, season, decision,
+                   evidence_sha256, evidence_locator, reviewer, migration_version
+            from audit.reporting_cohort_rule_adjudications_v3
+            where cohort_view_version = {cohort_params.text(cohort_view_version)}
+              and season = {cohort_params.text(season)}
+              and adjudication_ref = 'COHORT-01'
+            """,
+            cohort_params.values,
+        )
+        if len(cohort_adjudications) != 1:
+            raise SystemExit("exact season-bound cohort adjudication evidence is incomplete")
     preflight_league_sha256 = sha256_json(dashboard)
 
     team_payload_params = SqlParams()
     team_payloads = query_sql(
         f"select team_key, team_release_id::text, curated_build_id::text, dashboard "
-        f"from analysis.team_dashboard_release_candidates_v3 "
+        f"from analysis.team_dashboard_release_candidates_v4 "
         f"where season = {team_payload_params.text(season)} "
+        f"and analysis_version = {team_payload_params.text(analysis_version)} "
         f"and classification_view_version = {team_payload_params.text(classification_view_version)} "
         f"and classification_evidence_sha256 is not distinct from "
-        f"{team_payload_params.text(classification_evidence_sha256)} order by team_key",
+        f"{team_payload_params.text(classification_evidence_sha256)} "
+        f"and cohort_view_version = {team_payload_params.text(cohort_view_version)} "
+        f"and cohort_evidence_sha256 is not distinct from {team_payload_params.text(cohort_evidence_sha256)} order by team_key",
         team_payload_params.values,
     )
     if len(team_payloads) != 16 or any(
@@ -5478,6 +5581,11 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit(
             f"release-league requires 16 complete team dashboard payloads, found {len(team_payloads)}"
         )
+    if analysis_version == "v3" and any(
+        "injury_cohort_filters" in row["dashboard"].get("coverage", {})
+        for row in team_payloads
+    ):
+        raise SystemExit("season-bound team payload retained stale V2 cohort filters")
 
     member_params = SqlParams()
     members = query_sql(
@@ -5515,17 +5623,25 @@ def release_league(args: argparse.Namespace) -> None:
     canonical_hash_params = SqlParams()
     canonical_hash_rows = query_sql(
         f"with league as ("
-        f"  select dashboard from analysis.league_dashboard_release_candidates_v3 "
+        f"  select dashboard from analysis.league_dashboard_release_candidates_v4 "
         f"  where season = {canonical_hash_params.text(season)} "
-        f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)}"
+        f"    and analysis_version = {canonical_hash_params.text(analysis_version)} "
+        f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)} "
+        f"    and classification_evidence_sha256 is not distinct from {canonical_hash_params.text(classification_evidence_sha256)} "
+        f"    and cohort_view_version = {canonical_hash_params.text(cohort_view_version)} "
+        f"    and cohort_evidence_sha256 is not distinct from {canonical_hash_params.text(cohort_evidence_sha256)}"
         f"), teams as ("
         f"  select jsonb_agg(jsonb_build_object('team_key', team_key, 'dashboard', dashboard) "
         f"    order by team_key) as dashboards, "
         f"    jsonb_object_agg(team_key, encode(digest(convert_to(dashboard::text, 'UTF8'), "
         f"      'sha256'), 'hex') order by team_key) as hashes "
-        f"  from analysis.team_dashboard_release_candidates_v3 "
+        f"  from analysis.team_dashboard_release_candidates_v4 "
         f"  where season = {canonical_hash_params.text(season)} "
-        f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)}"
+        f"    and analysis_version = {canonical_hash_params.text(analysis_version)} "
+        f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)} "
+        f"    and classification_evidence_sha256 is not distinct from {canonical_hash_params.text(classification_evidence_sha256)} "
+        f"    and cohort_view_version = {canonical_hash_params.text(cohort_view_version)} "
+        f"    and cohort_evidence_sha256 is not distinct from {canonical_hash_params.text(cohort_evidence_sha256)}"
         f"), bundle as ("
         f"  select league.dashboard, teams.hashes, jsonb_build_object("
         f"    'schema_version', 'urc_dashboard_bundle_v2', "
@@ -5633,7 +5749,7 @@ def release_league(args: argparse.Namespace) -> None:
             "--previous-bundle-file is only valid when an approved predecessor exists"
         )
 
-    label_prefix = f"urc-{season}-v2-{bundle_payload_sha256[:12]}"
+    label_prefix = f"urc-{season}-{analysis_version}-{bundle_payload_sha256[:12]}"
     attempt_params = SqlParams()
     attempt_rows = query_sql(
         f"select count(*)::integer as attempts from reporting.aggregate_releases "
@@ -5646,10 +5762,13 @@ def release_league(args: argparse.Namespace) -> None:
     if not generated_at:
         raise SystemExit("league payload generated_at is missing")
     release_parameters = {
-        "analysis_version": "v2",
+        "analysis_version": analysis_version,
         "classification_view_version": classification_view_version,
         "classification_evidence_sha256": classification_evidence_sha256,
         "classification_adjudications": classification_adjudications,
+        "cohort_view_version": cohort_view_version,
+        "cohort_evidence_sha256": cohort_evidence_sha256,
+        "cohort_adjudications": cohort_adjudications,
         "member_count": len(members),
         "member_input_hash": member_input_hash,
         "member_release_ids": [member["team_release_id"] for member in members],
@@ -5719,8 +5838,8 @@ def release_league(args: argparse.Namespace) -> None:
         insert into audit.step_runs
           (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count,
            counts_by_team, input_hash, output_hash)
-        select id, 'release_league_dashboard', {params.text(LEAGUE_DASHBOARD_RELEASE_RULE_VERSION)},
-          'league_dashboard_release_v2', 16, 17,
+        select id, 'release_league_dashboard', {params.text(release_rule_version)},
+          {params.text(release_reason_code)}, 16, 17,
           {params.jsonb({member['team_key']: 1 for member in members})},
           {params.text(member_input_hash)}, {params.text(bundle_payload_sha256)}
         from run
@@ -5735,11 +5854,13 @@ def release_league(args: argparse.Namespace) -> None:
       insert into reporting.league_release_context_v2
         (release_id, season, analysis_version, generated_at,
          expected_member_count, match_exposure_decision, decision_reviewer, decision_recorded_at,
-         classification_view_version, classification_evidence_sha256)
-      select id, {params.text(season)}, 'v2', {params.text(generated_at)}::timestamptz,
+         classification_view_version, classification_evidence_sha256,
+         cohort_view_version, cohort_evidence_sha256)
+      select id, {params.text(season)}, {params.text(analysis_version)}, {params.text(generated_at)}::timestamptz,
         16, 'all_registered_season_fixtures_15_players_x_80_minutes_div_60',
-        'Abdel Babiker', date '2026-07-14',
-        {params.text(classification_view_version)}, {params.text(classification_evidence_sha256)}
+        'Abdel Babiker', {params.text(decision_recorded_at)}::date,
+        {params.text(classification_view_version)}, {params.text(classification_evidence_sha256)},
+        {params.text(cohort_view_version)}, {params.text(cohort_evidence_sha256)}
       from current_league_release;
 
       insert into reporting.league_release_members_v2
@@ -5755,22 +5876,28 @@ def release_league(args: argparse.Namespace) -> None:
         (release_id, dashboard_payload)
       select current_league_release.id, candidate.dashboard
       from current_league_release
-      join analysis.league_dashboard_release_candidates_v3 candidate
+      join analysis.league_dashboard_release_candidates_v4 candidate
         on candidate.season = {params.text(season)}
+       and candidate.analysis_version = {params.text(analysis_version)}
        and candidate.classification_view_version = {params.text(classification_view_version)}
        and candidate.classification_evidence_sha256 is not distinct from
-         {params.text(classification_evidence_sha256)};
+         {params.text(classification_evidence_sha256)}
+       and candidate.cohort_view_version = {params.text(cohort_view_version)}
+       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)};
 
       insert into reporting.team_dashboard_payloads_v2
         (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
       select current_league_release.id, candidate.team_key, candidate.team_release_id,
         candidate.curated_build_id, candidate.dashboard
       from current_league_release
-      join analysis.team_dashboard_release_candidates_v3 candidate
+      join analysis.team_dashboard_release_candidates_v4 candidate
         on candidate.season = {params.text(season)}
+       and candidate.analysis_version = {params.text(analysis_version)}
        and candidate.classification_view_version = {params.text(classification_view_version)}
        and candidate.classification_evidence_sha256 is not distinct from
          {params.text(classification_evidence_sha256)}
+       and candidate.cohort_view_version = {params.text(cohort_view_version)}
+       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)}
       join jsonb_to_recordset({params.jsonb(members)}) as expected(
         team_key text, team_release_id text, curated_build_id text
       ) on expected.team_key = candidate.team_key
@@ -10591,8 +10718,16 @@ def main() -> None:
         help="exact current approved bundle snapshot required for every bundle re-release",
     )
     league_release_parser.add_argument(
+        "--analysis-version", default="v2", choices=["v2", "v3"],
+        help="analytical candidate family; V3 requires the accepted season-bound cohort",
+    )
+    league_release_parser.add_argument(
         "--classification-view-version", default="v2",
         choices=["v2", "reporting_classification_2026-07-20_v1"],
+    )
+    league_release_parser.add_argument(
+        "--cohort-view-version", default="v2",
+        choices=["v2", "season_bound_2026-07-20_v1"],
     )
     league_release_parser.add_argument(
         "--preflight",
