@@ -110,18 +110,9 @@ Before cleaning Munster, freeze the case definition, time-loss definition, recur
 
 Exposure reporting granularity is not uniform across teams. Leinster, Munster, Connacht, and Ulster report exposure weekly. Confirm the grain from each current intake and record it explicitly rather than inferring it from the team name; other teams must likewise be profiled from their own file evidence. Analysis views preserve the native grain and aggregate comparably rather than treating weekly rows as session rows.
 
-## Minimal Modules and Commands
+## Operational Pipeline
 
-Keep the implementation small and concentrated behind four command interfaces:
-
-```text
-pipeline ingest      register and load an untouched pseudonymised input
-pipeline run         execute a named, versioned cleaning pipeline
-pipeline adjudicate  import and validate recorded manual decisions
-pipeline release     build frozen analytical views and exports
-```
-
-SQL migrations define the database. Python contains transformation logic and small runnable checks. Do not duplicate cleaning formulas in the website or spreadsheet exports. Keep only scripts used by an accepted run.
+The current commands, evidence chain, approval gates, and row/metric tracing procedure are maintained in `docs/PIPELINE_RUNBOOK.md`. SQL migrations define the database; the `pipeline` package is the supported processing interface; and the website is a read-only reporting consumer. Do not duplicate cleaning formulas in the website, spreadsheet exports, local review tools, or one-off scripts.
 
 ## Website Architecture
 
@@ -131,7 +122,7 @@ SQL migrations define the database. Python contains transformation logic and sma
 - No team JSON or passwords in `public/` or Git history.
 - League and team pages show data coverage and release/version context with the metrics.
 - Before public production, restore one signed session cookie containing the authorized team scope and expiry; verify a slow team password hash, rate-limit unlock requests, and protect preview deployments. Treat every legacy password as public and generate new high-entropy V2 passwords.
-- Apply an approved disclosure-control rule to small or rare aggregate cells before release. The threshold and suppression/combination method require governance approval and must be versioned with the release.
+- Exact small aggregate counts are currently retained. Any future suppression or combination rule requires governance approval and a versioned release rule.
 
 ## Design Direction: Preserve and Refine
 
@@ -188,17 +179,17 @@ Munster is complete only when:
 10. Desktop and mobile browser verification passes.
 11. A restore rehearsal proves the database can be rebuilt from migrations, retained pseudonymised inputs, adjudication evidence, and an approved backup. If the chosen Supabase plan lacks point-in-time recovery, retain encrypted logical backups in UCD-managed storage.
 
-After acceptance, freeze the schema, rules, reason codes, tests, and pipeline version before processing the remaining teams.
+After acceptance, freeze the schema, rules, reason codes, tests, and pipeline version before processing another team or season; later changes use additive versioned successors.
 
 ## DB-Backed Reporting and the V1 Freeze (10 July 2026)
 
-The full lakehouse path is live and is the single source of truth for every published number: `ingestion` → `processing` (+ `audit`) → `curated` (typed builds) → `analysis.*_v1` views (metric definitions live once, in SQL) → `reporting.release_context`/`reporting.release_table_rows` (full-dashboard snapshots per approved release) → `reporting.latest_team_dashboard` (the one consumer view).
+The full lakehouse path is live and is the single source of truth for every published number: `ingestion` → `processing` (+ `audit`) → `curated` (typed builds) → versioned analysis views → reviewed per-team release snapshots → immutable 16-team league bundle → `reporting.latest_team_dashboard_v2` / `reporting.latest_league_dashboard_v2` (the website consumer views).
 
 - **Releases.** `pipeline release` reads the `analysis.*_v1` views directly, snapshots all six dashboard sections, and gates on: required migrations tracked, exactly one active and non-stale curated build, adjudicated duplicate exclusions reflected in that build, section-vs-headline reconciliation, a clean protected-alias scan, and a non-dirty code version. Before a team/season's first release, `release --preflight` runs those checks read-only and renders the exact public candidate under Git-ignored `data/reporting`; the actual first release requires the reviewed candidate and named reviewer through `--preflight-file`/`--preflight-reviewer` and permits only `generated_at` to change. A re-release requires `--previous-dashboard-file`; the CLI caches, parses, and hashes the previous artifact before its first database query, requires its contents to exactly match the latest accepted full release (currently approved, or a successfully retired predecessor), applies the frozen historical whitelist against both the current candidate and serialized draft, and records the predecessor identity plus checksum in the release audit parameters. The write path uses the existing statuses as a two-transaction state machine: insert snapshot plus `started` audit evidence as invisible `draft`; serialize and verify that draft directly; then lock the team release boundary, recheck the expected predecessor, atomically promote the exact draft to `approved` while retiring superseded approved full releases, reconstruct its complete public JSON through `reporting.latest_team_dashboard` pinned to that release id, compare it with the verified draft candidate, and only then finalize the audit run as `succeeded` in the same transaction. Any failed draft or promotion is best-effort retired and marked failed, and retries use a new immutable label; if local artifact export fails after promotion, cleanup restores the exact prior approved predecessor when one existed and no newer successor displaced it. Sixteen approved 2024-25 releases exist, one per URC team; superseded releases remain retired, not deleted. Per-release evidence (labels, curated build ids, view version, code version, operator, row counts, first-release reviewer/checksum where applicable, and predecessor identity/checksum for re-releases) and the Phase 6 end-to-end reconciliation live in Git-ignored `data/reporting/phase6_acceptance_evidence_2026-07-10.json`.
 - **Edinburgh restatement.** Edinburgh was re-released under the current frozen rules with Abdel's explicit approval of the number change (recorded injuries 140→115, time-loss 92→75, days lost 1,867→1,663, incidence 13.7→11.2, burden 278.4→248.0; denominator unchanged). The exclusion attribution is recorded in the release's `injury_cohort_filters` and the diff record retained with the release evidence.
-- **Website.** `lib/reporting.ts` queries `reporting.latest_team_dashboard` server-side through the `web_reader` role (SELECT on that single view and nothing else; definer-rights + security_barrier is the one reviewed window through the deny-all RLS posture). Team pages are dynamic and, during the temporary private review approved on 14 July 2026, every team marked `live` is directly accessible without a password. A missing credential, database error, or missing approved release fails closed to the unavailable shell. `content/reporting/*.json` is still exported by `release` as an emergency artifact and parity record, but the app no longer imports it. The `web_reader` credential lives only in Git-ignored `.env.local` and the review deployment environment.
+- **Bundle and website.** A per-team `pipeline release` preserves the reviewed member snapshot but does not change the site until `pipeline release-league` promotes a reviewed immutable 16-team bundle. `lib/reporting.ts` queries `reporting.latest_team_dashboard_v2` and `reporting.latest_league_dashboard_v2` server-side through the `web_reader` role; those views expose only whitelisted fields from the latest approved complete bundle. Team pages are dynamic and, during the temporary private review approved on 14 July 2026, every team marked `live` is directly accessible without a password. A missing credential, database error, or missing approved bundle fails closed to the unavailable shell. `content/reporting/*.json` remains an emergency artifact and parity record, but the app does not import it. The `web_reader` credential lives only in Git-ignored `.env.local` and the review deployment environment.
 - **Frozen as of migrations `20260710130000` and `20260710150000`:** the `analysis.*_v1` view definitions, the `curated` schema, the controlled reason codes, the release gates, and the dashboard-JSON diff whitelist. The first-release preflight is an operational pipeline safety gate only; it does not change the frozen curated schema, `_v1` metric definitions, cohort, or release payload. Any analytical rule change still requires a new versioned migration (e.g. `_v2` views), a recorded adjudication of why, and a rerun plus re-release for every affected team/season — never an edit in place.
-- **Rollout.** All 16 teams completed the frozen 2024-25 path and are marked `live`. Every new team/season still begins with the local, read-only `docs/TEAM_INTAKE_PROFILING_GATE.md`, then follows `ingest` → `process-intake`/`process-exposure` → `build-curated` → read-only release preflight → sign-off → release. An approved database release and a route's `live` status remain separate explicit manual approvals.
+- **Rollout.** All 16 teams completed the 2024-25 path and are marked `live` for the private passwordless review. Every new team/season follows `docs/PIPELINE_RUNBOOK.md`: local profile and injury/exposure preparation; separate checksum-matched registrations and processing runs; once-per-season fixture loading; curated build; reconciliation/parity; reviewed team release; and reviewed immutable league-bundle release. A database release, bundle promotion, route status, access-control change, deployment, sharing, and production cutover remain distinct approval boundaries.
 
 ## Next Step
 

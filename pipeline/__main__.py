@@ -9117,6 +9117,14 @@ def build_munster_dashboard(args: argparse.Namespace) -> None:
     build_team_dashboard(args)
 
 
+def retired_legacy_dashboard_command(args: argparse.Namespace) -> None:
+    raise SystemExit(
+        "this local CSV dashboard command is retired because it bypasses the audited database "
+        "pipeline. Use ingest -> process-intake/process-exposure -> build-curated -> release -> "
+        "release-league; see docs/PIPELINE_RUNBOOK.md."
+    )
+
+
 def quiet_call(func: Any, args: argparse.Namespace) -> None:
     with contextlib.redirect_stdout(io.StringIO()):
         func(args)
@@ -10909,13 +10917,21 @@ def main() -> None:
         command.add_argument("--analysis-source-output", default="")
         command.add_argument("--standardisation-audit-output", default="")
 
-    team_dashboard_parser = subcommands.add_parser("build-team-dashboard")
+    team_dashboard_parser = subcommands.add_parser(
+        "build-team-dashboard",
+        help="retired and disabled; use the audited release pipeline",
+        description="Retired local CSV calculator. This command always refuses to run.",
+    )
     add_team_dashboard_args(team_dashboard_parser)
-    team_dashboard_parser.set_defaults(func=build_team_dashboard)
+    team_dashboard_parser.set_defaults(func=retired_legacy_dashboard_command)
 
-    dashboard_parser = subcommands.add_parser("build-munster-dashboard")
+    dashboard_parser = subcommands.add_parser(
+        "build-munster-dashboard",
+        help="retired and disabled; use the audited release pipeline",
+        description="Retired local CSV calculator. This command always refuses to run.",
+    )
     add_team_dashboard_args(dashboard_parser)
-    dashboard_parser.set_defaults(func=build_munster_dashboard)
+    dashboard_parser.set_defaults(func=retired_legacy_dashboard_command)
 
     redact_alias_parser = subcommands.add_parser("redact-protected-team-aliases")
     redact_alias_parser.add_argument("--scope", default="all", choices=["all"])

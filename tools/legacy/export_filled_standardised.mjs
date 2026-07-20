@@ -2,6 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
 
+// LEGACY / NOT FOR PIPELINE USE. This script predates the accepted export
+// audit contract and is retained only to explain a historical local artifact.
+// See tools/legacy/README.md and docs/PIPELINE_RUNBOOK.md.
+
 const args = Object.fromEntries(
   process.argv.slice(2).map((arg) => {
     const [key, ...rest] = arg.replace(/^--/, "").split("=");
