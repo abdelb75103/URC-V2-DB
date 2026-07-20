@@ -107,6 +107,21 @@ Standing watch-outs learned during the pilot:
 - The `web_reader` role is created NOLOGIN by migration; LOGIN and password were set out-of-band. To rotate: write the new password to a chmod-600 scratch SQL file, apply, delete the file, update `.env.local` — never echo it.
 - Python: `Path("")` is truthy — a release-export bug came from `Path(x or "") or default` (fixed in `0e27bf1`); do not reintroduce that pattern.
 
+## Cross-Season Reproducibility and Change Capture
+
+The pipeline must stay re-runnable: a new season's (or team's) pseudonymised intake file goes in, a published dashboard comes out, applying the same versioned rules. Keep three layers strictly separated, because only the first carries forward:
+
+- **Rules that carry forward** — case and time-loss definitions, cohort/season-window logic, IOC body and tissue/pathology bucket mappings, diagnosis inference precedence, exposure grain handling, severity bands, exclusion criteria. These live in versioned migrations/views (`analysis.*_vN`) and re-run unchanged on later seasons.
+- **Row-level adjudications** — specific date corrections, duplicate exclusions, individual ambiguity rulings. Recorded as data keyed to source rows in `audit.adjudications`; season-specific, reapplied by the pipeline, never baked into code and never carried blindly into a new season.
+- **Per-team source mappings** — each club's column/codebook translation into canonical form, versioned per team and re-validated through `docs/TEAM_INTAKE_PROFILING_GATE.md` whenever that club's export changes.
+
+Binding consequences:
+
+- **A rule that exists only in a dev-only preview file (e.g. `tools/sql/dashboard_v3_preview.sql`) is not part of the pipeline and will not apply to Year 2.** Promote it to a versioned view through a migration, or it does not count and will be re-derived from scratch next season.
+- Any change that alters a derived value, classification, cohort, denominator, or published figure must be recorded in `docs/PIPELINE_RULE_CHANGELOG.md` with date, rule version, what changed, why, carry-forward status, and the adjudication reference. Record it when the change is accepted, not retrospectively at season end.
+- The audit deliverable is **source → final**, not per-version: for every source row, its final published state and every decision that moved it (included, excluded, corrected, mapped, inferred, adjudicated) with reasons. Intermediate draft versions are working steps, not standalone review artifacts. Per-run/per-step event recording continues as the machinery that makes that record provable.
+- The audit record is anchored at the supplied pseudonymised intake file (the formal V2 boundary), with a documented checksum/locator/row-reconciliation bridge back to each club's original workbook and the limits of that bridge stated wherever preparation evidence is thin.
+
 ## Privacy and Data Safety
 
 - URC is the data controller and UCD is the data processor. The URC/UCD governance, ethics, and DPA approval covering hosted Supabase storage of pseudonymised player-level data is confirmed and recorded (Abdel, 9 July 2026). Loading pseudonymised data into the approved live Supabase target is permitted.
