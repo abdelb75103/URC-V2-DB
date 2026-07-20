@@ -122,6 +122,79 @@ test('team comparison overall setting is a validated projection of released head
   }
 });
 
+test('league and team page metrics include the released overall benchmark', async () => {
+  const priorUrl = process.env.WEB_READER_DB_URL;
+  process.env.WEB_READER_DB_URL = 'postgres://fixture';
+  const coverage = {
+    exposure_rows: 1,
+    exposed_players: 1,
+    weeks: 1,
+    hours: 800,
+    distance_km: 0,
+    included_exposure_status: 'included',
+  };
+  const headline = [
+    { key: 'recorded_injuries', label: 'Recorded injuries', value: 14, unit: 'cases', formula: '' },
+    { key: 'time_loss_injuries', label: 'Time-loss injuries', value: 6, unit: 'cases', formula: '' },
+    { key: 'incidence_per_1000h', label: 'Incidence', value: 7.5, unit: '/1,000 h', numerator: 6, denominator: 800, formula: '' },
+    { key: 'severity_mean_days', label: 'Severity', value: 12.5, unit: 'days', numerator: 75, denominator: 6, formula: '' },
+    { key: 'burden_per_1000h', label: 'Burden', value: 93.75, unit: 'days /1,000 h', numerator: 75, denominator: 800, formula: '' },
+  ];
+  const settingMetrics = [
+    { setting: 'match', label: 'Match', time_loss_injuries: 1, days_lost: 2, exposure_hours: 3, incidence_per_1000h: 4, burden_per_1000h: 5, mean_severity_days: 2 },
+  ];
+  const dashboard = {
+    team: 'URC Overall',
+    season: '2024-25',
+    generated_at: '2026-07-20T00:00:00Z',
+    analysis_window: { start: '2024-07-01', end: '2025-06-30', basis: 'season' },
+    method: [],
+    coverage,
+    headline,
+    setting_split: [],
+    setting_metrics: settingMetrics,
+    monthly: [],
+    body_locations: [],
+    injury_types: [],
+    injury_profiles: [],
+    severity_distribution: [],
+    prior_season: { season: '2023-24', status: 'unavailable', note: '' },
+    limitations: [],
+  };
+  globalThis.__urcWebReaderPool = {
+    query: async () => ({
+      rows: [{
+        dashboard,
+        comparisons: [],
+      }],
+    }),
+  };
+
+  try {
+    const { getLeaguePageData, getTeamPageData } = await loadReportingForFixtureTest();
+    const pageData = await getLeaguePageData();
+    assert.deepEqual(pageData.leagueMetrics.map((row) => row.setting), ['all', 'match']);
+    assert.equal(pageData.leagueMetrics[0].incidence_per_1000h, 7.5);
+    assert.equal(pageData.leagueMetrics[0].burden_per_1000h, 93.75);
+
+    globalThis.__urcWebReaderPool.query = async () => ({
+      rows: [{
+        dashboard: { ...dashboard, team: 'Fixture Team' },
+        comparisons: [],
+        league_metrics: { coverage, headline, setting_metrics: settingMetrics },
+      }],
+    });
+    const teamPageData = await getTeamPageData('fixture-team');
+    assert.deepEqual(teamPageData.leagueMetrics.map((row) => row.setting), ['all', 'match']);
+    assert.equal(teamPageData.leagueMetrics[0].incidence_per_1000h, 7.5);
+    assert.equal(teamPageData.leagueMetrics[0].burden_per_1000h, 93.75);
+  } finally {
+    globalThis.__urcWebReaderPool = undefined;
+    if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;
+    else process.env.WEB_READER_DB_URL = priorUrl;
+  }
+});
+
 test('comparison tab offers Overall when projected overall data exists', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const rows = [{ all: { setting: 'all' } }];

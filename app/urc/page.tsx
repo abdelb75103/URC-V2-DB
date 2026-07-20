@@ -3,7 +3,7 @@ import { LockedShell } from '@/components/locked-shell';
 import { StaticImages } from '@/lib/placeholder-images';
 import { getLeaguePageData } from '@/lib/reporting';
 import { getDashboardSupplement } from '@/lib/reporting-preview';
-import type { DashboardSupplement, TeamComparisonRow } from '@/lib/reporting-types';
+import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -11,12 +11,14 @@ export const revalidate = 0;
 export default async function UrcOverallPage() {
   let dashboard;
   let comparisons: TeamComparisonRow[] = [];
+  let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   try {
-    ({ dashboard, comparisons } = await getLeaguePageData());
+    ({ dashboard, comparisons, leagueMetrics } = await getLeaguePageData());
   } catch {
     dashboard = undefined;
     comparisons = [];
+    leagueMetrics = [];
   }
   try {
     supplement = await getDashboardSupplement('urc');
@@ -42,7 +44,7 @@ export default async function UrcOverallPage() {
       crest={StaticImages.urcLogo}
       teamName="United Rugby Championship"
       comparisons={comparisons}
-      leagueMetrics={dashboard.setting_metrics}
+      leagueMetrics={leagueMetrics}
       supplement={supplement}
     />
   );

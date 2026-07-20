@@ -111,6 +111,12 @@ const comparisonSourceRowSchema = z.object({
   setting_metrics: z.array(settingMetricSchema),
 });
 
+const leagueMetricsSourceSchema = z.object({
+  coverage: coverageSchema,
+  headline: z.array(headlineMetricSchema).min(1),
+  setting_metrics: z.array(settingMetricSchema),
+});
+
 const dashboardRowSchema = z.object({
   team: z.string(),
   season: z.string(),
@@ -348,9 +354,11 @@ export async function getTeamPageData(
            where season = $2
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
-       (select setting_metrics
-        from reporting.latest_league_dashboard_v2
-        where season = $2) as league_setting_metrics`,
+       (select to_jsonb(league_metrics_row) from (
+          select coverage, headline, setting_metrics
+          from reporting.latest_league_dashboard_v2
+          where season = $2
+        ) league_metrics_row) as league_metrics`,
     [teamId, season]
   );
   if (result.rows.length !== 1) throw new Error("expected one team page snapshot row");
@@ -358,7 +366,7 @@ export async function getTeamPageData(
   const snapshot = z.object({
     dashboard: dashboardRowSchema.nullable(),
     comparisons: z.array(comparisonSourceRowSchema),
-    league_setting_metrics: z.array(settingMetricSchema).nullable(),
+    league_metrics: leagueMetricsSourceSchema.nullable(),
   }).parse(result.rows[0]);
 
   return {
@@ -366,13 +374,16 @@ export async function getTeamPageData(
       ? normalizeDashboardRow(snapshot.dashboard, "team")
       : undefined,
     comparisons: normalizeTeamComparisons(snapshot.comparisons),
-    leagueMetrics: normalizeSettingMetrics(snapshot.league_setting_metrics ?? []),
+    leagueMetrics: snapshot.league_metrics
+      ? normalizeLeagueMetrics(snapshot.league_metrics)
+      : [],
   };
 }
 
 export type LeaguePageData = {
   dashboard: DashboardData | undefined;
   comparisons: TeamComparisonRow[];
+  leagueMetrics: SettingMetricRow[];
 };
 
 /** Same single-statement snapshot guarantee as getTeamPageData(). */
@@ -380,7 +391,7 @@ export async function getLeaguePageData(
   season = "2024-25"
 ): Promise<LeaguePageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, comparisons: [] };
+  if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [] };
 
   const result = await pool.query(
     `select
@@ -414,6 +425,9 @@ export async function getLeaguePageData(
       ? normalizeDashboardRow(snapshot.dashboard, "league")
       : undefined,
     comparisons: normalizeTeamComparisons(snapshot.comparisons),
+    leagueMetrics: snapshot.dashboard
+      ? normalizeLeagueMetrics(snapshot.dashboard)
+      : [],
   };
 }
 
@@ -467,6 +481,16 @@ function normalizeSettingMetrics(items: z.infer<typeof settingMetricSchema>[]): 
     burden_per_1000h: item.burden_per_1000h ?? null,
     mean_severity_days: item.mean_severity_days ?? null,
   })) as SettingMetricRow[];
+}
+
+function normalizeLeagueMetrics(
+  source: z.infer<typeof leagueMetricsSourceSchema>
+): SettingMetricRow[] {
+  const overall = overallSettingMetric(source.headline, source.coverage);
+  return [
+    ...(overall ? [overall] : []),
+    ...normalizeSettingMetrics(source.setting_metrics),
+  ];
 }
 
 function normalizeDashboardRow(
