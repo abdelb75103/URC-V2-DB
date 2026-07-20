@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from pipeline.__main__ import release_league
+from pipeline.__main__ import decimal_values_close, release_league
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +66,10 @@ class SeasonBoundReportingV3ContractTests(unittest.TestCase):
         self.assertIn("season-bound team payload retained stale V2 cohort filters", self.source)
         self.assertIn("(\"v2\", \"v2\", \"v2\")", self.source)
         self.assertIn("(\"v3\", \"reporting_classification_2026-07-20_v1\", \"season_bound_2026-07-20_v1\")", self.source)
+
+    def test_exposure_reconciliation_tolerates_only_sub_nanohour_rounding(self) -> None:
+        self.assertTrue(decimal_values_close("76784.9492188000000000", "76784.9492188000000001"))
+        self.assertFalse(decimal_values_close("76784.9492188000", "76784.9492188100"))
 
     def test_release_cli_rejects_an_unbound_v3_tuple_before_database_access(self) -> None:
         with self.assertRaisesRegex(SystemExit, "V3 requires accepted IA-02/ACL-01"):

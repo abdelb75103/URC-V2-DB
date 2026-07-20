@@ -18,6 +18,7 @@ import tempfile
 import uuid
 from collections import defaultdict
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -413,6 +414,13 @@ def query_sql(sql: str, params: list[object] | None = None) -> list[dict[str, An
         Path(sql_path).unlink(missing_ok=True)
         if params_path:
             Path(params_path).unlink(missing_ok=True)
+
+
+def decimal_values_close(left: object, right: object) -> bool:
+    try:
+        return abs(Decimal(str(left)) - Decimal(str(right))) <= Decimal("0.000000001")
+    except InvalidOperation:
+        return False
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -5521,7 +5529,9 @@ def release_league(args: argparse.Namespace) -> None:
             headline_by_key.get("recorded_injuries") != semantic["recorded_injuries"]
             or headline_by_key.get("time_loss_injuries") != semantic["time_loss_injuries"]
             or semantic["monthly_time_loss_injuries"] != semantic["dated_time_loss_injuries"]
-            or semantic["monthly_exposure_hours"] != semantic["exposure_hours"]
+            or not decimal_values_close(
+                semantic["monthly_exposure_hours"], semantic["exposure_hours"]
+            )
         ):
             raise SystemExit("season-bound cohort, headline, or monthly reconciliation failed")
     classification_adjudications: list[dict[str, Any]] = []
