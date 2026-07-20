@@ -6,7 +6,7 @@ import type { DashboardSupplement } from "@/lib/reporting-types";
 const settingSchema = z.enum(["all", "match", "training", "unknown"]);
 
 const injuryProfileSchema = z.object({
-  dimension: z.literal("injury_profile"),
+  dimension: z.literal("diagnosis"),
   code: z.string(),
   label: z.string(),
   setting: settingSchema,
@@ -16,6 +16,10 @@ const injuryProfileSchema = z.object({
   incidence_per_1000h: z.number().nonnegative().nullable(),
   burden_per_1000h: z.number().nonnegative().nullable(),
   mean_severity_days: z.number().nonnegative().nullable(),
+});
+
+const classificationProfileSchema = injuryProfileSchema.extend({
+  dimension: z.enum(["body_location", "injury_type"]),
 });
 
 const inferenceCoverageCountsSchema = z.object({
@@ -33,7 +37,8 @@ const supplementSchema = z.object({
   status: z.literal("draft_not_for_release"),
   season: z.string(),
   team_key: z.string(),
-  rule_version: z.string(),
+  rule_version: z.literal("urc-diagnosis-inference-v3-draft.9"),
+  cohort_rule: z.literal("season_bound_2024-07-01_2025-06-30_no_exposure_window"),
   generated_at: z.string(),
   consequence_summary: z.object({
     recorded_injuries: z.number().int().nonnegative(),
@@ -92,6 +97,8 @@ const supplementSchema = z.object({
     recorded_injuries: z.number().int().nonnegative(),
     time_loss_injuries: z.number().int().nonnegative(),
   })),
+  body_locations: z.array(classificationProfileSchema),
+  injury_types: z.array(classificationProfileSchema),
   common_injuries: z.array(injuryProfileSchema),
   diagnosis_coverage: z.object({
     classified_time_loss_injuries: z.number().int().nonnegative(),

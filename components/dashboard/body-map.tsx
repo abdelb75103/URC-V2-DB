@@ -61,18 +61,17 @@ export function BodyMap({
     <div className="relative">
       <div
         id={tooltipId}
-        role="tooltip"
         aria-live="polite"
-        className="mb-3 rounded-md border border-border bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-lg"
+        className="mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground"
       >
         {activeRow ? (
           <>
             <span className="font-semibold text-foreground">{activeRow.label}</span>
             <span className="mx-1 text-muted-foreground">:</span>
             <span className="font-medium tabular-nums text-foreground">{activeValue.toLocaleString(undefined, { maximumFractionDigits: 1 })} {metricMeta.label}{metricMeta.unit}</span>
-            <span className="block mt-0.5 text-muted-foreground">Overall body-location cohort. n = {activeRow.time_loss_injuries} time-loss injuries. Tap, hover, or focus a region to inspect it.</span>
+            <span className="block mt-0.5 text-muted-foreground">n = {activeRow.time_loss_injuries} time-loss injuries.</span>
           </>
-        ) : 'Tap, hover, or focus a highlighted body region to inspect its exact value.'}
+        ) : 'No body location selected.'}
       </div>
       <svg
         viewBox="0 0 360 420"

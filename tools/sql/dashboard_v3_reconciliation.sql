@@ -12,6 +12,16 @@ with builds as (
       ''
     ))) as source_class,
     lower(trim(coalesce(sr.source_values ->> 'Match Type', ''))) as source_match_type,
+    upper(trim(coalesce(
+      nullif(sr.source_values ->> 'Orchard Code', ''),
+      case when i.problem_type = 'injury' then sr.source_values ->> 'Illness Code' end,
+      ''
+    ))) as orchard_code,
+    lower(trim(concat_ws(' ',
+      sr.source_values ->> 'Description',
+      sr.source_values ->> 'Injury Tissue Type/s',
+      sr.source_values ->> 'Body Part'
+    ))) as narrow_clinical_evidence,
     lower(concat_ws(' ',
       sr.source_values ->> 'Description',
       sr.source_values ->> 'Orchard Code',
@@ -28,43 +38,55 @@ with builds as (
   from pinned
   where eligibility_status not in ('excluded_from_analysis', 'excluded_duplicate_adjudicated')
     and problem_type = 'injury'
-), attributed_descriptive as (
+), attributed_unbounded as (
   select *
   from eligible_injury_records
   where (received_in_team_status is null or received_in_team_status not in ('other_team', 'club'))
     and (urc_match_scope is null or urc_match_scope <> 'non_urc_marker')
     and source_match_type <> 'italian elite championship'
+), attributed_descriptive as (
+  select *
+  from attributed_unbounded
+  where date_injured is null
+    or date_injured between date '2024-07-01' and date '2025-06-30'
 ), legacy_diagnosis_candidates as (
-  select d.id, x.code
+  select d.id, x.code, x.diagnosis_subtype, x.profile_code
   from attributed_descriptive d
   cross join lateral (values
-    ('concussion', d.legacy_evidence ~ '(concuss|brain injury)'),
-    ('knee_ligament', d.body_location = 'knee' and d.legacy_evidence ~ '(acl|pcl|mcl|lcl|cruciate|collateral ligament|knee ligament)'),
-    ('ankle_ligament_sprain', d.body_location = 'ankle' and d.legacy_evidence ~ '(sprain|ligament)'),
-    ('hamstring_strain', d.legacy_evidence ~ '(hamstring|biceps femoris|semitend|semimembran)'),
-    ('contusion_haematoma', d.legacy_evidence ~ '(contusion|haematoma|hematoma|dead leg)'),
-    ('calf_muscle', d.legacy_evidence ~ '(calf|gastrocnemius|soleus)'),
-    ('quadriceps_muscle', d.legacy_evidence ~ '(quadriceps|rectus femoris|vastus )'),
-    ('adductor_groin', d.legacy_evidence ~ '(adductor|groin)'),
-    ('shoulder_instability', d.body_location = 'shoulder' and d.legacy_evidence ~ '(disloc|sublux|instability)'),
-    ('fracture', d.legacy_evidence ~ '(fracture|broken bone)'),
-    ('tendon_injury', d.legacy_evidence ~ '(tendon|tendin)')
-  ) x(code, matches)
+    ('concussion', 'concussion', 'head__brain_spinal_cord_injury', d.legacy_evidence ~ '(concuss|brain injury)'
+      and d.legacy_evidence !~ '(no|not|negative( for)?|passed|clear(ed)?|ruled out|without|did not).{0,32}(concuss(ion|ed)?|head injury assessment|brain injury|\mhia\M|\msrc\M)'
+      and d.legacy_evidence !~ '(concuss(ion|ed)?|head injury assessment|brain injury|\mhia\M|\msrc\M).{0,32}(negative|passed|clear(ed)?|ruled out|not diagnosed)'),
+    ('knee_ligament', 'acl', 'knee__joint_sprain', d.body_location = 'knee' and d.legacy_evidence ~ '(\macl\M|anterior cruciate)'),
+    ('knee_ligament', 'mcl', 'knee__joint_sprain', d.body_location = 'knee' and d.legacy_evidence ~ '(\mmcl\M|medial collateral)'),
+    ('knee_ligament', 'pcl', 'knee__joint_sprain', d.body_location = 'knee' and d.legacy_evidence ~ '(\mpcl\M|posterior cruciate)'),
+    ('knee_ligament', 'lcl', 'knee__joint_sprain', d.body_location = 'knee' and d.legacy_evidence ~ '(\mlcl\M|lateral collateral)'),
+    ('knee_ligament', 'unspecified', 'knee__joint_sprain', d.body_location = 'knee'
+      and d.legacy_evidence ~ '(\mcruciate\M|\mcollateral\M|knee ligament)'
+      and d.legacy_evidence !~ '(\macl\M|\mpcl\M|\mmcl\M|\mlcl\M|anterior cruciate|posterior cruciate|medial collateral|lateral collateral)'),
+    ('ankle_ligament_sprain', 'ankle_ligament_sprain', 'ankle__joint_sprain', d.body_location = 'ankle' and d.legacy_evidence ~ '(sprain|ligament)'),
+    ('hamstring_strain', 'hamstring_strain', 'thigh__muscle_injury', d.legacy_evidence ~ '(hamstring|biceps femoris|semitend|semimembran)'),
+    ('contusion_haematoma', 'contusion_haematoma', concat(coalesce(d.body_location, 'unknown'), '__contusion_superficial'), d.legacy_evidence ~ '(contusion|haematoma|hematoma|dead leg)'),
+    ('calf_muscle', 'calf_muscle', 'lower_leg__muscle_injury', d.legacy_evidence ~ '(calf|gastrocnemius|soleus)'),
+    ('quadriceps_muscle', 'quadriceps_muscle', 'thigh__muscle_injury', d.legacy_evidence ~ '(quadriceps|rectus femoris|vastus )'),
+    ('adductor_groin', 'adductor_groin', 'hip_groin__muscle_injury', d.legacy_evidence ~ '(adductor|groin)'),
+    ('shoulder_instability', 'shoulder_instability', 'shoulder__joint_sprain', d.body_location = 'shoulder' and d.legacy_evidence ~ '(disloc|sublux|instability)'),
+    ('fracture', 'fracture', concat(coalesce(d.body_location, 'unknown'), '__fracture'), d.legacy_evidence ~ '(fracture|broken bone)'),
+    ('tendon_injury', 'tendon_injury', concat(coalesce(d.body_location, 'unknown'), '__tendinopathy'), d.legacy_evidence ~ '(tendon|tendin)')
+  ) x(code, diagnosis_subtype, profile_code, matches)
   where x.matches
 ), legacy_diagnosis_candidate_summary as (
-  select id, count(distinct code)::int as candidate_count
+  select id, count(distinct code)::int as candidate_count,
+    count(distinct diagnosis_subtype)::int as subtype_candidate_count
   from legacy_diagnosis_candidates
   group by id
 ), attributed_with_legacy as (
-  select d.*, coalesce(l.candidate_count, 0) as legacy_diagnosis_candidate_count
+  select d.*, coalesce(l.candidate_count, 0) as legacy_diagnosis_candidate_count,
+    coalesce(l.subtype_candidate_count, 0) as legacy_diagnosis_subtype_candidate_count
   from attributed_descriptive d
   left join legacy_diagnosis_candidate_summary l on l.id = d.id
 ), rate_cohort as (
-  select c.injury_id
-  from analysis.injury_cohort_by_build_v2 c
-  join builds b
-    on b.curated_build_id = c.curated_build_id
-   and b.team_key = c.team_key and b.season = c.season
+  select id as injury_id
+  from attributed_descriptive
 ), teams as (
   select team_key from builds union all select 'urc'
 ), scoped_records as (
@@ -76,6 +98,9 @@ with builds as (
 ), scoped_attributed as (
   select team_key as scope_key, p.* from attributed_with_legacy p
   union all select 'urc', p.* from attributed_with_legacy p
+), scoped_attributed_unbounded as (
+  select team_key as scope_key, p.* from attributed_unbounded p
+  union all select 'urc', p.* from attributed_unbounded p
 ), scoped_rate as (
   select p.team_key as scope_key, p.*
   from attributed_descriptive p join rate_cohort r on r.injury_id = p.id
@@ -122,12 +147,16 @@ with builds as (
 select jsonb_build_object(
   'status', 'draft_not_for_release',
   'season', '2024-25',
-  'rule_version', 'urc-diagnosis-inference-v3-draft.5',
+  'rule_version', 'urc-diagnosis-inference-v3-draft.9',
+  'cohort_rule', 'season_bound_2024-07-01_2025-06-30_no_exposure_window',
   'definitions', jsonb_build_object(
     'pinned_records', 'All injury-table rows on the 16 immutable approved V2 member builds.',
     'eligible_injury_records', 'Pinned rows explicitly classified as injury after controlled duplicate/exclusion decisions; dates and attribution are not required.',
-    'attributed_descriptive_cases', 'Eligible injury records attributed to the reporting team; other-team/club and explicit non-URC markers are retained upstream but excluded from team totals.',
-    'exposure_aligned_rate_cases', 'Attributed cases with a known injury date inside that team approved exposure window; only this cohort can feed incidence and burden.'
+    'attributed_descriptive_cases', 'Eligible attributed injury records dated inside 2024-07-01..2025-06-30 or season-attributed with no injury date.',
+    'exposure_aligned_rate_cases', 'Draft.9 season-bound attributed cases, including undated cases; no team exposure-window restriction is applied.',
+    'diagnosis_unknown_exception', 'Unknown requires a missing standardised body or tissue input, except that cross-display-bucket named-diagnosis conflicts remain Unknown for adjudication.',
+    'knee_ankle_ligament_families_display_under_ioc_joint_sprain_parent', 'Adjudicated display-taxonomy decision approved by Abdel on 20 Jul 2026 and grounded in the IOC 2020 joint_sprain tissue parent: knee named ligaments plus generic knee sprains display as Knee · Joint sprain; ankle lateral-ligament, syndesmosis, and generic ankle sprains display as Ankle · Joint sprain. Ligament specificity remains in diagnosis_subtype and each row retains its pre-display origin class.',
+    'joint_sprain_scope_exceptions', 'Shoulder instability, AC joint sprain / separation, and Lisfranc injury remain distinct named diagnoses. Other joint-sprain compounds and named muscle diagnoses are unchanged.'
   ),
   'curated_origin_class_counts', (
     select coalesce(jsonb_agg(
@@ -164,8 +193,9 @@ select jsonb_build_object(
     'explicit_non_urc_records', (select count(*) from scoped_eligible r where r.scope_key = t.team_key
       and (r.urc_match_scope = 'non_urc_marker' or r.source_match_type = 'italian elite championship')),
     'missing_injury_date', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and r.date_injured is null),
-    'outside_exposure_window', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and r.date_injured is not null and not exists (select 1 from rate_cohort c where c.injury_id = r.id)),
-    'time_loss_outside_rate_cohort', (select count(*) from scoped_attributed r where r.scope_key = t.team_key
+    'outside_exposure_window', (select count(*) from scoped_attributed_unbounded r where r.scope_key = t.team_key
+      and r.date_injured is not null and r.date_injured not between date '2024-07-01' and date '2025-06-30'),
+    'time_loss_outside_rate_cohort', (select count(*) from scoped_attributed_unbounded r where r.scope_key = t.team_key
       and (coalesce(r.days_injured, 0) > 0 or r.source_class in ('time loss', 'yes', 'true', '1'))
       and not exists (select 1 from rate_cohort c where c.injury_id = r.id)),
     'positive_day_cases_descriptive', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and coalesce(r.days_injured, 0) > 0),
@@ -195,8 +225,19 @@ select jsonb_build_object(
     'contact_context_inferred_before_v3', (select count(*) from origin_classes o where o.scope_key = t.team_key and o.field = 'contact_context' and o.origin_class = 'inferred'),
     'contact_context_adjudicated_before_v3', (select count(*) from origin_classes o where o.scope_key = t.team_key and o.field = 'contact_context' and o.origin_class = 'adjudicated'),
     'contact_context_unknown_before_v3', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and coalesce(r.contact_context, 'unknown') = 'unknown'),
-    'diagnosis_unknown_before_v3', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and r.legacy_diagnosis_candidate_count <> 1),
-    'diagnosis_legacy_multi_match_refused', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and r.legacy_diagnosis_candidate_count > 1)
+    'exact_concussion_code_rows', (select count(*) from scoped_attributed r where r.scope_key = t.team_key
+      and r.orchard_code in ('HN1', 'HN2', 'HNC1', 'HNC2', 'HNCA', 'HNCD', 'HNCH', 'HNCN', 'HNCO', 'HNCX')),
+    'exact_concussion_code_rows_without_narrow_text', (select count(*) from scoped_attributed r where r.scope_key = t.team_key
+      and r.orchard_code in ('HN1', 'HN2', 'HNC1', 'HNC2', 'HNCA', 'HNCD', 'HNCH', 'HNCN', 'HNCO', 'HNCX')
+      and r.narrow_clinical_evidence !~ '(concuss(ion|ed)?|head injury assessment|brain injury|\mhia\M|\msrc\M)'),
+    'concussion_curated_body_conflicts', (select count(*) from scoped_attributed r where r.scope_key = t.team_key
+      and r.orchard_code in ('HN1', 'HN2', 'HNC1', 'HNC2', 'HNCA', 'HNCD', 'HNCH', 'HNCN', 'HNCO', 'HNCX')
+      and coalesce(r.body_location, 'unknown') not in ('unknown', 'head')),
+    'concussion_curated_tissue_conflicts', (select count(*) from scoped_attributed r where r.scope_key = t.team_key
+      and r.orchard_code in ('HN1', 'HN2', 'HNC1', 'HNC2', 'HNCA', 'HNCD', 'HNCH', 'HNCN', 'HNCO', 'HNCX')
+      and coalesce(r.injury_type, 'unknown') not in ('unknown', 'brain_spinal_cord_injury')),
+    'diagnosis_unknown_before_v3', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and r.legacy_diagnosis_subtype_candidate_count <> 1),
+    'diagnosis_legacy_multi_match_observed_before_draft6', (select count(*) from scoped_attributed r where r.scope_key = t.team_key and r.legacy_diagnosis_subtype_candidate_count > 1)
   ) order by t.team_key)
 ) as reconciliation
 from teams t;

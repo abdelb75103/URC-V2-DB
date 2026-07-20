@@ -19,7 +19,7 @@ export function KpiCard({ label, value, unit, hint, emphasis, className }: KpiCa
         className
       )}
     >
-      <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="text-xs font-medium text-muted-foreground">
         {label}
       </span>
       <span

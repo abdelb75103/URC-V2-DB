@@ -157,6 +157,23 @@ function webReaderPool(): Pool | undefined {
   return globalThis.__urcWebReaderPool;
 }
 
+function teamDisplayAliases(): Record<string, string> {
+  const raw = process.env.TEAM_DISPLAY_ALIAS_JSON;
+  if (!raw) return {};
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([, alias]) => typeof alias === "string" && alias.trim().length > 0
+      )
+    ) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Reads the latest approved release for a team from
  * reporting.latest_team_dashboard_v2 and validates it into DashboardData.
@@ -232,7 +249,7 @@ export async function getTeamComparisons(
   if (!pool) return [];
 
   const result = await pool.query(
-    `select team_key, team, coverage, setting_metrics
+    `select team_key, team, coverage, headline, setting_metrics
      from reporting.latest_team_dashboard_v2
      where season = $1
      order by team_key`,
@@ -243,6 +260,7 @@ export async function getTeamComparisons(
     team_key: z.string(),
     team: z.string(),
     coverage: coverageSchema,
+    headline: z.array(headlineMetricSchema).min(1),
     setting_metrics: z.array(settingMetricSchema),
   });
 
@@ -265,26 +283,56 @@ export async function getTeamComparisons(
       exposure_hours: row.coverage.hours,
       match_hours: row.coverage.match_hours ?? null,
       training_hours: row.coverage.training_hours ?? null,
+      all: overallSettingMetric(row.headline, row.coverage),
       match: metric("match"),
       training: metric("training"),
     };
   });
 
-  // Comparison labels are deliberately independent of the protected alias map.
+  // TEAM_DISPLAY_ALIAS_JSON may carry the real codebook alias under Abdel's
+  // 19 Jul 2026 amendment; Club NN remains the no-environment fallback.
   // They are assigned only after real identifiers have served their server-side
   // validation/tie-break purpose. Neither the real team key nor name crosses
   // the server-component boundary into the browser payload. While team pages are
   // passwordless, exact shared metrics still allow alias-to-team linkage by walking
   // those pages; restoring team-scoped passwords closes that vector, leaving only
   // each authorised team able to identify itself.
+  const aliases = teamDisplayAliases();
   return internalRows
     .sort((a, b) => b.exposure_hours - a.exposure_hours
       || a.internal_team_key.localeCompare(b.internal_team_key))
-    .map(({ internal_team_key: _internalTeamKey, ...row }, index) => ({
+    .map(({ internal_team_key, ...row }, index) => ({
       ...row,
       comparison_id: `comparison-${String(index + 1).padStart(2, "0")}`,
-      team_alias: `Club ${String(index + 1).padStart(2, "0")}`,
+      team_alias: aliases[internal_team_key] ?? `Club ${String(index + 1).padStart(2, "0")}`,
     }));
+}
+
+function overallSettingMetric(
+  headline: z.infer<typeof headlineMetricSchema>[],
+  coverage: z.infer<typeof coverageSchema>
+): SettingMetricRow | null {
+  const metric = (key: string) => headline.find((item) => item.key === key);
+  const timeLoss = metric("time_loss_injuries");
+  const incidence = metric("incidence_per_1000h");
+  const burden = metric("burden_per_1000h");
+  const severity = metric("severity_mean_days");
+
+  if (!incidence || !burden || !severity) return null;
+
+  const timeLossInjuries = timeLoss?.value ?? incidence.numerator;
+  if (timeLossInjuries == null || burden.numerator == null) return null;
+
+  return settingMetricSchema.parse({
+    setting: "all",
+    label: "All settings",
+    time_loss_injuries: timeLossInjuries,
+    days_lost: burden.numerator,
+    exposure_hours: incidence.denominator ?? coverage.hours,
+    incidence_per_1000h: incidence.value,
+    burden_per_1000h: burden.value,
+    mean_severity_days: severity.value,
+  }) as SettingMetricRow;
 }
 
 export async function getLeagueSettingMetrics(

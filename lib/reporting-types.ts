@@ -66,7 +66,7 @@ export type SettingMetricRow = {
 };
 
 export type InjuryProfileRow = {
-  dimension: 'body_location' | 'injury_type' | 'injury_profile';
+  dimension: 'body_location' | 'injury_type' | 'injury_profile' | 'diagnosis';
   code: string;
   label: string;
   setting: 'all' | 'match' | 'training' | 'unknown';
@@ -140,7 +140,8 @@ export type DashboardSupplement = {
   status: 'draft_not_for_release';
   season: string;
   team_key: string;
-  rule_version: string;
+  rule_version: 'urc-diagnosis-inference-v3-draft.9';
+  cohort_rule: 'season_bound_2024-07-01_2025-06-30_no_exposure_window';
   generated_at: string;
   consequence_summary: ConsequenceSummary;
   descriptive_consequence_summary: DescriptiveConsequenceSummary;
@@ -153,6 +154,8 @@ export type DashboardSupplement = {
   };
   monthly_by_setting: MonthlySettingRow[];
   contact_distribution: DistributionRow[];
+  body_locations: InjuryProfileRow[];
+  injury_types: InjuryProfileRow[];
   common_injuries: InjuryProfileRow[];
   diagnosis_coverage: {
     classified_time_loss_injuries: number;
@@ -167,6 +170,7 @@ export type TeamComparisonRow = {
   exposure_hours: number;
   match_hours: number | null;
   training_hours: number | null;
+  all: SettingMetricRow | null;
   match: SettingMetricRow | null;
   training: SettingMetricRow | null;
 };

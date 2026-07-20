@@ -1,6 +1,25 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import ts from 'typescript';
+
+const require = createRequire(import.meta.url);
+
+async function loadReportingForFixtureTest() {
+  const source = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
+  const pgUrl = pathToFileURL(require.resolve('pg')).href;
+  const zodUrl = pathToFileURL(require.resolve('zod')).href;
+  const executable = source
+    .replace('import "server-only";\n', '')
+    .replace('import { Pool } from "pg";', `import pg from "${pgUrl}";\nconst { Pool } = pg;`)
+    .replace('import { z } from "zod";', `import { z } from "${zodUrl}";`);
+  const javascript = ts.transpileModule(executable, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`);
+}
 
 test('league dashboard uses the approved database consumer view and fails closed', async () => {
   const page = await readFile(new URL('../app/urc/page.tsx', import.meta.url), 'utf8');
@@ -36,19 +55,74 @@ test('team comparisons cross the client boundary with display aliases only', asy
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
   const types = await readFile(new URL('../lib/reporting-types.ts', import.meta.url), 'utf8');
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const envExample = await readFile(new URL('../.env.example', import.meta.url), 'utf8');
 
   assert.match(reporting, /comparison_id: `comparison-/);
-  assert.match(reporting, /team_alias: `Club \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\}`/);
+  assert.match(reporting, /function teamDisplayAliases\(\)/);
+  assert.match(reporting, /TEAM_DISPLAY_ALIAS_JSON/);
+  assert.match(reporting, /all: overallSettingMetric\(row\.headline, row\.coverage\)/);
+  assert.match(reporting, /team_alias: aliases\[internal_team_key\] \?\? `Club \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\}`/);
   const displayAliasFormat = /^Club \d{2}$/;
   assert.match('Club 01', displayAliasFormat);
   assert.doesNotMatch('Club 1', displayAliasFormat);
-  assert.doesNotMatch(reporting, /Team \$\{String\.fromCharCode|Team [A-Z]\b/);
   assert.match(types, /comparison_id: string;[\s\S]*team_alias: string;/);
+  assert.match(types, /team_alias: string;[\s\S]*all: SettingMetricRow \| null;/);
+  assert.match(envExample, /TEAM_DISPLAY_ALIAS_JSON=\{\"team-x\":\"Team Z\"\}/);
   assert.doesNotMatch(types, /export type TeamComparisonRow = \{[^}]*team_key:/);
   assert.doesNotMatch(types, /export type TeamComparisonRow = \{[^}]*\bteam:/);
   assert.doesNotMatch(dashboard, /row\.team_key|row\.team\b/);
   assert.doesNotMatch(dashboard, /Team [A-Z]\b/);
   assert.match(dashboard, /row\.team_alias/);
+});
+
+test('team comparison overall setting is a validated projection of released headline fields', async () => {
+  const priorUrl = process.env.WEB_READER_DB_URL;
+  process.env.WEB_READER_DB_URL = 'postgres://fixture';
+  globalThis.__urcWebReaderPool = {
+    query: async () => ({
+      rows: [{
+        team_key: 'fixture-team',
+        team: 'Fixture Team',
+        coverage: { exposure_rows: 1, exposed_players: 1, weeks: 1, hours: 999, distance_km: 0, included_exposure_status: 'included' },
+        headline: [
+          { key: 'recorded_injuries', label: 'Recorded injuries', value: 14, unit: 'cases', formula: '' },
+          { key: 'incidence_per_1000h', label: 'Incidence', value: 7.5, unit: '/1,000 h', numerator: 6, denominator: 800, formula: '' },
+          { key: 'severity_mean_days', label: 'Severity', value: 12.5, unit: 'days', formula: '' },
+          { key: 'burden_per_1000h', label: 'Burden', value: 93.75, unit: 'days /1,000 h', numerator: 75, formula: '' },
+        ],
+        setting_metrics: [{ setting: 'match', label: 'Match', time_loss_injuries: 1, days_lost: 2, exposure_hours: 3, incidence_per_1000h: 4, burden_per_1000h: 5, mean_severity_days: 6 }],
+      }],
+    }),
+  };
+
+  try {
+    const { getTeamComparisons } = await loadReportingForFixtureTest();
+    const [row] = await getTeamComparisons();
+    assert.deepEqual(row.all, {
+      setting: 'all',
+      label: 'All settings',
+      time_loss_injuries: 6,
+      days_lost: 75,
+      exposure_hours: 800,
+      incidence_per_1000h: 7.5,
+      burden_per_1000h: 93.75,
+      mean_severity_days: 12.5,
+    });
+    assert.ok([row].some((comparison) => comparison.all));
+  } finally {
+    globalThis.__urcWebReaderPool = undefined;
+    if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;
+    else process.env.WEB_READER_DB_URL = priorUrl;
+  }
+});
+
+test('comparison tab offers Overall when projected overall data exists', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const rows = [{ all: { setting: 'all' } }];
+
+  assert.ok(rows.some((row) => row.all));
+  assert.match(dashboard, /\{ value: 'all', label: 'Overall' \}/);
+  assert.match(dashboard, /rows\.some\(\(row\) => row\[value\]\)/);
 });
 
 test('body map regions keep a reliable touch and pointer hit area', async () => {

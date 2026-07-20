@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import {
   assertPrivatePreviewOutputPath,
+  validateDraft9ClassificationProfiles,
+  validateDraft9DiagnosisBuckets,
+  validateDraft9RuleChecks,
+  validateDraft9SeasonBoundCohort,
   validateOriginClassCounts,
   validateLegacyMultiMatchRefusal,
 } from "./dashboard-v3-validation.mjs";
@@ -52,8 +56,16 @@ if (!connectionString) throw new Error("DATABASE_URL or SUPABASE_DB_URL is requi
 const client = new pg.Client({ connectionString });
 
 function validatePreview(payload) {
+  const cohortRule = "season_bound_2024-07-01_2025-06-30_no_exposure_window";
   const coverageFields = ["body_location", "tissue_pathology", "diagnosis", "contact_context"];
   for (const row of payload.supplements ?? []) {
+    validateDraft9SeasonBoundCohort(row);
+    validateDraft9DiagnosisBuckets(row);
+    validateDraft9ClassificationProfiles(row);
+    if (row.rule_version !== "urc-diagnosis-inference-v3-draft.9"
+      || row.cohort_rule !== cohortRule) {
+      throw new Error(`${row.team_key}: unexpected draft.9 rule metadata`);
+    }
     const descriptive = row.descriptive_consequence_summary;
     const partition = descriptive.time_loss_injuries
       + descriptive.medical_attention_only
@@ -108,8 +120,18 @@ function validatePreview(payload) {
     const diagnosedTotal = row.common_injuries
       .filter((item) => item.setting === "all")
       .reduce((sum, item) => sum + item.time_loss_injuries, 0);
-    if (diagnosedTotal !== row.diagnosis_coverage.classified_time_loss_injuries) {
-      throw new Error(`${row.team_key}: diagnosis profiles do not match classified-case coverage`);
+    if (diagnosedTotal !== row.diagnosis_coverage.eligible_time_loss_injuries) {
+      throw new Error(`${row.team_key}: diagnosis buckets including Unknown do not partition eligible time-loss cases`);
+    }
+    const unknownDiagnosis = row.common_injuries.find(
+      (item) => item.setting === "all" && item.code === "unknown"
+    );
+    if (!unknownDiagnosis || unknownDiagnosis.label !== "Unknown diagnosis"
+      || unknownDiagnosis.dimension !== "diagnosis"
+      || unknownDiagnosis.time_loss_injuries
+        !== row.diagnosis_coverage.eligible_time_loss_injuries
+          - row.diagnosis_coverage.classified_time_loss_injuries) {
+      throw new Error(`${row.team_key}: visible Unknown diagnosis bucket does not reconcile`);
     }
 
     if (row.inference_coverage.cohort !== "attributed_descriptive_cases") {
@@ -138,12 +160,19 @@ function validatePreview(payload) {
       }
     }
 
+    const allMonths = row.monthly_by_setting.filter((item) => item.setting === "all");
+    const monthlyRecorded = allMonths.reduce((sum, item) => sum + item.recorded_injuries, 0);
+    const monthlyRateCases = allMonths.reduce((sum, item) => sum + item.rate_time_loss_injuries, 0);
+    if (monthlyRecorded + row.descriptive_consequence_summary.undated_injuries
+      !== row.descriptive_consequence_summary.recorded_injuries
+      || monthlyRateCases > overallRate.time_loss_injuries) {
+      throw new Error(`${row.team_key}: undated injuries are not excluded only from monthly series`);
+    }
+
     const matchMonths = row.monthly_by_setting.filter((item) => item.setting === "match");
-    const monthlyMatchCases = matchMonths.reduce((sum, item) => sum + item.rate_time_loss_injuries, 0);
     const monthlyMatchHours = matchMonths.reduce((sum, item) => sum + (item.exposure_hours ?? 0), 0);
-    if (monthlyMatchCases !== matchRate.time_loss_injuries
-      || Math.abs(monthlyMatchHours - (matchRate.exposure_hours ?? 0)) > 1e-9) {
-      throw new Error(`${row.team_key}: monthly match totals do not reconcile to setting metrics`);
+    if (Math.abs(monthlyMatchHours - (matchRate.exposure_hours ?? 0)) > 1e-9) {
+      throw new Error(`${row.team_key}: monthly bounded match exposure does not reconcile to setting metrics`);
     }
   }
   const league = (payload.supplements ?? []).find((row) => row.team_key === "urc");
@@ -236,12 +265,19 @@ function validateReconciliation(payload, reconciliation, previewOriginClassCount
           throw new Error(`${team.team_key}: ${field} ${originClass} origin-string counts do not match preview coverage`);
         }
       }
-      for (const [originClass, reconciliationKey] of Object.entries(originKeys[field] ?? {})) {
-        const expected = originClass === "inferred"
-          ? team[reconciliationKey] + coverage.unknown_before_v3 - coverage.remaining_unknown
-          : team[reconciliationKey];
-        if (coverage[originClass] !== expected) {
-          throw new Error(`${team.team_key}: ${field} ${originClass} preview/reconciliation counts differ`);
+      const fieldOriginKeys = originKeys[field];
+      if (fieldOriginKeys) {
+        for (const originClass of ["source_reported", "adjudicated"]) {
+          if (coverage[originClass] !== team[fieldOriginKeys[originClass]]) {
+            throw new Error(`${team.team_key}: ${field} ${originClass} preview/reconciliation counts differ`);
+          }
+        }
+        const resolvedUnknowns = coverage.unknown_before_v3 - coverage.remaining_unknown;
+        const beforeMapped = team[fieldOriginKeys.mapped];
+        const beforeInferred = team[fieldOriginKeys.inferred];
+        if (coverage.mapped < beforeMapped || coverage.inferred < beforeInferred
+          || coverage.mapped + coverage.inferred !== beforeMapped + beforeInferred + resolvedUnknowns) {
+          throw new Error(`${team.team_key}: ${field} mapped/inferred resolutions do not reconcile`);
         }
       }
     }
@@ -282,6 +318,7 @@ try {
   const {
     adjudication_candidates: _privateCandidates,
     origin_class_counts: previewOriginClassCounts = [],
+    validation_checks: previewValidationChecks,
     ...aggregatePayload
   } = rawPayload;
   const payload = {
@@ -290,6 +327,7 @@ try {
   };
   validatePreview(payload);
   validateAdjudicationCandidates(candidates);
+  validateDraft9RuleChecks(previewValidationChecks);
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
 
@@ -320,8 +358,9 @@ try {
       source_query_sha256: createHash("sha256").update(reconciliationQuery).digest("hex"),
     };
     validateReconciliation(payload, reconciliation, previewOriginClassCounts);
-    validateLegacyMultiMatchRefusal(candidates, reconciliation);
+    validateLegacyMultiMatchRefusal(candidates, reconciliation, previewValidationChecks);
     reconciliation.origin_class_counts = previewOriginClassCounts;
+    reconciliation.preview_validation_checks = previewValidationChecks;
     await mkdir(dirname(reconciliationOutputPath), { recursive: true });
     await writeFile(reconciliationOutputPath, `${JSON.stringify(reconciliation, null, 2)}\n`, "utf8");
   }

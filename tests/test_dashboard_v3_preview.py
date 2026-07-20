@@ -60,8 +60,9 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("consequence_unknown", PREVIEW)
         self.assertIn("rate_ineligible_time_loss_injuries", PREVIEW)
         self.assertIn("descriptive and rate time-loss cohorts do not reconcile", GENERATOR)
-        self.assertIn("Exposure-aligned rate cohort", UI)
-        self.assertIn("Positive-day cases", UI)
+        self.assertIn("V3 inference preview - draft, not released", UI)
+        self.assertNotIn("Exposure-aligned rate cohort", UI)
+        self.assertNotIn("The approved V2 rate cohort uses positive recorded days", UI)
 
     def test_descriptive_and_rate_cohorts_are_not_mixed(self) -> None:
         self.assertIn("scoped_descriptive", PREVIEW)
@@ -70,7 +71,7 @@ class DashboardV3PreviewTests(unittest.TestCase):
         incidence = PREVIEW.split("'incidence_per_1000h'", 1)[1].split("'contact_distribution'", 1)[0]
         self.assertIn("m.rate_time_loss_injuries", incidence)
         self.assertNotIn("then m.time_loss_injuries::numeric", incidence)
-        self.assertIn("only this cohort can feed incidence and burden", RECONCILIATION)
+        self.assertIn("no team exposure-window restriction is applied", RECONCILIATION)
         self.assertIn("italian elite championship", PREVIEW)
         self.assertIn("retained_generic_match_cases", PREVIEW)
 
@@ -85,9 +86,10 @@ class DashboardV3PreviewTests(unittest.TestCase):
             "ac_joint_sprain",
             "syndesmosis_injury",
             "lisfranc_injury",
-            "acl_injury",
-            "mcl_injury",
-            "pcl_lcl_injury",
+            "'knee_ligament', 'acl'",
+            "'knee_ligament', 'mcl'",
+            "'knee_ligament', 'pcl'",
+            "'knee_ligament', 'lcl'",
             "meniscal_injury",
         ):
             self.assertIn(rule, PREVIEW)
@@ -102,6 +104,108 @@ class DashboardV3PreviewTests(unittest.TestCase):
             "), diagnosis_candidate_summary as (", 1
         )[0]
         self.assertNotRegex(diagnosis_rules.lower(), r"substring\([^\n]*orchard|substr\([^\n]*orchard")
+        current_summary = PREVIEW.split("), diagnosis_candidate_summary as (", 1)[1].split(
+            "), legacy_diagnosis_candidates as (", 1
+        )[0]
+        legacy_summary = PREVIEW.split("), legacy_diagnosis_candidate_summary as (", 1)[1].split(
+            "), diagnosis_stage as (", 1
+        )[0]
+        for summary in (current_summary, legacy_summary):
+            self.assertIn("count(distinct diagnosis_code)", summary)
+            self.assertIn("array_agg(distinct diagnosis_code order by diagnosis_code)", summary)
+            self.assertIn("count(distinct diagnosis_subtype)", summary)
+            self.assertNotIn("count(distinct profile_code)", summary)
+        self.assertIn("select id, count(distinct code)::int as candidate_count", RECONCILIATION)
+        self.assertIn("count(distinct diagnosis_subtype)::int as subtype_candidate_count", RECONCILIATION)
+        self.assertNotIn("select id, count(distinct profile_code)::int as candidate_count", RECONCILIATION)
+
+    def test_concussion_capture_is_cross_column_exact_code_and_negation_aware(self) -> None:
+        self.assertIn("reliable_concussion_text", PREVIEW)
+        self.assertIn("cross join lateral jsonb_each_text(d.source_values)", PREVIEW)
+        for field in (
+            "Description", "Injury Tissue Type/s", "Body Part", "Mechanism of Injury",
+            "Mechanism Notes", "Treatment/Rehab", "Injury Immediate Action",
+        ):
+            self.assertIn(f"'{field}'", PREVIEW)
+        for code in ("HN1", "HN2", "HNC1", "HNC2", "HNCA", "HNCD", "HNCH", "HNCN", "HNCO", "HNCX"):
+            self.assertIn(f"'{code}'", PREVIEW)
+        self.assertIn("mapped_from_exact_orchard_concussion_code", PREVIEW)
+        self.assertIn("not diagnosed", PREVIEW)
+        self.assertIn("HIA negative", PREVIEW)
+        self.assertIn("player not concussed", PREVIEW)
+        self.assertIn("concussion with no concerning history", PREVIEW)
+        self.assertIn("legacy_concussion_case_failures", PREVIEW)
+        self.assertIn("Legacy fallback remains negation-aware", PREVIEW)
+        self.assertIn("case when i.problem_type = 'injury' then sr.source_values ->> 'Illness Code' end", RECONCILIATION)
+        self.assertIn("validateDraft9RuleChecks", GENERATOR)
+
+    def test_knee_and_ankle_ligaments_display_under_ioc_joint_sprain_parents(self) -> None:
+        self.assertIn("diagnosis_labels", PREVIEW)
+        for source_code, label in (
+            ("compound__knee__joint_sprain", "Knee · Joint sprain"),
+            ("compound__ankle__joint_sprain", "Ankle · Joint sprain"),
+            ("meniscal_injury", "Meniscal injury"),
+            ("concussion", "Concussion"),
+            ("hamstring_strain", "Hamstring strain"),
+            ("quadriceps_muscle", "Quadriceps muscle injury"),
+        ):
+            self.assertRegex(PREVIEW, rf"\('{source_code}', '{re.escape(label)}',")
+        for removed_code in ("acl_injury", "mcl_injury", "pcl_lcl_injury"):
+            self.assertNotIn(f"('{removed_code}',", PREVIEW)
+        diagnosis_labels = PREVIEW.split("), diagnosis_labels as (", 1)[1].split(
+            "), diagnosis_profile_rows as (", 1
+        )[0]
+        self.assertNotIn("Knee ligament injury", diagnosis_labels)
+        self.assertIn("'acl', 'mapped'", PREVIEW)
+        self.assertIn("'generic_knee_sprain'", PREVIEW)
+        self.assertIn("array['unspecified']::text[], 'unspecified', 'inferred'", PREVIEW)
+        for subtype in ("ankle_lateral_ligament", "syndesmosis", "unspecified"):
+            self.assertIn(f"'{subtype}'", PREVIEW)
+        for distinct_code in (
+            "shoulder_instability", "ac_joint_sprain", "lisfranc_injury",
+            "meniscal_injury", "compound__knee__cartilage_injury",
+            "compound__knee__peripheral_nerve_injury", "hamstring_strain",
+            "quadriceps_muscle",
+        ):
+            self.assertIn(f"'{distinct_code}'", PREVIEW)
+        self.assertIn("synthetic_display_taxonomy_case_failures", PREVIEW)
+        self.assertIn("display_taxonomy_origin_class_changes", PREVIEW)
+        self.assertIn("count(distinct diagnosis_code)::int as candidate_count", PREVIEW)
+        self.assertIn("count(distinct diagnosis_subtype)::int as subtype_candidate_count", PREVIEW)
+        self.assertIn("within_bucket_multi_match_refusals", PREVIEW)
+        self.assertIn("cross_bucket_conflicts_classified", PREVIEW)
+        self.assertIn("diagnosis_bucket_rule_cases", PREVIEW)
+        for case_name in (
+            "acl", "mcl", "pcl", "lcl", "cruciate", "collateral",
+            "within_bucket_acl_pcl", "cross_bucket_knee_fracture",
+        ):
+            self.assertIn(f"'{case_name}'", PREVIEW)
+        self.assertIn("synthetic_diagnosis_bucket_case_failures", PREVIEW)
+        self.assertIn("from all_diagnosis_candidates", PREVIEW)
+        self.assertNotIn("synthetic_diagnosis_candidates as (", PREVIEW)
+        self.assertIn("('unknown', 'Unknown diagnosis'", PREVIEW)
+        self.assertIn("'dimension', 'diagnosis'", PREVIEW)
+        self.assertIn("profile_map_duplicate_source_codes", PREVIEW)
+        self.assertIn("diagnosis_bucket_rows", PREVIEW)
+        self.assertIn("duplicate_injury_rows", PREVIEW)
+        self.assertIn("time_loss_profile_assignments", PREVIEW)
+        self.assertIn("legacy_multi_match_refusal_checks", PREVIEW)
+        self.assertIn("profile_rows", PREVIEW)
+
+    def test_tier2_compound_and_unknown_invariants_are_explicit(self) -> None:
+        self.assertIn("then concat('compound__', effective_body_location, '__', effective_injury_type)", PREVIEW)
+        self.assertIn("then 'tier_2_compound'", PREVIEW)
+        self.assertIn("effective_body_location <> 'unknown' and effective_injury_type <> 'unknown'", PREVIEW)
+        self.assertIn("compound_missing_input_failures", PREVIEW)
+        self.assertIn("unknown_with_complete_compound_inputs", PREVIEW)
+        self.assertIn("synthetic_compound_origin_results", PREVIEW)
+        self.assertIn("synthetic_compound_origin_case_failures", PREVIEW)
+        self.assertIn("then compound_origin_group", PREVIEW)
+        self.assertIn("from compound_origin_expected_cases", PREVIEW)
+        self.assertIn("join compound_origin_pairs", PREVIEW)
+        self.assertIn("diagnosis_unknown_exception", RECONCILIATION)
+        self.assertIn("draft7_unknown_decomposition", PREVIEW)
+        self.assertIn("genuinely_evidence_less_all_four", PREVIEW)
 
     def test_body_and_tissue_rules_use_only_controlled_ioc_buckets(self) -> None:
         body_buckets = {row["bucket_key"] for row in IOC_BUCKETS if row["domain"] == "body_location"}
@@ -152,8 +256,43 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("origins do not partition the descriptive cohort", GENERATOR)
         self.assertIn("preview/reconciliation counts differ", GENERATOR)
         self.assertIn("inference_partition_total", RECONCILIATION)
-        self.assertIn("urc-diagnosis-inference-v3-draft.5", PREVIEW)
-        self.assertIn("urc-diagnosis-inference-v3-draft.5", RECONCILIATION)
+        self.assertIn("urc-diagnosis-inference-v3-draft.9", PREVIEW)
+        self.assertIn("urc-diagnosis-inference-v3-draft.9", RECONCILIATION)
+        self.assertIn("knee_ankle_ligament_families_display_under_ioc_joint_sprain_parent", RECONCILIATION)
+
+    def test_common_injuries_contains_overall_match_and_training_rows(self) -> None:
+        self.assertIn("select * from (values ('all', 1), ('match', 2), ('training', 3))", PREVIEW)
+        self.assertIn("cross join settings st", PREVIEW)
+        self.assertIn("'setting', p.setting_code", PREVIEW)
+        self.assertIn("'Unknown diagnosis'", PREVIEW)
+        self.assertIn("row.code !== 'unknown'", UI)
+        for headline in (
+            "Most common match injury", "Most common training injury",
+            "Highest match burden", "Highest training burden",
+        ):
+            self.assertIn(headline, UI)
+        self.assertIn("{row?.label ?? 'Not available'}", UI)
+
+    def test_draft9_uses_one_season_bound_for_injuries_and_exposure(self) -> None:
+        rule = "season_bound_2024-07-01_2025-06-30_no_exposure_window"
+        self.assertIn(rule, PREVIEW)
+        self.assertIn(rule, RECONCILIATION)
+        self.assertIn("date_injured is null", PREVIEW)
+        self.assertIn("date_injured between date '2024-07-01' and date '2025-06-30'", PREVIEW)
+        self.assertIn("from curated.exposure e", PREVIEW)
+        self.assertIn("coalesce(e.session_date, e.week_start_date)", PREVIEW)
+        self.assertIn("round(coalesce(sum(e.minutes_clean), 0) / 60, 1)", PREVIEW)
+        self.assertNotIn("from analysis.injury_cohort_by_build_v2 c", PREVIEW)
+        self.assertNotIn("from analysis.exposure_hours_by_build_v2 e", PREVIEW)
+        self.assertIn("outside_season_date_injuries", PREVIEW)
+        self.assertIn("undated_injuries", PREVIEW)
+        self.assertIn("validateDraft9SeasonBoundCohort", GENERATOR)
+        self.assertIn("validateDraft9DiagnosisBuckets", GENERATOR)
+        self.assertIn("classification_profile_rows", PREVIEW)
+        self.assertIn("'body_locations'", PREVIEW)
+        self.assertIn("'injury_types'", PREVIEW)
+        self.assertIn("supplement.body_locations", UI)
+        self.assertIn("supplement.injury_types", UI)
 
     def test_requested_dashboard_surfaces_exist(self) -> None:
         for label in (

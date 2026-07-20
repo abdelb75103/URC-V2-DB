@@ -8,8 +8,6 @@ import {
   Cell,
   LabelList,
   Legend,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ReferenceArea,
@@ -150,8 +148,8 @@ function CasesTooltip({
         { label: 'Time-loss cases', value: `${count(row.time_loss_injuries)} cases` },
       ]}
       cohort={hasRecordedCases
-        ? `${settingLabel(row.setting)} dated cases in ${label ?? row.month}. n = ${count(row.recorded_injuries)} recorded cases.`
-        : `${settingLabel(row.setting)} dated time-loss cases in ${label ?? row.month}. n = ${count(row.time_loss_injuries)} cases.`}
+        ? `n = ${count(row.recorded_injuries)} recorded cases.`
+        : `n = ${count(row.time_loss_injuries)} time-loss cases.`}
     />
   );
 }
@@ -175,7 +173,7 @@ function IncidenceTooltip({
         { label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` },
         { label: 'Time-loss cases', value: `${count(row.rate_time_loss_injuries)} cases` },
       ]}
-      cohort={`${settingLabel(row.setting)} rate cohort in ${label ?? row.month}. n = ${count(row.rate_time_loss_injuries)} time-loss cases.`}
+      cohort={`n = ${count(row.rate_time_loss_injuries)} time-loss cases.`}
     />
   );
 }
@@ -195,7 +193,7 @@ function ExposureTooltip({
     <TooltipCard
       title={`${label ?? row.month ?? 'Month'} - all recorded settings`}
       rows={[{ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` }]}
-      cohort={`Monthly player-hours for ${label ?? row.month ?? 'this period'}. Match and training denominators stay separate in rate views.`}
+      cohort={`n = ${hours(row.exposure_hours)} player-hours.`}
     />
   );
 }
@@ -211,11 +209,15 @@ export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
       aria-label={hasRecordedCases ? 'Monthly recorded and time-loss injury cases chart' : 'Monthly time-loss injury cases chart'}
     >
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart accessibilityLayer data={data} margin={{ top: 34, right: 14, bottom: 28, left: 12 }}>
+        <AreaChart accessibilityLayer data={data} margin={{ top: 70, right: 14, bottom: 28, left: 12 }}>
           <defs>
             <linearGradient id="recordedCases" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={SETTING_COLORS.all} stopOpacity={0.34} />
               <stop offset="100%" stopColor={SETTING_COLORS.all} stopOpacity={0.02} />
+            </linearGradient>
+            <linearGradient id="timeLossCases" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#ffc45c" stopOpacity={0.30} />
+              <stop offset="100%" stopColor="#ffc45c" stopOpacity={0.01} />
             </linearGradient>
           </defs>
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
@@ -238,6 +240,7 @@ export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
             content={<CasesTooltip />}
             cursor={{ stroke: 'hsl(var(--primary) / 0.55)', strokeWidth: 1 }}
             allowEscapeViewBox={{ x: false, y: false }}
+            position={{ x: 14, y: 10 }}
             wrapperStyle={{ zIndex: 30 }}
           />
           <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
@@ -251,11 +254,12 @@ export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
             activeDot={{ r: 5, strokeWidth: 2 }}
             isAnimationActive={false}
           />}
-          <Line
+          <Area
             type="monotone"
             dataKey="time_loss_injuries"
             name="Time-loss cases"
             stroke="#ffc45c"
+            fill="url(#timeLossCases)"
             strokeWidth={2.5}
             dot={{ r: 3, strokeWidth: 1.5 }}
             activeDot={{ r: 5, strokeWidth: 2 }}
@@ -277,7 +281,13 @@ export function MatchIncidenceChart({ rows }: { rows: MonthlySettingRow[] }) {
   return (
     <div className="h-[286px] min-w-[540px]" aria-label="Monthly injury incidence chart">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart accessibilityLayer data={data} margin={{ top: 12, right: 14, bottom: 28, left: 24 }}>
+        <AreaChart accessibilityLayer data={data} margin={{ top: 70, right: 14, bottom: 28, left: 24 }}>
+          <defs>
+            <linearGradient id="incidenceRate" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={SETTING_COLORS.match} stopOpacity={0.34} />
+              <stop offset="100%" stopColor={SETTING_COLORS.match} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="month"
@@ -298,19 +308,21 @@ export function MatchIncidenceChart({ rows }: { rows: MonthlySettingRow[] }) {
             content={<IncidenceTooltip />}
             cursor={{ stroke: SETTING_COLORS.match, strokeWidth: 1 }}
             allowEscapeViewBox={{ x: false, y: false }}
+            position={{ x: 14, y: 10 }}
             wrapperStyle={{ zIndex: 30 }}
           />
-          <Line
+          <Area
             type="monotone"
             dataKey="incidence_per_1000h"
             name="Incidence"
             stroke={SETTING_COLORS.match}
+            fill="url(#incidenceRate)"
             strokeWidth={2.5}
             dot={{ r: 3, strokeWidth: 1.5 }}
             activeDot={{ r: 5, strokeWidth: 2 }}
             isAnimationActive={false}
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
@@ -318,37 +330,13 @@ export function MatchIncidenceChart({ rows }: { rows: MonthlySettingRow[] }) {
 
 export type RingDatum = { key: string; label: string; value: number };
 
-function RingTooltip({
-  active,
-  payload,
-  cohort,
-  valueLabel,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload?: RingDatum }>;
-  cohort: string;
-  valueLabel: string;
-}) {
-  const row = payload?.[0]?.payload;
-  if (!active || !row) return null;
-  return (
-    <TooltipCard
-      title={row.label}
-      rows={[{ label: valueLabel, value: `${count(row.value)} ${valueLabel}` }]}
-      cohort={`${cohort}. n = ${count(row.value)} ${valueLabel}.`}
-    />
-  );
-}
-
 export function RingBreakdown({
   rows,
   centerLabel,
-  cohort = 'Selected injury cohort',
   valueLabel = 'cases',
 }: {
   rows: RingDatum[];
   centerLabel: string;
-  cohort?: string;
   valueLabel?: string;
 }) {
   const data = rows.filter((row) => row.value > 0);
@@ -384,25 +372,20 @@ export function RingBreakdown({
                 />
               ))}
             </Pie>
-            <Tooltip
-              content={<RingTooltip cohort={cohort} valueLabel={valueLabel} />}
-              allowEscapeViewBox={{ x: false, y: false }}
-              wrapperStyle={{ zIndex: 30 }}
-            />
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 grid place-content-center text-center">
-          <strong className="text-2xl tabular-nums text-foreground">{count(total)}</strong>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{centerLabel}</span>
+          <strong className="max-w-[112px] text-lg leading-tight text-foreground">{selected?.label ?? centerLabel}</strong>
+          <span className="mt-1 text-xl font-semibold tabular-nums text-primary">{count(selected?.value)}</span>
+          <span className="text-[10px] font-medium text-muted-foreground">{valueLabel}</span>
         </div>
       </div>
       <div className="space-y-1">
         {selected && (
-          <div role="tooltip" aria-live="polite" className="mb-2 rounded-md border border-border bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-lg">
+          <div aria-live="polite" className="mb-2 rounded-md border border-border bg-background/60 px-3 py-2 text-xs leading-relaxed text-popover-foreground">
             <span className="font-semibold text-foreground">{selected.label}</span>
             <span className="mx-1 text-muted-foreground">:</span>
             <span className="font-medium tabular-nums text-foreground">{count(selected.value)} {valueLabel}</span>
-            <span className="block mt-0.5 text-muted-foreground">{cohort}. n = {count(selected.value)} {valueLabel}. Tap, hover, or focus a segment or row to inspect it.</span>
           </div>
         )}
         {data.map((row, index) => {
@@ -415,7 +398,7 @@ export function RingBreakdown({
               onFocus={() => setSelectedKey(row.key)}
               onClick={() => setSelectedKey(row.key)}
               className={`grid min-h-11 w-full grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-2 rounded px-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
-              aria-label={`${row.label}: ${count(row.value)} ${valueLabel}. ${cohort}.`}
+              aria-label={`${row.label}: ${count(row.value)} ${valueLabel}.`}
             >
               <span className="h-2 w-2 rounded-full" style={{ background: PROFILE_COLORS[index % PROFILE_COLORS.length] }} />
               <span className="truncate text-muted-foreground">{row.label}</span>
@@ -438,7 +421,7 @@ export function ExposureTrendChart({ rows }: { rows: AnalyticsRow[] }) {
   return (
     <div className="h-[304px] min-w-[560px]" aria-label="Monthly player-hours chart">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart accessibilityLayer data={data} margin={{ top: 12, right: 14, bottom: 28, left: 30 }}>
+        <AreaChart accessibilityLayer data={data} margin={{ top: 70, right: 14, bottom: 28, left: 30 }}>
           <defs>
             <linearGradient id="exposureHours" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={SETTING_COLORS.training} stopOpacity={0.38} />
@@ -465,6 +448,7 @@ export function ExposureTrendChart({ rows }: { rows: AnalyticsRow[] }) {
             content={<ExposureTooltip />}
             cursor={{ stroke: SETTING_COLORS.training, strokeWidth: 1 }}
             allowEscapeViewBox={{ x: false, y: false }}
+            position={{ x: 14, y: 10 }}
             wrapperStyle={{ zIndex: 30 }}
           />
           <Area
@@ -512,7 +496,7 @@ function ImpactTooltip({
         { label: 'Burden', value: `${number(row.burden_per_1000h)} days /1,000 h` },
         { label: 'Time-loss cases', value: `${count(row.time_loss_injuries)} cases` },
       ]}
-      cohort={`${settingLabel(row.setting)} injury profile. n = ${count(row.time_loss_injuries)} time-loss cases.`}
+      cohort={`n = ${count(row.time_loss_injuries)} time-loss cases.`}
     />
   );
 }
