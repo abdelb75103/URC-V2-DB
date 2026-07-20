@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-14T11:27:49Z",
+  "generated_at": "2026-07-20T13:16:48Z",
   "team": "Dragons",
   "season": "2024-25",
   "analysis_window": {
@@ -34,7 +34,7 @@
       "exclusion_reason_counts": {
         "non_injury_problem_type": 47,
         "received_or_injured_in_other_team": 18,
-        "injury_date_missing_or_outside_exposure_coverage": 68
+        "injury_date_missing_or_outside_exposure_coverage": 67
       },
       "injured_in_team_applied": true,
       "explicit_non_urc_match_type_applied": true
@@ -45,7 +45,7 @@
     {
       "key": "recorded_injuries",
       "label": "Recorded injuries in coverage window",
-      "value": 86,
+      "value": 87,
       "unit": "injuries",
       "formula": "count(injury rows with Date Injured inside exposure coverage window)"
     },
@@ -290,7 +290,7 @@
     {
       "key": "zero_days_medical_attention_only",
       "label": "Medical attention",
-      "recorded_injuries": 8,
+      "recorded_injuries": 9,
       "time_loss_injuries": 0,
       "days_lost": 0
     },
