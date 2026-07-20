@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from pipeline.__main__ import decimal_values_close, release_league
+from pipeline.__main__ import decimal_values_close, integer_values_equal, release_league
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,6 +70,10 @@ class SeasonBoundReportingV3ContractTests(unittest.TestCase):
     def test_exposure_reconciliation_tolerates_only_sub_nanohour_rounding(self) -> None:
         self.assertTrue(decimal_values_close("76784.9492188000000000", "76784.9492188000000001"))
         self.assertFalse(decimal_values_close("76784.9492188000", "76784.9492188100"))
+
+    def test_count_reconciliation_accepts_postgres_bigint_strings(self) -> None:
+        self.assertTrue(integer_values_equal(2160, "2160"))
+        self.assertFalse(integer_values_equal(2160, "2161"))
 
     def test_release_cli_rejects_an_unbound_v3_tuple_before_database_access(self) -> None:
         with self.assertRaisesRegex(SystemExit, "V3 requires accepted IA-02/ACL-01"):

@@ -423,6 +423,13 @@ def decimal_values_close(left: object, right: object) -> bool:
         return False
 
 
+def integer_values_equal(left: object, right: object) -> bool:
+    try:
+        return int(left) == int(right)
+    except (TypeError, ValueError):
+        return False
+
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPROVED_ADJUDICATION_14_WORKBOOK_SHA256 = "b258bd9ad13d1fa6ddb58f99fec1f6cf1dfa559cfcd01fa8787931b53b484f1d"
 APPROVED_ADJUDICATION_14_EVIDENCE_SHA256 = "d3be9f4308f070951abc0e0f6fd2e33f4f8c670f3b514d1176dc0ebaf5cdbf7e"
@@ -5526,9 +5533,15 @@ def release_league(args: argparse.Namespace) -> None:
             if isinstance(item, dict)
         }
         if (
-            headline_by_key.get("recorded_injuries") != semantic["recorded_injuries"]
-            or headline_by_key.get("time_loss_injuries") != semantic["time_loss_injuries"]
-            or semantic["monthly_time_loss_injuries"] != semantic["dated_time_loss_injuries"]
+            not integer_values_equal(
+                headline_by_key.get("recorded_injuries"), semantic["recorded_injuries"]
+            )
+            or not integer_values_equal(
+                headline_by_key.get("time_loss_injuries"), semantic["time_loss_injuries"]
+            )
+            or not integer_values_equal(
+                semantic["monthly_time_loss_injuries"], semantic["dated_time_loss_injuries"]
+            )
             or not decimal_values_close(
                 semantic["monthly_exposure_hours"], semantic["exposure_hours"]
             )
