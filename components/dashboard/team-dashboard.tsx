@@ -187,6 +187,20 @@ function EmptyState({ children = 'No data is available for this view.' }: { chil
   return <div className="grid min-h-40 place-items-center rounded-md border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{children}</div>;
 }
 
+function reportingDiagnosisRows(
+  profiles: InjuryProfileRow[],
+  supplement?: DashboardSupplement,
+): InjuryProfileRow[] {
+  if (supplement?.common_injuries.length) return supplement.common_injuries;
+  if (profiles.some((row) => row.dimension === 'diagnosis')) {
+    return profiles.filter((row) => row.dimension === 'diagnosis');
+  }
+  if (profiles.some((row) => row.dimension === 'injury_profile')) {
+    return profiles.filter((row) => row.dimension === 'injury_profile');
+  }
+  return profiles.filter((row) => row.dimension === 'injury_type');
+}
+
 function OverviewTab({
   dashboard,
   profiles,
@@ -205,11 +219,7 @@ function OverviewTab({
     ?? dashboard.setting_metrics.find((row) => row.setting === 'match');
   const training = supplement?.rate_setting_metrics.find((row) => row.setting === 'training')
     ?? dashboard.setting_metrics.find((row) => row.setting === 'training');
-  const diagnosisRows = supplement?.common_injuries.length
-    ? supplement.common_injuries
-    : profiles.some((row) => row.dimension === 'injury_profile')
-    ? profiles.filter((row) => row.dimension === 'injury_profile')
-    : profiles.filter((row) => row.dimension === 'injury_type');
+  const diagnosisRows = reportingDiagnosisRows(profiles, supplement);
   const namedDiagnosisRows = diagnosisRows.filter((row) => row.code !== 'unknown');
   const highlights = [
     ['Most common match injury', topRow(namedDiagnosisRows, 'match', 'incidence_per_1000h'), 'incidence_per_1000h'],
@@ -429,11 +439,7 @@ function CompactRanking({ rows }: { rows: InjuryProfileRow[] }) {
 }
 
 function CommonInjuriesTab({ profiles, supplement }: { profiles: InjuryProfileRow[]; supplement?: DashboardSupplement }) {
-  const source = supplement?.common_injuries.length
-    ? supplement.common_injuries
-    : profiles.some((row) => row.dimension === 'injury_profile')
-    ? profiles.filter((row) => row.dimension === 'injury_profile')
-    : profiles.filter((row) => row.dimension === 'injury_type');
+  const source = reportingDiagnosisRows(profiles, supplement);
   const settings = availableSettings(source, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
   const rows = source
@@ -905,11 +911,7 @@ function InjuryTypesTab({ profiles }: { profiles: InjuryProfileRow[] }) {
 
 function ImpactTab({ profiles, supplement }: { profiles: InjuryProfileRow[]; supplement?: DashboardSupplement }) {
   const [dimension, setDimension] = useState<'diagnosis' | 'location' | 'type'>('diagnosis');
-  const diagnosis = supplement?.common_injuries.length
-    ? supplement.common_injuries
-    : profiles.some((row) => row.dimension === 'injury_profile')
-      ? profiles.filter((row) => row.dimension === 'injury_profile')
-      : profiles.filter((row) => row.dimension === 'injury_type');
+  const diagnosis = reportingDiagnosisRows(profiles, supplement);
   const source = dimension === 'diagnosis'
     ? diagnosis
     : profiles.filter((row) => row.dimension === (dimension === 'location' ? 'body_location' : 'injury_type'));

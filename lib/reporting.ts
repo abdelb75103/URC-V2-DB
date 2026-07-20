@@ -54,7 +54,7 @@ const settingMetricSchema = z.object({
 });
 
 const injuryProfileSchema = z.object({
-  dimension: z.enum(["body_location", "injury_type", "injury_profile"]),
+  dimension: z.enum(["body_location", "injury_type", "injury_profile", "diagnosis"]),
   code: z.string(),
   label: z.string(),
   setting: z.enum(["all", "match", "training", "unknown"]),
@@ -102,6 +102,14 @@ const coverageSchema = z
       .nullish(),
   })
   .passthrough();
+
+const comparisonSourceRowSchema = z.object({
+  team_key: z.string(),
+  team: z.string(),
+  coverage: coverageSchema,
+  headline: z.array(headlineMetricSchema).min(1),
+  setting_metrics: z.array(settingMetricSchema),
+});
 
 const dashboardRowSchema = z.object({
   team: z.string(),
@@ -256,16 +264,12 @@ export async function getTeamComparisons(
     [season]
   );
 
-  const rowSchema = z.object({
-    team_key: z.string(),
-    team: z.string(),
-    coverage: coverageSchema,
-    headline: z.array(headlineMetricSchema).min(1),
-    setting_metrics: z.array(settingMetricSchema),
-  });
+  return normalizeTeamComparisons(result.rows);
+}
 
-  const internalRows = result.rows.map((raw) => {
-    const row = rowSchema.parse(raw);
+function normalizeTeamComparisons(rawRows: unknown[]): TeamComparisonRow[] {
+  const internalRows = rawRows.map((raw) => {
+    const row = comparisonSourceRowSchema.parse(raw);
     const metric = (setting: SettingMetricRow["setting"]) => {
       const value = row.setting_metrics.find((item) => item.setting === setting);
       if (!value) return null;
@@ -308,6 +312,111 @@ export async function getTeamComparisons(
     }));
 }
 
+export type TeamPageData = {
+  dashboard: DashboardData | undefined;
+  comparisons: TeamComparisonRow[];
+  leagueMetrics: SettingMetricRow[];
+};
+
+/**
+ * Loads every production payload needed by a team page in one PostgreSQL
+ * statement. PostgreSQL gives a statement one MVCC snapshot, so a request
+ * cannot mix an old dashboard bundle with comparisons from its successor.
+ */
+export async function getTeamPageData(
+  teamId: string,
+  season = "2024-25"
+): Promise<TeamPageData> {
+  const pool = webReaderPool();
+  if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [] };
+
+  const result = await pool.query(
+    `select
+       (select to_jsonb(team_row) from (
+          select team, season, generated_at, analysis_window, method, coverage,
+                 headline, setting_split, setting_metrics, monthly, body_locations,
+                 injury_types, injury_profiles, severity_distribution, prior_season,
+                 limitations
+          from reporting.latest_team_dashboard_v2
+          where team_key = $1 and season = $2
+        ) team_row) as dashboard,
+       coalesce((
+         select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
+         from (
+           select team_key, team, coverage, headline, setting_metrics
+           from reporting.latest_team_dashboard_v2
+           where season = $2
+         ) comparison_row
+       ), '[]'::jsonb) as comparisons,
+       (select setting_metrics
+        from reporting.latest_league_dashboard_v2
+        where season = $2) as league_setting_metrics`,
+    [teamId, season]
+  );
+  if (result.rows.length !== 1) throw new Error("expected one team page snapshot row");
+
+  const snapshot = z.object({
+    dashboard: dashboardRowSchema.nullable(),
+    comparisons: z.array(comparisonSourceRowSchema),
+    league_setting_metrics: z.array(settingMetricSchema).nullable(),
+  }).parse(result.rows[0]);
+
+  return {
+    dashboard: snapshot.dashboard
+      ? normalizeDashboardRow(snapshot.dashboard, "team")
+      : undefined,
+    comparisons: normalizeTeamComparisons(snapshot.comparisons),
+    leagueMetrics: normalizeSettingMetrics(snapshot.league_setting_metrics ?? []),
+  };
+}
+
+export type LeaguePageData = {
+  dashboard: DashboardData | undefined;
+  comparisons: TeamComparisonRow[];
+};
+
+/** Same single-statement snapshot guarantee as getTeamPageData(). */
+export async function getLeaguePageData(
+  season = "2024-25"
+): Promise<LeaguePageData> {
+  const pool = webReaderPool();
+  if (!pool) return { dashboard: undefined, comparisons: [] };
+
+  const result = await pool.query(
+    `select
+       (select to_jsonb(league_row) from (
+          select team, season, generated_at, analysis_window, method, coverage,
+                 headline, setting_split, setting_metrics, monthly, body_locations,
+                 injury_types, injury_profiles, severity_distribution, prior_season,
+                 limitations
+          from reporting.latest_league_dashboard_v2
+          where season = $1
+        ) league_row) as dashboard,
+       coalesce((
+         select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
+         from (
+           select team_key, team, coverage, headline, setting_metrics
+           from reporting.latest_team_dashboard_v2
+           where season = $1
+         ) comparison_row
+       ), '[]'::jsonb) as comparisons`,
+    [season]
+  );
+  if (result.rows.length !== 1) throw new Error("expected one league page snapshot row");
+
+  const snapshot = z.object({
+    dashboard: dashboardRowSchema.nullable(),
+    comparisons: z.array(comparisonSourceRowSchema),
+  }).parse(result.rows[0]);
+
+  return {
+    dashboard: snapshot.dashboard
+      ? normalizeDashboardRow(snapshot.dashboard, "league")
+      : undefined,
+    comparisons: normalizeTeamComparisons(snapshot.comparisons),
+  };
+}
+
 function overallSettingMetric(
   headline: z.infer<typeof headlineMetricSchema>[],
   coverage: z.infer<typeof coverageSchema>
@@ -347,7 +456,11 @@ export async function getLeagueSettingMetrics(
     [season]
   );
   if (result.rows.length !== 1) return [];
-  return z.array(settingMetricSchema).parse(result.rows[0].setting_metrics).map((item) => ({
+  return normalizeSettingMetrics(z.array(settingMetricSchema).parse(result.rows[0].setting_metrics));
+}
+
+function normalizeSettingMetrics(items: z.infer<typeof settingMetricSchema>[]): SettingMetricRow[] {
+  return items.map((item) => ({
     ...stripNulls(item),
     exposure_hours: item.exposure_hours ?? null,
     incidence_per_1000h: item.incidence_per_1000h ?? null,

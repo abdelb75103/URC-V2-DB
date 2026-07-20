@@ -416,6 +416,19 @@ def query_sql(sql: str, params: list[object] | None = None) -> list[dict[str, An
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+APPROVED_ADJUDICATION_14_WORKBOOK_SHA256 = "b258bd9ad13d1fa6ddb58f99fec1f6cf1dfa559cfcd01fa8787931b53b484f1d"
+APPROVED_ADJUDICATION_14_EVIDENCE_SHA256 = "d3be9f4308f070951abc0e0f6fd2e33f4f8c670f3b514d1176dc0ebaf5cdbf7e"
+APPROVED_ADJUDICATION_14_MANIFEST_SHA256 = "26237f484d2c3aac3a161caa89f61e0207611e2b83fcd78751616f30348c1d78"
+APPROVED_ADJUDICATION_14_WORKBOOK_PATH = (
+    REPO_ROOT / "data" / "reporting" /
+    "adjudication_14_needs_abdel_2024-25_approved_b258bd9a.xlsx"
+).resolve()
+APPROVED_ADJUDICATION_14_MANIFEST_PATH = (
+    REPO_ROOT / "data" / "reporting" / "adjudication_14_approved_batch.json"
+).resolve()
+APPROVED_ADJUDICATION_14_EVIDENCE_PATH = (
+    REPO_ROOT / "data" / "reporting" / "adjudication_checklist_2024-25_evidence.json"
+).resolve()
 
 
 def run_provenance() -> dict[str, str]:
@@ -1996,6 +2009,127 @@ def fetch_standing_eligibility_adjudications(
     return {int(row["source_row_number"]): row for row in rows}
 
 
+def fetch_standing_source_field_adjudications(
+    team: str, season: str, file_hash: str
+) -> dict[int, list[dict[str, Any]]]:
+    """Return approved source-field overlays for one immutable intake file.
+
+    The source representation remains unchanged. process-intake applies these
+    allowlisted decisions only in memory before deriving a new record version.
+    """
+    lookup_params = SqlParams()
+    rows = query_sql(
+        f"""
+        select sr.source_row_number, sr.row_sha256, a.id as adjudication_id,
+               a.field_name, a.decision, a.rationale
+        from audit.adjudications a
+        join ingestion.source_rows sr on sr.id = a.source_row_id
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        where sf.team = {lookup_params.text(team)}
+          and sf.season = {lookup_params.text(season)}
+          and sf.file_sha256 = {lookup_params.text(file_hash)}
+          and a.field_name in ('Date Injured', 'Fit For Selection Date')
+          and a.decision ->> 'decision_type' = 'source_field_correction'
+        order by sr.source_row_number, a.decided_at, a.id
+        """,
+        lookup_params.values,
+    )
+    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[int(row["source_row_number"])].append(row)
+    return grouped
+
+
+def apply_source_field_adjudications(
+    row: dict[str, Any], adjudications: list[dict[str, Any]]
+) -> list[dict[str, object]]:
+    """Apply validated manual source corrections to a processing copy only."""
+    events: list[dict[str, object]] = []
+    for adjudication in adjudications:
+        field_name = clean_text(adjudication.get("field_name"))
+        if field_name not in {"Date Injured", "Fit For Selection Date"}:
+            raise SystemExit(f"source-field adjudication uses disallowed field {field_name!r}")
+        decision = adjudication.get("decision")
+        if not isinstance(decision, dict):
+            raise SystemExit("source-field adjudication decision must be a JSON object")
+        expected_row_sha256 = clean_text(decision.get("source_row_sha256"))
+        actual_row_sha256 = clean_text(adjudication.get("row_sha256"))
+        if not expected_row_sha256 or expected_row_sha256 != actual_row_sha256:
+            raise SystemExit(
+                f"source-field adjudication {adjudication.get('adjudication_id')} row fingerprint mismatch"
+            )
+        expected_old = clean_text(decision.get("old_value"))
+        actual_old = clean_text(row.get(field_name))
+        if actual_old != expected_old:
+            raise SystemExit(
+                f"source-field adjudication {adjudication.get('adjudication_id')} expected "
+                f"{field_name}={expected_old!r}, found {actual_old!r}"
+            )
+        new_value = clean_text(decision.get("new_value"))
+        if not new_value:
+            raise SystemExit("source-field correction cannot replace a value with blank")
+        row[field_name] = new_value
+        if field_name == "Fit For Selection Date":
+            # This source column is Cardiff's return-to-availability evidence.
+            # Bind it explicitly to the existing allowlisted adapter seam so
+            # the generic processing rule can derive duration without learning
+            # a team-specific column name.
+            row["Adapter Canonical Confirmed Return Date"] = new_value
+            row["Adapter Canonical Confirmed Return Date Origin"] = (
+                f"manual_adjudication:{clean_text(decision.get('item_id'))}"
+            )
+        events.append(
+            {
+                "field_name": field_name,
+                "old_value": expected_old or None,
+                "new_value": new_value,
+                "action": "correct",
+                "reason_code": "source_field_adjudicated_correction",
+                "rationale": (
+                    f"Approved workbook item {clean_text(decision.get('item_id'))}; "
+                    f"immutable source value retained. Evidence sha256="
+                    f"{clean_text(decision.get('evidence_sha256'))}."
+                ),
+                "review_status": "adjudicated",
+            }
+        )
+    return events
+
+
+def adjudicated_derived_change_events(
+    old_state: dict[str, Any] | None,
+    new_state: dict[str, Any],
+    item_ids: list[str],
+) -> list[dict[str, object]]:
+    """Make every derived change caused by a source correction explicit."""
+    if old_state is None:
+        return []
+    ignored = {"source_locator", "provisional_qc_window"}
+    events: list[dict[str, object]] = []
+    for field_name in sorted(set(old_state) | set(new_state)):
+        if field_name in ignored:
+            continue
+        old_value = old_state.get(field_name)
+        new_value = new_state.get(field_name)
+        if old_value == new_value:
+            continue
+        events.append(
+            {
+                "field_name": field_name,
+                "old_value": old_value,
+                "new_value": new_value,
+                "action": "rederive_after_correction",
+                "reason_code": "source_field_adjudicated_correction",
+                "rationale": (
+                    f"Derived field changed after approved source correction(s) "
+                    f"{', '.join(item_ids)}; prior record version remains immutable."
+                ),
+                "review_status": "adjudicated",
+            }
+        )
+    return events
+
+
 def apply_standing_adjudication(
     state: dict[str, Any],
     events: list[dict[str, Any]],
@@ -2925,6 +3059,32 @@ def process_intake(args: argparse.Namespace) -> None:
     standing_adjudications = fetch_standing_eligibility_adjudications(
         args.team, args.season, registered_file_hash
     )
+    source_field_adjudications = fetch_standing_source_field_adjudications(
+        args.team, args.season, registered_file_hash
+    )
+    source_field_adjudication_count = sum(
+        len(decisions) for decisions in source_field_adjudications.values()
+    )
+    prior_state_params = SqlParams()
+    prior_state_rows = query_sql(
+        f"""
+        select distinct on (sr.source_row_number)
+          sr.source_row_number, rv.record_state
+        from ingestion.source_rows sr
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        join processing.record_versions rv on rv.source_row_id = sr.id
+        where sf.team = {prior_state_params.text(args.team)}
+          and sf.season = {prior_state_params.text(args.season)}
+          and sf.file_sha256 = {prior_state_params.text(registered_file_hash)}
+        order by sr.source_row_number, rv.version_number desc
+        """,
+        prior_state_params.values,
+    )
+    prior_states = {
+        int(prior["source_row_number"]): prior["record_state"]
+        for prior in prior_state_rows
+        if isinstance(prior.get("record_state"), dict)
+    }
 
     # Phase 3.5 cohort-signal capture (Adjudication 4): resolved once per
     # process-intake run, then discarded after this point -- passed only
@@ -2951,12 +3111,27 @@ def process_intake(args: argparse.Namespace) -> None:
     reapplied_adjudication_rows = 0
     for row in rows:
         source_row_number = int(row["standardised_row_number"])
+        row_source_adjudications = source_field_adjudications.get(source_row_number, [])
+        source_correction_events = apply_source_field_adjudications(
+            row, row_source_adjudications
+        )
         state, events = build_processing_state(
             row,
             window_start=window_start,
             window_end=window_end,
             duplicate_signature_rows=duplicate_signature_rows,
             own_team_alias=own_team_alias,
+        )
+        events.extend(source_correction_events)
+        events.extend(
+            adjudicated_derived_change_events(
+                prior_states.get(source_row_number),
+                state,
+                [
+                    clean_text(adjudication["decision"].get("item_id"))
+                    for adjudication in row_source_adjudications
+                ],
+            )
         )
         for exclusion in analysis_exclusions.get(source_row_number, []):
             reason = clean_text(exclusion.get("reason"))
@@ -3043,6 +3218,7 @@ def process_intake(args: argparse.Namespace) -> None:
         ('controlled_inference', 'Canonical analysis field inferred from explicit high-confidence source evidence and marked with origin metadata.'),
         ('candidate_duplicate', 'Candidate duplicate flagged for review; source row retained.'),
         ('outside_provisional_window', 'Row falls outside provisional QC season window or has unparseable injury date; source row retained.')
+        ,('source_field_adjudicated_correction', 'Human-approved correction overlaid on an immutable source field before deterministic re-derivation.')
       on conflict (code) do update set description = excluded.description;
 
       {reason_code_sql}
@@ -3096,6 +3272,7 @@ def process_intake(args: argparse.Namespace) -> None:
               'record_events': event_count,
               'duplicate_signature_rows': len(duplicate_signature_rows),
               'reapplied_adjudication_rows': reapplied_adjudication_rows,
+              'source_field_adjudications': source_field_adjudication_count,
             }
           })},
           {params.text(file_hash)}, {params.text(output_hash)}, now()
@@ -3103,6 +3280,19 @@ def process_intake(args: argparse.Namespace) -> None:
         returning id
       )
       select id from step;
+
+      update audit.adjudications adjudication
+      set consumed_by_step_run_id = step.id
+      from ingestion.source_rows sr
+      join ingestion.source_files sf on sf.id = sr.source_file_id
+      cross join current_step step
+      where adjudication.source_row_id = sr.id
+        and sf.team = {params.text(args.team)}
+        and sf.season = {params.text(args.season)}
+        and sf.file_sha256 = {params.text(registered_file_hash)}
+        and adjudication.field_name in ('Date Injured', 'Fit For Selection Date')
+        and adjudication.decision ->> 'decision_type' = 'source_field_correction'
+        and adjudication.consumed_by_step_run_id is null;
 
       {"".join(record_sql)}
       {"".join(event_sql)}
@@ -3118,6 +3308,7 @@ def process_intake(args: argparse.Namespace) -> None:
                 "record_events": event_count,
                 "duplicate_signature_rows": len(duplicate_signature_rows),
                 "reapplied_adjudication_rows": reapplied_adjudication_rows,
+                "source_field_adjudications": source_field_adjudication_count,
                 "registered_source_file_sha256": registered_file_hash,
             },
             indent=2,
@@ -3389,6 +3580,7 @@ RELEASE_DASHBOARDS_MIGRATION_VERSION = "20260710130000"
 INJURY_COHORT_V1_AMENDMENT_MIGRATION_VERSION = "20260710120000"
 FULL_DASHBOARD_RELEASE_RULE_VERSION = "full_dashboard_release_2026-07-10_v1"
 LEAGUE_DASHBOARD_V2_MIGRATION_VERSION = "20260714130000"
+ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260720150000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
 # The five dashboard cohort-exclusion reason codes analysis.coverage_v1
@@ -5092,14 +5284,118 @@ def release(args: argparse.Namespace) -> None:
     )
 
 
+def current_league_bundle_snapshot(season: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read the exact latest approved immutable bundle using one SQL statement."""
+    params = SqlParams()
+    rows = query_sql(
+        f"""
+        with current_bundle as (
+          select c.release_id, c.season, r.release_label, r.approved_at
+          from reporting.league_release_context_v2 c
+          join reporting.aggregate_releases r on r.id = c.release_id
+          where c.season = {params.text(season)} and r.status = 'approved'
+          order by r.approved_at desc nulls last, r.created_at desc, r.id desc
+          limit 1
+        )
+        select b.release_id::text, b.release_label, b.approved_at,
+          league.dashboard_payload as league,
+          coalesce(jsonb_agg(jsonb_build_object(
+            'team_key', team.team_key, 'dashboard', team.dashboard_payload
+          ) order by team.team_key), '[]'::jsonb) as teams
+        from current_bundle b
+        join reporting.league_release_payloads_v2 league on league.release_id = b.release_id
+        join reporting.team_dashboard_payloads_v2 team on team.bundle_release_id = b.release_id
+        group by b.release_id, b.release_label, b.approved_at, league.dashboard_payload
+        """,
+        params.values,
+    )
+    if len(rows) != 1 or not isinstance(rows[0].get("league"), dict):
+        raise SystemExit(f"no complete approved dashboard bundle exists for {season}")
+    if not isinstance(rows[0].get("teams"), list) or len(rows[0]["teams"]) != 16:
+        raise SystemExit("latest approved dashboard bundle is not a complete 16-team snapshot")
+    bundle = {
+        "schema_version": "urc_dashboard_bundle_v2",
+        "season": season,
+        "league": rows[0]["league"],
+        "teams": rows[0]["teams"],
+    }
+    metadata = {
+        "release_id": rows[0]["release_id"],
+        "release_label": rows[0]["release_label"],
+        "approved_at": rows[0]["approved_at"],
+        "bundle_sha256": sha256_json(bundle),
+    }
+    return bundle, metadata
+
+
+def snapshot_current_league_bundle(args: argparse.Namespace) -> None:
+    season = clean_text(args.season)
+    output_arg = clean_text(args.output or "")
+    if not output_arg:
+        raise SystemExit("--snapshot-current requires --output")
+    output_path = Path(output_arg)
+    if Path("content/reporting").resolve() in output_path.resolve().parents:
+        raise SystemExit("current bundle snapshot must stay outside content/reporting")
+    bundle, metadata = current_league_bundle_snapshot(season)
+    write_json_atomic(output_path, bundle)
+    print(json.dumps({"status": "current_snapshot", "season": season,
+        "output_path": str(output_path), **metadata}, indent=2))
+
+
+def record_failed_league_release_attempt(
+    *, label: str, season: str, input_hash: str, output_hash: str,
+    parameters: dict[str, Any], provenance: dict[str, str], failure_stage: str,
+) -> None:
+    """Best-effort immutable failure marker after a rolled-back promotion."""
+    params = SqlParams()
+    failed_parameters = {**parameters, "failure_stage": failure_stage}
+    run_sql(
+        f"""
+        do $$
+        begin
+          if not exists (
+            select 1 from reporting.aggregate_releases
+            where release_label = {params.text(label)}
+          ) then
+            with failed_run as (
+              insert into audit.pipeline_runs
+                (command, team, season, status, input_hash, output_hash, parameters,
+                 ended_at, code_version, dependency_lock_hash, operator)
+              values ('release-league', 'URC Overall', {params.text(season)}, 'failed',
+                {params.text(input_hash)}, {params.text(output_hash)},
+                {params.jsonb(failed_parameters)}, now(),
+                {params.text(provenance['code_version'])},
+                {params.text(provenance['dependency_lock_hash'])},
+                {params.text(provenance['operator'])})
+              returning id
+            )
+            insert into reporting.aggregate_releases
+              (release_label, status, pipeline_run_id)
+            select {params.text(label)}, 'retired', id from failed_run;
+          end if;
+        end $$;
+        """,
+        params.values,
+    )
+
+
 def release_league(args: argparse.Namespace) -> None:
     """Preflight and atomically publish the build-pinned 16-team V2 league dashboard."""
     season = clean_text(args.season)
     if not season:
         raise SystemExit("--season is required")
+    if bool(getattr(args, "snapshot_current", False)):
+        snapshot_current_league_bundle(args)
+        return
     preflight = bool(args.preflight)
     preflight_file_arg = clean_text(args.preflight_file or "")
     reviewer = clean_text(args.preflight_reviewer or "")
+    previous_bundle_file_arg = clean_text(getattr(args, "previous_bundle_file", ""))
+    classification_view_version = clean_text(
+        getattr(args, "classification_view_version", "v2") or "v2"
+    )
+    if classification_view_version not in {"v2", "reporting_classification_2026-07-20_v1"}:
+        raise SystemExit("unsupported --classification-view-version")
     if preflight and preflight_file_arg:
         raise SystemExit("--preflight cannot be combined with --preflight-file")
     if preflight_file_arg and not reviewer:
@@ -5116,19 +5412,22 @@ def release_league(args: argparse.Namespace) -> None:
             f"(code_version={provenance['code_version']})"
         )
 
+    required_migration = ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION
     migration_rows = query_sql(
         "select version from supabase_migrations.schema_migrations "
-        f"where version = '{LEAGUE_DASHBOARD_V2_MIGRATION_VERSION}'"
+        f"where version = '{required_migration}'"
     )
     if len(migration_rows) != 1:
         raise SystemExit(
-            f"release-league requires tracked migration {LEAGUE_DASHBOARD_V2_MIGRATION_VERSION}"
+            f"release-league requires tracked migration {required_migration}"
         )
 
     payload_params = SqlParams()
     payload_rows = query_sql(
-        f"select dashboard from analysis.league_dashboard_payload_v2 "
-        f"where season = {payload_params.text(season)}",
+        f"select dashboard, classification_evidence_sha256 "
+        f"from analysis.league_dashboard_release_candidates_v3 "
+        f"where season = {payload_params.text(season)} "
+        f"and classification_view_version = {payload_params.text(classification_view_version)}",
         payload_params.values,
     )
     if len(payload_rows) != 1 or not isinstance(payload_rows[0].get("dashboard"), dict):
@@ -5136,13 +5435,41 @@ def release_league(args: argparse.Namespace) -> None:
             f"release-league expected one complete league payload for {season!r}, found {len(payload_rows)}"
         )
     dashboard = payload_rows[0]["dashboard"]
+    classification_evidence_sha256 = clean_text(
+        payload_rows[0].get("classification_evidence_sha256")
+    ) or None
+    if classification_view_version != "v2" and not classification_evidence_sha256:
+        raise SystemExit("accepted reporting classification evidence is missing")
+    classification_adjudications: list[dict[str, Any]] = []
+    if classification_view_version != "v2":
+        rule_params = SqlParams()
+        classification_adjudications = query_sql(
+            f"""
+            select adjudication_ref, rule_version, evidence_sha256,
+                   workbook_sha256, evidence_manifest_sha256, reviewer,
+                   workbook_snapshot_locator, migration_version, migration_sha256,
+                   rationale
+            from audit.rule_adjudications
+            where rule_version = {rule_params.text(classification_view_version)}
+              and adjudication_ref in ('IA-02', 'ACL-01')
+            order by adjudication_ref
+            """,
+            rule_params.values,
+        )
+        if len(classification_adjudications) != 2 or {
+            row["adjudication_ref"] for row in classification_adjudications
+        } != {"IA-02", "ACL-01"}:
+            raise SystemExit("exact IA-02/ACL-01 classification evidence is incomplete")
     preflight_league_sha256 = sha256_json(dashboard)
 
     team_payload_params = SqlParams()
     team_payloads = query_sql(
         f"select team_key, team_release_id::text, curated_build_id::text, dashboard "
-        f"from analysis.team_dashboard_payload_v2 "
-        f"where season = {team_payload_params.text(season)} order by team_key",
+        f"from analysis.team_dashboard_release_candidates_v3 "
+        f"where season = {team_payload_params.text(season)} "
+        f"and classification_view_version = {team_payload_params.text(classification_view_version)} "
+        f"and classification_evidence_sha256 is not distinct from "
+        f"{team_payload_params.text(classification_evidence_sha256)} order by team_key",
         team_payload_params.values,
     )
     if len(team_payloads) != 16 or any(
@@ -5188,15 +5515,17 @@ def release_league(args: argparse.Namespace) -> None:
     canonical_hash_params = SqlParams()
     canonical_hash_rows = query_sql(
         f"with league as ("
-        f"  select dashboard from analysis.league_dashboard_payload_v2 "
-        f"  where season = {canonical_hash_params.text(season)}"
+        f"  select dashboard from analysis.league_dashboard_release_candidates_v3 "
+        f"  where season = {canonical_hash_params.text(season)} "
+        f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)}"
         f"), teams as ("
         f"  select jsonb_agg(jsonb_build_object('team_key', team_key, 'dashboard', dashboard) "
         f"    order by team_key) as dashboards, "
         f"    jsonb_object_agg(team_key, encode(digest(convert_to(dashboard::text, 'UTF8'), "
         f"      'sha256'), 'hex') order by team_key) as hashes "
-        f"  from analysis.team_dashboard_payload_v2 "
-        f"  where season = {canonical_hash_params.text(season)}"
+        f"  from analysis.team_dashboard_release_candidates_v3 "
+        f"  where season = {canonical_hash_params.text(season)} "
+        f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)}"
         f"), bundle as ("
         f"  select league.dashboard, teams.hashes, jsonb_build_object("
         f"    'schema_version', 'urc_dashboard_bundle_v2', "
@@ -5270,23 +5599,57 @@ def release_league(args: argparse.Namespace) -> None:
 
     existing_params = SqlParams()
     existing = query_sql(
-        f"select c.release_id from reporting.league_release_context_v2 c "
+        f"select c.release_id::text, r.release_label from reporting.league_release_context_v2 c "
         f"join reporting.aggregate_releases r on r.id = c.release_id "
         f"where c.season = {existing_params.text(season)} and r.status = 'approved'",
         existing_params.values,
     )
+    predecessor: dict[str, Any] | None = None
     if existing:
+        if len(existing) != 1:
+            raise SystemExit("expected exactly one approved predecessor bundle")
+        if not previous_bundle_file_arg:
+            raise SystemExit(
+                "an approved bundle already exists; --previous-bundle-file is required for re-release"
+            )
+        previous_path = Path(previous_bundle_file_arg)
+        if not previous_path.exists():
+            raise SystemExit(f"previous bundle snapshot not found: {previous_path}")
+        previous_bytes = previous_path.read_bytes()
+        try:
+            previous_document = json.loads(previous_bytes)
+        except json.JSONDecodeError as exc:
+            raise SystemExit("previous bundle snapshot is invalid JSON") from exc
+        approved_previous, predecessor = current_league_bundle_snapshot(season)
+        previous_diffs = diff_json_documents(previous_document, approved_previous)
+        if previous_diffs:
+            paths = ", ".join(diff["path"] for diff in previous_diffs[:10])
+            raise SystemExit(
+                f"--previous-bundle-file does not match the approved predecessor ({paths})"
+            )
+        predecessor["snapshot_sha256"] = hashlib.sha256(previous_bytes).hexdigest()
+    elif previous_bundle_file_arg:
         raise SystemExit(
-            "an approved league V2 release already exists for this season; "
-            "a versioned re-release workflow is required"
+            "--previous-bundle-file is only valid when an approved predecessor exists"
         )
 
-    label = f"urc-{season}-v2-{bundle_payload_sha256[:12]}"
+    label_prefix = f"urc-{season}-v2-{bundle_payload_sha256[:12]}"
+    attempt_params = SqlParams()
+    attempt_rows = query_sql(
+        f"select count(*)::integer as attempts from reporting.aggregate_releases "
+        f"where release_label like {attempt_params.text(label_prefix + '-a%')}",
+        attempt_params.values,
+    )
+    attempt_number = int(attempt_rows[0]["attempts"]) + 1
+    label = f"{label_prefix}-a{attempt_number}"
     generated_at = clean_text(dashboard.get("generated_at"))
     if not generated_at:
         raise SystemExit("league payload generated_at is missing")
     release_parameters = {
         "analysis_version": "v2",
+        "classification_view_version": classification_view_version,
+        "classification_evidence_sha256": classification_evidence_sha256,
+        "classification_adjudications": classification_adjudications,
         "member_count": len(members),
         "member_input_hash": member_input_hash,
         "member_release_ids": [member["team_release_id"] for member in members],
@@ -5300,13 +5663,41 @@ def release_league(args: argparse.Namespace) -> None:
         "preflight_reviewer": reviewer,
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
     }
+    if predecessor is not None:
+        release_parameters.update({
+            "predecessor_release_id": predecessor["release_id"],
+            "predecessor_release_label": predecessor["release_label"],
+            "predecessor_bundle_sha256": predecessor["bundle_sha256"],
+            "predecessor_snapshot_sha256": predecessor["snapshot_sha256"],
+        })
 
     params = SqlParams()
+    predecessor_lock_sql = ""
+    predecessor_retire_sql = ""
+    if predecessor is not None:
+        predecessor_lock_sql = f"""
+          if not exists (
+            select 1 from reporting.aggregate_releases
+            where id = {params.text(predecessor['release_id'])}::uuid
+              and release_label = {params.text(predecessor['release_label'])}
+              and status = 'approved'
+          ) then
+            raise exception 'approved predecessor changed after preflight validation';
+          end if;
+        """
+        predecessor_retire_sql = f"""
+          update reporting.aggregate_releases
+          set status = 'retired'
+          where id = {params.text(predecessor['release_id'])}::uuid
+            and status = 'approved';
+        """
     sql = f"""
       {protected_alias_scan_sql('league release gate')}
 
       do $$
       begin
+        perform 1 from reporting.teams order by team_key for update;
+        {predecessor_lock_sql}
         if exists (select 1 from reporting.aggregate_releases where release_label = {params.text(label)}) then
           raise exception 'immutable league release label already exists';
         end if;
@@ -5343,10 +5734,12 @@ def release_league(args: argparse.Namespace) -> None:
 
       insert into reporting.league_release_context_v2
         (release_id, season, analysis_version, generated_at,
-         expected_member_count, match_exposure_decision, decision_reviewer, decision_recorded_at)
+         expected_member_count, match_exposure_decision, decision_reviewer, decision_recorded_at,
+         classification_view_version, classification_evidence_sha256)
       select id, {params.text(season)}, 'v2', {params.text(generated_at)}::timestamptz,
         16, 'all_registered_season_fixtures_15_players_x_80_minutes_div_60',
-        'Abdel Babiker', date '2026-07-14'
+        'Abdel Babiker', date '2026-07-14',
+        {params.text(classification_view_version)}, {params.text(classification_evidence_sha256)}
       from current_league_release;
 
       insert into reporting.league_release_members_v2
@@ -5362,21 +5755,29 @@ def release_league(args: argparse.Namespace) -> None:
         (release_id, dashboard_payload)
       select current_league_release.id, candidate.dashboard
       from current_league_release
-      join analysis.league_dashboard_payload_v2 candidate
-        on candidate.season = {params.text(season)};
+      join analysis.league_dashboard_release_candidates_v3 candidate
+        on candidate.season = {params.text(season)}
+       and candidate.classification_view_version = {params.text(classification_view_version)}
+       and candidate.classification_evidence_sha256 is not distinct from
+         {params.text(classification_evidence_sha256)};
 
       insert into reporting.team_dashboard_payloads_v2
         (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
       select current_league_release.id, candidate.team_key, candidate.team_release_id,
         candidate.curated_build_id, candidate.dashboard
       from current_league_release
-      join analysis.team_dashboard_payload_v2 candidate
+      join analysis.team_dashboard_release_candidates_v3 candidate
         on candidate.season = {params.text(season)}
+       and candidate.classification_view_version = {params.text(classification_view_version)}
+       and candidate.classification_evidence_sha256 is not distinct from
+         {params.text(classification_evidence_sha256)}
       join jsonb_to_recordset({params.jsonb(members)}) as expected(
         team_key text, team_release_id text, curated_build_id text
       ) on expected.team_key = candidate.team_key
         and expected.team_release_id::uuid = candidate.team_release_id
         and expected.curated_build_id::uuid = candidate.curated_build_id;
+
+      {predecessor_retire_sql}
 
       update reporting.aggregate_releases r
       set status = 'approved', approved_at = now()
@@ -5433,13 +5834,90 @@ def release_league(args: argparse.Namespace) -> None:
     """
     output_arg = clean_text(args.output or "")
     export_path = Path(output_arg) if output_arg else Path("content/reporting") / f"urc_dashboard_{season}.json"
+    export_backup_path: Path | None = None
     if export_path.exists():
-        raise SystemExit(f"league release export already exists: {export_path}")
-    write_json_atomic(export_path, dashboard)
+        export_backup_path = Path("data/reporting") / (
+            f"{export_path.stem}_{label}_backup.json"
+        )
+        if export_backup_path.exists():
+            raise SystemExit(f"league export backup already exists: {export_backup_path}")
+        export_backup_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(export_path, export_backup_path)
+    staged_export_path = Path("data/reporting") / f"{export_path.stem}_{label}_candidate.json"
+    if staged_export_path.exists():
+        raise SystemExit(f"staged league export already exists: {staged_export_path}")
+    write_json_atomic(staged_export_path, dashboard)
     try:
         run_sql(sql, params.values)
     except BaseException:
-        export_path.unlink(missing_ok=True)
+        with contextlib.suppress(BaseException):
+            record_failed_league_release_attempt(
+                label=label, season=season, input_hash=member_input_hash,
+                output_hash=bundle_payload_sha256, parameters=release_parameters,
+                provenance=provenance, failure_stage="database_promotion_rolled_back",
+            )
+        raise
+    try:
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staged_export_path, export_path)
+    except BaseException:
+        recovery_params = SqlParams()
+        predecessor_id = predecessor["release_id"] if predecessor is not None else None
+        run_sql(
+            f"""
+            do $$
+            declare
+              failed_release_id uuid;
+              latest_approved_id uuid;
+            begin
+              perform 1 from reporting.teams order by team_key for update;
+
+              select id into failed_release_id
+              from reporting.aggregate_releases
+              where release_label = {recovery_params.text(label)};
+
+              select c.release_id into latest_approved_id
+              from reporting.league_release_context_v2 c
+              join reporting.aggregate_releases r on r.id = c.release_id
+              where c.season = {recovery_params.text(season)} and r.status = 'approved'
+              order by r.approved_at desc nulls last, r.created_at desc, r.id desc
+              limit 1;
+
+              if failed_release_id is not null and latest_approved_id = failed_release_id then
+                update reporting.aggregate_releases set status = 'retired'
+                where id = failed_release_id and status = 'approved';
+
+                if {recovery_params.text(predecessor_id)} is not null
+                  and not exists (
+                    select 1 from reporting.league_release_context_v2 c
+                    join reporting.aggregate_releases r on r.id = c.release_id
+                    where c.season = {recovery_params.text(season)} and r.status = 'approved'
+                  )
+                then
+                  update reporting.aggregate_releases set status = 'approved'
+                  where id = {recovery_params.text(predecessor_id)}::uuid
+                    and status = 'retired';
+                end if;
+              elsif failed_release_id is not null then
+                update reporting.aggregate_releases set status = 'retired'
+                where id = failed_release_id and status = 'approved';
+              end if;
+
+              update audit.pipeline_runs set status = 'failed', ended_at = now(),
+                parameters = parameters || jsonb_build_object(
+                  'recovery', case
+                    when latest_approved_id = failed_release_id
+                      then 'local_export_failed_predecessor_restored'
+                    else 'local_export_failed_later_successor_preserved'
+                  end)
+              where id = (
+                select pipeline_run_id from reporting.aggregate_releases
+                where id = failed_release_id
+              );
+            end $$;
+            """,
+            recovery_params.values,
+        )
         raise
 
     print(
@@ -5453,6 +5931,7 @@ def release_league(args: argparse.Namespace) -> None:
                 "bundle_payload_sha256": bundle_payload_sha256,
                 "preflight_json_sha256": preflight_bundle_sha256,
                 "export_path": str(export_path),
+                "export_backup_path": str(export_backup_path) if export_backup_path else None,
             },
             indent=2,
         )
@@ -5562,6 +6041,387 @@ def adjudicate_duplicate_exclusion(args: argparse.Namespace) -> None:
     """
     run_sql(sql, params.values)
     print(json.dumps({"team": args.team, "excluded_row": args.row_number, "raw_record_id": raw_id}, indent=2))
+
+
+def expected_adjudication_batch_records(
+    *, source_corrections: list[dict[str, Any]], duplicate_reviews: list[dict[str, Any]],
+    rule_decisions: list[dict[str, Any]], workbook_sha256: str,
+    evidence_manifest_sha256: str, workbook_path: Path,
+    migration_version: str, migration_sha256: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    row_records: list[dict[str, Any]] = []
+    for item in source_corrections:
+        row_records.append({
+            "source_row_id": item["source_row_id"], "field_name": item["field_name"],
+            "decision": {
+                "decision_type": "source_field_correction", "item_id": item["item_id"],
+                "old_value": item["old_value"], "new_value": item["new_value"],
+                "source_row_sha256": item["source_row_sha256"],
+                "evidence_sha256": item["evidence_sha256"],
+                "workbook_sha256": workbook_sha256,
+                "evidence_manifest_sha256": evidence_manifest_sha256,
+            },
+            "rationale": item["rationale"], "reviewer": "Abdel Babiker",
+        })
+    for item in duplicate_reviews:
+        row_records.append({
+            "source_row_id": item["source_row_ids"][0], "field_name": "duplicate_review",
+            "decision": {
+                "decision_type": "duplicate_review", "item_id": item["item_id"],
+                "decision": item["decision"], "source_row_ids": item["source_row_ids"],
+                "source_row_sha256s": item["source_row_sha256s"],
+                "differing_source_key": "training_day", "evidence_sha256": item["evidence_sha256"],
+                "workbook_sha256": workbook_sha256,
+                "evidence_manifest_sha256": evidence_manifest_sha256,
+            },
+            "rationale": item["rationale"], "reviewer": "Abdel Babiker",
+        })
+    rule_records = [{
+        "adjudication_ref": item["item_id"], "rule_version": item["rule_version"],
+        "decision": item["decision"], "evidence_sha256": item["evidence_sha256"],
+        "workbook_sha256": workbook_sha256,
+        "evidence_manifest_sha256": evidence_manifest_sha256,
+        "reviewer": "Abdel Babiker", "workbook_snapshot_locator": str(workbook_path),
+        "migration_version": migration_version, "migration_sha256": migration_sha256,
+        "rationale": item["rationale"],
+    } for item in rule_decisions]
+    return (
+        sorted(row_records, key=lambda row: clean_text(row["decision"]["item_id"])),
+        sorted(rule_records, key=lambda row: clean_text(row["adjudication_ref"])),
+    )
+
+
+def apply_adjudication_batch(args: argparse.Namespace) -> None:
+    """Record the exact 14-item workbook decision batch without editing sources."""
+    manifest_path = Path(args.file)
+    workbook_path = Path(args.workbook)
+    evidence_path = Path(args.evidence_file)
+    for required in (manifest_path, workbook_path, evidence_path):
+        if not required.exists():
+            raise SystemExit(f"adjudication input not found: {required}")
+    if manifest_path.resolve() != APPROVED_ADJUDICATION_14_MANIFEST_PATH:
+        raise SystemExit("adjudication batch must use the durable Git-ignored approved manifest")
+    if workbook_path.resolve() != APPROVED_ADJUDICATION_14_WORKBOOK_PATH:
+        raise SystemExit("adjudication batch must use the durable Git-ignored approved workbook snapshot")
+    if evidence_path.resolve() != APPROVED_ADJUDICATION_14_EVIDENCE_PATH:
+        raise SystemExit("adjudication batch must use the durable Git-ignored evidence manifest")
+    manifest_sha256 = sha256_file(manifest_path)
+    if manifest_sha256 != APPROVED_ADJUDICATION_14_MANIFEST_SHA256:
+        raise SystemExit("adjudication decision envelope differs from the approved manifest")
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("schema_version") != "urc_adjudication_batch_v1":
+        raise SystemExit("unsupported adjudication batch schema")
+    if clean_text(manifest.get("season")) != "2024-25":
+        raise SystemExit("this adjudication batch must be bound to season 2024-25")
+    if clean_text(manifest.get("reviewer")) != "Abdel Babiker":
+        raise SystemExit("adjudication reviewer must be Abdel Babiker")
+    workbook_sha256 = sha256_file(workbook_path)
+    evidence_manifest_sha256 = sha256_file(evidence_path)
+    if workbook_sha256 != APPROVED_ADJUDICATION_14_WORKBOOK_SHA256:
+        raise SystemExit("workbook does not match the binding approved workbook checksum")
+    if evidence_manifest_sha256 != APPROVED_ADJUDICATION_14_EVIDENCE_SHA256:
+        raise SystemExit("evidence does not match the binding approved evidence checksum")
+    migration_version = clean_text(manifest.get("classification_migration_version"))
+    migration_path = Path("supabase/migrations") / f"{migration_version}_adjudicated_reporting_classification.sql"
+    if migration_version != ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION or not migration_path.exists():
+        raise SystemExit("adjudication batch classification migration is missing or untracked")
+    migration_sha256 = sha256_file(migration_path)
+    if workbook_sha256 != clean_text(manifest.get("workbook_sha256")):
+        raise SystemExit("adjudication workbook checksum differs from the approved batch")
+    if evidence_manifest_sha256 != clean_text(manifest.get("evidence_manifest_sha256")):
+        raise SystemExit("adjudication evidence checksum differs from the approved batch")
+    if migration_sha256 != clean_text(manifest.get("classification_migration_sha256")):
+        raise SystemExit("classification migration checksum differs from the approved batch")
+
+    source_corrections = manifest.get("source_corrections")
+    duplicate_reviews = manifest.get("duplicate_reviews")
+    rule_decisions = manifest.get("rule_decisions")
+    if not isinstance(source_corrections, list) or len(source_corrections) != 3:
+        raise SystemExit("adjudication batch requires exactly three source corrections")
+    if not isinstance(duplicate_reviews, list) or len(duplicate_reviews) != 9:
+        raise SystemExit("adjudication batch requires exactly nine duplicate reviews")
+    if not isinstance(rule_decisions, list) or len(rule_decisions) != 2:
+        raise SystemExit("adjudication batch requires exactly two reporting-rule decisions")
+    classification_rule_version = "reporting_classification_2026-07-20_v1"
+    if {clean_text(item.get("rule_version")) for item in rule_decisions} != {classification_rule_version}:
+        raise SystemExit("reporting-rule decisions use an unexpected classification version")
+    item_ids = {
+        *(clean_text(item.get("item_id")) for item in source_corrections),
+        *(clean_text(item.get("item_id")) for item in duplicate_reviews),
+        *(clean_text(item.get("item_id")) for item in rule_decisions),
+    }
+    expected_item_ids = {
+        "ID-01", "ID-02", "ID-03", "DX-02", "DX-03", "DX-12", "DX-13",
+        "DX-14", "DX-15", "DX-16", "DX-17", "DX-18", "IA-02", "ACL-01",
+    }
+    if item_ids != expected_item_ids:
+        raise SystemExit(f"adjudication item set differs: {sorted(item_ids ^ expected_item_ids)}")
+
+    source_row_ids: set[str] = set()
+    for item in source_corrections:
+        if item.get("field_name") not in {"Date Injured", "Fit For Selection Date"}:
+            raise SystemExit(f"{item.get('item_id')} uses a disallowed source field")
+        source_row_ids.add(str(uuid.UUID(clean_text(item.get("source_row_id")))))
+    for item in duplicate_reviews:
+        ids = item.get("source_row_ids")
+        if not isinstance(ids, list) or len(ids) != 2:
+            raise SystemExit(f"{item.get('item_id')} must bind exactly two source rows")
+        source_row_ids.update(str(uuid.UUID(clean_text(value))) for value in ids)
+        if item.get("decision") != "retain_distinct_training_day":
+            raise SystemExit(f"{item.get('item_id')} is not an approved retain-distinct decision")
+
+    lookup_params = SqlParams()
+    live_rows = query_sql(
+        f"""
+        select sr.id::text as source_row_id, sr.row_sha256, sr.source_values,
+               sf.team, sf.season
+        from ingestion.source_rows sr
+        join ingestion.source_files sf on sf.id = sr.source_file_id
+        where sr.id in (
+          select value::uuid
+          from jsonb_array_elements_text({lookup_params.jsonb(sorted(source_row_ids))}) value
+        )
+        order by sr.id
+        """,
+        lookup_params.values,
+    )
+    if len(live_rows) != len(source_row_ids):
+        raise SystemExit("one or more adjudication source rows are absent from the hosted database")
+    live_by_id = {row["source_row_id"]: row for row in live_rows}
+    for item in source_corrections:
+        row = live_by_id[clean_text(item["source_row_id"])]
+        source_values = row.get("source_values")
+        if row["season"] != "2024-25" or row["row_sha256"] != item["source_row_sha256"]:
+            raise SystemExit(f"{item['item_id']} source evidence fingerprint changed")
+        if not isinstance(source_values, dict) or clean_text(source_values.get(item["field_name"])) != clean_text(item["old_value"]):
+            raise SystemExit(f"{item['item_id']} expected old source value changed")
+    for item in duplicate_reviews:
+        for row_id, expected_hash in zip(item["source_row_ids"], item["source_row_sha256s"], strict=True):
+            row = live_by_id[row_id]
+            if row["season"] != "2024-25" or row["row_sha256"] != expected_hash:
+                raise SystemExit(f"{item['item_id']} duplicate evidence fingerprint changed")
+        first = live_by_id[item["source_row_ids"][0]]["source_values"]
+        second = live_by_id[item["source_row_ids"][1]]["source_values"]
+        if clean_text(first.get("training_day")) == clean_text(second.get("training_day")):
+            raise SystemExit(f"{item['item_id']} no longer has the reviewed training_day distinction")
+
+    expected_row_records, expected_rule_records = expected_adjudication_batch_records(
+        source_corrections=source_corrections,
+        duplicate_reviews=duplicate_reviews,
+        rule_decisions=rule_decisions,
+        workbook_sha256=workbook_sha256,
+        evidence_manifest_sha256=evidence_manifest_sha256,
+        workbook_path=workbook_path.resolve(),
+        migration_version=migration_version,
+        migration_sha256=migration_sha256,
+    )
+
+    if bool(getattr(args, "plan", False)):
+        print(json.dumps({
+            "status": "validated_read_only",
+            "items": sorted(item_ids),
+            "source_rows_verified": len(source_row_ids),
+            "workbook_sha256": workbook_sha256,
+            "evidence_manifest_sha256": evidence_manifest_sha256,
+            "classification_migration_version": migration_version,
+            "classification_migration_sha256": migration_sha256,
+            "manifest_sha256": manifest_sha256,
+        }, indent=2))
+        return
+
+    existing_rows = query_sql(
+        """
+        select source_row_id::text as source_row_id, field_name, decision,
+               rationale, reviewer
+        from audit.adjudications
+        where decision ->> 'item_id' in (
+          'ID-01', 'ID-02', 'ID-03', 'DX-02', 'DX-03', 'DX-12',
+          'DX-13', 'DX-14', 'DX-15', 'DX-16', 'DX-17', 'DX-18'
+        )
+        order by decision ->> 'item_id'
+        """
+    )
+    existing_rules = query_sql(
+        """
+        select adjudication_ref, rule_version, decision, evidence_sha256,
+               workbook_sha256, evidence_manifest_sha256, reviewer,
+               workbook_snapshot_locator, migration_version, migration_sha256,
+               rationale
+        from audit.rule_adjudications
+        where adjudication_ref in ('IA-02', 'ACL-01')
+          and rule_version = 'reporting_classification_2026-07-20_v1'
+        order by adjudication_ref
+        """
+    )
+    if existing_rows == expected_row_records and existing_rules == expected_rule_records:
+        print(json.dumps({"status": "already_recorded", "items": sorted(item_ids),
+            "workbook_sha256": workbook_sha256}, indent=2))
+        return
+    recorded_count = len(existing_rows) + len(existing_rules)
+    if recorded_count:
+        raise SystemExit(
+            f"conflicting or partial adjudication batch already exists ({recorded_count} rows); "
+            "refusing mixed replay"
+        )
+
+    _write_adjudication_batch(
+        manifest=manifest,
+        manifest_path=manifest_path,
+        workbook_path=workbook_path,
+        evidence_path=evidence_path,
+        workbook_sha256=workbook_sha256,
+        evidence_manifest_sha256=evidence_manifest_sha256,
+        migration_version=migration_version,
+        migration_sha256=migration_sha256,
+        classification_rule_version=classification_rule_version,
+        manifest_sha256=manifest_sha256,
+        expected_row_records=expected_row_records,
+        expected_rule_records=expected_rule_records,
+        item_ids=item_ids,
+    )
+
+
+def _write_adjudication_batch(
+    *, manifest: dict[str, Any], manifest_path: Path, workbook_path: Path,
+    evidence_path: Path, workbook_sha256: str, evidence_manifest_sha256: str,
+    migration_version: str, migration_sha256: str,
+    classification_rule_version: str,
+    manifest_sha256: str,
+    item_ids: set[str],
+    expected_row_records: list[dict[str, Any]],
+    expected_rule_records: list[dict[str, Any]],
+) -> None:
+    provenance = run_provenance()
+    input_hash = manifest_sha256
+    params = SqlParams()
+    adjudication_values: list[str] = []
+    for record in expected_row_records:
+        adjudication_values.append(
+            f"({params.text(record['source_row_id'])}::uuid, {params.text(record['field_name'])}, "
+            f"{params.jsonb(record['decision'])}, {params.text(record['rationale'])}, "
+            f"{params.text(record['reviewer'])})"
+        )
+    rule_values = [
+        f"({params.text(record['adjudication_ref'])}, {params.text(record['rule_version'])}, "
+        f"{params.jsonb(record['decision'])}, {params.text(record['evidence_sha256'])}, "
+        f"{params.text(record['workbook_sha256'])}, "
+        f"{params.text(record['evidence_manifest_sha256'])}, "
+        f"{params.text(record['reviewer'])}, {params.text(record['workbook_snapshot_locator'])}, "
+        f"{params.text(record['migration_version'])}, {params.text(record['migration_sha256'])}, "
+        f"{params.text(record['rationale'])})"
+        for record in expected_rule_records
+    ]
+    run_parameters = {
+        "schema_version": manifest["schema_version"], "manifest": str(manifest_path.resolve()),
+        "workbook_sha256": workbook_sha256,
+        "workbook_snapshot_locator": str(workbook_path.resolve()),
+        "evidence_manifest": str(evidence_path.resolve()),
+        "evidence_manifest_sha256": evidence_manifest_sha256,
+        "classification_migration_version": migration_version,
+        "classification_migration_sha256": migration_sha256,
+        "reviewer": "Abdel Babiker", "item_ids": sorted(item_ids),
+    }
+    sql = f"""
+      insert into audit.reason_codes (code, description) values
+        ('source_field_adjudicated_correction', 'Human-approved correction overlaid on an immutable source field before deterministic re-derivation.'),
+        ('duplicate_review_retain_distinct', 'Human-reviewed exposure pair retained because a substantive source field differs.'),
+        ('reporting_classification_adjudication', 'Human-approved reporting classification rule bound to exact evidence.')
+      on conflict (code) do update set description = excluded.description;
+
+      with run as (
+        insert into audit.pipeline_runs
+          (command, team, season, status, input_hash, output_hash, parameters,
+           ended_at, code_version, dependency_lock_hash, operator)
+        values ('apply-adjudication-batch', 'URC adjudication batch', '2024-25',
+          'succeeded', {params.text(input_hash)}, {params.text(input_hash)},
+          {params.jsonb(run_parameters)}, now(), {params.text(provenance['code_version'])},
+          {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])})
+        returning id
+      ) insert into audit.step_runs
+          (pipeline_run_id, step_name, step_version, reason_code, input_count,
+           output_count, input_hash, output_hash, ended_at)
+        select id, 'record_adjudication_batch', 'urc_adjudication_batch_2026-07-20_v1',
+          'reporting_classification_adjudication', 14, 14,
+          {params.text(input_hash)}, {params.text(input_hash)}, now() from run;
+
+      insert into audit.adjudications
+        (source_row_id, field_name, decision, rationale, reviewer)
+      select v.source_row_id, v.field_name, v.decision, v.rationale, v.reviewer
+      from (values {', '.join(adjudication_values)})
+        v(source_row_id, field_name, decision, rationale, reviewer)
+      where not exists (
+        select 1 from audit.adjudications existing
+        where existing.source_row_id = v.source_row_id
+          and existing.field_name = v.field_name and existing.decision = v.decision
+          and existing.reviewer = v.reviewer
+      );
+
+      insert into audit.rule_adjudications
+        (adjudication_ref, rule_version, decision, evidence_sha256,
+         workbook_sha256, evidence_manifest_sha256, reviewer,
+         workbook_snapshot_locator, migration_version, migration_sha256, rationale)
+      values {', '.join(rule_values)}
+      on conflict (adjudication_ref, rule_version) do nothing;
+
+      do $$
+      begin
+        if (
+          select count(*)
+          from jsonb_to_recordset({params.jsonb(expected_row_records)}) as expected(
+            source_row_id text, field_name text, decision jsonb, rationale text, reviewer text
+          )
+          join audit.adjudications actual
+            on actual.source_row_id = expected.source_row_id::uuid
+           and actual.field_name = expected.field_name
+           and actual.decision = expected.decision
+           and actual.rationale = expected.rationale
+           and actual.reviewer = expected.reviewer
+        ) <> 12 or (
+          select count(*)
+          from audit.adjudications
+          where decision ->> 'item_id' in (
+            'ID-01', 'ID-02', 'ID-03', 'DX-02', 'DX-03', 'DX-12',
+            'DX-13', 'DX-14', 'DX-15', 'DX-16', 'DX-17', 'DX-18'
+          )
+        ) <> 12 then
+          raise exception 'stored row adjudications differ from the approved batch';
+        end if;
+
+        if (
+          select count(*)
+          from jsonb_to_recordset({params.jsonb(expected_rule_records)}) as expected(
+            adjudication_ref text, rule_version text, decision jsonb,
+            evidence_sha256 text, workbook_sha256 text,
+            evidence_manifest_sha256 text, reviewer text,
+            workbook_snapshot_locator text, migration_version text,
+            migration_sha256 text, rationale text
+          )
+          join audit.rule_adjudications actual
+            on actual.adjudication_ref = expected.adjudication_ref
+           and actual.rule_version = expected.rule_version
+           and actual.decision = expected.decision
+           and actual.evidence_sha256 = expected.evidence_sha256
+           and actual.workbook_sha256 = expected.workbook_sha256
+           and actual.evidence_manifest_sha256 = expected.evidence_manifest_sha256
+           and actual.reviewer = expected.reviewer
+           and actual.workbook_snapshot_locator = expected.workbook_snapshot_locator
+           and actual.migration_version = expected.migration_version
+           and actual.migration_sha256 = expected.migration_sha256
+           and actual.rationale = expected.rationale
+        ) <> 2 or (
+          select count(*) from audit.rule_adjudications
+          where rule_version = {params.text(classification_rule_version)}
+            and adjudication_ref in ('IA-02', 'ACL-01')
+        ) <> 2 then
+          raise exception 'stored classification adjudications differ from the approved batch';
+        end if;
+      end $$;
+    """
+    run_sql(sql, params.values)
+    print(json.dumps({"status": "recorded", "items": sorted(item_ids),
+        "workbook_sha256": workbook_sha256,
+        "evidence_manifest_sha256": evidence_manifest_sha256,
+        "input_hash": input_hash}, indent=2))
 
 
 def reapply_adjudications(args: argparse.Namespace) -> None:
@@ -9723,6 +10583,18 @@ def main() -> None:
     league_release_parser.add_argument("--season", default="2024-25")
     league_release_parser.add_argument("--output", default="")
     league_release_parser.add_argument(
+        "--snapshot-current", action="store_true",
+        help="write the exact current approved immutable bundle outside content/reporting",
+    )
+    league_release_parser.add_argument(
+        "--previous-bundle-file", default="",
+        help="exact current approved bundle snapshot required for every bundle re-release",
+    )
+    league_release_parser.add_argument(
+        "--classification-view-version", default="v2",
+        choices=["v2", "reporting_classification_2026-07-20_v1"],
+    )
+    league_release_parser.add_argument(
         "--preflight",
         action="store_true",
         help="render the exact 16-team league release candidate without a database write",
@@ -9760,6 +10632,13 @@ def main() -> None:
     adjudicate_duplicate_parser.add_argument("--step-version", default=INJURY_PROCESSING_RULE_VERSION)
     adjudicate_duplicate_parser.add_argument("--version-number", type=int, default=2)
     adjudicate_duplicate_parser.set_defaults(func=adjudicate_duplicate_exclusion)
+
+    adjudication_batch_parser = subcommands.add_parser("apply-adjudication-batch")
+    adjudication_batch_parser.add_argument("--file", required=True)
+    adjudication_batch_parser.add_argument("--workbook", required=True)
+    adjudication_batch_parser.add_argument("--evidence-file", required=True)
+    adjudication_batch_parser.add_argument("--plan", action="store_true")
+    adjudication_batch_parser.set_defaults(func=apply_adjudication_batch)
 
     reapply_adjudications_parser = subcommands.add_parser("reapply-adjudications")
     reapply_adjudications_parser.add_argument("--team", required=True)

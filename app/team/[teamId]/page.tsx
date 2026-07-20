@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getTeamById } from '@/config/teams';
-import { getLeagueSettingMetrics, getTeamDashboard, getTeamComparisons } from '@/lib/reporting';
+import { getTeamPageData } from '@/lib/reporting';
 import { getDashboardSupplement } from '@/lib/reporting-preview';
 import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
 import { LockedShell } from '@/components/locked-shell';
@@ -35,18 +35,10 @@ export default async function TeamPage({
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   try {
-    dashboard = await getTeamDashboard(team.id);
+    ({ dashboard, comparisons, leagueMetrics } = await getTeamPageData(team.id));
   } catch {
     dashboard = undefined;
-  }
-  try {
-    comparisons = await getTeamComparisons();
-  } catch {
     comparisons = [];
-  }
-  try {
-    leagueMetrics = await getLeagueSettingMetrics();
-  } catch {
     leagueMetrics = [];
   }
   try {

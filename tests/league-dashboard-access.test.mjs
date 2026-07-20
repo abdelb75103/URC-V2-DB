@@ -25,7 +25,7 @@ test('league dashboard uses the approved database consumer view and fails closed
   const page = await readFile(new URL('../app/urc/page.tsx', import.meta.url), 'utf8');
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
 
-  assert.match(page, /getLeagueDashboard\(\)/);
+  assert.match(page, /getLeaguePageData\(\)/);
   assert.match(page, /force-dynamic/);
   assert.match(page, /Dashboard unavailable/);
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
@@ -49,6 +49,10 @@ test('team dashboard reads the v2 approved-build projection', async () => {
   assert.match(reporting, /reporting\.latest_team_dashboard_v2/);
   assert.match(reporting, /setting_metrics/);
   assert.match(reporting, /injury_profiles/);
+  assert.match(reporting, /"injury_profile", "diagnosis"/);
+  assert.match(reporting, /getTeamPageData/);
+  assert.match(reporting, /getLeaguePageData/);
+  assert.match(reporting, /one MVCC snapshot/);
 });
 
 test('team comparisons cross the client boundary with display aliases only', async () => {
@@ -73,6 +77,8 @@ test('team comparisons cross the client boundary with display aliases only', asy
   assert.doesNotMatch(dashboard, /row\.team_key|row\.team\b/);
   assert.doesNotMatch(dashboard, /Team [A-Z]\b/);
   assert.match(dashboard, /row\.team_alias/);
+  assert.match(dashboard, /row\.dimension === 'diagnosis'/);
+  assert.match(dashboard, /return profiles\.filter\(\(row\) => row\.dimension === 'diagnosis'\)/);
 });
 
 test('team comparison overall setting is a validated projection of released headline fields', async () => {

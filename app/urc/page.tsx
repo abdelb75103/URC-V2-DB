@@ -1,7 +1,7 @@
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 import { LockedShell } from '@/components/locked-shell';
 import { StaticImages } from '@/lib/placeholder-images';
-import { getLeagueDashboard, getTeamComparisons } from '@/lib/reporting';
+import { getLeaguePageData } from '@/lib/reporting';
 import { getDashboardSupplement } from '@/lib/reporting-preview';
 import type { DashboardSupplement, TeamComparisonRow } from '@/lib/reporting-types';
 
@@ -13,13 +13,9 @@ export default async function UrcOverallPage() {
   let comparisons: TeamComparisonRow[] = [];
   let supplement: DashboardSupplement | undefined;
   try {
-    dashboard = await getLeagueDashboard();
+    ({ dashboard, comparisons } = await getLeaguePageData());
   } catch {
     dashboard = undefined;
-  }
-  try {
-    comparisons = await getTeamComparisons();
-  } catch {
     comparisons = [];
   }
   try {
