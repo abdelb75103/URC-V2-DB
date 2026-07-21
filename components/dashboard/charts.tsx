@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -10,8 +10,6 @@ import {
   Legend,
   Pie,
   PieChart,
-  ReferenceArea,
-  ReferenceLine,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -471,33 +469,39 @@ function ChartEmpty({ compact = false, reason }: { compact?: boolean; reason: st
   return <div className={`grid place-items-center rounded-md border border-dashed border-border px-6 text-center text-sm leading-relaxed text-muted-foreground ${compact ? 'h-40' : 'h-[260px]'}`}>{reason}</div>;
 }
 
-function median(values: number[]) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
 function ImpactTooltip({
-  active,
-  payload,
+  row,
+  pinned,
+  id,
 }: {
-  active?: boolean;
-  payload?: Array<{ payload?: InjuryProfileRow }>;
+  row?: InjuryProfileRow;
+  pinned: boolean;
+  id: string;
 }) {
-  const row = payload?.[0]?.payload;
-  if (!active || !row) return null;
+  if (!row) return null;
+  const caution = row.time_loss_injuries === 1
+    ? 'Caution: based on 1 injury.'
+    : row.time_loss_injuries === 2
+      ? 'Small sample: interpret 2 injuries cautiously.'
+      : '';
+
   return (
-    <TooltipCard
-      title={row.label}
-      rows={[
-        { label: 'Incidence', value: `${number(row.incidence_per_1000h)} injuries /1,000 h` },
-        { label: 'Mean severity', value: `${number(row.mean_severity_days)} days` },
-        { label: 'Burden', value: `${number(row.burden_per_1000h)} days /1,000 h` },
-        { label: 'Time-loss cases', value: `${count(row.time_loss_injuries)} cases` },
-      ]}
-      cohort={`n = ${count(row.time_loss_injuries)} time-loss cases.`}
-    />
+    <div id={id} role="tooltip" aria-live="polite" className="w-[min(18rem,calc(100vw-2rem))] rounded-md border border-border bg-popover px-3 py-2 text-xs text-popover-foreground shadow-xl">
+      <p className="font-semibold text-foreground">{row.label} <span className="font-normal text-muted-foreground">- {settingLabel(row.setting)}</span></p>
+      <p className="mt-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Burden</p>
+      <p className="text-lg font-semibold tabular-nums text-foreground">{number(row.burden_per_1000h)} <span className="text-xs font-medium text-muted-foreground">days /1,000 h</span></p>
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 border-t border-border/70 pt-2">
+        <div>
+          <dt className="text-muted-foreground">Incidence</dt>
+          <dd className="font-medium tabular-nums text-foreground">{number(row.incidence_per_1000h)} /1,000 h</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Mean severity</dt>
+          <dd className="font-medium tabular-nums text-foreground">{number(row.mean_severity_days)} days</dd>
+        </div>
+      </dl>
+      <p className="mt-2 border-t border-border/70 pt-2 leading-snug text-muted-foreground">n = {count(row.time_loss_injuries)} time-loss {row.time_loss_injuries === 1 ? 'injury' : 'injuries'} · {count(row.days_lost)} total days lost.{caution && ` ${caution}`}{pinned && ' Pinned. Press Escape or click outside to dismiss.'}</p>
+    </div>
   );
 }
 
@@ -505,99 +509,311 @@ function formatAxisTick(value: number) {
   return number(value);
 }
 
-export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
-  const data = rows
-    .filter(
-      (row) =>
-        row.incidence_per_1000h !== null &&
-        row.mean_severity_days !== null &&
-        row.burden_per_1000h !== null
-    )
-    .map((row) => ({ ...row, bubble_burden: Math.max(row.burden_per_1000h ?? 0, 0.01) }));
+const IMPACT_LOG_SEVERITY_BASE_DOMAIN = [1, 400] as const;
+const IMPACT_LOG_SEVERITY_BASE_TICKS = [1, 2, 5, 10, 20, 50, 100, 200, 400];
 
-  if (!data.length) {
-    return <ChartEmpty reason="No injury profiles have the rate and severity values needed for this chart." />;
-  }
+function isPlottableLogSeverity(value: number | null): value is number {
+  return value !== null && Number.isFinite(value) && value > 0;
+}
 
-  const medianIncidence = median(data.map((row) => row.incidence_per_1000h ?? 0));
-  const medianSeverity = median(data.map((row) => row.mean_severity_days ?? 0));
-  const maxIncidence = Math.max(...data.map((row) => row.incidence_per_1000h ?? 0)) * 1.12 || 1;
-  const maxSeverity = Math.max(...data.map((row) => row.mean_severity_days ?? 0)) * 1.15 || 1;
-  const labels = new Set(
-    [...data]
-      .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0))
-      .slice(0, 4)
-      .map((row) => row.code)
-  );
-  const chartData = data.map((row) => ({ ...row, displayLabel: labels.has(row.code) ? row.label : '' }));
+function logSeverityDomain(maximum: number): [number, number] {
+  return [IMPACT_LOG_SEVERITY_BASE_DOMAIN[0], Math.max(IMPACT_LOG_SEVERITY_BASE_DOMAIN[1], 10 ** Math.ceil(Math.log10(maximum)))];
+}
+
+function logSeverityTicks(domainMaximum: number) {
+  if (domainMaximum === IMPACT_LOG_SEVERITY_BASE_DOMAIN[1]) return IMPACT_LOG_SEVERITY_BASE_TICKS;
+  const ticks = Array.from({ length: Math.ceil(Math.log10(domainMaximum)) + 1 }, (_, exponent) => [1, 2, 5].map((multiple) => multiple * 10 ** exponent))
+    .flat()
+    .filter((tick) => tick <= domainMaximum);
+  return ticks.at(-1) === domainMaximum ? ticks : [...ticks, domainMaximum];
+}
+
+type ImpactChartRow = InjuryProfileRow & {
+  bubble_burden: number;
+  displayLabel: string;
+  impactKey: string;
+};
+
+type ImpactPointPosition = {
+  row: ImpactChartRow;
+  x: number;
+  y: number;
+};
+
+type ImpactBubbleShapeProps = {
+  cx?: number;
+  cy?: number;
+  size?: number;
+  payload?: ImpactChartRow;
+};
+
+function ImpactBubble({
+  cx,
+  cy,
+  size,
+  payload,
+  pinnedKey,
+  onPreview,
+  onFocusPreview,
+  onLeave,
+  onBlur,
+  onPin,
+  onDismiss,
+  onPosition,
+  tooltipId,
+}: ImpactBubbleShapeProps & {
+  pinnedKey?: string;
+  onPreview: (point: ImpactPointPosition) => void;
+  onFocusPreview: (point: ImpactPointPosition) => void;
+  onLeave: () => void;
+  onBlur: () => void;
+  onPin: (point: ImpactPointPosition) => void;
+  onDismiss: () => void;
+  onPosition: (point: ImpactPointPosition) => void;
+  tooltipId: string;
+}) {
+  useLayoutEffect(() => {
+    if (cx !== undefined && cy !== undefined && payload) onPosition({ row: payload, x: cx, y: cy });
+  }, [cx, cy, onPosition, payload]);
+
+  if (cx === undefined || cy === undefined || !payload) return null;
+  const radius = Math.sqrt(Math.max(size ?? 0, 0) / Math.PI);
+  const point = { row: payload, x: cx, y: cy };
+  const selected = pinnedKey === payload.impactKey;
+  const accessibleLabel = `${payload.label}, ${settingLabel(payload.setting)}. Burden ${number(payload.burden_per_1000h)} days per 1,000 hours. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
 
   return (
-    <div role="img" aria-label="Injury impact chart. Horizontal position is incidence, vertical position is mean severity, and bubble area is burden. Use the data table below for keyboard inspection of every profile.">
-      <div className="overflow-x-auto pb-2">
-        <div className="h-[430px] min-w-[680px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart accessibilityLayer margin={{ top: 30, right: 30, bottom: 34, left: 18 }}>
-              <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
-              <ReferenceArea
-                x1={0}
-                x2={medianIncidence}
-                y1={0}
-                y2={medianSeverity}
-                fill="#22c55e"
-                fillOpacity={0.08}
-                ifOverflow="extendDomain"
-              />
-              <ReferenceArea
-                x1={medianIncidence}
-                x2={maxIncidence}
-                y1={medianSeverity}
-                y2={maxSeverity}
-                fill="#ef4444"
-                fillOpacity={0.09}
-                ifOverflow="extendDomain"
-              />
-              <ReferenceLine x={medianIncidence} stroke="hsl(0 0% 75% / 0.6)" strokeDasharray="5 5" />
-              <ReferenceLine y={medianSeverity} stroke="hsl(0 0% 75% / 0.6)" strokeDasharray="5 5" />
-              <XAxis
-                type="number"
-                dataKey="incidence_per_1000h"
-                domain={[0, maxIncidence]}
-                name="Incidence"
-                tickFormatter={formatAxisTick}
-                tick={{ fill: AXIS, fontSize: 11 }}
-                tickLine={false}
-                axisLine={{ stroke: GRID }}
-                label={{ value: 'Incidence, injuries /1,000 h', position: 'bottom', fill: AXIS, fontSize: 12, offset: 16 }}
-              />
-              <YAxis
-                type="number"
-                dataKey="mean_severity_days"
-                domain={[0, maxSeverity]}
-                name="Mean severity"
-                tickFormatter={formatAxisTick}
-                width={54}
-                tick={{ fill: AXIS, fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-                label={{ value: 'Mean severity, days', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 0 }}
-              />
-              <ZAxis type="number" dataKey="bubble_burden" range={[160, 1_100]} name="Burden" />
-              <Tooltip cursor={false} content={<ImpactTooltip />} wrapperStyle={{ zIndex: 30 }} />
-              <Scatter data={chartData} isAnimationActive={false}>
-                {chartData.map((row) => (
-                  <Cell key={`${row.setting}-${row.code}`} fill={profileColor(row.code)} fillOpacity={0.72} stroke="hsl(0 0% 96%)" strokeWidth={1.5} strokeOpacity={0.9} />
-                ))}
-                <LabelList dataKey="displayLabel" position="top" fill="hsl(0 0% 90%)" fontSize={11} />
-              </Scatter>
-            </ScatterChart>
-          </ResponsiveContainer>
+    <g>
+      {selected && <circle cx={cx} cy={cy} r={radius + 5} fill="none" stroke="hsl(var(--foreground))" strokeWidth={2} strokeOpacity={0.9} pointerEvents="none" />}
+      <circle cx={cx} cy={cy} r={radius} fill={profileColor(payload.code)} fillOpacity={0.72} stroke="hsl(0 0% 96%)" strokeWidth={1.5} strokeOpacity={0.9} pointerEvents="none" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={22}
+        fill="transparent"
+        tabIndex={0}
+        role="button"
+        aria-label={accessibleLabel}
+        aria-describedby={tooltipId}
+        aria-pressed={selected}
+        data-impact-key={payload.impactKey}
+        onMouseEnter={() => onPreview(point)}
+        onMouseLeave={onLeave}
+        onFocus={() => onFocusPreview(point)}
+        onBlur={onBlur}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onPin(point);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onDismiss();
+          }
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onPin(point);
+          }
+        }}
+      />
+    </g>
+  );
+}
+
+export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const focusedImpactKeyRef = useRef<string | undefined>(undefined);
+  const dismissedImpactKeyRef = useRef<string | undefined>(undefined);
+  const activeImpactKeyRef = useRef<string | undefined>(undefined);
+  const [preview, setPreview] = useState<ImpactPointPosition>();
+  const [pinned, setPinned] = useState<ImpactPointPosition>();
+  const [scrollLeft, setScrollLeft] = useState(0);
+  activeImpactKeyRef.current = (pinned ?? preview)?.row.impactKey;
+  const previewPoint = useCallback((point: ImpactPointPosition) => {
+    if (dismissedImpactKeyRef.current === point.row.impactKey) return;
+    setPreview((current) => current?.row.impactKey === point.row.impactKey ? current : point);
+  }, []);
+  const clearPreview = useCallback(() => {
+    dismissedImpactKeyRef.current = undefined;
+    setPreview(undefined);
+  }, []);
+  const previewFromFocus = useCallback((point: ImpactPointPosition) => {
+    focusedImpactKeyRef.current = point.row.impactKey;
+    previewPoint(point);
+  }, [previewPoint]);
+  const clearFocusPreview = useCallback(() => {
+    window.setTimeout(() => {
+      if (!chartRef.current?.contains(document.activeElement)) {
+        focusedImpactKeyRef.current = undefined;
+        clearPreview();
+      }
+    }, 0);
+  }, [clearPreview]);
+  const pin = useCallback((point: ImpactPointPosition) => {
+    dismissedImpactKeyRef.current = undefined;
+    setPinned(point);
+  }, []);
+  const dismissTooltip = useCallback(() => {
+    dismissedImpactKeyRef.current = activeImpactKeyRef.current;
+    setPreview(undefined);
+    setPinned(undefined);
+  }, []);
+  const syncPointPosition = useCallback((point: ImpactPointPosition) => {
+    setPreview((current) => current?.row.impactKey === point.row.impactKey && (current.x !== point.x || current.y !== point.y) ? point : current);
+    setPinned((current) => current?.row.impactKey === point.row.impactKey && (current.x !== point.x || current.y !== point.y) ? point : current);
+  }, []);
+  const nonPositiveSeverityRows = useMemo(
+    () => rows.filter((row) => row.mean_severity_days !== null && Number.isFinite(row.mean_severity_days) && row.mean_severity_days <= 0),
+    [rows]
+  );
+  const data = useMemo(
+    () => rows
+      .filter(
+        (row) =>
+          row.incidence_per_1000h !== null &&
+          Number.isFinite(row.incidence_per_1000h) &&
+          row.burden_per_1000h !== null &&
+          Number.isFinite(row.burden_per_1000h) &&
+          isPlottableLogSeverity(row.mean_severity_days)
+      )
+      .map((row) => ({ ...row, bubble_burden: Math.max(row.burden_per_1000h ?? 0, 0.01), impactKey: `${row.setting}-${row.code}` })),
+    [rows]
+  );
+
+  useEffect(() => {
+    if (!pinned) return;
+    const dismissIfOutside = (event: PointerEvent) => {
+      if (!chartRef.current?.contains(event.target as Node)) dismissTooltip();
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismissTooltip();
+    };
+    document.addEventListener('pointerdown', dismissIfOutside);
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', dismissIfOutside);
+      document.removeEventListener('keydown', dismissOnEscape);
+    };
+  }, [dismissTooltip, pinned]);
+
+  const rowSliceKey = useMemo(
+    () => data.map((row) => `${row.impactKey}-${row.incidence_per_1000h}-${row.mean_severity_days}-${row.burden_per_1000h}`).join('|'),
+    [data]
+  );
+  useEffect(() => {
+    setPreview(undefined);
+    setPinned(undefined);
+  }, [rowSliceKey]);
+
+  useLayoutEffect(() => {
+    const focusedImpactKey = focusedImpactKeyRef.current;
+    if (!focusedImpactKey || !chartRef.current) return;
+    const target = Array.from(chartRef.current.querySelectorAll<SVGCircleElement>('[data-impact-key]'))
+      .find((element) => element.dataset.impactKey === focusedImpactKey);
+    if (target && document.activeElement !== target) target.focus();
+  }, [preview]);
+
+  const renderImpactBubble = useCallback((shapeProps: ImpactBubbleShapeProps) => (
+    <ImpactBubble
+      {...shapeProps}
+      pinnedKey={pinned?.row.impactKey}
+      onPreview={previewPoint}
+      onFocusPreview={previewFromFocus}
+      onLeave={clearPreview}
+      onBlur={clearFocusPreview}
+      onPin={pin}
+      onDismiss={dismissTooltip}
+      onPosition={syncPointPosition}
+      tooltipId="impact-tooltip"
+    />
+  ), [clearFocusPreview, clearPreview, dismissTooltip, pin, pinned?.row.impactKey, previewFromFocus, previewPoint, syncPointPosition]);
+
+  const chartData = useMemo(() => {
+    const labels = new Set(
+      [...data]
+        .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0))
+        .slice(0, 4)
+        .map((row) => row.code)
+    );
+    return data.map((row) => ({ ...row, displayLabel: labels.has(row.code) ? row.label : '' }));
+  }, [data]);
+
+  if (!data.length) {
+    return <ChartEmpty reason="No injury profiles have finite rate and burden values plus a positive mean severity needed for this logarithmic chart." />;
+  }
+
+  const maxIncidence = Math.max(...data.map((row) => row.incidence_per_1000h ?? 0)) * 1.12 || 1;
+  const severityDomain = logSeverityDomain(Math.max(...data.map((row) => row.mean_severity_days ?? IMPACT_LOG_SEVERITY_BASE_DOMAIN[0])));
+  const severityTicks = logSeverityTicks(severityDomain[1]);
+  const activePoint = pinned ?? preview;
+  const tooltipTop = activePoint && activePoint.y < 190 ? activePoint.y + 16 : (activePoint?.y ?? 0) - 148;
+  const visiblePointX = (activePoint?.x ?? 0) - scrollLeft;
+  const tooltipLeft = visiblePointX > 430 ? visiblePointX - 296 : visiblePointX + 16;
+
+  return (
+    <section aria-label={`Injury impact chart. Horizontal position is incidence, vertical position is logarithmic mean severity from 1 to ${number(severityDomain[1])} days, and bubble area is burden. Focus a bubble to preview its values, then press Enter or Space to pin it.`}>
+      <div className="relative">
+        <div
+          onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
+          className="overflow-x-auto pb-2"
+        >
+          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[430px] min-w-[680px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart accessibilityLayer margin={{ top: 30, right: 30, bottom: 34, left: 18 }}>
+                <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
+                <XAxis
+                  type="number"
+                  dataKey="incidence_per_1000h"
+                  domain={[0, maxIncidence]}
+                  name="Incidence"
+                  tickFormatter={formatAxisTick}
+                  tick={{ fill: AXIS, fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: GRID }}
+                  label={{ value: 'Incidence, injuries /1,000 h', position: 'bottom', fill: AXIS, fontSize: 12, offset: 16 }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="mean_severity_days"
+                  domain={severityDomain}
+                  scale="log"
+                  ticks={severityTicks}
+                  name="Mean severity"
+                  tickFormatter={formatAxisTick}
+                  width={54}
+                  tick={{ fill: AXIS, fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  label={{ value: 'Mean severity, days (logarithmic scale)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 0 }}
+                />
+                <ZAxis type="number" dataKey="bubble_burden" range={[160, 1_100]} name="Burden" />
+                <Scatter
+                  data={chartData}
+                  isAnimationActive={false}
+                  shape={renderImpactBubble}
+                >
+                  <LabelList dataKey="displayLabel" position="top" fill="hsl(0 0% 90%)" fontSize={11} />
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
         </div>
+        {activePoint && (
+          <div
+            className="pointer-events-none absolute z-30 w-[18rem]"
+            style={{
+              left: `clamp(0.75rem, ${tooltipLeft}px, calc(100% - 18.75rem))`,
+              top: `clamp(0.75rem, ${tooltipTop}px, calc(100% - 9rem))`,
+            }}
+          >
+            <ImpactTooltip id="impact-tooltip" row={activePoint.row} pinned={Boolean(pinned)} />
+          </div>
+        )}
       </div>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-green-500/50" />Lower frequency and lower severity</span>
-        <span>Dashed lines show category medians</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-red-500/50" />Priority: frequent and severe</span>
+      <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+        <p>Mean severity uses a logarithmic scale from 1 to {number(severityDomain[1])} days. Bubble area shows burden.</p>
+        {nonPositiveSeverityRows.length > 0 && <p>{count(nonPositiveSeverityRows.length)} profile{nonPositiveSeverityRows.length === 1 ? '' : 's'} with non-positive mean severity {nonPositiveSeverityRows.length === 1 ? 'is' : 'are'} not shown because a logarithmic scale cannot represent those values.</p>}
       </div>
-    </div>
+    </section>
   );
 }

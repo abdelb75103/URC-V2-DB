@@ -331,6 +331,63 @@ test('body map regions keep a reliable touch and pointer hit area', async () => 
   assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
 });
 
+test('injury impact uses a fixed log severity scale without changing burden bubbles or hiding singleton profiles', async () => {
+  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const impact = charts.slice(charts.indexOf('const IMPACT_LOG_SEVERITY_BASE_DOMAIN'));
+
+  assert.match(impact, /const IMPACT_LOG_SEVERITY_BASE_DOMAIN = \[1, 400\] as const/);
+  assert.match(impact, /const IMPACT_LOG_SEVERITY_BASE_TICKS = \[1, 2, 5, 10, 20, 50, 100, 200, 400\]/);
+  assert.match(impact, /Math\.max\(IMPACT_LOG_SEVERITY_BASE_DOMAIN\[1\], 10 \*\* Math\.ceil\(Math\.log10\(maximum\)\)\)/);
+  assert.match(impact, /domain=\{severityDomain\}/);
+  assert.match(impact, /scale="log"/);
+  assert.match(impact, /ticks=\{severityTicks\}/);
+  assert.match(impact, /Mean severity, days \(logarithmic scale\)/);
+  assert.match(impact, /isPlottableLogSeverity\(row\.mean_severity_days\)/);
+  assert.match(impact, /Number\.isFinite\(value\) && value > 0/);
+  assert.match(impact, /non-positive mean severity.*not shown because a logarithmic scale cannot represent those values/s);
+  assert.match(impact, /bubble_burden: Math\.max\(row\.burden_per_1000h \?\? 0, 0\.01\)/);
+  assert.match(impact, /<ZAxis type="number" dataKey="bubble_burden" range=\{\[160, 1_100\]\} name="Burden" \/>/);
+  assert.doesNotMatch(impact, /time_loss_injuries\s*[<>]/);
+  assert.doesNotMatch(impact, /ReferenceArea|ReferenceLine|median\(/);
+  assert.doesNotMatch(impact, /aboveLogDomainRows|pending chart-domain review/);
+  assert.doesNotMatch(dashboard, /View injury impact data|function AccessibleDataTable/);
+});
+
+test('injury impact tooltip prioritises burden, gives exact small-sample cautions, and supports pinning', async () => {
+  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+  const tooltip = charts.slice(charts.indexOf('function ImpactTooltip'), charts.indexOf('function formatAxisTick'));
+  const interaction = charts.slice(charts.indexOf('function ImpactBubble'), charts.indexOf('export function ImpactBubbleChart'));
+  const chart = charts.slice(charts.indexOf('export function ImpactBubbleChart'));
+
+  assert.match(tooltip, /\{row\.label\}.*settingLabel\(row\.setting\)/s);
+  assert.ok(tooltip.indexOf('>Burden<') < tooltip.indexOf('>Incidence<'), 'burden must be the primary tooltip metric');
+  assert.match(tooltip, /n = \{count\(row\.time_loss_injuries\)\} time-loss .*\{count\(row\.days_lost\)\} total days lost/s);
+  assert.doesNotMatch(tooltip, /Time-loss cases/);
+  assert.match(tooltip, /Caution: based on 1 injury\./);
+  assert.match(tooltip, /Small sample: interpret 2 injuries cautiously\./);
+  assert.match(tooltip, /aria-live="polite"/);
+  assert.match(interaction, /r=\{22\}/);
+  assert.match(interaction, /role="button"/);
+  assert.match(interaction, /onMouseEnter/);
+  assert.match(interaction, /onFocus/);
+  assert.match(interaction, /onKeyDown/);
+  assert.match(interaction, /onPointerDown=\{\(event\) => \{.*event\.stopPropagation\(\);.*onPin\(point\);/s);
+  assert.match(interaction, /aria-pressed=\{selected\}/);
+  assert.match(interaction, /aria-describedby=\{tooltipId\}/);
+  assert.match(interaction, /radius \+ 5/);
+  assert.match(interaction, /onPosition\(\{ row: payload, x: cx, y: cy \}\)/);
+  assert.match(chart, /const syncPointPosition = useCallback/);
+  assert.match(chart, /current\.x !== point\.x \|\| current\.y !== point\.y/);
+  assert.match(chart, /document\.addEventListener\('pointerdown', dismissIfOutside\)/);
+  assert.match(chart, /document\.addEventListener\('keydown', dismissOnEscape\)/);
+  assert.match(chart, /setPinned\(undefined\)/);
+  assert.match(chart, /onPointerDown=\{dismissTooltip\}/);
+  assert.match(chart, /clamp\(0\.75rem/);
+  assert.doesNotMatch(chart, /data table below/);
+  assert.doesNotMatch(chart, /within the 1 to 400|logarithmic scale from 1 to 400/);
+});
+
 test('location ranking bars and body regions share one heat scale', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const bodyMap = await readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8');

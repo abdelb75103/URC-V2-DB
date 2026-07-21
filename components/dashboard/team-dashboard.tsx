@@ -1290,40 +1290,7 @@ function ImpactTab({ profiles, supplement }: { profiles: InjuryProfileRow[]; sup
       <Panel>
         <ImpactBubbleChart rows={rows} />
       </Panel>
-      {rows.length > 0 && <AccessibleDataTable rows={rows} />}
     </div>
-  );
-}
-
-function AccessibleDataTable({ rows }: { rows: InjuryProfileRow[] }) {
-  return (
-    <details className="mt-4 rounded-lg border border-border/70 bg-card/60">
-      <summary className="flex min-h-11 cursor-pointer items-center px-4 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">View injury impact data</summary>
-      <div className="overflow-x-auto border-t border-border/60 p-4">
-        <table className="w-full min-w-[620px] text-sm">
-          <thead className="text-xs text-muted-foreground">
-            <tr>
-              <th className="pb-2 text-left font-medium">Injury profile</th>
-              <th className="pb-2 text-right font-medium">Injuries</th>
-              <th className="pb-2 text-right font-medium">Incidence</th>
-              <th className="pb-2 text-right font-medium">Mean severity</th>
-              <th className="pb-2 text-right font-medium">Burden</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...rows].sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0)).map((row) => (
-              <tr key={row.code} className="border-t border-border/40">
-                <td className="py-2 pr-4 text-foreground">{row.label}</td>
-                <td className="py-2 text-right tabular-nums text-muted-foreground">{row.time_loss_injuries}</td>
-                <td className="py-2 text-right tabular-nums text-muted-foreground">{fmt(row.incidence_per_1000h)}</td>
-                <td className="py-2 text-right tabular-nums text-muted-foreground">{fmt(row.mean_severity_days)}</td>
-                <td className="py-2 text-right tabular-nums text-muted-foreground">{fmt(row.burden_per_1000h)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </details>
   );
 }
 
