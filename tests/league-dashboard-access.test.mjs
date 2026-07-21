@@ -21,6 +21,14 @@ async function loadReportingForFixtureTest() {
   return import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`);
 }
 
+async function loadLocationViewForFixtureTest() {
+  const source = await readFile(new URL('../lib/location-view.ts', import.meta.url), 'utf8');
+  const javascript = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString('base64')}`);
+}
+
 test('league dashboard uses the approved database consumer view and fails closed', async () => {
   const page = await readFile(new URL('../app/urc/page.tsx', import.meta.url), 'utf8');
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
@@ -229,6 +237,53 @@ test('location detail becomes a vertical rail beside a larger desktop body map',
   assert.match(dashboard, /grid-cols-3[^"\n]*xl:flex[^"\n]*xl:flex-col/);
   assert.match(dashboard, /metric === 'incidence_per_1000h'/);
   assert.match(dashboard, /xl:border-l-primary/);
+});
+
+test('location setting filter wires the approved overall, match, and training profile rows', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+
+  assert.match(dashboard, /const locationProfiles = profiles\.filter\(\(row\) => row\.dimension === 'body_location'\)/);
+  assert.match(dashboard, /availableSettings\(locationProfiles, \['all', 'match', 'training'\]\)/);
+  assert.match(dashboard, /resolveLocationView\(\{/);
+  assert.match(dashboard, /<SettingControl value=\{effectiveSetting\}/);
+});
+
+test('location view resolves setting transitions, selection persistence, and hover fallback', async () => {
+  const { resolveLocationView } = await loadLocationViewForFixtureTest();
+  const row = (setting, code, label, incidence) => ({
+    dimension: 'body_location',
+    setting,
+    code,
+    label,
+    time_loss_injuries: incidence,
+    days_lost: incidence * 10,
+    exposure_hours: 1000,
+    incidence_per_1000h: incidence,
+    burden_per_1000h: incidence * 10,
+    mean_severity_days: 10,
+  });
+  const profiles = [
+    row('all', 'thigh', 'Thigh', 9),
+    row('all', 'head', 'Head', 8),
+    row('match', 'head', 'Head', 7),
+    row('match', 'thigh', 'Thigh', 5),
+    row('training', 'knee', 'Knee', 3),
+    row('training', 'thigh', 'Thigh', 1),
+  ];
+  const view = (setting, selectedCode, hoveredCode) => resolveLocationView({
+    profiles,
+    setting,
+    metric: 'incidence_per_1000h',
+    selectedCode,
+    hoveredCode,
+  });
+
+  assert.equal(view('all').activeCode, 'thigh');
+  assert.equal(view('match').activeCode, 'head');
+  assert.equal(view('training').activeCode, 'knee');
+  assert.equal(view('match', 'thigh').selected.label, 'Thigh');
+  assert.equal(view('match', 'thigh', 'head').activeCode, 'head');
+  assert.equal(view('training', 'head', 'head').activeCode, 'knee');
 });
 
 test('impact chart formats floating point axis ticks for presentation', async () => {

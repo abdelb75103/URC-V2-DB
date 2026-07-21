@@ -14,6 +14,7 @@ import type {
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BodyMap, locationHeatColor, type LocationMetric } from '@/components/dashboard/body-map';
+import { resolveLocationView } from '@/lib/location-view';
 import {
   ExposureTrendChart,
   ImpactBubbleChart,
@@ -101,30 +102,6 @@ const FALLBACK_INJURY_COLORS = [
   '#15803d',
   '#9f1239',
 ] as const;
-
-const LOCATION_ORDER = [
-  'head',
-  'neck',
-  'shoulder',
-  'upper_arm',
-  'elbow',
-  'forearm',
-  'wrist',
-  'hand',
-  'chest',
-  'thoracic_spine',
-  'abdomen',
-  'lumbosacral',
-  'hip_groin',
-  'thigh',
-  'knee',
-  'lower_leg',
-  'ankle',
-  'foot',
-  'multiple',
-  'unspecified',
-  'unknown',
-];
 
 function fmt(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
@@ -1074,23 +1051,29 @@ function ExposureSettingSplit({
 }
 
 function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
+  const locationProfiles = profiles.filter((row) => row.dimension === 'body_location');
+  const settings = availableSettings(locationProfiles, ['all', 'match', 'training']);
+  const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
   const [metric, setMetric] = useState<ProfileMetric>('incidence_per_1000h');
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
-  const rows = profiles
-    .filter((row) => row.dimension === 'body_location' && row.setting === 'all')
-    .sort((a, b) => LOCATION_ORDER.indexOf(a.code) - LOCATION_ORDER.indexOf(b.code));
-  const barRows = [...rows]
-    .sort((a, b) => metricValue(b, metric) - metricValue(a, metric) || a.label.localeCompare(b.label))
-    .slice(0, 10);
-  const activeCode = hoveredCode ?? (rows.some((row) => row.code === selectedCode) ? selectedCode : barRows[0]?.code);
-  const selected = rows.find((row) => row.code === activeCode);
+  const effectiveSetting = settings.includes(setting) ? setting : settings[0] ?? 'all';
+  const { rows, barRows, activeCode, selected } = resolveLocationView({
+    profiles: locationProfiles,
+    setting: effectiveSetting,
+    metric: metric as LocationMetric,
+    selectedCode,
+    hoveredCode,
+  });
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Injury Location</h2>
-        <MetricControl value={metric} onChange={setMetric} locationOnly />
+        <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
+          <SettingControl value={effectiveSetting} settings={settings.length ? settings : ['all', 'match', 'training']} onChange={setSetting} />
+          <MetricControl value={metric} onChange={setMetric} locationOnly />
+        </div>
       </div>
       {rows.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
