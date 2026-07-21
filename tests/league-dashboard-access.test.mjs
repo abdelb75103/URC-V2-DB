@@ -211,6 +211,15 @@ test('body map regions keep a reliable touch and pointer hit area', async () => 
   assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
 });
 
+test('location ranking bars and body regions share one heat scale', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const bodyMap = await readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8');
+
+  assert.match(bodyMap, /export function locationHeatColor/);
+  assert.match(bodyMap, /fill=\{locationHeatColor\(value, max\)\}/);
+  assert.match(dashboard, /backgroundColor: heatMapColors \? locationHeatColor\(value, max\)/);
+});
+
 test('impact chart formats floating point axis ticks for presentation', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
 

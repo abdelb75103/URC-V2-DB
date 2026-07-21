@@ -13,7 +13,7 @@ import type {
 } from '@/lib/reporting-types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BodyMap, type LocationMetric } from '@/components/dashboard/body-map';
+import { BodyMap, locationHeatColor, type LocationMetric } from '@/components/dashboard/body-map';
 import {
   ExposureTrendChart,
   ImpactBubbleChart,
@@ -151,14 +151,15 @@ function metricMeta(metric: ProfileMetric) {
   return METRICS.find((item) => item.key === metric) ?? METRICS[0];
 }
 
-function Panel({ title, children, className = '' }: {
+function Panel({ title, children, className = '', contentClassName = 'p-5 sm:p-6' }: {
   title?: string;
   children: ReactNode;
   className?: string;
+  contentClassName?: string;
 }) {
   return (
     <Card className={`min-w-0 border-border/70 bg-card/70 shadow-none ${className}`}>
-      <CardContent className="p-5 sm:p-6">
+      <CardContent className={contentClassName}>
         {title && (
           <div className="mb-5">
             <h3 className="text-lg font-semibold text-foreground">{title}</h3>
@@ -1087,23 +1088,23 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
 
   return (
     <div>
-      <SectionHeading title="Injury Location" />
-      <div className="mb-5 flex justify-end">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Injury Location</h2>
         <MetricControl value={metric} onChange={setMetric} locationOnly />
       </div>
       {rows.length ? (
-        <>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.85fr)]">
-            <Panel>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+            <Panel contentClassName="p-4">
               <MetricBars
                 rows={barRows}
                 metric={metric}
                 activeCode={activeCode}
                 onHover={setHoveredCode}
                 onSelect={setSelectedCode}
+                heatMapColors
               />
             </Panel>
-            <Panel>
+            <Panel contentClassName="p-4">
               <BodyMap
                 rows={rows}
                 metric={metric as LocationMetric}
@@ -1111,10 +1112,9 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
                 onHover={setHoveredCode}
                 onSelect={setSelectedCode}
               />
+              <LocationDetail row={selected} />
             </Panel>
           </div>
-          <LocationDetail row={selected} />
-        </>
       ) : <EmptyState />}
     </div>
   );
@@ -1122,32 +1122,45 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
 
 function LocationDetail({ row }: { row?: InjuryProfileRow }) {
   return (
-    <div className="mt-5 grid gap-4 rounded-lg border border-border/70 bg-card/70 p-5 sm:grid-cols-[minmax(180px,1fr)_repeat(3,minmax(0,1fr))]">
-      <div className="self-center">
+    <div className="mt-3 overflow-hidden rounded-md border border-border/70 bg-background/35">
+      <div className="flex items-baseline justify-between gap-3 px-4 py-3">
         <p className="text-xs font-medium text-muted-foreground">Selected location</p>
-        <p className="mt-2 text-xl font-semibold text-foreground">{row?.label ?? 'Not available'}</p>
+        <p className="truncate text-base font-semibold text-foreground">{row?.label ?? 'Not available'}</p>
       </div>
-      <SettingValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} />
-      <SettingValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" />
-      <SettingValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" />
+      <div className="grid grid-cols-3 border-t border-border/60">
+        <LocationMetricValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} />
+        <LocationMetricValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" />
+        <LocationMetricValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" />
+      </div>
     </div>
   );
 }
 
-function MetricBars({ rows, metric, activeCode, onHover, onSelect }: {
+function LocationMetricValue({ label, value, unit }: { label: string; value: string; unit?: string }) {
+  return (
+    <div className="min-w-0 border-r border-border/50 px-3 py-3 last:border-r-0 sm:px-4">
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground">{value}</p>
+      {unit && <p className="truncate text-[10px] text-muted-foreground">{unit}</p>}
+    </div>
+  );
+}
+
+function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors = false }: {
   rows: InjuryProfileRow[];
   metric: ProfileMetric;
   activeCode?: string;
   onHover: (code?: string) => void;
   onSelect: (code: string) => void;
+  heatMapColors?: boolean;
 }) {
   const max = Math.max(...rows.map((row) => metricValue(row, metric)), 1);
   const meta = metricMeta(metric);
   const tooltipId = useId();
   const activeRow = rows.find((row) => row.code === activeCode) ?? rows[0];
   return (
-    <div className="space-y-1">
-      <div id={tooltipId} aria-live="polite" className="mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground">
+    <div className={heatMapColors ? 'space-y-0' : 'space-y-1'}>
+      <div id={tooltipId} aria-live="polite" className={heatMapColors ? 'sr-only' : 'mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground'}>
         {activeRow ? (
           <>
             <span className="font-semibold text-foreground">{activeRow.label}</span>
@@ -1171,13 +1184,17 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect }: {
             onFocus={() => onHover(row.code)}
             onBlur={() => onHover()}
             onClick={() => onSelect(row.code)}
-            className="group grid min-h-12 w-full grid-cols-[minmax(92px,0.42fr)_minmax(84px,1fr)_auto] items-center gap-3 rounded px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="group grid min-h-11 w-full grid-cols-[minmax(92px,0.42fr)_minmax(84px,1fr)_auto] items-center gap-3 rounded px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <span className={`truncate text-sm ${active ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>{row.label}</span>
             <span className="h-3 overflow-hidden rounded-full bg-background/70">
               <span
-                className="block h-full rounded-full bg-primary"
-                style={{ width: `${Math.max((value / max) * 100, value > 0 ? 2 : 0)}%`, opacity: active ? 1 : activeCode ? 0.28 : 0.75 }}
+                className={`block h-full rounded-full ${heatMapColors ? '' : 'bg-primary'}`}
+                style={{
+                  width: `${Math.max((value / max) * 100, value > 0 ? 2 : 0)}%`,
+                  backgroundColor: heatMapColors ? locationHeatColor(value, max) : undefined,
+                  opacity: active ? 1 : activeCode ? 0.25 : heatMapColors ? 1 : 0.75,
+                }}
               />
             </span>
             <span className="min-w-16 text-right text-base font-semibold tabular-nums text-foreground">{fmt(row[metric])}</span>

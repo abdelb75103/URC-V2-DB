@@ -37,6 +37,11 @@ function valueFor(row: InjuryProfileRow | undefined, metric: LocationMetric) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+export function locationHeatColor(value: number, max: number) {
+  const ratio = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0;
+  return `hsla(${48 - ratio * 48}, 92%, 54%, ${0.22 + ratio * 0.76})`;
+}
+
 export function BodyMap({
   rows,
   metric,
@@ -59,11 +64,7 @@ export function BodyMap({
 
   return (
     <div className="relative">
-      <div
-        id={tooltipId}
-        aria-live="polite"
-        className="mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground"
-      >
+      <div id={tooltipId} aria-live="polite" className="sr-only">
         {activeRow ? (
           <>
             <span className="font-semibold text-foreground">{activeRow.label}</span>
@@ -75,7 +76,7 @@ export function BodyMap({
       </div>
       <svg
         viewBox="0 0 360 420"
-        className="mx-auto h-auto w-full max-w-[420px]"
+        className="mx-auto h-auto w-full max-w-[390px] lg:max-w-[240px]"
         aria-label="Interactive front and back body map"
         aria-describedby={tooltipId}
       >
@@ -141,7 +142,6 @@ function BodyFigure({
         if ((code === 'thoracic_spine' || code === 'lumbosacral') && view === 'front') return null;
         const row = byCode.get(code);
         const value = valueFor(row, metric);
-        const ratio = max > 0 ? value / max : 0;
         return (
           <Region
             key={code}
@@ -151,7 +151,7 @@ function BodyFigure({
             value={value}
             metric={metric}
             enabled={Boolean(row)}
-            fill={`hsla(${48 - ratio * 48}, 92%, 54%, ${0.22 + ratio * 0.76})`}
+            fill={locationHeatColor(value, max)}
             active={activeCode === code}
             dimmed={Boolean(activeCode && activeCode !== code)}
             onHover={onHover}
