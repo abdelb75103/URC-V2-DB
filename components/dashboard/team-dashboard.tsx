@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -689,10 +689,12 @@ function CommonInjuryCard({
 
   return (
     <li
-      className="min-h-24 overflow-hidden rounded-lg px-3 py-3.5"
+      className="group min-h-24 animate-in overflow-hidden rounded-lg px-3 py-3.5 shadow-sm fill-mode-both fade-in slide-in-from-bottom-2 duration-200 transition-[transform,box-shadow,filter] ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/40 hover:brightness-110 motion-reduce:animate-none motion-reduce:transition-none motion-reduce:hover:transform-none"
       style={{
         backgroundColor: `color-mix(in srgb, ${color.background} 90%, black)`,
         color: color.foreground,
+        animationDelay: `${(rank - 1) * 60}ms`,
+        animationDuration: '450ms',
       }}
     >
       <article className="flex h-full items-center justify-between gap-3" aria-label={`${rank}. ${row.label}, ${fmt(row[metric], metric === 'time_loss_injuries' ? 0 : 1)} ${unit}`}>
@@ -703,7 +705,7 @@ function CommonInjuryCard({
           )}
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-xl font-bold leading-none tabular-nums text-inherit">{fmt(row[metric], metric === 'time_loss_injuries' ? 0 : 1)}</p>
+          <p className="text-xl font-bold leading-none tabular-nums text-inherit transition-transform duration-200 ease-out origin-right group-hover:scale-105 motion-reduce:transform-none">{fmt(row[metric], metric === 'time_loss_injuries' ? 0 : 1)}</p>
           <p className="mt-1 text-[11px] leading-tight text-inherit">{unit}</p>
         </div>
       </article>
@@ -758,6 +760,26 @@ function TeamComparisonTab({
     .sort((a, b) => (b[activeSetting]?.[metric] ?? 0) - (a[activeSetting]?.[metric] ?? 0));
   const max = Math.max(...ranked.map((row) => row[activeSetting]?.[metric] ?? 0), 1);
   const activeId = hoveredId ?? selectedId;
+  const ladderRef = useRef<HTMLDivElement>(null);
+  const ladderPositions = useRef(new Map<string, number>());
+
+  // Re-rank smoothly: capture each row's previous offset and slide it to its new place.
+  useLayoutEffect(() => {
+    const list = ladderRef.current;
+    if (!list) return;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    list.querySelectorAll<HTMLElement>('[data-row-id]').forEach((item) => {
+      const id = item.dataset.rowId ?? '';
+      const next = item.offsetTop;
+      const previous = ladderPositions.current.get(id);
+      ladderPositions.current.set(id, next);
+      if (reduceMotion || previous === undefined || previous === next) return;
+      item.animate(
+        [{ transform: `translateY(${previous - next}px)` }, { transform: 'translateY(0)' }],
+        { duration: COMPARISON_ANIMATION_MS, easing: COMPARISON_EASING },
+      );
+    });
+  }, [activeSetting, metric]);
 
   if (!rows.length) return <EmptyState>No approved team comparison rows are available.</EmptyState>;
   const settingLabel = activeSetting === 'all' ? 'overall' : activeSetting;
@@ -779,29 +801,22 @@ function TeamComparisonTab({
       </div>
       <div className="space-y-4">
         <Panel title={`Ranked by ${settingLabel} ${metricLabel} (${metricUnit})`}>
-          <div className="min-w-0">
-            {ranked.map((row, index) => {
-              const value = row[activeSetting]?.[metric] ?? 0;
-              const metricRow = row[activeSetting];
-              return (
-                <button
-                  key={row.comparison_id}
-                  type="button"
-                  aria-label={`${row.team_alias}, ${activeSetting} ${metricLabel}: ${fmt(value)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
-                  onMouseEnter={() => setHoveredId(row.comparison_id)}
-                  onMouseLeave={() => setHoveredId(undefined)}
-                  onFocus={() => setHoveredId(row.comparison_id)}
-                  onBlur={() => setHoveredId(undefined)}
-                  onClick={() => setSelectedId(row.comparison_id)}
-                  className={`grid min-h-12 w-full grid-cols-[26px_minmax(84px,140px)_minmax(80px,1fr)_76px] items-center gap-3 rounded px-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:gap-4 ${activeId === row.comparison_id ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
-                >
-                  <span className="tabular-nums text-xs text-muted-foreground">{index + 1}</span>
-                  <span className="truncate font-semibold text-foreground sm:text-base">{row.team_alias}</span>
-                  <span className="h-4 overflow-hidden rounded-full bg-muted sm:h-5"><span className="block h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${value / max * 100}%` }} /></span>
-                  <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmt(value)}</span>
-                </button>
-              );
-            })}
+          <div ref={ladderRef} className="min-w-0">
+            {ranked.map((row, index) => (
+              <ComparisonBarRow
+                key={row.comparison_id}
+                row={row}
+                rank={index + 1}
+                value={row[activeSetting]?.[metric] ?? 0}
+                max={max}
+                metric={metric}
+                metricLabel={metricLabel}
+                setting={activeSetting}
+                active={activeId === row.comparison_id}
+                onHover={setHoveredId}
+                onSelect={setSelectedId}
+              />
+            ))}
           </div>
         </Panel>
         <Panel title="Match and training values against the league average">
@@ -810,14 +825,14 @@ function TeamComparisonTab({
               <thead className="text-muted-foreground">
                 <tr>
                   <th rowSpan={2} className="w-[22%] px-3 pb-2 text-left text-sm font-semibold text-foreground align-bottom">Team</th>
-                  <th colSpan={2} className="rounded-t-md border-l-2 border-card bg-primary/15 px-3 py-2 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Match</th>
-                  <th colSpan={2} className="rounded-t-md border-l-4 border-card bg-primary/15 px-3 py-2 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Training</th>
+                  <th colSpan={2} className="rounded-t-md border-l-2 border-card bg-primary/15 px-3 py-1.5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Match</th>
+                  <th colSpan={2} className="rounded-t-md border-l-4 border-card bg-primary/15 px-3 py-1.5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Training</th>
                 </tr>
                 <tr>
-                  <th className="border-l-2 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Incidence</th>
-                  <th className="border-l-2 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Burden</th>
-                  <th className="border-l-4 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Incidence</th>
-                  <th className="border-l-2 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Burden</th>
+                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Incidence</th>
+                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
+                  <th className="border-l-4 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Incidence</th>
+                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
                 </tr>
               </thead>
               <tbody>
@@ -834,7 +849,7 @@ function TeamComparisonTab({
                         onFocus={() => setHoveredId(row.comparison_id)}
                         onBlur={() => setHoveredId(undefined)}
                         onClick={() => setSelectedId(row.comparison_id)}
-                        className="flex min-h-12 w-full items-center rounded px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:text-base"
+                        className="flex min-h-12 w-full items-center rounded px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:text-base lg:min-h-8"
                       >
                         {row.team_alias}
                       </button>
@@ -848,7 +863,7 @@ function TeamComparisonTab({
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex flex-wrap justify-end gap-x-4 gap-y-2 border-t border-border/60 pt-3 text-right text-[11px] text-muted-foreground">
+          <div className="mt-3 flex flex-wrap justify-end gap-x-4 gap-y-2 border-t border-border/60 pt-2.5 text-right text-[11px] text-muted-foreground">
             <span>Values are per 1,000 player-hours.</span>
             <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500/55" />≥10% below league average</span>
             <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-400/55" />within ±10%</span>
@@ -857,6 +872,88 @@ function TeamComparisonTab({
         </Panel>
       </div>
     </div>
+  );
+}
+
+const COMPARISON_ANIMATION_MS = 900;
+const COMPARISON_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+/** Tween a number so a metric change is readable while it happens. */
+function useAnimatedNumber(value: number) {
+  const [display, setDisplay] = useState(value);
+  const displayRef = useRef(value);
+
+  useEffect(() => {
+    const from = displayRef.current;
+    if (from === value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      displayRef.current = value;
+      setDisplay(value);
+      return;
+    }
+    let frame = 0;
+    const start = performance.now();
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - start) / COMPARISON_ANIMATION_MS);
+      const eased = 1 - (1 - progress) ** 3;
+      const current = from + (value - from) * eased;
+      displayRef.current = current;
+      setDisplay(current);
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [value]);
+
+  return display;
+}
+
+function ComparisonBarRow({
+  row,
+  rank,
+  value,
+  max,
+  metric,
+  metricLabel,
+  setting,
+  active,
+  onHover,
+  onSelect,
+}: {
+  row: TeamComparisonRow;
+  rank: number;
+  value: number;
+  max: number;
+  metric: ComparisonMetric;
+  metricLabel: string;
+  setting: ComparisonSetting;
+  active: boolean;
+  onHover: (id?: string) => void;
+  onSelect: (id: string) => void;
+}) {
+  const animatedValue = useAnimatedNumber(value);
+  const metricRow = row[setting];
+  return (
+    <button
+      data-row-id={row.comparison_id}
+      type="button"
+      aria-label={`${row.team_alias}, ${setting} ${metricLabel}: ${fmt(value)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
+      onMouseEnter={() => onHover(row.comparison_id)}
+      onMouseLeave={() => onHover(undefined)}
+      onFocus={() => onHover(row.comparison_id)}
+      onBlur={() => onHover(undefined)}
+      onClick={() => onSelect(row.comparison_id)}
+      className={`group grid min-h-12 w-full grid-cols-[26px_minmax(84px,140px)_minmax(80px,1fr)_76px] items-center gap-3 rounded px-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:gap-4 lg:min-h-10 ${active ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
+    >
+      <span className="tabular-nums text-xs text-muted-foreground transition-colors duration-300 group-hover:text-foreground">{rank}</span>
+      <span className="truncate font-semibold text-foreground sm:text-base">{row.team_alias}</span>
+      <span className="h-4 overflow-hidden rounded-full bg-muted sm:h-5">
+        <span
+          className={`block h-full rounded-full bg-primary transition-[width,filter] ease-[cubic-bezier(0.22,1,0.36,1)] duration-[900ms] ${active ? 'brightness-125' : ''}`}
+          style={{ width: `${(value / max) * 100}%` }}
+        />
+      </span>
+      <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmt(animatedValue)}</span>
+    </button>
   );
 }
 
