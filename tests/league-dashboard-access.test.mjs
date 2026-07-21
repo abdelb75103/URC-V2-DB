@@ -220,6 +220,17 @@ test('location ranking bars and body regions share one heat scale', async () => 
   assert.match(dashboard, /backgroundColor: heatMapColors \? locationHeatColor\(value, max\)/);
 });
 
+test('location detail becomes a vertical rail beside a larger desktop body map', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const bodyMap = await readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8');
+
+  assert.match(bodyMap, /max-w-\[390px\][^"\n]*lg:max-w-\[280px\][^"\n]*xl:max-w-\[320px\]/);
+  assert.match(dashboard, /xl:grid-cols-\[minmax\(0,1fr\)_10rem\]/);
+  assert.match(dashboard, /grid-cols-3[^"\n]*xl:flex[^"\n]*xl:flex-col/);
+  assert.match(dashboard, /metric === 'incidence_per_1000h'/);
+  assert.match(dashboard, /xl:border-l-primary/);
+});
+
 test('impact chart formats floating point axis ticks for presentation', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
 

@@ -1093,7 +1093,7 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
         <MetricControl value={metric} onChange={setMetric} locationOnly />
       </div>
       {rows.length ? (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+          <div className="grid gap-4 lg:grid-cols-2">
             <Panel contentClassName="p-4">
               <MetricBars
                 rows={barRows}
@@ -1105,14 +1105,16 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
               />
             </Panel>
             <Panel contentClassName="p-4">
-              <BodyMap
-                rows={rows}
-                metric={metric as LocationMetric}
-                activeCode={activeCode}
-                onHover={setHoveredCode}
-                onSelect={setSelectedCode}
-              />
-              <LocationDetail row={selected} />
+              <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_10rem] xl:items-stretch xl:gap-4">
+                <BodyMap
+                  rows={rows}
+                  metric={metric as LocationMetric}
+                  activeCode={activeCode}
+                  onHover={setHoveredCode}
+                  onSelect={setSelectedCode}
+                />
+                <LocationDetail row={selected} metric={metric} />
+              </div>
             </Panel>
           </div>
       ) : <EmptyState />}
@@ -1120,25 +1122,25 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
   );
 }
 
-function LocationDetail({ row }: { row?: InjuryProfileRow }) {
+function LocationDetail({ row, metric }: { row?: InjuryProfileRow; metric: ProfileMetric }) {
   return (
-    <div className="mt-3 overflow-hidden rounded-md border border-border/70 bg-background/35">
-      <div className="flex items-baseline justify-between gap-3 px-4 py-3">
+    <div className="mt-3 overflow-hidden rounded-md border border-border/70 bg-background/35 xl:mt-0 xl:flex xl:flex-col">
+      <div className="flex items-baseline justify-between gap-3 px-4 py-3 xl:block xl:py-4">
         <p className="text-xs font-medium text-muted-foreground">Selected location</p>
-        <p className="truncate text-base font-semibold text-foreground">{row?.label ?? 'Not available'}</p>
+        <p className="truncate text-base font-semibold text-foreground xl:mt-1 xl:text-lg">{row?.label ?? 'Not available'}</p>
       </div>
-      <div className="grid grid-cols-3 border-t border-border/60">
-        <LocationMetricValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} />
-        <LocationMetricValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" />
-        <LocationMetricValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" />
+      <div className="grid grid-cols-3 border-t border-border/60 xl:flex xl:flex-1 xl:flex-col">
+        <LocationMetricValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} active={metric === 'time_loss_injuries'} />
+        <LocationMetricValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
+        <LocationMetricValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
       </div>
     </div>
   );
 }
 
-function LocationMetricValue({ label, value, unit }: { label: string; value: string; unit?: string }) {
+function LocationMetricValue({ label, value, unit, active }: { label: string; value: string; unit?: string; active: boolean }) {
   return (
-    <div className="min-w-0 border-r border-border/50 px-3 py-3 last:border-r-0 sm:px-4">
+    <div className={`min-w-0 border-r border-border/50 px-3 py-3 last:border-r-0 sm:px-4 xl:flex xl:flex-1 xl:flex-col xl:justify-center xl:border-r-0 xl:border-b xl:px-4 xl:last:border-b-0 ${active ? 'xl:border-l-2 xl:border-l-primary xl:bg-primary/[0.04]' : 'xl:border-l-2 xl:border-l-transparent'}`}>
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className="mt-1 truncate text-lg font-semibold tabular-nums text-foreground">{value}</p>
       {unit && <p className="truncate text-[10px] text-muted-foreground">{unit}</p>}

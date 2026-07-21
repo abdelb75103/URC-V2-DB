@@ -76,7 +76,7 @@ export function BodyMap({
       </div>
       <svg
         viewBox="0 0 360 420"
-        className="mx-auto h-auto w-full max-w-[390px] lg:max-w-[240px]"
+        className="mx-auto h-auto w-full max-w-[390px] lg:max-w-[280px] xl:max-w-[320px]"
         aria-label="Interactive front and back body map"
         aria-describedby={tooltipId}
       >
