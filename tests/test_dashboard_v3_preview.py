@@ -304,7 +304,8 @@ class DashboardV3PreviewTests(unittest.TestCase):
             "Common Injuries",
         ):
             self.assertIn(label, UI)
-        self.assertIn("slice(0, 10)", UI)
+        self.assertIn("<InjuryTypeMap", UI)
+        self.assertIn("familyColors", UI)
         self.assertNotIn("Head-to-foot profile", UI)
 
     def test_draft_supplement_is_dev_only_with_complete_production_fallback(self) -> None:

@@ -78,6 +78,12 @@ export type InjuryProfileRow = {
   mean_severity_days: number | null;
 };
 
+export type InjuryTypeFamilyRow = Omit<InjuryProfileRow, 'dimension'> & {
+  dimension: 'injury_type_family';
+  mapping_version: 'injury_type_family_2026-07-21_v1';
+  subtypes: InjuryProfileRow[];
+};
+
 export type MonthlySettingRow = {
   month: string;
   setting: 'all' | 'match' | 'training' | 'unknown';
@@ -194,6 +200,7 @@ export type DashboardData = {
   body_locations: AnalyticsRow[];
   injury_types: AnalyticsRow[];
   injury_profiles: InjuryProfileRow[];
+  injury_type_families: InjuryTypeFamilyRow[];
   severity_distribution: SeverityRow[];
   prior_season: {
     season: string;

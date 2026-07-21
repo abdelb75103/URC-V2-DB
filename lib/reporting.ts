@@ -7,6 +7,7 @@ import type {
   DashboardData,
   HeadlineMetric,
   InjuryProfileRow,
+  InjuryTypeFamilyRow,
   SeverityRow,
   SettingMetricRow,
   TeamComparisonRow,
@@ -64,6 +65,26 @@ const injuryProfileSchema = z.object({
   incidence_per_1000h: z.number().nullish(),
   burden_per_1000h: z.number().nullish(),
   mean_severity_days: z.number().nullish(),
+});
+
+const injuryTypeSubtypeSchema = injuryProfileSchema.extend({
+  dimension: z.literal('injury_type'),
+});
+
+const injuryTypeFamilySchema = injuryProfileSchema.omit({ dimension: true }).extend({
+  dimension: z.literal('injury_type_family'),
+  mapping_version: z.literal('injury_type_family_2026-07-21_v1'),
+  subtypes: z.array(injuryTypeSubtypeSchema),
+}).superRefine((family, context) => {
+  family.subtypes.forEach((subtype, index) => {
+    if (subtype.setting !== family.setting) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['subtypes', index, 'setting'],
+        message: 'Subtype setting must match its injury type family setting',
+      });
+    }
+  });
 });
 
 const severityRowSchema = z.object({
@@ -135,6 +156,7 @@ const dashboardRowSchema = z.object({
   body_locations: z.array(analyticsRowSchema),
   injury_types: z.array(analyticsRowSchema),
   injury_profiles: z.array(injuryProfileSchema),
+  injury_type_families: z.array(injuryTypeFamilySchema),
   severity_distribution: z.array(severityRowSchema),
   prior_season: z.object({
     season: z.string(),
@@ -190,9 +212,9 @@ function teamDisplayAliases(): Record<string, string> {
 
 /**
  * Reads the latest approved release for a team from
- * reporting.latest_team_dashboard_v2 and validates it into DashboardData.
- * The v2 consumer view exposes only the whitelisted fields from the immutable
- * team snapshot stored with the approved 16-team dashboard bundle.
+ * reporting.latest_team_dashboard_v3 and validates it into DashboardData.
+ * The v3 consumer view keeps the V2 immutable snapshot projection and adds
+ * only the versioned injury-type family roll-up.
  *
  * Fail-closed contract:
  * - No reader credential or no approved release -> undefined (the dynamic
@@ -210,9 +232,9 @@ export async function getTeamDashboard(
   const result = await pool.query(
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
-            injury_types, injury_profiles, severity_distribution, prior_season,
+            injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
             limitations
-     from reporting.latest_team_dashboard_v2
+     from reporting.latest_team_dashboard_v3
      where team_key = $1 and season = $2`,
     [teamId, season]
   );
@@ -237,9 +259,9 @@ export async function getLeagueDashboard(
   const result = await pool.query(
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
-            injury_types, injury_profiles, severity_distribution, prior_season,
+            injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
             limitations
-     from reporting.latest_league_dashboard_v2
+     from reporting.latest_league_dashboard_v3
      where season = $1`,
     [season]
   );
@@ -341,9 +363,9 @@ export async function getTeamPageData(
        (select to_jsonb(team_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, severity_distribution, prior_season,
+                 injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
                  limitations
-          from reporting.latest_team_dashboard_v2
+          from reporting.latest_team_dashboard_v3
           where team_key = $1 and season = $2
         ) team_row) as dashboard,
        coalesce((
@@ -356,7 +378,7 @@ export async function getTeamPageData(
        ), '[]'::jsonb) as comparisons,
        (select to_jsonb(league_metrics_row) from (
           select coverage, headline, setting_metrics
-          from reporting.latest_league_dashboard_v2
+          from reporting.latest_league_dashboard_v3
           where season = $2
         ) league_metrics_row) as league_metrics`,
     [teamId, season]
@@ -398,9 +420,9 @@ export async function getLeaguePageData(
        (select to_jsonb(league_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, severity_distribution, prior_season,
+                 injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
                  limitations
-          from reporting.latest_league_dashboard_v2
+          from reporting.latest_league_dashboard_v3
           where season = $1
         ) league_row) as dashboard,
        coalesce((
@@ -532,6 +554,20 @@ function normalizeDashboardRow(
       burden_per_1000h: item.burden_per_1000h ?? null,
       mean_severity_days: item.mean_severity_days ?? null,
     })) as InjuryProfileRow[],
+    injury_type_families: row.injury_type_families.map((item) => ({
+      ...stripNulls(item),
+      exposure_hours: item.exposure_hours ?? null,
+      incidence_per_1000h: item.incidence_per_1000h ?? null,
+      burden_per_1000h: item.burden_per_1000h ?? null,
+      mean_severity_days: item.mean_severity_days ?? null,
+      subtypes: item.subtypes.map((subtype) => ({
+        ...stripNulls(subtype),
+        exposure_hours: subtype.exposure_hours ?? null,
+        incidence_per_1000h: subtype.incidence_per_1000h ?? null,
+        burden_per_1000h: subtype.burden_per_1000h ?? null,
+        mean_severity_days: subtype.mean_severity_days ?? null,
+      })),
+    })) as InjuryTypeFamilyRow[],
     severity_distribution: row.severity_distribution.map(stripNulls) as SeverityRow[],
     prior_season: row.prior_season,
     limitations: row.limitations,

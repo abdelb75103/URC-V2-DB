@@ -11,6 +11,24 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-21 — Injury-type family anatomy roll-up
+
+| Field | Value |
+|---|---|
+| Rule version | `injury_type_family_2026-07-21_v1` |
+| Status | accepted additive reporting reader |
+| Carry-forward | `carries-forward` |
+| Decision provenance | Abdel Babiker, 21 July 2026; approved the recommended family model and the methodology record in the Injury Types design/review session |
+| Migration | `20260721120000_injury_type_family_reader_v3.sql`, SHA-256 `763516def079dffe7bb66b5f5d092143900fa35e97781d8d035b15e9c70177e6` |
+
+**What changed.** The approved IOC injury-type rows are rolled into major display families for the Injury Types anatomy explorer: Muscle; Tendon; Ligament / sprain; Joint & capsule; Bone; Cartilage; Nervous system; Skin & superficial tissue; Internal organ; Vascular; and Other / unclassified. The mapping covers all 26 controlled injury-type codes. Each family retains its contributing controlled subtypes, and family counts and days lost are pooled before incidence, burden, and mean severity are derived. Types not present in an approved dashboard payload do not produce an interactive family total.
+
+**Why.** The dashboard needs a clinically legible anatomical overview rather than 26 competing fine-grained regions. The major-family layer matches the approved user interaction while preserving the exact subtype evidence and avoiding unsupported clinical inference. The transparent silhouette is a presentation layer only; the versioned SQL mapping remains the single analytical definition consumed by team and league readers.
+
+**Scope and lineage.** The additive `reporting.latest_team_dashboard_v3` and `reporting.latest_league_dashboard_v3` readers extend the immutable approved V2 payloads; frozen V1/V2 views and release data remain unchanged. Rates reuse `analysis.rate_per_1000_v1`. This rule carries forward to later seasons while their controlled injury types remain on the same canonical code list; any code-list or family-mapping change requires a new versioned mapping and a new recorded decision.
+
+---
+
 ## 2026-07-20 — Accepted 14-item adjudication batch
 
 | Field | Value |

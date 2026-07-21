@@ -38,7 +38,7 @@ test('league dashboard uses the approved database consumer view and fails closed
   assert.match(page, /Dashboard unavailable/);
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
 
-  assert.match(reporting, /reporting\.latest_league_dashboard_v2/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v3/);
   assert.match(reporting, /where season = \$1/);
   assert.match(reporting, /expected one league dashboard row/);
   assert.doesNotMatch(reporting, /reduce\(|incidence.*\/.*hours|burden.*\/.*hours/i);
@@ -51,16 +51,121 @@ test('published league dashboard is unlocked on the homepage', async () => {
   assert.match(home, /href="\/urc"/);
 });
 
-test('team dashboard reads the v2 approved-build projection', async () => {
+test('team dashboard reads the v3 approved-build projection', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
 
-  assert.match(reporting, /reporting\.latest_team_dashboard_v2/);
+  assert.match(reporting, /reporting\.latest_team_dashboard_v3/);
   assert.match(reporting, /setting_metrics/);
   assert.match(reporting, /injury_profiles/);
+  assert.match(reporting, /injury_type_families/);
   assert.match(reporting, /"injury_profile", "diagnosis"/);
   assert.match(reporting, /getTeamPageData/);
   assert.match(reporting, /getLeaguePageData/);
   assert.match(reporting, /one MVCC snapshot/);
+});
+
+test('injury type families remain database-defined and include subtype evidence', async () => {
+  const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
+  const types = await readFile(new URL('../lib/reporting-types.ts', import.meta.url), 'utf8');
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+
+  assert.match(reporting, /injury_type_families: z\.array\(injuryTypeFamilySchema\)/);
+  assert.match(reporting, /injuryTypeSubtypeSchema[\s\S]*dimension: z\.literal\('injury_type'\)/);
+  assert.match(reporting, /subtype\.setting !== family\.setting/);
+  assert.doesNotMatch(dashboard, /reduce\([^)]*(time_loss_injuries|days_lost)/);
+  assert.match(types, /export type InjuryTypeFamilyRow = Omit<InjuryProfileRow, 'dimension'> & \{[\s\S]*subtypes: InjuryProfileRow\[\];/);
+  assert.match(dashboard, /dashboard\.injury_type_families/);
+  assert.match(dashboard, /row\.subtypes\.map/);
+});
+
+test('injury type anatomy supports pointer, keyboard, and touch selection', async () => {
+  const anatomy = await readFile(new URL('../components/dashboard/injury-type-map.tsx', import.meta.url), 'utf8');
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+
+  assert.match(anatomy, /aria-label="Interactive injury type anatomy"/);
+  assert.match(anatomy, /onMouseEnter/);
+  assert.match(anatomy, /onFocus/);
+  assert.match(anatomy, /onClick/);
+  assert.match(anatomy, /event\.key === 'Enter' \|\| event\.key === ' '/);
+  assert.match(anatomy, /tabIndex:\s*0/);
+  assert.match(anatomy, /'aria-pressed': selected/);
+  assert.match(anatomy, /pointerEvents=\{enabled \? 'visiblePainted' : 'none'\}/);
+  assert.match(anatomy, /r="23"/);
+  const anatomyPanel = dashboard.indexOf('<InjuryTypeMap');
+  const rankingPanel = dashboard.indexOf('<MetricBars', anatomyPanel);
+  assert.ok(anatomyPanel > -1 && rankingPanel > anatomyPanel, 'anatomy must precede the linked ranking in DOM and visual order');
+  assert.doesNotMatch(dashboard.slice(anatomyPanel - 600, rankingPanel + 300), /order-[12]/);
+  assert.match(anatomy, /cx="266" cy="372"/);
+  assert.match(anatomy, /cx="266" cy="418"/);
+  assert.match(dashboard, /min-h-11/);
+});
+
+test('reader preserves versioned family totals and exact subtype evidence', async () => {
+  const priorUrl = process.env.WEB_READER_DB_URL;
+  process.env.WEB_READER_DB_URL = 'postgres://fixture';
+  let queryText = '';
+  globalThis.__urcWebReaderPool = {
+    query: async (sql) => {
+      queryText = sql;
+      return {
+        rows: [{
+          team: 'URC Overall',
+          season: '2024-25',
+          generated_at: '2026-07-21T00:00:00Z',
+          analysis_window: { start: '2024-07-01', end: '2025-06-30', basis: 'season' },
+          method: [],
+          coverage: { exposure_rows: 1, exposed_players: 1, weeks: 1, hours: 1200, distance_km: 0, included_exposure_status: 'included' },
+          headline: [{ key: 'time_loss_injuries', label: 'Time-loss injuries', value: 5, unit: 'cases', formula: '' }],
+          setting_split: [],
+          setting_metrics: [],
+          monthly: [],
+          body_locations: [],
+          injury_types: [],
+          injury_profiles: [],
+          injury_type_families: [{
+            dimension: 'injury_type_family',
+            code: 'muscle',
+            label: 'Muscle',
+            setting: 'all',
+            time_loss_injuries: 5,
+            days_lost: 61,
+            exposure_hours: 1200,
+            incidence_per_1000h: 4.1666666667,
+            burden_per_1000h: 50.8333333333,
+            mean_severity_days: 12.2,
+            mapping_version: 'injury_type_family_2026-07-21_v1',
+            subtypes: [{
+              dimension: 'injury_type',
+              code: 'muscle_injury',
+              label: 'Muscle injury',
+              setting: 'all',
+              time_loss_injuries: 5,
+              days_lost: 61,
+              exposure_hours: 1200,
+              incidence_per_1000h: 4.1666666667,
+              burden_per_1000h: 50.8333333333,
+              mean_severity_days: 12.2,
+            }],
+          }],
+          severity_distribution: [],
+          prior_season: { season: '2023-24', status: 'unavailable', note: '' },
+          limitations: [],
+        }],
+      };
+    },
+  };
+
+  try {
+    const { getLeagueDashboard } = await loadReportingForFixtureTest();
+    const dashboard = await getLeagueDashboard();
+    assert.match(queryText, /reporting\.latest_league_dashboard_v3/);
+    assert.equal(dashboard.injury_type_families[0].burden_per_1000h, 50.8333333333);
+    assert.equal(dashboard.injury_type_families[0].subtypes[0].code, 'muscle_injury');
+  } finally {
+    globalThis.__urcWebReaderPool = undefined;
+    if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;
+    else process.env.WEB_READER_DB_URL = priorUrl;
+  }
 });
 
 test('team comparisons cross the client boundary with display aliases only', async () => {
@@ -165,6 +270,7 @@ test('league and team page metrics include the released overall benchmark', asyn
     body_locations: [],
     injury_types: [],
     injury_profiles: [],
+    injury_type_families: [],
     severity_distribution: [],
     prior_season: { season: '2023-24', status: 'unavailable', note: '' },
     limitations: [],
@@ -225,7 +331,7 @@ test('location ranking bars and body regions share one heat scale', async () => 
 
   assert.match(bodyMap, /export function locationHeatColor/);
   assert.match(bodyMap, /fill=\{locationHeatColor\(value, max\)\}/);
-  assert.match(dashboard, /backgroundColor: heatMapColors \? locationHeatColor\(value, max\)/);
+  assert.match(dashboard, /backgroundColor:\s*heatMapColors\s*\? locationHeatColor\(value, max\)/);
 });
 
 test('location detail becomes a vertical rail beside a larger desktop body map', async () => {
