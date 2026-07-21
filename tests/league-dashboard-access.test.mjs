@@ -64,7 +64,7 @@ test('team dashboard reads the v3 approved-build projection', async () => {
   assert.match(reporting, /one MVCC snapshot/);
 });
 
-test('injury type families remain database-defined and include subtype evidence', async () => {
+test('injury type families remain database-defined while the interface stays at family level', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
   const types = await readFile(new URL('../lib/reporting-types.ts', import.meta.url), 'utf8');
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
@@ -75,7 +75,8 @@ test('injury type families remain database-defined and include subtype evidence'
   assert.doesNotMatch(dashboard, /reduce\([^)]*(time_loss_injuries|days_lost)/);
   assert.match(types, /export type InjuryTypeFamilyRow = Omit<InjuryProfileRow, 'dimension'> & \{[\s\S]*subtypes: InjuryProfileRow\[\];/);
   assert.match(dashboard, /dashboard\.injury_type_families/);
-  assert.match(dashboard, /row\.subtypes\.map/);
+  assert.doesNotMatch(dashboard, /row\.subtypes\.map/);
+  assert.doesNotMatch(dashboard, /Included types/);
 });
 
 test('injury type anatomy supports pointer, keyboard, and touch selection', async () => {
@@ -90,13 +91,18 @@ test('injury type anatomy supports pointer, keyboard, and touch selection', asyn
   assert.match(anatomy, /tabIndex:\s*0/);
   assert.match(anatomy, /'aria-pressed': selected/);
   assert.match(anatomy, /pointerEvents=\{enabled \? 'visiblePainted' : 'none'\}/);
+  assert.match(anatomy, /aria-hidden="true" pointerEvents="none"/);
   assert.match(anatomy, /r="23"/);
-  const anatomyPanel = dashboard.indexOf('<InjuryTypeMap');
-  const rankingPanel = dashboard.indexOf('<MetricBars', anatomyPanel);
-  assert.ok(anatomyPanel > -1 && rankingPanel > anatomyPanel, 'anatomy must precede the linked ranking in DOM and visual order');
-  assert.doesNotMatch(dashboard.slice(anatomyPanel - 600, rankingPanel + 300), /order-[12]/);
-  assert.match(anatomy, /cx="266" cy="372"/);
-  assert.match(anatomy, /cx="266" cy="418"/);
+  const typeTab = dashboard.slice(dashboard.indexOf('function InjuryTypesTab'), dashboard.indexOf('function ImpactTab'));
+  const rankingPanel = typeTab.indexOf('<MetricBars');
+  const metricRail = typeTab.indexOf('<InjuryTypeMetricRail');
+  const anatomyPanel = typeTab.indexOf('<InjuryTypeMap');
+  assert.ok(rankingPanel > -1 && metricRail > rankingPanel && anatomyPanel > metricRail, 'ranking, metric rail, and anatomy must follow the visual reading order');
+  assert.match(typeTab, /showSummary=\{false\}/);
+  assert.match(typeTab, /MetricControl value=\{metric\} onChange=\{setMetric\} locationOnly/);
+  assert.doesNotMatch(typeTab, /Severity|Included types/);
+  assert.match(typeTab, /row\.code !== 'other_unclassified'/);
+  assert.doesNotMatch(anatomy, /other_unclassified|unmapped_review|<text/);
   assert.match(dashboard, /min-h-11/);
 });
 

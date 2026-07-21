@@ -1135,7 +1135,7 @@ function LocationMetricValue({ label, value, unit, active }: { label: string; va
   );
 }
 
-function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors = false, familyColors = false }: {
+function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors = false, familyColors = false, showSummary = true }: {
   rows: ProfileMetricRow[];
   metric: ProfileMetric;
   activeCode?: string;
@@ -1143,6 +1143,7 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
   onSelect: (code: string) => void;
   heatMapColors?: boolean;
   familyColors?: boolean;
+  showSummary?: boolean;
 }) {
   const max = Math.max(...rows.map((row) => metricValue(row, metric)), 1);
   const meta = metricMeta(metric);
@@ -1150,7 +1151,7 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
   const activeRow = rows.find((row) => row.code === activeCode) ?? rows[0];
   return (
     <div className={heatMapColors ? 'space-y-0' : 'space-y-1'}>
-      <div id={tooltipId} aria-live="polite" className={heatMapColors ? 'sr-only' : 'mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground'}>
+      <div id={tooltipId} aria-live="polite" className={heatMapColors || !showSummary ? 'sr-only' : 'mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground'}>
         {activeRow ? (
           <>
             <span className="font-semibold text-foreground">{activeRow.label}</span>
@@ -1200,13 +1201,14 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
 }
 
 function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
-  const settings = availableSettings(families, ['all', 'match', 'training']);
+  const visibleFamilies = families.filter((row) => row.code !== 'other_unclassified' && row.code !== 'unmapped_review');
+  const settings = availableSettings(visibleFamilies, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
-  const [metric, setMetric] = useState<ProfileMetric>('burden_per_1000h');
+  const [metric, setMetric] = useState<ProfileMetric>('incidence_per_1000h');
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
   const effectiveSetting = settings.includes(setting) ? setting : settings[0] ?? 'all';
-  const rows = families
+  const rows = visibleFamilies
     .filter((row) => row.setting === effectiveSetting)
     .sort((a, b) => metricValue(b, metric) - metricValue(a, metric) || a.label.localeCompare(b.label));
   const pinnedCode = rows.some((row) => row.code === selectedCode)
@@ -1223,25 +1225,11 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
         <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Injury Types</h2>
         <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <SettingControl value={effectiveSetting} settings={settings.length ? settings : ['all']} onChange={setSetting} />
-          <MetricControl value={metric} onChange={setMetric} />
+          <MetricControl value={metric} onChange={setMetric} locationOnly />
         </div>
       </div>
       {rows.length ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Panel contentClassName="p-4">
-            <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_11rem] xl:items-stretch xl:gap-4">
-              <InjuryTypeMap
-                rows={rows}
-                metric={metric as InjuryTypeMetric}
-                activeCode={activeCode}
-                selectedCode={pinnedCode}
-                onHover={setHoveredCode}
-                onSelect={setSelectedCode}
-              />
-              <InjuryTypeDetail row={activeRow} metric={metric} />
-            </div>
-            <InjuryTypeSubtypes row={activeRow} metric={metric} />
-          </Panel>
           <Panel contentClassName="p-4">
             <MetricBars
               rows={rows}
@@ -1250,7 +1238,21 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
               onHover={setHoveredCode}
               onSelect={setSelectedCode}
               familyColors
+              showSummary={false}
             />
+          </Panel>
+          <Panel contentClassName="p-4">
+            <div className="grid gap-3 xl:grid-cols-[10rem_minmax(0,1fr)] xl:items-stretch xl:gap-4">
+              <InjuryTypeMetricRail row={activeRow} metric={metric} />
+              <InjuryTypeMap
+                rows={rows}
+                metric={metric as InjuryTypeMetric}
+                activeCode={activeCode}
+                selectedCode={pinnedCode}
+                onHover={setHoveredCode}
+                onSelect={setSelectedCode}
+              />
+            </div>
           </Panel>
         </div>
       ) : <EmptyState />}
@@ -1258,47 +1260,23 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
   );
 }
 
-function InjuryTypeDetail({ row, metric }: { row?: InjuryTypeFamilyRow; metric: ProfileMetric }) {
+function InjuryTypeMetricRail({ row, metric }: { row?: InjuryTypeFamilyRow; metric: ProfileMetric }) {
   return (
-    <div className="mt-3 overflow-hidden rounded-md border border-border/70 bg-background/35 xl:mt-0 xl:flex xl:flex-col">
-      <div className="flex items-start gap-3 px-4 py-3 xl:block xl:py-4">
+    <div className="overflow-hidden rounded-md border border-border/70 bg-background/35 xl:flex xl:flex-col">
+      <div className="flex items-center gap-3 px-4 py-3 xl:block xl:py-4">
         <span
-          className="mt-1 h-8 w-1.5 shrink-0 rounded-full xl:mb-3 xl:block xl:h-1.5 xl:w-10"
+          className="h-8 w-1.5 shrink-0 rounded-full xl:mb-3 xl:block xl:h-1.5 xl:w-10"
           style={{ backgroundColor: row ? INJURY_FAMILY_COLORS[row.code] : 'hsl(var(--border))' }}
           aria-hidden="true"
         />
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">Selected family</p>
-          <p className="mt-1 text-base font-semibold leading-tight text-foreground xl:text-lg">{row?.label ?? 'Not available'}</p>
+          <p className="truncate text-base font-semibold leading-tight text-foreground xl:text-lg">{row?.label ?? 'Not available'}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 border-t border-border/60 xl:flex xl:flex-1 xl:flex-col">
-        <LocationMetricValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} active={metric === 'time_loss_injuries'} />
+      <div className="grid grid-cols-3 border-t border-border/60 xl:flex xl:flex-1 xl:flex-col">
+        <LocationMetricValue label="Count" value={fmt(row?.time_loss_injuries, 0)} active={metric === 'time_loss_injuries'} />
         <LocationMetricValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
         <LocationMetricValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
-        <LocationMetricValue label="Severity" value={fmt(row?.mean_severity_days)} unit="days" active={metric === 'mean_severity_days'} />
-      </div>
-    </div>
-  );
-}
-
-function InjuryTypeSubtypes({ row, metric }: { row?: InjuryTypeFamilyRow; metric: ProfileMetric }) {
-  if (!row?.subtypes.length) return null;
-  const meta = metricMeta(metric);
-
-  return (
-    <div className="mt-4 border-t border-border/60 pt-4">
-      <div className="mb-3 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold text-foreground">Included types</h3>
-        <p className="text-xs text-muted-foreground">{meta.label}</p>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {row.subtypes.map((subtype) => (
-          <div key={subtype.code} className="flex min-h-11 items-center justify-between gap-3 rounded-md bg-background/45 px-3 py-2">
-            <span className="min-w-0 truncate text-sm text-muted-foreground">{subtype.label}</span>
-            <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">{fmt(subtype[metric])}</span>
-          </div>
-        ))}
       </div>
     </div>
   );
