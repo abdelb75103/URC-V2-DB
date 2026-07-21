@@ -47,6 +47,61 @@ const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; lon
   { key: 'mean_severity_days', label: 'Severity', shortUnit: 'days', longUnit: 'days' },
 ];
 
+type InjuryCardColor = { background: string; foreground: string };
+
+const REFERENCE_INJURY_COLORS: Record<string, InjuryCardColor> = {
+  concussion: { background: '#e5252a', foreground: '#ffffff' },
+  contusion_haematoma: { background: '#f59e0b', foreground: '#ffffff' },
+  compound__thigh__contusion_superficial: { background: '#f59e0b', foreground: '#ffffff' },
+  compound__knee__joint_sprain: { background: '#3b82f6', foreground: '#ffffff' },
+  hamstring_strain: { background: '#9333ea', foreground: '#ffffff' },
+  compound__thigh__muscle_injury: { background: '#9333ea', foreground: '#ffffff' },
+  compound__ankle__joint_sprain: { background: '#16a34a', foreground: '#ffffff' },
+  adductor_groin: { background: '#db2777', foreground: '#ffffff' },
+  compound__knee__peripheral_nerve_injury: { background: '#db2777', foreground: '#ffffff' },
+  calf_muscle: { background: '#f97316', foreground: '#ffffff' },
+  compound__lower_leg__muscle_injury: { background: '#f97316', foreground: '#ffffff' },
+  compound__shoulder__joint_sprain: { background: '#14b8a6', foreground: '#ffffff' },
+  compound__shoulder__tendon_rupture: { background: '#06b6d4', foreground: '#ffffff' },
+  compound__ankle__fracture: { background: '#0d9488', foreground: '#ffffff' },
+  compound__lower_leg__fracture: { background: '#4f46e5', foreground: '#ffffff' },
+  compound__wrist__fracture: { background: '#0ea5e9', foreground: '#ffffff' },
+  compound__wrist__tendinopathy: { background: '#14b8a6', foreground: '#ffffff' },
+  compound__shoulder__fracture: { background: '#eab308', foreground: '#ffffff' },
+  compound__lumbosacral__synovitis_capsulitis: { background: '#65a30d', foreground: '#ffffff' },
+  compound__lumbosacral__cartilage_injury: { background: '#84cc16', foreground: '#ffffff' },
+  compound__lumbosacral__tendinopathy: { background: '#eab308', foreground: '#ffffff' },
+  compound__lumbosacral__nonspecific: { background: '#c026d3', foreground: '#ffffff' },
+  compound__forearm__fracture: { background: '#1e40af', foreground: '#ffffff' },
+};
+
+const FALLBACK_INJURY_COLORS = [
+  '#007d92',
+  '#6d28d9',
+  '#b56000',
+  '#00759a',
+  '#007a55',
+  '#c94b00',
+  '#4f46e5',
+  '#007a78',
+  '#c51b4a',
+  '#075fc7',
+  '#966b00',
+  '#08783f',
+  '#1e40af',
+  '#7e22ce',
+  '#be123c',
+  '#007f6d',
+  '#0369a1',
+  '#5b21b6',
+  '#b45309',
+  '#0f766e',
+  '#4338ca',
+  '#0e7490',
+  '#15803d',
+  '#9f1239',
+] as const;
+
 const LOCATION_ORDER = [
   'head',
   'neck',
@@ -442,39 +497,217 @@ function CommonInjuriesTab({ profiles, supplement }: { profiles: InjuryProfileRo
   const source = reportingDiagnosisRows(profiles, supplement);
   const settings = availableSettings(source, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
-  const rows = source
+  const rows = source.filter((row) => row.setting === setting && row.code !== 'unknown');
+  const injuryColors = commonInjuryColorMap(source);
+  const totalInjuries = source
     .filter((row) => row.setting === setting)
-    .sort((a, b) => b.time_loss_injuries - a.time_loss_injuries || a.label.localeCompare(b.label));
+    .reduce((sum, row) => sum + row.time_loss_injuries, 0);
+  const settingTitle = setting === 'all' ? '' : `${setting[0].toUpperCase()}${setting.slice(1)} `;
 
   return (
     <div>
-      <SectionHeading title="Common Injuries" />
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Most Common {settingTitle}Injuries</h2>
+          <p className="mt-2 text-sm text-muted-foreground">Top five time-loss diagnoses. Rates use player-hours; severity is mean days lost.</p>
+        </div>
         <SettingControl value={setting} settings={settings.length ? settings : ['all', 'match', 'training']} onChange={setSetting} />
       </div>
-      {rows.length ? <ProfileCards rows={rows.slice(0, 10)} /> : <EmptyState />}
+      {rows.length ? <CommonInjuryRankings rows={rows} totalInjuries={totalInjuries} injuryColors={injuryColors} /> : <EmptyState />}
     </div>
   );
 }
 
-function ProfileCards({ rows }: { rows: InjuryProfileRow[] }) {
+function commonInjuryColorMap(rows: InjuryProfileRow[]) {
+  const codes: string[] = [];
+  const seen = new Set<string>();
+  const visibleBySetting = new Map<Setting, Set<string>>();
+  const addCode = (code: string) => {
+    if (code !== 'unknown' && !seen.has(code)) {
+      seen.add(code);
+      codes.push(code);
+    }
+  };
+
+  for (const setting of ['all', 'match', 'training'] as const) {
+    const visibleCodes = new Set<string>();
+    for (const metric of METRICS) {
+      [...rows]
+        .filter((row) => row.setting === setting && row.code !== 'unknown' && metricValue(row, metric.key) > 0)
+        .sort((a, b) => metricValue(b, metric.key) - metricValue(a, metric.key) || a.label.localeCompare(b.label))
+        .slice(0, 5)
+        .forEach((row) => {
+          addCode(row.code);
+          visibleCodes.add(row.code);
+        });
+    }
+    visibleBySetting.set(setting, visibleCodes);
+  }
+
+  [...new Set(rows.map((row) => row.code))].sort().forEach(addCode);
+  const neighbours = new Map(codes.map((code) => [code, new Set<string>()]));
+  for (const visibleCodes of visibleBySetting.values()) {
+    for (const code of visibleCodes) {
+      for (const other of visibleCodes) {
+        if (other !== code) neighbours.get(code)?.add(other);
+      }
+    }
+  }
+
+  const assigned = new Map<string, InjuryCardColor>();
+  for (const code of codes) {
+    const referenceColor = REFERENCE_INJURY_COLORS[code];
+    if (referenceColor) assigned.set(code, referenceColor);
+  }
+
+  const available = [...FALLBACK_INJURY_COLORS];
+  const orderedCodes = [...codes].sort((a, b) =>
+    (neighbours.get(b)?.size ?? 0) - (neighbours.get(a)?.size ?? 0) || a.localeCompare(b));
+
+  for (const code of orderedCodes) {
+    if (assigned.has(code)) continue;
+    const neighbourColors = [...(neighbours.get(code) ?? [])]
+      .map((other) => assigned.get(other)?.background)
+      .filter((color): color is string => Boolean(color));
+    const comparisonColors = neighbourColors.length
+      ? neighbourColors
+      : [...assigned.values()].map((color) => color.background);
+    let selectedIndex = 0;
+    let bestDistance = -1;
+    for (let index = 0; index < available.length; index += 1) {
+      const candidate = available[index];
+      const distance = comparisonColors.length
+        ? Math.min(...comparisonColors.map((color) => hexColorDistance(candidate, color)))
+        : Number.POSITIVE_INFINITY;
+      if (distance > bestDistance) {
+        selectedIndex = index;
+        bestDistance = distance;
+      }
+    }
+    const paletteColor = available.splice(selectedIndex, 1)[0];
+    const generatedHue = (205 + assigned.size * 137.508) % 360;
+    assigned.set(code, {
+      background: paletteColor ?? `hsl(${generatedHue} 76% 38%)`,
+      foreground: '#ffffff',
+    });
+  }
+
+  return assigned;
+}
+
+function hexColorDistance(a: string, b: string) {
+  const channels = (color: string) => [1, 3, 5].map((index) => Number.parseInt(color.slice(index, index + 2), 16));
+  const [ar, ag, ab] = channels(a);
+  const [br, bg, bb] = channels(b);
+  return Math.hypot(ar - br, ag - bg, ab - bb);
+}
+
+function CommonInjuryRankings({
+  rows,
+  totalInjuries,
+  injuryColors,
+}: {
+  rows: InjuryProfileRow[];
+  totalInjuries: number;
+  injuryColors: Map<string, InjuryCardColor>;
+}) {
   return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      {rows.map((row) => (
-        <article key={`${row.setting}-${row.code}`} className="grid overflow-hidden rounded-lg border border-border/70 bg-card/70 sm:grid-cols-[5px_minmax(150px,1.25fr)_minmax(320px,2fr)]">
-          <div className="h-1 sm:h-auto" style={{ backgroundColor: profileColor(row.code) }} />
-          <div className="flex items-center p-5">
-            <h3 className="text-lg font-semibold leading-snug text-foreground">{row.label}</h3>
-          </div>
-          <div className="grid grid-cols-2 border-t border-border/60 sm:grid-cols-4 sm:border-l sm:border-t-0">
-            <ProfileValue label="Count" value={fmt(row.time_loss_injuries, 0)} />
-            <ProfileValue label="Incidence" value={fmt(row.incidence_per_1000h)} unit="injuries /1,000 h" />
-            <ProfileValue label="Burden" value={fmt(row.burden_per_1000h)} unit="days /1,000 h" />
-            <ProfileValue label="Severity" value={fmt(row.mean_severity_days)} unit="days" />
-          </div>
-        </article>
+    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      {METRICS.map((metric) => (
+        <CommonInjuryLane
+          key={metric.key}
+          metric={metric}
+          rows={rows}
+          totalInjuries={totalInjuries}
+          injuryColors={injuryColors}
+        />
       ))}
     </div>
+  );
+}
+
+function CommonInjuryLane({
+  metric,
+  rows,
+  totalInjuries,
+  injuryColors,
+}: {
+  metric: (typeof METRICS)[number];
+  rows: InjuryProfileRow[];
+  totalInjuries: number;
+  injuryColors: Map<string, InjuryCardColor>;
+}) {
+  const ranked = [...rows]
+    .filter((row) => metricValue(row, metric.key) > 0)
+    .sort((a, b) => metricValue(b, metric.key) - metricValue(a, metric.key) || a.label.localeCompare(b.label))
+    .slice(0, 5);
+
+  return (
+    <section aria-labelledby={`common-injuries-${metric.key}`}>
+      <h3 id={`common-injuries-${metric.key}`} className="mb-3 text-base font-semibold text-foreground sm:text-lg">
+        {metric.label}
+      </h3>
+      {ranked.length ? (
+        <ol className="space-y-2.5">
+          {ranked.map((row, index) => (
+            <CommonInjuryCard
+              key={`${row.setting}-${metric.key}-${row.code}`}
+              row={row}
+              metric={metric.key}
+              rank={index + 1}
+              totalInjuries={totalInjuries}
+              color={injuryColors.get(row.code) ?? { background: profileColor(row.code), foreground: '#ffffff' }}
+            />
+          ))}
+        </ol>
+      ) : <EmptyState>No ranked injuries are available for {metric.label.toLowerCase()}.</EmptyState>}
+    </section>
+  );
+}
+
+function CommonInjuryCard({
+  row,
+  metric,
+  rank,
+  totalInjuries,
+  color,
+}: {
+  row: InjuryProfileRow;
+  metric: ProfileMetric;
+  rank: number;
+  totalInjuries: number;
+  color: InjuryCardColor;
+}) {
+  const share = totalInjuries > 0 ? Math.round((row.time_loss_injuries / totalInjuries) * 100) : 0;
+  const unit = metric === 'time_loss_injuries'
+    ? 'cases'
+    : metric === 'incidence_per_1000h'
+      ? 'per 1,000 player-h'
+      : metric === 'burden_per_1000h'
+        ? 'days per 1,000 player-h'
+        : 'mean days lost';
+
+  return (
+    <li
+      className="min-h-24 overflow-hidden rounded-lg px-3 py-3.5"
+      style={{
+        backgroundColor: `color-mix(in srgb, ${color.background} 90%, black)`,
+        color: color.foreground,
+      }}
+    >
+      <article className="flex h-full items-center justify-between gap-3" aria-label={`${rank}. ${row.label}, ${fmt(row[metric], metric === 'time_loss_injuries' ? 0 : 1)} ${unit}`}>
+        <div className="min-w-0 self-center">
+          <h4 className="text-sm font-semibold leading-snug text-inherit">{row.label}</h4>
+          {metric === 'time_loss_injuries' && (
+            <p className="mt-1 text-xs text-inherit">{share}% of time-loss cases</p>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-xl font-bold leading-none tabular-nums text-inherit">{fmt(row[metric], metric === 'time_loss_injuries' ? 0 : 1)}</p>
+          <p className="mt-1 text-[11px] leading-tight text-inherit">{unit}</p>
+        </div>
+      </article>
+    </li>
   );
 }
 
@@ -491,31 +724,10 @@ function ProfileValue({ label, value, unit }: { label: string; value: string; un
 type ComparisonMetric = 'incidence_per_1000h' | 'burden_per_1000h';
 type ComparisonSetting = 'all' | 'match' | 'training';
 
-function ComparisonRowTooltip({
-  id,
-  row,
-  setting,
-  metric,
-}: {
-  id: string;
-  row?: TeamComparisonRow;
-  setting: ComparisonSetting;
-  metric: ComparisonMetric;
-}) {
-  const metricRow = row?.[setting];
-  const metricLabel = metric === 'incidence_per_1000h' ? 'Incidence' : 'Burden';
-  const unit = metric === 'incidence_per_1000h' ? 'injuries /1,000 h' : 'days /1,000 h';
-  return (
-    <div id={id} aria-live="polite" className="mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground">
-      {row && metricRow ? (
-        <>
-          <p className="font-semibold text-foreground">{row.team_alias}</p>
-          <p className="mt-0.5 text-foreground"><span className="font-medium">{metricLabel}:</span> <span className="tabular-nums">{fmt(metricRow[metric])} {unit}</span></p>
-          <p className="mt-1 text-muted-foreground">n = {fmt(metricRow.time_loss_injuries, 0)} time-loss cases. {fmtHours(metricRow.exposure_hours)} player-hours.</p>
-        </>
-      ) : 'No comparison selected.'}
-    </div>
-  );
+function deltaTone(delta: number) {
+  if (delta <= -10) return 'bg-emerald-500/20 text-emerald-100';
+  if (delta >= 10) return 'bg-red-500/20 text-red-100';
+  return 'bg-amber-400/20 text-amber-100';
 }
 
 function TeamComparisonTab({
@@ -535,94 +747,110 @@ function TeamComparisonTab({
   const [metric, setMetric] = useState<ComparisonMetric>('incidence_per_1000h');
   const [hoveredId, setHoveredId] = useState<string>();
   const [selectedId, setSelectedId] = useState<string>();
-  const tooltipId = useId();
   const activeSetting = availableSettingOptions.some(({ value }) => value === setting)
     ? setting
     : availableSettingOptions[0]?.value ?? 'all';
   const benchmark = leagueMetrics.find((row) => row.setting === activeSetting);
+  const matchBenchmark = leagueMetrics.find((row) => row.setting === 'match');
+  const trainingBenchmark = leagueMetrics.find((row) => row.setting === 'training');
   const ranked = [...rows]
     .filter((row) => row[activeSetting]?.[metric] != null)
     .sort((a, b) => (b[activeSetting]?.[metric] ?? 0) - (a[activeSetting]?.[metric] ?? 0));
   const max = Math.max(...ranked.map((row) => row[activeSetting]?.[metric] ?? 0), 1);
-  const activeId = hoveredId ?? selectedId ?? ranked[0]?.comparison_id;
-  const activeRow = rows.find((row) => row.comparison_id === activeId);
+  const activeId = hoveredId ?? selectedId;
 
   if (!rows.length) return <EmptyState>No approved team comparison rows are available.</EmptyState>;
+  const settingLabel = activeSetting === 'all' ? 'overall' : activeSetting;
+  const metricLabel = metric === 'incidence_per_1000h' ? 'incidence' : 'burden';
+  const metricUnit = metric === 'incidence_per_1000h' ? 'injuries /1,000 hours' : 'days /1,000 hours';
+  const alphabetical = [...rows].sort((a, b) => a.team_alias.localeCompare(b.team_alias));
   return (
     <div>
-      <SectionHeading title="Team Comparison" />
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <Segmented value={activeSetting} options={availableSettingOptions.length ? availableSettingOptions : comparisonSettings} onChange={setSetting} label="Choose comparison setting" />
-        <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'Incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Team Comparison</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented value={activeSetting} options={availableSettingOptions.length ? availableSettingOptions : comparisonSettings} onChange={setSetting} label="Choose comparison setting" />
+          <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'Incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
+        </div>
       </div>
-      <div className="mb-6 grid overflow-hidden rounded-lg border border-border/70 bg-card/70 sm:grid-cols-2">
-        <OverviewStat label={`League ${activeSetting === 'all' ? 'overall' : activeSetting} incidence`} value={fmt(benchmark?.incidence_per_1000h)} unit="/1,000 h" />
-        <OverviewStat label={`League ${activeSetting === 'all' ? 'overall' : activeSetting} burden`} value={fmt(benchmark?.burden_per_1000h)} unit="days /1,000 h" />
+      <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-lg border border-border/70 bg-card/70">
+        <OverviewStat label={`League ${settingLabel} incidence`} value={fmt(benchmark?.incidence_per_1000h)} unit="injuries /1,000 hours" />
+        <OverviewStat label={`League ${settingLabel} burden`} value={fmt(benchmark?.burden_per_1000h)} unit="days /1,000 hours" />
       </div>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(420px,0.9fr)]">
-        <Panel title="League standings">
-          <ComparisonRowTooltip id={tooltipId} row={activeRow} setting={activeSetting} metric={metric} />
-          <div className="max-h-[560px] space-y-1 overflow-y-auto pr-1">
+      <div className="space-y-4">
+        <Panel title={`Ranked by ${settingLabel} ${metricLabel} (${metricUnit})`}>
+          <div className="min-w-0">
             {ranked.map((row, index) => {
               const value = row[activeSetting]?.[metric] ?? 0;
+              const metricRow = row[activeSetting];
               return (
                 <button
                   key={row.comparison_id}
                   type="button"
-                  aria-describedby={tooltipId}
-                  aria-label={`${row.team_alias}, ${activeSetting} ${metric === 'incidence_per_1000h' ? 'incidence' : 'burden'}: ${fmt(value)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}`}
+                  aria-label={`${row.team_alias}, ${activeSetting} ${metricLabel}: ${fmt(value)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
                   onMouseEnter={() => setHoveredId(row.comparison_id)}
                   onMouseLeave={() => setHoveredId(undefined)}
                   onFocus={() => setHoveredId(row.comparison_id)}
                   onBlur={() => setHoveredId(undefined)}
                   onClick={() => setSelectedId(row.comparison_id)}
-                  className={`grid min-h-12 w-full grid-cols-[28px_minmax(100px,0.7fr)_minmax(110px,1fr)_86px] items-center gap-3 rounded px-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeId === row.comparison_id ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
+                  className={`grid min-h-12 w-full grid-cols-[26px_minmax(84px,140px)_minmax(80px,1fr)_76px] items-center gap-3 rounded px-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:gap-4 ${activeId === row.comparison_id ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
                 >
-                  <span className="tabular-nums text-muted-foreground">{index + 1}</span>
-                  <span className="truncate font-semibold text-foreground">{row.team_alias}</span>
-                  <span className="h-3 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${value / max * 100}%` }} /></span>
-                  <span className="text-right text-base font-semibold tabular-nums text-foreground">{fmt(value)}</span>
+                  <span className="tabular-nums text-xs text-muted-foreground">{index + 1}</span>
+                  <span className="truncate font-semibold text-foreground sm:text-base">{row.team_alias}</span>
+                  <span className="h-4 overflow-hidden rounded-full bg-muted sm:h-5"><span className="block h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${value / max * 100}%` }} /></span>
+                  <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmt(value)}</span>
                 </button>
               );
             })}
           </div>
         </Panel>
-        <Panel title="Relative to league average" className="min-w-0">
-          <div className="overflow-x-auto pb-1">
-            <table className="w-full min-w-[480px] table-fixed text-sm">
+        <Panel title="Match and training values against the league average">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] table-fixed text-sm">
               <thead className="text-muted-foreground">
                 <tr>
-                  <th className="w-[38%] px-2 pb-3 text-left font-medium">Team</th>
-                  <th className="w-[31%] px-2 pb-3 text-right font-medium leading-tight">Incidence</th>
-                  <th className="w-[31%] px-2 pb-3 text-right font-medium leading-tight">Burden</th>
+                  <th rowSpan={2} className="w-[22%] px-3 pb-2 text-left text-sm font-semibold text-foreground align-bottom">Team</th>
+                  <th colSpan={2} className="rounded-t-md border-l-2 border-card bg-primary/15 px-3 py-2 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Match</th>
+                  <th colSpan={2} className="rounded-t-md border-l-4 border-card bg-primary/15 px-3 py-2 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Training</th>
+                </tr>
+                <tr>
+                  <th className="border-l-2 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Incidence</th>
+                  <th className="border-l-2 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Burden</th>
+                  <th className="border-l-4 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Incidence</th>
+                  <th className="border-l-2 border-card px-3 pb-2 pt-1.5 text-center text-sm font-medium text-foreground">Burden</th>
                 </tr>
               </thead>
               <tbody>
-                {[...rows].sort((a, b) => a.team_alias.localeCompare(b.team_alias)).map((row) => (
-                  <tr key={row.comparison_id} className={`border-t border-border/40 ${activeId === row.comparison_id ? 'bg-muted/40' : ''}`}>
-                    <td className="px-2 py-2 font-medium text-foreground">
+                {alphabetical.map((row) => (
+                  <tr
+                    key={row.comparison_id}
+                    className={`border-t border-border/40 ${activeId === row.comparison_id ? 'bg-muted/40' : ''}`}
+                    onMouseEnter={() => setHoveredId(row.comparison_id)}
+                    onMouseLeave={() => setHoveredId(undefined)}
+                  >
+                    <td className="font-medium text-foreground">
                       <button
                         type="button"
-                        aria-describedby={tooltipId}
-                        onMouseEnter={() => setHoveredId(row.comparison_id)}
-                        onMouseLeave={() => setHoveredId(undefined)}
                         onFocus={() => setHoveredId(row.comparison_id)}
                         onBlur={() => setHoveredId(undefined)}
                         onClick={() => setSelectedId(row.comparison_id)}
-                        className="min-h-11 rounded px-1 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="flex min-h-12 w-full items-center rounded px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:text-base"
                       >
                         {row.team_alias}
                       </button>
                     </td>
-                    <BenchmarkCell value={row[activeSetting]?.incidence_per_1000h} average={benchmark?.incidence_per_1000h} />
-                    <BenchmarkCell value={row[activeSetting]?.burden_per_1000h} average={benchmark?.burden_per_1000h} />
+                    <BenchmarkCell value={row.match?.incidence_per_1000h} average={matchBenchmark?.incidence_per_1000h} />
+                    <BenchmarkCell value={row.match?.burden_per_1000h} average={matchBenchmark?.burden_per_1000h} />
+                    <BenchmarkCell value={row.training?.incidence_per_1000h} average={trainingBenchmark?.incidence_per_1000h} groupStart />
+                    <BenchmarkCell value={row.training?.burden_per_1000h} average={trainingBenchmark?.burden_per_1000h} />
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex flex-wrap gap-3 border-t border-border/60 pt-4 text-[11px] text-muted-foreground">
-            <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500/55" />≥10% below</span>
+          <div className="mt-4 flex flex-wrap justify-end gap-x-4 gap-y-2 border-t border-border/60 pt-3 text-right text-[11px] text-muted-foreground">
+            <span>Values are per 1,000 player-hours.</span>
+            <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-emerald-500/55" />≥10% below league average</span>
             <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-400/55" />within ±10%</span>
             <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-red-500/55" />≥10% above</span>
           </div>
@@ -632,13 +860,18 @@ function TeamComparisonTab({
   );
 }
 
-function BenchmarkCell({ value, average }: { value?: number | null; average?: number | null }) {
-  if (value === null || value === undefined || average === null || average === undefined || average === 0) {
-    return <td className="px-2 py-2 text-right text-muted-foreground">Not available</td>;
+function BenchmarkCell({ value, average, groupStart = false }: {
+  value?: number | null;
+  average?: number | null;
+  groupStart?: boolean;
+}) {
+  const divider = groupStart ? 'border-l-4' : 'border-l-2';
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return <td className={`${divider} border-card px-3 text-center text-xs text-muted-foreground`}>n/a</td>;
   }
-  const delta = (value - average) / average * 100;
-  const tone = delta <= -10 ? 'bg-emerald-500/20 text-emerald-100' : delta >= 10 ? 'bg-red-500/20 text-red-100' : 'bg-amber-400/20 text-amber-100';
-  return <td className={`px-2 py-2 text-right text-base font-semibold tabular-nums ${tone}`}>{delta > 0 ? '+' : ''}{fmt(delta)}%</td>;
+  const comparable = average !== null && average !== undefined && average !== 0;
+  const tone = comparable ? deltaTone((value - average) / average * 100) : '';
+  return <td className={`${divider} border-card px-3 text-center font-semibold tabular-nums sm:text-lg ${tone}`}>{fmt(value)}</td>;
 }
 
 function ExposureRowTooltip({ id, row }: { id: string; row?: TeamComparisonRow }) {
