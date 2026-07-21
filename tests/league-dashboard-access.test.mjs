@@ -79,31 +79,31 @@ test('injury type families remain database-defined while the interface stays at 
   assert.doesNotMatch(dashboard, /Included types/);
 });
 
-test('injury type anatomy supports pointer, keyboard, and touch selection', async () => {
-  const anatomy = await readFile(new URL('../components/dashboard/injury-type-map.tsx', import.meta.url), 'utf8');
+test('injury type dossier links ranked selection to exact subtype evidence', async () => {
+  const dossier = await readFile(new URL('../components/dashboard/injury-type-dossier.tsx', import.meta.url), 'utf8');
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
 
-  assert.match(anatomy, /aria-label="Interactive injury type anatomy"/);
-  assert.match(anatomy, /onMouseEnter/);
-  assert.match(anatomy, /onFocus/);
-  assert.match(anatomy, /onClick/);
-  assert.match(anatomy, /event\.key === 'Enter' \|\| event\.key === ' '/);
-  assert.match(anatomy, /tabIndex:\s*0/);
-  assert.match(anatomy, /'aria-pressed': selected/);
-  assert.match(anatomy, /pointerEvents=\{enabled \? 'visiblePainted' : 'none'\}/);
-  assert.match(anatomy, /aria-hidden="true" pointerEvents="none"/);
-  assert.match(anatomy, /r="23"/);
+  assert.match(dossier, /Injury types ranked by/);
+  assert.match(dossier, /onMouseEnter/);
+  assert.match(dossier, /onFocus/);
+  assert.match(dossier, /onClick/);
+  assert.match(dossier, /aria-pressed=\{selected\}/);
+  assert.match(dossier, /min-h-14/);
+  assert.match(dossier, /Included injury types/);
+  assert.match(dossier, /subtype\.time_loss_injuries > 0/);
+  assert.match(dossier, /contributingSubtypes\.map/);
+  assert.doesNotMatch(dossier, /<svg|silhouette|anatomy/i);
   const typeTab = dashboard.slice(dashboard.indexOf('function InjuryTypesTab'), dashboard.indexOf('function ImpactTab'));
-  const rankingPanel = typeTab.indexOf('<MetricBars');
-  const metricRail = typeTab.indexOf('<InjuryTypeMetricRail');
-  const anatomyPanel = typeTab.indexOf('<InjuryTypeMap');
-  assert.ok(rankingPanel > -1 && metricRail > rankingPanel && anatomyPanel > metricRail, 'ranking, metric rail, and anatomy must follow the visual reading order');
-  assert.match(typeTab, /showSummary=\{false\}/);
+  const rankingPanel = typeTab.indexOf('<InjuryTypeRanking');
+  const dossierPanel = typeTab.indexOf('<InjuryTypeDossier');
+  assert.ok(rankingPanel > -1 && dossierPanel > rankingPanel, 'ranking and dossier must follow the visual reading order');
   assert.match(typeTab, /MetricControl value=\{metric\} onChange=\{setMetric\} locationOnly/);
-  assert.doesNotMatch(typeTab, /Severity|Included types/);
+  assert.doesNotMatch(typeTab, /Severity/);
   assert.match(typeTab, /row\.code !== 'other_unclassified'/);
-  assert.doesNotMatch(anatomy, /other_unclassified|unmapped_review|<text/);
-  assert.match(dashboard, /min-h-11/);
+  assert.match(typeTab, /availableSettings\(classifiedFamilies/);
+  assert.match(typeTab, /row\.setting === effectiveSetting && row\.time_loss_injuries > 0/);
+  assert.doesNotMatch(dossier, /other_unclassified|unmapped_review/);
+  assert.match(dashboard, /lg:grid-cols-\[minmax\(0,1\.2fr\)_minmax\(20rem,0\.8fr\)\]/);
 });
 
 test('reader preserves versioned family totals and exact subtype evidence', async () => {

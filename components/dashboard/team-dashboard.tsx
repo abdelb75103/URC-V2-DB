@@ -15,7 +15,11 @@ import type {
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BodyMap, locationHeatColor, type LocationMetric } from '@/components/dashboard/body-map';
-import { InjuryTypeMap, INJURY_FAMILY_COLORS, type InjuryTypeMetric } from '@/components/dashboard/injury-type-map';
+import {
+  InjuryTypeDossier,
+  InjuryTypeRanking,
+  type InjuryTypeMetric,
+} from '@/components/dashboard/injury-type-dossier';
 import { resolveLocationView } from '@/lib/location-view';
 import {
   ExposureTrendChart,
@@ -1135,14 +1139,13 @@ function LocationMetricValue({ label, value, unit, active }: { label: string; va
   );
 }
 
-function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors = false, familyColors = false, showSummary = true }: {
+function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors = false, showSummary = true }: {
   rows: ProfileMetricRow[];
   metric: ProfileMetric;
   activeCode?: string;
   onHover: (code?: string) => void;
   onSelect: (code: string) => void;
   heatMapColors?: boolean;
-  familyColors?: boolean;
   showSummary?: boolean;
 }) {
   const max = Math.max(...rows.map((row) => metricValue(row, metric)), 1);
@@ -1183,11 +1186,7 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
                 className={`block h-full rounded-full ${heatMapColors ? '' : 'bg-primary'}`}
                 style={{
                   width: `${Math.max((value / max) * 100, value > 0 ? 2 : 0)}%`,
-                  backgroundColor: heatMapColors
-                    ? locationHeatColor(value, max)
-                    : familyColors
-                      ? INJURY_FAMILY_COLORS[row.code]
-                      : undefined,
+                  backgroundColor: heatMapColors ? locationHeatColor(value, max) : undefined,
                   opacity: active ? 1 : activeCode ? 0.25 : heatMapColors ? 1 : 0.75,
                 }}
               />
@@ -1201,15 +1200,18 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
 }
 
 function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
-  const visibleFamilies = families.filter((row) => row.code !== 'other_unclassified' && row.code !== 'unmapped_review');
-  const settings = availableSettings(visibleFamilies, ['all', 'match', 'training']);
+  const classifiedFamilies = families.filter((row) => (
+    row.code !== 'other_unclassified'
+    && row.code !== 'unmapped_review'
+  ));
+  const settings = availableSettings(classifiedFamilies, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
   const [metric, setMetric] = useState<ProfileMetric>('incidence_per_1000h');
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
   const effectiveSetting = settings.includes(setting) ? setting : settings[0] ?? 'all';
-  const rows = visibleFamilies
-    .filter((row) => row.setting === effectiveSetting)
+  const rows = classifiedFamilies
+    .filter((row) => row.setting === effectiveSetting && row.time_loss_injuries > 0)
     .sort((a, b) => metricValue(b, metric) - metricValue(a, metric) || a.label.localeCompare(b.label));
   const pinnedCode = rows.some((row) => row.code === selectedCode)
     ? selectedCode
@@ -1218,6 +1220,7 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
     ? hoveredCode
     : pinnedCode;
   const activeRow = rows.find((row) => row.code === activeCode);
+  const activeRank = activeRow ? rows.findIndex((row) => row.code === activeRow.code) + 1 : undefined;
 
   return (
     <div>
@@ -1229,55 +1232,27 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
         </div>
       </div>
       {rows.length ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
           <Panel contentClassName="p-4">
-            <MetricBars
+            <InjuryTypeRanking
               rows={rows}
-              metric={metric}
+              metric={metric as InjuryTypeMetric}
               activeCode={activeCode}
+              selectedCode={pinnedCode}
               onHover={setHoveredCode}
               onSelect={setSelectedCode}
-              familyColors
-              showSummary={false}
             />
           </Panel>
           <Panel contentClassName="p-4">
-            <div className="grid gap-3 xl:grid-cols-[10rem_minmax(0,1fr)] xl:items-stretch xl:gap-4">
-              <InjuryTypeMetricRail row={activeRow} metric={metric} />
-              <InjuryTypeMap
-                rows={rows}
-                metric={metric as InjuryTypeMetric}
-                activeCode={activeCode}
-                selectedCode={pinnedCode}
-                onHover={setHoveredCode}
-                onSelect={setSelectedCode}
-              />
-            </div>
+            <InjuryTypeDossier
+              row={activeRow}
+              metric={metric as InjuryTypeMetric}
+              rank={activeRank}
+              total={rows.length}
+            />
           </Panel>
         </div>
       ) : <EmptyState />}
-    </div>
-  );
-}
-
-function InjuryTypeMetricRail({ row, metric }: { row?: InjuryTypeFamilyRow; metric: ProfileMetric }) {
-  return (
-    <div className="overflow-hidden rounded-md border border-border/70 bg-background/35 xl:flex xl:flex-col">
-      <div className="flex items-center gap-3 px-4 py-3 xl:block xl:py-4">
-        <span
-          className="h-8 w-1.5 shrink-0 rounded-full xl:mb-3 xl:block xl:h-1.5 xl:w-10"
-          style={{ backgroundColor: row ? INJURY_FAMILY_COLORS[row.code] : 'hsl(var(--border))' }}
-          aria-hidden="true"
-        />
-        <div className="min-w-0">
-          <p className="truncate text-base font-semibold leading-tight text-foreground xl:text-lg">{row?.label ?? 'Not available'}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-3 border-t border-border/60 xl:flex xl:flex-1 xl:flex-col">
-        <LocationMetricValue label="Count" value={fmt(row?.time_loss_injuries, 0)} active={metric === 'time_loss_injuries'} />
-        <LocationMetricValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
-        <LocationMetricValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
-      </div>
     </div>
   );
 }

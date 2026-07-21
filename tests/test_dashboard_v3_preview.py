@@ -13,6 +13,7 @@ PREVIEW = (ROOT / "tools/sql/dashboard_v3_preview.sql").read_text()
 RECONCILIATION = (ROOT / "tools/sql/dashboard_v3_reconciliation.sql").read_text()
 GENERATOR = (ROOT / "tools/generate-dashboard-v3-preview.mjs").read_text()
 UI = (ROOT / "components/dashboard/team-dashboard.tsx").read_text()
+INJURY_TYPE_DOSSIER = (ROOT / "components/dashboard/injury-type-dossier.tsx").read_text()
 PREVIEW_READER = (ROOT / "lib/reporting-preview.ts").read_text()
 REPORTING_TYPES = (ROOT / "lib/reporting-types.ts").read_text()
 IOC_BUCKETS = list(csv.DictReader((ROOT / "docs/IOC_TAXONOMY_BUCKETS.csv").open()))
@@ -304,11 +305,12 @@ class DashboardV3PreviewTests(unittest.TestCase):
             "Common Injuries",
         ):
             self.assertIn(label, UI)
-        self.assertIn("<InjuryTypeMap", UI)
-        self.assertIn("familyColors", UI)
-        self.assertIn("showSummary={false}", UI)
-        self.assertIn("<InjuryTypeMetricRail", UI)
-        self.assertNotIn("Included types", UI)
+        self.assertIn("<InjuryTypeRanking", UI)
+        self.assertIn("<InjuryTypeDossier", UI)
+        self.assertIn("availableSettings(classifiedFamilies", UI)
+        self.assertIn("row.setting === effectiveSetting && row.time_loss_injuries > 0", UI)
+        self.assertIn("Included injury types", INJURY_TYPE_DOSSIER)
+        self.assertNotIn("<svg", INJURY_TYPE_DOSSIER)
         self.assertNotIn("Head-to-foot profile", UI)
 
     def test_draft_supplement_is_dev_only_with_complete_production_fallback(self) -> None:
