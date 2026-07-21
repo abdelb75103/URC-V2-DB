@@ -506,10 +506,9 @@ function CommonInjuriesTab({ profiles, supplement }: { profiles: InjuryProfileRo
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Most Common {settingTitle}Injuries</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Top five time-loss diagnoses. Rates use player-hours; severity is mean days lost.</p>
         </div>
         <SettingControl value={setting} settings={settings.length ? settings : ['all', 'match', 'training']} onChange={setSetting} />
       </div>
