@@ -58,7 +58,7 @@ class SeasonBoundReportingV3ContractTests(unittest.TestCase):
     def test_release_cli_gates_v3_and_preserves_v2_paths(self) -> None:
         self.assertIn("supported_release_variants", self.source)
         self.assertIn("SEASON_BOUND_REPORTING_MIGRATION_VERSION", self.source)
-        self.assertIn("analysis.league_dashboard_release_candidates_v4", self.source)
+        self.assertIn("analysis.league_dashboard_release_candidates_v5", self.source)
         self.assertIn("cohort_adjudications", self.source)
         self.assertIn("league_dashboard_release_v3", self.source)
         self.assertIn("SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION", self.source)
@@ -76,7 +76,7 @@ class SeasonBoundReportingV3ContractTests(unittest.TestCase):
         self.assertFalse(integer_values_equal(2160, "2161"))
 
     def test_release_cli_rejects_an_unbound_v3_tuple_before_database_access(self) -> None:
-        with self.assertRaisesRegex(SystemExit, "V3 requires accepted IA-02/ACL-01"):
+        with self.assertRaisesRegex(SystemExit, "V3 requires an accepted reporting classification"):
             release_league(SimpleNamespace(
                 season="2024-25", snapshot_current=False, preflight=True,
                 preflight_file="", preflight_reviewer="", previous_bundle_file="",

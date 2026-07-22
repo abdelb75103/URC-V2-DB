@@ -408,7 +408,11 @@ def query_sql(sql: str, params: list[object] | None = None) -> list[dict[str, An
         command = ["node", str(Path(__file__).with_name("sql_query.mjs")), sql_path]
         if params_path:
             command.append(params_path)
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            detail = clean_text(exc.stderr) or clean_text(exc.stdout) or str(exc)
+            raise RuntimeError(f"read-only database query failed: {detail}") from exc
         return json.loads(result.stdout)
     finally:
         Path(sql_path).unlink(missing_ok=True)
@@ -3598,6 +3602,7 @@ LEAGUE_DASHBOARD_V2_MIGRATION_VERSION = "20260714130000"
 ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260720150000"
 SEASON_BOUND_REPORTING_MIGRATION_VERSION = "20260720170000"
 REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION = "20260720180000"
+OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260722130000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-20_v3"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
@@ -5423,12 +5428,24 @@ def release_league(args: argparse.Namespace) -> None:
         ("v2", "v2", "v2"),
         ("v2", "reporting_classification_2026-07-20_v1", "v2"),
         ("v3", "reporting_classification_2026-07-20_v1", "season_bound_2026-07-20_v1"),
+        ("v3", "reporting_classification_2026-07-22_v2", "season_bound_2026-07-20_v1"),
     }
     if (analysis_version, classification_view_version, cohort_view_version) not in supported_release_variants:
         raise SystemExit(
             "unsupported analysis/classification/cohort version combination; "
-            "V3 requires accepted IA-02/ACL-01 classification and the season-bound cohort"
+            "V3 requires an accepted reporting classification and the season-bound cohort"
         )
+    uses_osiics_successor = (
+        classification_view_version == "reporting_classification_2026-07-22_v2"
+    )
+    league_candidate_view = (
+        "analysis.league_dashboard_release_candidates_v5"
+        if uses_osiics_successor else "analysis.league_dashboard_release_candidates_v4"
+    )
+    team_candidate_view = (
+        "analysis.team_dashboard_release_candidates_v5"
+        if uses_osiics_successor else "analysis.team_dashboard_release_candidates_v4"
+    )
     release_rule_version = (
         SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
         if analysis_version == "v3"
@@ -5462,6 +5479,8 @@ def release_league(args: argparse.Namespace) -> None:
         else ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION
     )
     required_migrations = [required_migration]
+    if uses_osiics_successor:
+        required_migrations.append(OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION)
     if not preflight:
         required_migrations.append(REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION)
     migration_rows = query_sql(
@@ -5479,7 +5498,7 @@ def release_league(args: argparse.Namespace) -> None:
     payload_params = SqlParams()
     payload_rows = query_sql(
         f"select dashboard, classification_evidence_sha256, cohort_evidence_sha256 "
-        f"from analysis.league_dashboard_release_candidates_v4 "
+        f"from {league_candidate_view} "
         f"where season = {payload_params.text(season)} "
         f"and analysis_version = {payload_params.text(analysis_version)} "
         f"and classification_view_version = {payload_params.text(classification_view_version)} "
@@ -5560,6 +5579,20 @@ def release_league(args: argparse.Namespace) -> None:
     classification_adjudications: list[dict[str, Any]] = []
     if classification_view_version != "v2":
         rule_params = SqlParams()
+        if classification_view_version == "reporting_classification_2026-07-22_v2":
+            adjudication_filter = """
+              (rule_version = 'reporting_classification_2026-07-20_v1'
+                and adjudication_ref in ('IA-02', 'ACL-01'))
+              or (rule_version = 'reporting_classification_2026-07-22_v2'
+                and adjudication_ref = 'OSIICS-01')
+            """
+            expected_refs = {"IA-02", "ACL-01", "OSIICS-01"}
+        else:
+            adjudication_filter = """
+              rule_version = 'reporting_classification_2026-07-20_v1'
+              and adjudication_ref in ('IA-02', 'ACL-01')
+            """
+            expected_refs = {"IA-02", "ACL-01"}
         classification_adjudications = query_sql(
             f"""
             select adjudication_ref, rule_version, evidence_sha256,
@@ -5567,16 +5600,15 @@ def release_league(args: argparse.Namespace) -> None:
                    workbook_snapshot_locator, migration_version, migration_sha256,
                    rationale
             from audit.rule_adjudications
-            where rule_version = {rule_params.text(classification_view_version)}
-              and adjudication_ref in ('IA-02', 'ACL-01')
+            where {adjudication_filter}
             order by adjudication_ref
             """,
             rule_params.values,
         )
-        if len(classification_adjudications) != 2 or {
+        if len(classification_adjudications) != len(expected_refs) or {
             row["adjudication_ref"] for row in classification_adjudications
-        } != {"IA-02", "ACL-01"}:
-            raise SystemExit("exact IA-02/ACL-01 classification evidence is incomplete")
+        } != expected_refs:
+            raise SystemExit("exact reporting-classification evidence is incomplete")
     cohort_adjudications: list[dict[str, Any]] = []
     if cohort_view_version != "v2":
         cohort_params = SqlParams()
@@ -5598,7 +5630,7 @@ def release_league(args: argparse.Namespace) -> None:
     team_payload_params = SqlParams()
     team_payloads = query_sql(
         f"select team_key, team_release_id::text, curated_build_id::text, dashboard "
-        f"from analysis.team_dashboard_release_candidates_v4 "
+        f"from {team_candidate_view} "
         f"where season = {team_payload_params.text(season)} "
         f"and analysis_version = {team_payload_params.text(analysis_version)} "
         f"and classification_view_version = {team_payload_params.text(classification_view_version)} "
@@ -5654,7 +5686,7 @@ def release_league(args: argparse.Namespace) -> None:
     canonical_hash_params = SqlParams()
     canonical_hash_rows = query_sql(
         f"with league as ("
-        f"  select dashboard from analysis.league_dashboard_release_candidates_v4 "
+        f"  select dashboard from {league_candidate_view} "
         f"  where season = {canonical_hash_params.text(season)} "
         f"    and analysis_version = {canonical_hash_params.text(analysis_version)} "
         f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)} "
@@ -5666,7 +5698,7 @@ def release_league(args: argparse.Namespace) -> None:
         f"    order by team_key) as dashboards, "
         f"    jsonb_object_agg(team_key, encode(digest(convert_to(dashboard::text, 'UTF8'), "
         f"      'sha256'), 'hex') order by team_key) as hashes "
-        f"  from analysis.team_dashboard_release_candidates_v4 "
+        f"  from {team_candidate_view} "
         f"  where season = {canonical_hash_params.text(season)} "
         f"    and analysis_version = {canonical_hash_params.text(analysis_version)} "
         f"    and classification_view_version = {canonical_hash_params.text(classification_view_version)} "
@@ -5956,7 +5988,7 @@ def release_league(args: argparse.Namespace) -> None:
         (release_id, dashboard_payload)
       select current_league_release.id, candidate.dashboard
       from current_league_release
-      join analysis.league_dashboard_release_candidates_v4 candidate
+      join {league_candidate_view} candidate
         on candidate.season = {params.text(season)}
        and candidate.analysis_version = {params.text(analysis_version)}
        and candidate.classification_view_version = {params.text(classification_view_version)}
@@ -5970,7 +6002,7 @@ def release_league(args: argparse.Namespace) -> None:
       select current_league_release.id, candidate.team_key, candidate.team_release_id,
         candidate.curated_build_id, candidate.dashboard
       from current_league_release
-      join analysis.team_dashboard_release_candidates_v4 candidate
+      join {team_candidate_view} candidate
         on candidate.season = {params.text(season)}
        and candidate.analysis_version = {params.text(analysis_version)}
        and candidate.classification_view_version = {params.text(classification_view_version)}
@@ -6650,6 +6682,268 @@ def _write_adjudication_batch(
         "workbook_sha256": workbook_sha256,
         "evidence_manifest_sha256": evidence_manifest_sha256,
         "input_hash": input_hash}, indent=2))
+
+
+def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
+    """Validate and record the exact OSIICS-01 reporting-only rule decision."""
+    evidence_path = Path(args.evidence_file).resolve()
+    ledger_path = Path(args.row_ledger).resolve()
+    workbook_path = Path(args.workbook).resolve()
+    migration_path = Path(args.migration_file).resolve()
+    for path in (evidence_path, ledger_path, workbook_path, migration_path):
+        if not path.is_file():
+            raise SystemExit(f"required OSIICS evidence file is missing: {path}")
+
+    evidence = json.loads(evidence_path.read_text())
+    ledger = json.loads(ledger_path.read_text())
+    rows = ledger.get("rows")
+    if not isinstance(rows, list) or len(rows) != 121:
+        raise SystemExit("OSIICS row ledger must contain exactly 121 reviewed rows")
+    row_ids = [clean_text(row.get("source_row_id")) for row in rows]
+    if len(set(row_ids)) != 121 or any(not row_id for row_id in row_ids):
+        raise SystemExit("OSIICS row ledger source-row identities are incomplete or duplicated")
+
+    expected_workbook_sha = evidence["official_reference"]["official_workbook_sha256"]
+    expected_ledger_sha = evidence["row_ledger"]["sha256"]
+    expected_mapping_sha = evidence["mapping_catalogue"]["sha256"]
+    expected_multi_sha = evidence["multi_type_catalogue"]["sha256"]
+    mapping_path = evidence_path.parents[2] / evidence["mapping_catalogue"]["path"]
+    multi_path = evidence_path.parents[2] / evidence["multi_type_catalogue"]["path"]
+    actuals = {
+        "workbook": sha256_file(workbook_path),
+        "row_ledger": sha256_file(ledger_path),
+        "mapping_catalogue": sha256_file(mapping_path),
+        "multi_type_catalogue": sha256_file(multi_path),
+    }
+    expected = {
+        "workbook": expected_workbook_sha,
+        "row_ledger": expected_ledger_sha,
+        "mapping_catalogue": expected_mapping_sha,
+        "multi_type_catalogue": expected_multi_sha,
+    }
+    if actuals != expected:
+        raise SystemExit(f"OSIICS evidence checksum mismatch: expected={expected} actual={actuals}")
+
+    counts = evidence["expected_live_time_loss_counts"]
+    if counts != {
+        "cohort": 1120, "unknown_before": 245, "exact_code_candidates": 108,
+        "explicit_text_candidates": 12, "multi_type_diagnosis_candidates": 1,
+        "newly_classified": 121, "unknown_after": 124,
+    }:
+        raise SystemExit("OSIICS evidence counts differ from the approved decision envelope")
+
+    live_params = SqlParams()
+    live_rows = query_sql(
+        f"""
+        select sr.id::text as source_row_id, sr.row_sha256 as source_row_sha256,
+               c.injury_id::text as injury_id, c.team_key, c.season,
+               c.setting_code as setting, c.days_lost,
+               c.body_location_code as original_body_location_code,
+               c.injury_type_code as original_injury_type_code,
+               p.diagnosis_code
+        from ingestion.source_rows sr
+        join curated.injuries i on i.source_row_id=sr.id
+        join analysis.injury_cohort_by_build_season_bound_v3 c on c.injury_id=i.id
+        join analysis.league_member_releases_v2 m
+          on m.curated_build_id=c.curated_build_id and m.team_key=c.team_key
+         and m.season=c.season
+        join analysis.season_bound_reporting_classification_v3 p
+          on p.injury_id=c.injury_id and p.curated_build_id=c.curated_build_id
+         and p.team_key=c.team_key and p.season=c.season
+         and p.setting_code=c.setting_code and p.is_time_loss=c.is_time_loss
+         and p.days_lost=c.days_lost
+        where c.season='2024-25' and c.is_time_loss
+          and sr.id in (select value::uuid from jsonb_array_elements_text(
+            {live_params.jsonb(row_ids)}) value)
+        order by sr.id
+        """,
+        live_params.values,
+    )
+    if len(live_rows) != 121:
+        raise SystemExit(f"hosted OSIICS cohort contains {len(live_rows)} of 121 reviewed rows")
+    live_by_id = {row["source_row_id"]: row for row in live_rows}
+    for reviewed in rows:
+        live = live_by_id.get(reviewed["source_row_id"])
+        for key in (
+            "injury_id", "source_row_sha256", "team_key", "season", "setting",
+            "days_lost", "original_body_location_code", "original_injury_type_code",
+        ):
+            if live is None or live.get(key) != reviewed.get(key):
+                raise SystemExit(
+                    f"OSIICS reviewed row fingerprint changed: {reviewed['source_row_id']} {key}"
+                )
+        if live["diagnosis_code"] != "unknown":
+            raise SystemExit(
+                f"OSIICS reviewed predecessor diagnosis is no longer Unknown: {reviewed['source_row_id']}"
+            )
+    unknown_rows = query_sql("""
+      select count(*) as count
+      from analysis.season_bound_reporting_classification_v3 p
+      join analysis.league_member_releases_v2 m using (curated_build_id, team_key, season)
+      where p.season='2024-25' and p.is_time_loss and p.diagnosis_code='unknown'
+    """)
+    if len(unknown_rows) != 1 or int(unknown_rows[0]["count"]) != 245:
+        raise SystemExit("hosted predecessor Unknown count is no longer 245")
+
+    evidence_manifest_sha = sha256_file(evidence_path)
+    migration_sha = sha256_file(migration_path)
+    approved_migration_sha = clean_text(args.expected_migration_sha256).lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", approved_migration_sha):
+        raise SystemExit("--expected-migration-sha256 must be the exact approved 64-character hash")
+    if migration_sha != approved_migration_sha:
+        raise SystemExit(
+            f"migration checksum differs from the approved hash: {migration_sha}"
+        )
+    decision = {
+        "mapping_catalogue_sha256": expected_mapping_sha,
+        "multi_type_catalogue_sha256": expected_multi_sha,
+        "exact_code_candidate_count": 108,
+        "explicit_text_candidate_count": 12,
+        "multi_type_diagnosis_candidate_count": 1,
+        "unknown_before": 245,
+        "unknown_after": 124,
+        "preserve_original_values": True,
+        "conflicts_remain_unknown": True,
+    }
+    result = {
+        "status": "validated_read_only" if args.plan else "recorded",
+        "database_host": evidence["target"]["database_host"],
+        "rule_version": evidence["rule_version"],
+        "reviewed_rows": 121,
+        "unknown_before": 245,
+        "unknown_after": 124,
+        "evidence_manifest_sha256": evidence_manifest_sha,
+        "migration_sha256": migration_sha,
+    }
+    if args.plan:
+        print(json.dumps(result, indent=2))
+        return
+
+    existing_params = SqlParams()
+    existing = query_sql(
+        f"""
+        select adjudication_ref, rule_version, decision, evidence_sha256,
+               workbook_sha256, evidence_manifest_sha256, reviewer,
+               workbook_snapshot_locator, migration_version, migration_sha256, rationale
+        from audit.rule_adjudications
+        where adjudication_ref='OSIICS-01'
+          and rule_version='reporting_classification_2026-07-22_v2'
+        """,
+        existing_params.values,
+    )
+    if existing:
+        raise SystemExit(
+            "OSIICS-01 already exists; refusing to append a second pipeline run or mixed replay"
+        )
+
+    params = SqlParams()
+    provenance = run_provenance()
+    rationale = (
+        "Abdel Babiker approved exact OSIICS/OSICS mappings, uniquely explicit body/type "
+        "descriptions, and NPM as Neck with candidate types muscle_injury;tendinopathy; "
+        "the reporting primary type is nonspecific so the injury contributes once."
+    )
+    run_sql(
+        f"""
+        insert into audit.reason_codes (code, description) values
+          ('reporting_classification_adjudication',
+           'Human-approved reporting classification rule bound to exact evidence.')
+        on conflict (code) do update set description=excluded.description;
+        create temp table current_osiics_run on commit drop as
+        with run as (
+          insert into audit.pipeline_runs
+            (command, team, season, status, input_hash, output_hash, parameters,
+             code_version, dependency_lock_hash, operator)
+          values ('apply-osiics-mapping-adjudication','URC Overall','2024-25','started',
+            {params.text(evidence_manifest_sha)}, {params.text(expected_ledger_sha)},
+            {params.jsonb(result)}, {params.text(provenance['code_version'])},
+            {params.text(provenance['dependency_lock_hash'])},
+            {params.text(provenance['operator'])}) returning id
+        ) select id from run;
+        insert into audit.step_runs
+          (pipeline_run_id, step_name, step_version, reason_code, input_count,
+           output_count, input_hash, output_hash)
+        select id,'record_osiics_mapping_adjudication',
+          'reporting_classification_2026-07-22_v2','reporting_classification_adjudication',
+          245,121,{params.text(evidence_manifest_sha)},{params.text(expected_ledger_sha)}
+        from current_osiics_run;
+        insert into audit.rule_adjudications
+          (adjudication_ref, rule_version, decision, evidence_sha256,
+           workbook_sha256, evidence_manifest_sha256, reviewer,
+           workbook_snapshot_locator, migration_version, migration_sha256, rationale)
+        values ('OSIICS-01','reporting_classification_2026-07-22_v2',
+          {params.jsonb(decision)},{params.text(expected_ledger_sha)},
+          {params.text(expected_workbook_sha)},{params.text(evidence_manifest_sha)},
+          'Abdel Babiker',{params.text(str(workbook_path))},'20260722130000',
+          {params.text(migration_sha)},{params.text(rationale)})
+        on conflict (adjudication_ref,rule_version) do nothing;
+
+        do $$
+        declare
+          reviewed_match_count integer;
+          changed_count integer;
+          unknown_count integer;
+          cohort_count integer;
+        begin
+          select count(*) into reviewed_match_count
+          from jsonb_to_recordset({params.jsonb(rows)}) as expected(
+            injury_id text, mapped_body_location_code text,
+            mapped_injury_type_code text, mapped_diagnosis_code text,
+            mapped_diagnosis_label text, origin text, candidate_injury_types text
+          )
+          join analysis.season_bound_reporting_classification_v4 actual
+            on actual.injury_id=expected.injury_id::uuid
+          join analysis.league_member_releases_v2 member
+            using (curated_build_id,team_key,season)
+          where actual.season='2024-25' and actual.is_time_loss
+            and actual.effective_body_location_code=expected.mapped_body_location_code
+            and actual.effective_injury_type_code=expected.mapped_injury_type_code
+            and actual.diagnosis_code=expected.mapped_diagnosis_code
+            and (expected.mapped_diagnosis_label is null
+              or actual.diagnosis_label=expected.mapped_diagnosis_label)
+            and actual.diagnosis_origin=expected.origin
+            and actual.candidate_injury_types is not distinct from expected.candidate_injury_types;
+          if reviewed_match_count <> 121 then
+            raise exception 'OSIICS successor matches % of 121 reviewed row outcomes', reviewed_match_count;
+          end if;
+
+          select count(*), count(*) filter (where successor.diagnosis_code='unknown'),
+                 count(*) filter (where successor.diagnosis_code is distinct from predecessor.diagnosis_code)
+          into cohort_count, unknown_count, changed_count
+          from analysis.season_bound_reporting_classification_v4 successor
+          join analysis.season_bound_reporting_classification_v3 predecessor
+            using (injury_id,curated_build_id,team_key,season,setting_code,is_time_loss,days_lost)
+          join analysis.league_member_releases_v2 member
+            using (curated_build_id,team_key,season)
+          where successor.season='2024-25' and successor.is_time_loss;
+          if cohort_count <> 1120 or unknown_count <> 124 or changed_count <> 121 then
+            raise exception 'OSIICS successor reconciliation failed: cohort %, unknown %, changed %',
+              cohort_count, unknown_count, changed_count;
+          end if;
+        end $$;
+
+        update audit.pipeline_runs run
+        set status='succeeded', ended_at=now()
+        from current_osiics_run current
+        where run.id=current.id and run.status='started';
+        update audit.step_runs step set ended_at=now()
+        from current_osiics_run current
+        where step.pipeline_run_id=current.id
+          and step.step_name='record_osiics_mapping_adjudication';
+        """,
+        params.values,
+    )
+    stored = query_sql("""
+      select adjudication_ref, rule_version, decision, evidence_sha256,
+             workbook_sha256, evidence_manifest_sha256, reviewer,
+             workbook_snapshot_locator, migration_version, migration_sha256, rationale
+      from audit.rule_adjudications
+      where adjudication_ref='OSIICS-01'
+        and rule_version='reporting_classification_2026-07-22_v2'
+    """)
+    if len(stored) != 1 or stored[0]["decision"] != decision:
+        raise SystemExit("stored OSIICS-01 adjudication failed exact post-write verification")
+    print(json.dumps(result, indent=2))
 
 
 def reapply_adjudications(args: argparse.Namespace) -> None:
@@ -10832,7 +11126,11 @@ def main() -> None:
     )
     league_release_parser.add_argument(
         "--classification-view-version", default="v2",
-        choices=["v2", "reporting_classification_2026-07-20_v1"],
+        choices=[
+            "v2",
+            "reporting_classification_2026-07-20_v1",
+            "reporting_classification_2026-07-22_v2",
+        ],
     )
     league_release_parser.add_argument(
         "--cohort-view-version", default="v2",
@@ -10883,6 +11181,24 @@ def main() -> None:
     adjudication_batch_parser.add_argument("--evidence-file", required=True)
     adjudication_batch_parser.add_argument("--plan", action="store_true")
     adjudication_batch_parser.set_defaults(func=apply_adjudication_batch)
+
+    osiics_parser = subcommands.add_parser("apply-osiics-mapping-adjudication")
+    osiics_parser.add_argument(
+        "--evidence-file", default="docs/evidence/osiics_exact_mapping_2024-25.json"
+    )
+    osiics_parser.add_argument(
+        "--row-ledger", default="data/reporting/osiics_exact_mapping_2024-25_rows.json"
+    )
+    osiics_parser.add_argument(
+        "--workbook", default="data/reference/osiics/osiics-v15-8bfeab66.xlsx"
+    )
+    osiics_parser.add_argument(
+        "--migration-file",
+        default="supabase/migrations/20260722130000_osiics_exact_reporting_classification.sql",
+    )
+    osiics_parser.add_argument("--expected-migration-sha256", required=True)
+    osiics_parser.add_argument("--plan", action="store_true")
+    osiics_parser.set_defaults(func=apply_osiics_mapping_adjudication)
 
     reapply_adjudications_parser = subcommands.add_parser("reapply-adjudications")
     reapply_adjudications_parser.add_argument("--team", required=True)

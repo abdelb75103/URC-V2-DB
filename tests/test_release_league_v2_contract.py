@@ -19,7 +19,9 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertIn("diff_json_documents(reviewed_bundle, public_bundle)", self.source)
 
     def test_release_snapshots_league_and_all_team_payloads(self) -> None:
-        self.assertIn("from analysis.team_dashboard_release_candidates_v4", self.source)
+        self.assertIn('team_candidate_view = (', self.source)
+        self.assertIn('"analysis.team_dashboard_release_candidates_v4"', self.source)
+        self.assertIn('"analysis.team_dashboard_release_candidates_v5"', self.source)
         self.assertIn("len(team_payloads) != 16", self.source)
         self.assertIn("insert into reporting.league_release_payloads_v2", self.source)
         self.assertIn("insert into reporting.team_dashboard_payloads_v2", self.source)
@@ -50,8 +52,8 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertIn("create temp table reviewed_league_members", write_sql)
         self.assertIn("reviewed bundle member identities changed after preflight validation", write_sql)
         self.assertIn("from analysis.league_member_releases_v2\n            where season = {params.text(season)}", write_sql)
-        self.assertEqual(write_sql.count("analysis.league_dashboard_release_candidates_v4 candidate"), 1)
-        self.assertEqual(write_sql.count("analysis.team_dashboard_release_candidates_v4 candidate"), 1)
+        self.assertEqual(write_sql.count("join {league_candidate_view} candidate"), 1)
+        self.assertEqual(write_sql.count("join {team_candidate_view} candidate"), 1)
         self.assertIn("join reviewed_league_members expected", write_sql)
         self.assertNotIn("params.jsonb(dashboard)", write_sql)
 

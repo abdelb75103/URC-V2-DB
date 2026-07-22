@@ -1,0 +1,50 @@
+source_code,mapped_body_location_code,mapped_injury_type_code,official_ioc_category,expected_live_time_loss_cases
+AL1,ankle,joint_sprain,Joint sprain,3
+AL2,ankle,joint_sprain,Joint sprain,1
+ALA,ankle,joint_sprain,Joint sprain,7
+ALJ,ankle,joint_sprain,Joint sprain,4
+ALM,ankle,joint_sprain,Joint sprain,2
+ALR,ankle,joint_sprain,Joint sprain,2
+ALS,ankle,joint_sprain,Joint sprain,12
+AQA,ankle,synovitis_capsulitis,Synovitis / capsulitis,1
+AQP,ankle,synovitis_capsulitis,Synovitis / capsulitis,2
+CC1,chest,cartilage_injury,Cartilage,2
+CLS,chest,joint_sprain,Joint sprain,1
+CLX,chest,joint_sprain,Joint sprain,1
+DL1,thoracic_spine,joint_sprain,Joint sprain,1
+EC1,elbow,cartilage_injury,Cartilage,1
+ELA,elbow,joint_sprain,Joint sprain,1
+ELM,elbow,joint_sprain,Joint sprain,1
+ER1,elbow,tendon_rupture,Tendon rupture,4
+FIN,foot,abrasion,Abrasion,1
+FL1,foot,joint_sprain,Joint sprain,2
+FLJ,foot,joint_sprain,Joint sprain,2
+FPL,foot,joint_sprain,Diagnosis text: sprain of great toe,3
+FQ2,foot,synovitis_capsulitis,Synovitis / capsulitis,1
+FRP,foot,tendon_rupture,Tendon rupture,2
+JTKT,knee,physis_injury,Physis injury,1
+KC1,knee,cartilage_injury,Cartilage,2
+KC2,knee,cartilage_injury,Cartilage,2
+KC8,knee,cartilage_injury,Cartilage,2
+KCD,knee,cartilage_injury,Cartilage,1
+KCP,knee,cartilage_injury,Cartilage,1
+KCU,knee,cartilage_injury,Cartilage,2
+KL2,knee,joint_sprain,Joint sprain,2
+KL3,knee,joint_sprain,Joint sprain,2
+KL5,knee,joint_sprain,Joint sprain,2
+KLM,knee,joint_sprain,Joint sprain,1
+KLV,knee,joint_sprain,Joint sprain,3
+KQS,knee,synovitis_capsulitis,Synovitis / capsulitis,1
+KV1,knee,contusion_superficial,Contusion/vascular with explicit contusion diagnosis,5
+LC1,lumbosacral,cartilage_injury,Cartilage,1
+LC3,lumbosacral,cartilage_injury,Cartilage,1
+LCP,lumbosacral,cartilage_injury,Cartilage,1
+LLF,lumbosacral,joint_sprain,Joint sprain,1
+NC1,neck,cartilage_injury,Cartilage,4
+NL1,neck,joint_sprain,Joint sprain,6
+NLW,neck,joint_sprain,Joint sprain,1
+QVVP,lower_leg,vascular_trauma,Contusion/vascular with explicit vascular diagnosis,1
+SL1,shoulder,joint_sprain,Joint sprain,3
+SL2,shoulder,joint_sprain,Joint sprain,3
+SQP,shoulder,synovitis_capsulitis,Synovitis / capsulitis,1
+WC1,wrist,cartilage_injury,Cartilage,1

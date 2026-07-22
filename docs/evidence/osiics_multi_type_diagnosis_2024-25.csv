@@ -1,0 +1,2 @@
+source_code,mapped_body_location_code,diagnosis_code,diagnosis_label,candidate_injury_types,analysis_primary_type,expected_live_time_loss_cases
+NPM,neck,multi__neck__muscle_injury__tendinopathy,Neck · Muscle/tendon injury,muscle_injury;tendinopathy,nonspecific,1
