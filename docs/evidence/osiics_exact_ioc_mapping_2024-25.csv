@@ -43,6 +43,9 @@ LLF,lumbosacral,joint_sprain,Joint sprain,1
 NC1,neck,cartilage_injury,Cartilage,4
 NL1,neck,joint_sprain,Joint sprain,6
 NLW,neck,joint_sprain,Joint sprain,1
+QBC,lower_leg,bursitis,Bursitis,1
+QRA,ankle,tendon_rupture,Tendon rupture (source body retained),1
+QRA,lower_leg,tendon_rupture,Tendon rupture,1
 QVVP,lower_leg,vascular_trauma,Contusion/vascular with explicit vascular diagnosis,1
 SL1,shoulder,joint_sprain,Joint sprain,3
 SL2,shoulder,joint_sprain,Joint sprain,3

@@ -3602,7 +3602,7 @@ LEAGUE_DASHBOARD_V2_MIGRATION_VERSION = "20260714130000"
 ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260720150000"
 SEASON_BOUND_REPORTING_MIGRATION_VERSION = "20260720170000"
 REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION = "20260720180000"
-OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260722130000"
+OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260722140000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-20_v3"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
@@ -6726,8 +6726,8 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
 
     counts = evidence["expected_live_time_loss_counts"]
     if counts != {
-        "cohort": 1120, "unknown_before": 245, "exact_code_candidates": 108,
-        "explicit_text_candidates": 12, "multi_type_diagnosis_candidates": 1,
+        "cohort": 1120, "unknown_before": 245, "exact_code_candidates": 111,
+        "explicit_text_candidates": 9, "multi_type_diagnosis_candidates": 1,
         "newly_classified": 121, "unknown_after": 124,
     }:
         raise SystemExit("OSIICS evidence counts differ from the approved decision envelope")
@@ -6789,8 +6789,8 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
     decision = {
         "mapping_catalogue_sha256": expected_mapping_sha,
         "multi_type_catalogue_sha256": expected_multi_sha,
-        "exact_code_candidate_count": 108,
-        "explicit_text_candidate_count": 12,
+        "exact_code_candidate_count": 111,
+        "explicit_text_candidate_count": 9,
         "multi_type_diagnosis_candidate_count": 1,
         "unknown_before": 245,
         "unknown_after": 124,
@@ -6866,7 +6866,7 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
         values ('OSIICS-01','reporting_classification_2026-07-22_v2',
           {params.jsonb(decision)},{params.text(expected_ledger_sha)},
           {params.text(expected_workbook_sha)},{params.text(evidence_manifest_sha)},
-          'Abdel Babiker',{params.text(str(workbook_path))},'20260722130000',
+          'Abdel Babiker',{params.text(str(workbook_path))},'20260722140000',
           {params.text(migration_sha)},{params.text(rationale)});
 
         do $$
@@ -6875,6 +6875,7 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
           changed_count integer;
           unknown_count integer;
           cohort_count integer;
+          mismatch_detail jsonb;
         begin
           select count(*) into reviewed_match_count
           from jsonb_to_recordset({params.jsonb(rows)}) as expected(
@@ -6895,7 +6896,39 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
             and actual.diagnosis_origin=expected.origin
             and actual.candidate_injury_types is not distinct from expected.candidate_injury_types;
           if reviewed_match_count <> 121 then
-            raise exception 'OSIICS successor matches % of 121 reviewed row outcomes', reviewed_match_count;
+            select jsonb_agg(to_jsonb(mismatch)) into mismatch_detail
+            from (
+              select expected.injury_id, expected.mapped_body_location_code as expected_body,
+                actual.effective_body_location_code as actual_body,
+                expected.mapped_injury_type_code as expected_type,
+                actual.effective_injury_type_code as actual_type,
+                expected.mapped_diagnosis_code as expected_diagnosis,
+                actual.diagnosis_code as actual_diagnosis,
+                expected.origin as expected_origin, actual.diagnosis_origin as actual_origin,
+                expected.candidate_injury_types as expected_candidate_types,
+                actual.candidate_injury_types as actual_candidate_types
+              from jsonb_to_recordset({params.jsonb(rows)}) as expected(
+                injury_id text, mapped_body_location_code text,
+                mapped_injury_type_code text, mapped_diagnosis_code text,
+                mapped_diagnosis_label text, origin text, candidate_injury_types text
+              )
+              left join analysis.season_bound_reporting_classification_v4 actual
+                on actual.injury_id=expected.injury_id::uuid
+              left join analysis.league_member_releases_v2 member
+                on member.curated_build_id=actual.curated_build_id
+               and member.team_key=actual.team_key and member.season=actual.season
+              where member.team_key is null
+                or actual.season<>'2024-25' or not actual.is_time_loss
+                or actual.effective_body_location_code<>expected.mapped_body_location_code
+                or actual.effective_injury_type_code<>expected.mapped_injury_type_code
+                or actual.diagnosis_code<>expected.mapped_diagnosis_code
+                or (expected.mapped_diagnosis_label is not null
+                  and actual.diagnosis_label<>expected.mapped_diagnosis_label)
+                or actual.diagnosis_origin<>expected.origin
+                or actual.candidate_injury_types is distinct from expected.candidate_injury_types
+            ) mismatch;
+            raise exception 'OSIICS successor matches % of 121 reviewed row outcomes: %',
+              reviewed_match_count, mismatch_detail;
           end if;
 
           select count(*), count(*) filter (where successor.diagnosis_code='unknown'),
@@ -11185,7 +11218,7 @@ def main() -> None:
     )
     osiics_parser.add_argument(
         "--migration-file",
-        default="supabase/migrations/20260722130000_osiics_exact_reporting_classification.sql",
+        default="supabase/migrations/20260722140000_osiics_source_body_pathology_mapping.sql",
     )
     osiics_parser.add_argument("--expected-migration-sha256", required=True)
     osiics_parser.add_argument("--plan", action="store_true")

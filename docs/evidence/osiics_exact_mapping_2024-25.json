@@ -17,6 +17,8 @@
     "database_name": "postgres",
     "approved_bundle_release_id_at_review": "d8eef8a5-8ec7-430f-81b5-de3c777af053",
     "analysis_version": "v3",
+    "implementation_migration_version": "20260722140000",
+    "implementation_migration_path": "supabase/migrations/20260722140000_osiics_source_body_pathology_mapping.sql",
     "cohort_view_version": "season_bound_2026-07-20_v1",
     "predecessor_classification_view_version": "reporting_classification_2026-07-20_v1"
   },
@@ -36,8 +38,9 @@
   },
   "mapping_catalogue": {
     "path": "docs/evidence/osiics_exact_ioc_mapping_2024-25.csv",
-    "sha256": "81604d6cec0356967ccbd263b277f9d75cb19c7d085a9d15dc47d5b70cf5ae6c",
-    "source_code_count": 49
+    "sha256": "9b1f298883b7be0c2d64b6519b78957a04e594121c4d9463828f0e1b9a94980f",
+    "source_code_count": 51,
+    "mapping_row_count": 52
   },
   "multi_type_catalogue": {
     "path": "docs/evidence/osiics_multi_type_diagnosis_2024-25.csv",
@@ -47,29 +50,26 @@
   },
   "row_ledger": {
     "path": "data/reporting/osiics_exact_mapping_2024-25_rows.json",
-    "sha256": "ff0e31d1fb8f92c4a0084fc9d7dd86d9371941a2cd2aeb3b993cadbb66ea7310",
+    "sha256": "1c233ca4f9c13ef61b666bda5c1f1eec004c6a4bb0cec7e90cda8a71df68c428",
     "git_status": "ignored_sensitive_audit_evidence",
     "row_count": 121
   },
   "expected_live_time_loss_counts": {
     "cohort": 1120,
     "unknown_before": 245,
-    "exact_code_candidates": 108,
-    "explicit_text_candidates": 12,
+    "exact_code_candidates": 111,
+    "explicit_text_candidates": 9,
     "multi_type_diagnosis_candidates": 1,
     "newly_classified": 121,
     "unknown_after": 124
   },
   "explicit_text_candidate_profiles": {
-    "ankle__tendon_rupture": 1,
     "knee__joint_sprain": 2,
     "thigh__muscle_injury": 1,
     "shoulder__joint_sprain": 2,
     "ankle__contusion_superficial": 1,
     "ankle__cartilage_injury": 2,
-    "knee__cartilage_injury": 1,
-    "lower_leg__bursitis": 1,
-    "lower_leg__tendon_rupture": 1
+    "knee__cartilage_injury": 1
   },
   "controlled_exceptions": [
     {
@@ -81,6 +81,11 @@
       "source_code": "NPM",
       "decision": "Neck · Muscle/tendon injury; candidate types muscle_injury;tendinopathy; primary analytical type nonspecific",
       "basis": "The official diagnosis explicitly identifies the neck and the two possible tissue families, but it does not establish which family is primary. The candidate types are retained without double-counting the injury."
+    },
+    {
+      "source_code": "QRA",
+      "decision": "Use the source-reported canonical body (Ankle or Lower leg) with the exact OSIICS tendon-rupture pathology",
+      "basis": "OSIICS 15 identifies QRA as Achilles tendon rupture and IOC Tendon rupture. One supplied row records Ankle while the official broad body is Lower leg; the source body is preserved and only the pathology is code-mapped."
     },
     {
       "source_code": "QPS",

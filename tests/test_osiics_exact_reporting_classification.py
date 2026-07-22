@@ -12,6 +12,7 @@ from pipeline.__main__ import release_league
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20260722130000_osiics_exact_reporting_classification.sql"
+HOTFIX = ROOT / "supabase/migrations/20260722140000_osiics_source_body_pathology_mapping.sql"
 MAPPING = ROOT / "docs/evidence/osiics_exact_ioc_mapping_2024-25.csv"
 MULTI_TYPE = ROOT / "docs/evidence/osiics_multi_type_diagnosis_2024-25.csv"
 EVIDENCE = ROOT / "docs/evidence/osiics_exact_mapping_2024-25.json"
@@ -21,6 +22,7 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.sql = MIGRATION.read_text()
+        cls.hotfix_sql = HOTFIX.read_text()
         with MAPPING.open() as handle:
             cls.mapping_rows = list(csv.DictReader(handle))
         with MULTI_TYPE.open() as handle:
@@ -29,9 +31,9 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
         cls.release_source = inspect.getsource(release_league)
 
     def test_mapping_catalogue_is_exact_bounded_and_codebook_bound(self) -> None:
-        self.assertEqual(len(self.mapping_rows), 49)
-        self.assertEqual(sum(int(row["expected_live_time_loss_cases"]) for row in self.mapping_rows), 108)
-        self.assertEqual(len({row["source_code"] for row in self.mapping_rows}), 49)
+        self.assertEqual(len(self.mapping_rows), 52)
+        self.assertEqual(sum(int(row["expected_live_time_loss_cases"]) for row in self.mapping_rows), 111)
+        self.assertEqual(len({row["source_code"] for row in self.mapping_rows}), 51)
         self.assertEqual(
             self.evidence["official_reference"]["official_workbook_sha256"],
             "8bfeab660942f9ff7a25ebeb42544c231d611365fb9ee36cec27233bc82157c5",
@@ -41,8 +43,8 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
             hashlib.sha256(MAPPING.read_bytes()).hexdigest(),
         )
         counts = self.evidence["expected_live_time_loss_counts"]
-        self.assertEqual(counts["exact_code_candidates"], 108)
-        self.assertEqual(counts["explicit_text_candidates"], 12)
+        self.assertEqual(counts["exact_code_candidates"], 111)
+        self.assertEqual(counts["explicit_text_candidates"], 9)
         self.assertEqual(counts["multi_type_diagnosis_candidates"], 1)
         self.assertEqual(counts["unknown_after"], 124)
         self.assertEqual(self.multi_type_rows[0]["candidate_injury_types"], "muscle_injury;tendinopathy")
@@ -52,9 +54,22 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
             hashlib.sha256(MULTI_TYPE.read_bytes()).hexdigest(),
         )
 
+    def test_evidence_json_has_unique_keys_and_profile_total(self) -> None:
+        def unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f"duplicate evidence key: {key}")
+                result[key] = value
+            return result
+
+        parsed = json.loads(EVIDENCE.read_text(), object_pairs_hook=unique_object)
+        self.assertEqual(sum(parsed["explicit_text_candidate_profiles"].values()), 9)
+
     def test_nonspecific_and_unsupported_codes_are_not_promoted(self) -> None:
         mapped = {row["source_code"] for row in self.mapping_rows}
         self.assertIn("FPL", mapped)
+        self.assertTrue({"QRA", "QBC"}.issubset(mapped))
         self.assertTrue({"NPM", "QPS", "FZ1", "KZZ", "LZ1"}.isdisjoint(mapped))
         self.assertTrue({"#REF!", "BXXX", "GTDT", "KTQS"}.isdisjoint(mapped))
 
@@ -96,8 +111,11 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
         self.assertIn("cohort_count <> 1120 or unknown_count <> 124 or changed_count <> 121", source)
         write_contract = source.split("values ('OSIICS-01'", 1)[1].split("do $$", 1)[0]
         self.assertNotIn("on conflict", write_contract.lower())
-        self.assertIn("drop constraint rule_adjudications_migration_version_check", self.sql)
-        self.assertIn("'20260720150000', '20260722130000'", self.sql)
+        self.assertIn("drop constraint rule_adjudications_migration_version_check", self.hotfix_sql)
+        self.assertIn("'20260722130000', '20260722140000'", self.hotfix_sql)
+        self.assertIn("('QRA','ankle','tendon_rupture')", self.hotfix_sql)
+        self.assertIn("('QRA','lower_leg','tendon_rupture')", self.hotfix_sql)
+        self.assertIn("('QBC','lower_leg','bursitis')", self.hotfix_sql)
 
 
 if __name__ == "__main__":
