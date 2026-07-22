@@ -89,6 +89,9 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
     def test_audit_and_output_gates_are_exact(self) -> None:
         source = (ROOT / "pipeline/__main__.py").read_text()
         self.assertIn("--expected-migration-sha256", source)
+        fingerprint_gate = source.split("live_rows = query_sql", 1)[1].split("unknown_rows = query_sql", 1)[0]
+        self.assertIn("join curated.injuries i on i.source_row_id=sr.id", fingerprint_gate)
+        self.assertNotIn("injury_cohort_by_build_season_bound_v3", fingerprint_gate)
         self.assertIn("OSIICS successor matches % of 121 reviewed row outcomes", source)
         self.assertIn("cohort_count <> 1120 or unknown_count <> 124 or changed_count <> 121", source)
         write_contract = source.split("values ('OSIICS-01'", 1)[1].split("do $$", 1)[0]

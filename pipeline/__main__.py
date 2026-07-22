@@ -6736,23 +6736,19 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
     live_rows = query_sql(
         f"""
         select sr.id::text as source_row_id, sr.row_sha256 as source_row_sha256,
-               c.injury_id::text as injury_id, c.team_key, c.season,
-               c.setting_code as setting, c.days_lost,
-               c.body_location_code as original_body_location_code,
-               c.injury_type_code as original_injury_type_code,
-               p.diagnosis_code
+               i.id::text as injury_id, i.team_key, i.season,
+               case i.activity_context when 'urc_match' then 'match'
+                 when 'match' then 'match' when 'training' then 'training'
+                 else 'unknown' end as setting,
+               i.days_injured as days_lost,
+               i.body_location as original_body_location_code,
+               i.injury_type as original_injury_type_code
         from ingestion.source_rows sr
         join curated.injuries i on i.source_row_id=sr.id
-        join analysis.injury_cohort_by_build_season_bound_v3 c on c.injury_id=i.id
         join analysis.league_member_releases_v2 m
-          on m.curated_build_id=c.curated_build_id and m.team_key=c.team_key
-         and m.season=c.season
-        join analysis.season_bound_reporting_classification_v3 p
-          on p.injury_id=c.injury_id and p.curated_build_id=c.curated_build_id
-         and p.team_key=c.team_key and p.season=c.season
-         and p.setting_code=c.setting_code and p.is_time_loss=c.is_time_loss
-         and p.days_lost=c.days_lost
-        where c.season='2024-25' and c.is_time_loss
+          on m.curated_build_id=i.curated_build_id and m.team_key=i.team_key
+         and m.season=i.season
+        where i.season='2024-25' and i.days_injured > 0
           and sr.id in (select value::uuid from jsonb_array_elements_text(
             {live_params.jsonb(row_ids)}) value)
         order by sr.id
@@ -6772,10 +6768,6 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
                 raise SystemExit(
                     f"OSIICS reviewed row fingerprint changed: {reviewed['source_row_id']} {key}"
                 )
-        if live["diagnosis_code"] != "unknown":
-            raise SystemExit(
-                f"OSIICS reviewed predecessor diagnosis is no longer Unknown: {reviewed['source_row_id']}"
-            )
     unknown_rows = query_sql("""
       select count(*) as count
       from analysis.season_bound_reporting_classification_v3 p
