@@ -58,7 +58,7 @@ class SeasonBoundReportingV3ContractTests(unittest.TestCase):
     def test_release_cli_gates_v3_and_preserves_v2_paths(self) -> None:
         self.assertIn("supported_release_variants", self.source)
         self.assertIn("SEASON_BOUND_REPORTING_MIGRATION_VERSION", self.source)
-        self.assertIn("analysis.league_dashboard_release_candidates_v5", self.source)
+        self.assertIn("analysis.league_dashboard_classification_incremental_20260722_v1", self.source)
         self.assertIn("cohort_adjudications", self.source)
         self.assertIn("league_dashboard_release_v3", self.source)
         self.assertIn("SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION", self.source)

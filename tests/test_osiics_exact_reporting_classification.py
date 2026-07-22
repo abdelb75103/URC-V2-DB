@@ -13,6 +13,7 @@ from pipeline.__main__ import release_league
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20260722130000_osiics_exact_reporting_classification.sql"
 HOTFIX = ROOT / "supabase/migrations/20260722140000_osiics_source_body_pathology_mapping.sql"
+INCREMENTAL_RELEASE = ROOT / "supabase/migrations/20260722150000_incremental_classification_bundle_release.sql"
 MAPPING = ROOT / "docs/evidence/osiics_exact_ioc_mapping_2024-25.csv"
 MULTI_TYPE = ROOT / "docs/evidence/osiics_multi_type_diagnosis_2024-25.csv"
 EVIDENCE = ROOT / "docs/evidence/osiics_exact_mapping_2024-25.json"
@@ -23,6 +24,7 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.sql = MIGRATION.read_text()
         cls.hotfix_sql = HOTFIX.read_text()
+        cls.incremental_release_sql = INCREMENTAL_RELEASE.read_text()
         with MAPPING.open() as handle:
             cls.mapping_rows = list(csv.DictReader(handle))
         with MULTI_TYPE.open() as handle:
@@ -94,8 +96,9 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
         self.assertIn("reporting_classification_2026-07-22_v2", self.sql)
         self.assertIn("create view analysis.team_dashboard_release_candidates_v5", self.sql)
         self.assertIn("create view analysis.league_dashboard_release_candidates_v5", self.sql)
-        self.assertIn("analysis.team_dashboard_release_candidates_v5", self.release_source)
-        self.assertIn("analysis.league_dashboard_release_candidates_v5", self.release_source)
+        self.assertIn("analysis.team_dashboard_classification_incremental_20260722_v1", self.release_source)
+        self.assertIn("analysis.league_dashboard_classification_incremental_20260722_v1", self.release_source)
+        self.assertIn("INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION", self.release_source)
         self.assertIn(
             '("v3", "reporting_classification_2026-07-22_v2", "season_bound_2026-07-20_v1")',
             self.release_source,
@@ -116,6 +119,22 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
         self.assertIn("('QRA','ankle','tendon_rupture')", self.hotfix_sql)
         self.assertIn("('QRA','lower_leg','tendon_rupture')", self.hotfix_sql)
         self.assertIn("('QBC','lower_leg','bursitis')", self.hotfix_sql)
+
+    def test_classification_release_replaces_only_classification_sections(self) -> None:
+        sql = self.incremental_release_sql
+        self.assertIn("reporting.league_release_payloads_v2", sql)
+        self.assertIn("reporting.team_dashboard_payloads_v2", sql)
+        self.assertIn("release.status='approved'", sql)
+        self.assertEqual(sql.count("'{body_locations}'"), 2)
+        self.assertEqual(sql.count("'{injury_types}'"), 2)
+        self.assertEqual(sql.count("'{injury_profiles}'"), 2)
+        self.assertNotIn("'{headline}'", sql)
+        self.assertNotIn("'{monthly}'", sql)
+        self.assertNotIn("'{setting_metrics}'", sql)
+        self.assertNotIn("update reporting.league_release_payloads_v2", sql.lower())
+        self.assertNotIn("update reporting.team_dashboard_payloads_v2", sql.lower())
+        self.assertIn("incremental league dashboard snapshot changed fields outside", sql)
+        self.assertIn("incremental team dashboard snapshots changed fields outside", sql)
 
 
 if __name__ == "__main__":

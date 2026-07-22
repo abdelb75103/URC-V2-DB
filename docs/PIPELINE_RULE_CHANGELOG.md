@@ -16,18 +16,18 @@ Every change that alters a derived value, classification, cohort, denominator, o
 | Field | Value |
 |---|---|
 | Rule version | `reporting_classification_2026-07-22_v2` |
-| Status | accepted; additive migration and immutable bundle promotion prepared for the separately approved live-write gate |
+| Status | accepted; live adjudication recorded and incremental immutable bundle promotion approved |
 | Carry-forward | `carries-forward` for the exact code catalogue and conservative inference rules; the 2024-25 row ledger remains season-specific evidence |
 | Decision provenance | Abdel Babiker, 22 July 2026; approved use of defensible OSIICS/body/type/description evidence and the NPM neck multi-type representation |
 | Adjudication ref | `OSIICS-01` |
 | Evidence manifest | `docs/evidence/osiics_exact_mapping_2024-25.json`, SHA-256 `db1823f5d402c9989ef7c053dcfd4aced637eab142f7d372e6b16f22b168ed7c` |
-| Migrations | Base `20260722130000_osiics_exact_reporting_classification.sql` (`f469d4a724a481535c81c3c250a56a3ae75c29a6b6936f3d9cafe27612aa3c09`); additive correction `20260722140000_osiics_source_body_pathology_mapping.sql` (`47b4b918248b3cd0222c9013f1dad886bcc3995fb4348ed06124fac8fabe7b63`) |
+| Migrations | Base `20260722130000_osiics_exact_reporting_classification.sql` (`f469d4a724a481535c81c3c250a56a3ae75c29a6b6936f3d9cafe27612aa3c09`); additive correction `20260722140000_osiics_source_body_pathology_mapping.sql` (`47b4b918248b3cd0222c9013f1dad886bcc3995fb4348ed06124fac8fabe7b63`); incremental bundle release `20260722150000_incremental_classification_bundle_release.sql` (`ca10f3a52ac9df912c10cc6487169607a5770759e0e037cfa66cb4e99daa45f8`) |
 
 **What changes.** In the accepted 2024-25 league cohort, 111 Unknown diagnoses have an exact reviewed OSIICS/OSICS pathology mapping and 9 more have one unique explicit body area plus one unique controlled tissue/pathology type. One NPM case is reported as `Neck · Muscle/tendon injury`: its candidate types are retained as `muscle_injury;tendinopathy`, while its single analytical injury type is `nonspecific` so it contributes exactly once. The resulting bound expectation is 121 newly informative diagnoses and 245 → 124 underlying Unknown diagnoses. QRA preserves the supplied canonical body (`Ankle` or `Lower leg`) while applying the official Achilles tendon-rupture pathology; QBC maps to lower-leg bursitis.
 
 **Scientific limits.** Existing non-Unknown values win. Code/body conflicts, multiple candidate types, broken or nonspecific codes, and weak descriptions remain unresolved. QPS remains Unknown because “soleus trigger points/spasm” does not establish structural muscle injury. Original source and curated values are immutable; the successor view exposes effective values and provenance only.
 
-**Publication behaviour.** The successor recomputes diagnosis, body-location, injury-type, and combined injury-profile aggregates from the effective reporting values. The remaining Unknown categories are retained for completeness/audit but filtered from every front-facing dashboard category view. Promotion is an immutable 16-team league bundle; its approved predecessor remains available for rollback.
+**Publication behaviour.** The successor recomputes only diagnosis, body-location, injury-type, and combined injury-profile aggregates from the effective reporting values. The incremental release candidate copies the approved bundle and replaces only `body_locations`, `injury_types`, and `injury_profiles`; headline, exposure, monthly, setting, severity, coverage, method, limitations, and all other keys remain exactly inherited. The remaining Unknown categories are retained for completeness/audit but filtered from every front-facing dashboard category view. Promotion is an immutable 16-team league bundle; its approved predecessor remains available for rollback.
 
 ---
 

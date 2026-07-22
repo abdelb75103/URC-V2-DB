@@ -3603,6 +3603,7 @@ ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260720150000"
 SEASON_BOUND_REPORTING_MIGRATION_VERSION = "20260720170000"
 REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION = "20260720180000"
 OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260722140000"
+INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION = "20260722150000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-20_v3"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
@@ -5438,12 +5439,15 @@ def release_league(args: argparse.Namespace) -> None:
     uses_osiics_successor = (
         classification_view_version == "reporting_classification_2026-07-22_v2"
     )
+    # A classification-only successor inherits every non-classification field
+    # from the approved immutable bundle. Recomputing the full dashboard is both
+    # unnecessary and much slower than replacing the three affected sections.
     league_candidate_view = (
-        "analysis.league_dashboard_release_candidates_v5"
+        "analysis.league_dashboard_classification_incremental_20260722_v1"
         if uses_osiics_successor else "analysis.league_dashboard_release_candidates_v4"
     )
     team_candidate_view = (
-        "analysis.team_dashboard_release_candidates_v5"
+        "analysis.team_dashboard_classification_incremental_20260722_v1"
         if uses_osiics_successor else "analysis.team_dashboard_release_candidates_v4"
     )
     release_rule_version = (
@@ -5480,7 +5484,10 @@ def release_league(args: argparse.Namespace) -> None:
     )
     required_migrations = [required_migration]
     if uses_osiics_successor:
-        required_migrations.append(OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION)
+        required_migrations.extend([
+            OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION,
+            INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION,
+        ])
     if not preflight:
         required_migrations.append(REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION)
     migration_rows = query_sql(
@@ -5860,7 +5867,12 @@ def release_league(args: argparse.Namespace) -> None:
         "preflight_json_sha256": preflight_bundle_sha256,
         "reviewed_preflight_sha256": reviewed_sha256,
         "preflight_reviewer": reviewer,
-        "payload_validation_migration": REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION,
+        "payload_hash_validation_migration": REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION,
+        "payload_candidate_validation_migration": (
+            INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
+            if uses_osiics_successor
+            else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+        ),
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
     }
     if predecessor is not None:

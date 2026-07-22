@@ -21,11 +21,17 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
     def test_release_snapshots_league_and_all_team_payloads(self) -> None:
         self.assertIn('team_candidate_view = (', self.source)
         self.assertIn('"analysis.team_dashboard_release_candidates_v4"', self.source)
-        self.assertIn('"analysis.team_dashboard_release_candidates_v5"', self.source)
+        self.assertIn('"analysis.team_dashboard_classification_incremental_20260722_v1"', self.source)
         self.assertIn("len(team_payloads) != 16", self.source)
         self.assertIn("insert into reporting.league_release_payloads_v2", self.source)
         self.assertIn("insert into reporting.team_dashboard_payloads_v2", self.source)
         self.assertIn("release_reason_code", self.source)
+
+    def test_classification_successor_uses_incremental_candidates(self) -> None:
+        self.assertIn("classification-only successor inherits every non-classification field", self.source)
+        self.assertIn("analysis.league_dashboard_classification_incremental_20260722_v1", self.source)
+        self.assertIn("analysis.team_dashboard_classification_incremental_20260722_v1", self.source)
+        self.assertIn("INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION", self.source)
 
     def test_database_generates_payload_hashes(self) -> None:
         league_insert = self.source.split(
@@ -45,7 +51,7 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
             self.source.index("published league dashboard bundle must expose exactly one league row"),
         )
 
-    def test_promotion_reads_database_candidates_once_and_uses_fast_triggers(self) -> None:
+    def test_promotion_reads_database_candidates_once_and_uses_bound_triggers(self) -> None:
         write_sql = self.source.split("sql = f\"\"\"", 1)[1].split(
             "output_arg = clean_text(args.output or \"\")", 1
         )[0]
@@ -61,6 +67,9 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertIn("stored_bundle_hash", self.source)
         self.assertIn("stored bundle payload hash differs from the canonical candidate hash", self.source)
         self.assertIn("REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION", self.source)
+        self.assertIn('"payload_hash_validation_migration"', self.source)
+        self.assertIn('"payload_candidate_validation_migration"', self.source)
+        self.assertIn("INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION", self.source)
 
     def test_preflight_preserves_postgres_canonical_numeric_text(self) -> None:
         self.assertIn("document::text as bundle_payload_json", self.source)
@@ -80,6 +89,16 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertIn("inserted_count <> 16", migration)
         self.assertNotIn("analysis.league_dashboard_release_candidates_v4", migration)
         self.assertNotIn("analysis.team_dashboard_release_candidates_v4", migration)
+
+        incremental = (
+            Path(__file__).resolve().parents[1]
+            / "supabase/migrations/20260722150000_incremental_classification_bundle_release.sql"
+        ).read_text()
+        self.assertIn("create or replace function reporting.validate_league_dashboard_v2_candidate()", incremental)
+        self.assertIn("create or replace function reporting.validate_team_dashboard_v2_candidates()", incremental)
+        self.assertIn("analysis.league_dashboard_classification_incremental_20260722_v1", incremental)
+        self.assertIn("analysis.team_dashboard_classification_incremental_20260722_v1", incremental)
+        self.assertIn("changed fields outside the accepted classification sections", incremental)
 
     def test_rollback_only_hosted_contract_covers_validator_paths(self) -> None:
         harness = (
