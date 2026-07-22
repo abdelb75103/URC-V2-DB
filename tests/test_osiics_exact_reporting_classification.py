@@ -91,6 +91,8 @@ class OsiicsExactReportingClassificationTests(unittest.TestCase):
         self.assertIn("--expected-migration-sha256", source)
         self.assertIn("OSIICS successor matches % of 121 reviewed row outcomes", source)
         self.assertIn("cohort_count <> 1120 or unknown_count <> 124 or changed_count <> 121", source)
+        write_contract = source.split("values ('OSIICS-01'", 1)[1].split("do $$", 1)[0]
+        self.assertNotIn("on conflict", write_contract.lower())
         self.assertIn("drop constraint rule_adjudications_migration_version_check", self.sql)
         self.assertIn("'20260720150000', '20260722130000'", self.sql)
 

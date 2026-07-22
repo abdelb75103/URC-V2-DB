@@ -6875,8 +6875,7 @@ def apply_osiics_mapping_adjudication(args: argparse.Namespace) -> None:
           {params.jsonb(decision)},{params.text(expected_ledger_sha)},
           {params.text(expected_workbook_sha)},{params.text(evidence_manifest_sha)},
           'Abdel Babiker',{params.text(str(workbook_path))},'20260722130000',
-          {params.text(migration_sha)},{params.text(rationale)})
-        on conflict (adjudication_ref,rule_version) do nothing;
+          {params.text(migration_sha)},{params.text(rationale)});
 
         do $$
         declare
