@@ -1,7 +1,7 @@
 import "server-only";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
-import type { DashboardSupplement } from "@/lib/reporting-types";
+import type { DashboardSupplement, ExposureReviewPreview } from "@/lib/reporting-types";
 
 const settingSchema = z.enum(["all", "match", "training", "unknown"]);
 
@@ -72,6 +72,7 @@ const supplementSchema = z.object({
   severity_distribution: z.array(z.object({
     key: z.string(),
     label: z.string(),
+    setting: z.enum(["all", "match", "training"]),
     recorded_injuries: z.number().int().nonnegative(),
     time_loss_injuries: z.number().int().nonnegative(),
     days_lost: z.number().nonnegative(),
@@ -118,6 +119,31 @@ const previewFileSchema = z.object({
   supplements: z.array(supplementSchema),
 });
 
+const exposureReviewPreviewSchema = z.object({
+  status: z.literal("private_review_override"),
+  season: z.string(),
+  generated_at: z.string(),
+  source: z.string(),
+  hsr_field: z.string(),
+  source_file_count: z.number().int().positive(),
+  monthly: z.array(z.object({
+    month: z.string(),
+    additional_hours: z.number().nonnegative(),
+    additional_distance_km: z.number().nonnegative(),
+    hsr_distance_km: z.number().nonnegative(),
+    hsr_distance_denominator_km: z.number().nonnegative(),
+    hsr_reporting_teams: z.number().int().nonnegative(),
+    match_hours: z.number().nonnegative(),
+  })),
+  teams: z.array(z.object({
+    team_alias: z.string().regex(/^Team [A-Z]$/),
+    additional_hours: z.number().nonnegative(),
+    additional_distance_km: z.number().nonnegative(),
+    hsr_distance_km: z.number().nonnegative().nullable(),
+    hsr_distance_denominator_km: z.number().nonnegative(),
+  })),
+});
+
 /**
  * Local review only. The approved database projection remains the sole source
  * in production; setting DASHBOARD_V3_PREVIEW_FILE opts a dev server into an
@@ -131,4 +157,18 @@ export async function getDashboardSupplement(
 
   const parsed = previewFileSchema.parse(JSON.parse(await readFile(file, "utf8")));
   return parsed.supplements.find((row) => row.team_key === teamKey);
+}
+
+export async function getExposureReviewPreview(
+  season = "2024-25"
+): Promise<ExposureReviewPreview | undefined> {
+  if (process.env.NODE_ENV === "production") return undefined;
+  const file = process.env.EXPOSURE_REVIEW_PREVIEW_FILE
+    ?? `data/reporting/exposure_review_preview_${season}.json`;
+  try {
+    return exposureReviewPreviewSchema.parse(JSON.parse(await readFile(file, "utf8")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
 }

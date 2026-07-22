@@ -202,10 +202,23 @@ function teamDisplayAliases(): Record<string, string> {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return Object.fromEntries(
       Object.entries(parsed).filter(
-        ([, alias]) => typeof alias === "string" && alias.trim().length > 0
+        ([key, alias]) => /^[a-z0-9-]+$/.test(key)
+          && typeof alias === "string"
+          && /^Team [A-Z]$/.test(alias)
       )
     ) as Record<string, string>;
   } catch {
+    // Next's local dotenv parser can remove the inner JSON quotes when the
+    // value was entered unwrapped. Accept that narrow dev-only shape so an
+    // already-running review server does not expose fallback club labels.
+    if (process.env.NODE_ENV !== "production" && raw.startsWith("{") && raw.endsWith("}")) {
+      const entries = raw.slice(1, -1).split(",").map((pair) => pair.split(":"));
+      if (entries.length && entries.every(([key, alias]) =>
+        /^[a-z0-9-]+$/.test(key ?? "") && /^Team [A-Z]$/.test(alias ?? "")
+      )) {
+        return Object.fromEntries(entries) as Record<string, string>;
+      }
+    }
     return {};
   }
 }
@@ -313,6 +326,7 @@ function normalizeTeamComparisons(rawRows: unknown[]): TeamComparisonRow[] {
     return {
       internal_team_key: row.team_key,
       exposure_hours: row.coverage.hours,
+      distance_km: row.coverage.distance_km,
       match_hours: row.coverage.match_hours ?? null,
       training_hours: row.coverage.training_hours ?? null,
       all: overallSettingMetric(row.headline, row.coverage),

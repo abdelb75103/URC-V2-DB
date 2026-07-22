@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import type {
   DashboardSupplement,
+  ExposureReviewPreview,
   InjuryProfileRow,
   InjuryTypeFamilyRow,
   SettingMetricRow,
@@ -21,6 +22,7 @@ import {
   type InjuryTypeMetric,
 } from '@/components/dashboard/injury-type-dossier';
 import { resolveLocationView } from '@/lib/location-view';
+import { withoutFrontFacingUnknown } from '@/lib/dashboard-visibility';
 import {
   ExposureTrendChart,
   ImpactBubbleChart,
@@ -109,6 +111,11 @@ const FALLBACK_INJURY_COLORS = [
   '#9f1239',
 ] as const;
 
+const CONTACT_RING_COLORS: Record<string, string> = {
+  contact: '#a78bfa',
+  non_contact: '#fb923c',
+};
+
 function fmt(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
   return new Intl.NumberFormat('en-IE', {
@@ -169,14 +176,16 @@ function Segmented<T extends string>({
   options,
   onChange,
   label,
+  scrollable = true,
 }: {
   value: T;
   options: Array<{ value: T; label: string }>;
   onChange: (value: T) => void;
   label: string;
+  scrollable?: boolean;
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex max-w-full gap-1 overflow-x-auto rounded-md border border-border bg-background/50 p-1">
+    <div role="group" aria-label={label} className={`inline-flex max-w-full gap-1 rounded-md border border-border bg-background/50 p-1 ${scrollable ? 'overflow-x-auto' : 'flex-wrap overflow-visible'}`}>
       {options.map((option) => (
         <button
           key={option.value}
@@ -232,14 +241,14 @@ function reportingDiagnosisRows(
   profiles: InjuryProfileRow[],
   supplement?: DashboardSupplement,
 ): InjuryProfileRow[] {
-  if (supplement?.common_injuries.length) return supplement.common_injuries;
+  if (supplement?.common_injuries.length) return withoutFrontFacingUnknown(supplement.common_injuries);
   if (profiles.some((row) => row.dimension === 'diagnosis')) {
-    return profiles.filter((row) => row.dimension === 'diagnosis');
+    return withoutFrontFacingUnknown(profiles.filter((row) => row.dimension === 'diagnosis'));
   }
   if (profiles.some((row) => row.dimension === 'injury_profile')) {
-    return profiles.filter((row) => row.dimension === 'injury_profile');
+    return withoutFrontFacingUnknown(profiles.filter((row) => row.dimension === 'injury_profile'));
   }
-  return profiles.filter((row) => row.dimension === 'injury_type');
+  return withoutFrontFacingUnknown(profiles.filter((row) => row.dimension === 'injury_type'));
 }
 
 function OverviewTab({
@@ -252,6 +261,7 @@ function OverviewTab({
   supplement?: DashboardSupplement;
 }) {
   const [caseSetting, setCaseSetting] = useState<Setting>('all');
+  const [severitySetting, setSeveritySetting] = useState<'all' | 'match' | 'training'>('all');
   const [contactSetting, setContactSetting] = useState<'all' | 'match' | 'training'>('all');
   const headline = Object.fromEntries(dashboard.headline.map((row) => [row.key, row.value]));
   const all = supplement?.rate_setting_metrics.find((row) => row.setting === 'all')
@@ -261,12 +271,11 @@ function OverviewTab({
   const training = supplement?.rate_setting_metrics.find((row) => row.setting === 'training')
     ?? dashboard.setting_metrics.find((row) => row.setting === 'training');
   const diagnosisRows = reportingDiagnosisRows(profiles, supplement);
-  const namedDiagnosisRows = diagnosisRows.filter((row) => row.code !== 'unknown');
   const highlights = [
-    ['Most common match injury', topRow(namedDiagnosisRows, 'match', 'incidence_per_1000h'), 'incidence_per_1000h'],
-    ['Most common training injury', topRow(namedDiagnosisRows, 'training', 'incidence_per_1000h'), 'incidence_per_1000h'],
-    ['Highest match burden', topRow(namedDiagnosisRows, 'match', 'burden_per_1000h'), 'burden_per_1000h'],
-    ['Highest training burden', topRow(namedDiagnosisRows, 'training', 'burden_per_1000h'), 'burden_per_1000h'],
+    ['Most common match injury', topRow(diagnosisRows, 'match', 'incidence_per_1000h'), 'incidence_per_1000h'],
+    ['Most common training injury', topRow(diagnosisRows, 'training', 'incidence_per_1000h'), 'incidence_per_1000h'],
+    ['Highest match burden', topRow(diagnosisRows, 'match', 'burden_per_1000h'), 'burden_per_1000h'],
+    ['Highest training burden', topRow(diagnosisRows, 'training', 'burden_per_1000h'), 'burden_per_1000h'],
   ] as const;
   const recorded = supplement?.descriptive_consequence_summary.recorded_injuries
     ?? headline.recorded_injuries
@@ -291,16 +300,21 @@ function OverviewTab({
     exposure_hours: row.exposure_hours ?? null,
     incidence_per_1000h: row.incidence_per_1000h ?? null,
   }));
-  const contactRows = supplement?.contact_distribution
+  const contactRows = withoutFrontFacingUnknown(supplement?.contact_distribution ?? [])
     .filter((row) => row.setting === contactSetting)
-    .map((row) => ({ key: row.key, label: row.label, value: row.time_loss_injuries })) ?? [];
-  const severity = supplement?.severity_distribution ?? dashboard.severity_distribution;
+    .map((row) => ({
+      key: row.key,
+      label: row.label,
+      value: row.time_loss_injuries,
+      color: CONTACT_RING_COLORS[row.key],
+    })) ?? [];
+  const severity = supplement?.severity_distribution.filter((row) => row.setting === severitySetting)
+    ?? dashboard.severity_distribution;
   const severityRows = [
     { key: 'zero', label: '0 days recorded', value: severity.find((row) => row.key === 'zero_days_medical_attention_only')?.recorded_injuries ?? 0 },
     { key: 'one_to_seven', label: '1-7 days', value: severity.filter((row) => ['one_day', 'two_to_three_days', 'four_to_seven_days'].includes(row.key)).reduce((sum, row) => sum + row.recorded_injuries, 0) },
     { key: 'eight_to_twenty_eight', label: '8-28 days', value: severity.find((row) => row.key === 'eight_to_twenty_eight_days')?.recorded_injuries ?? 0 },
     { key: 'greater_than_twenty_eight', label: '>28 days', value: severity.find((row) => row.key === 'greater_than_twenty_eight_days')?.recorded_injuries ?? 0 },
-    { key: 'unknown', label: 'Unknown / censored', value: severity.find((row) => row.key === 'unknown_or_censored')?.recorded_injuries ?? 0 },
   ];
 
   return (
@@ -338,18 +352,31 @@ function OverviewTab({
       </div>
 
       <div className={`grid gap-5 ${supplement ? 'xl:grid-cols-2' : ''}`}>
-        <Panel title="Severity distribution">
-          <RingBreakdown rows={severityRows} centerLabel="cases" valueLabel="cases" />
-        </Panel>
-        {supplement && <Panel title="Contact vs non-contact">
-          <div className="mb-4 flex justify-end">
-            <Segmented value={contactSetting} options={['all', 'match', 'training'].map((value) => ({ value: value as typeof contactSetting, label: value === 'all' ? 'Overall' : value[0].toUpperCase() + value.slice(1) }))} onChange={setContactSetting} label="Choose contact setting" />
+        <Panel>
+          <div className="mb-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center xl:min-h-[4.5rem]">
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-foreground">Severity distribution</h3>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Classified injuries by time-loss duration.</p>
+            </div>
+            {supplement && (
+              <Segmented value={severitySetting} options={['all', 'match', 'training'].map((value) => ({ value: value as typeof severitySetting, label: value === 'all' ? 'Overall' : value[0].toUpperCase() + value.slice(1) }))} onChange={setSeveritySetting} label="Choose severity setting" />
+            )}
           </div>
-          <RingBreakdown rows={contactRows} centerLabel="positive-day" valueLabel="cases" />
-        </Panel>}
+          <RingBreakdown rows={severityRows} centerLabel="classified cases" valueLabel="cases" />
+        </Panel>
+        {supplement && (
+          <Panel>
+            <div className="mb-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center xl:min-h-[4.5rem]">
+              <div className="min-w-0">
+                <h3 className="text-lg font-semibold text-foreground">Contact vs non-contact</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Classified time-loss injuries by contact mechanism.</p>
+              </div>
+              <Segmented value={contactSetting} options={['all', 'match', 'training'].map((value) => ({ value: value as typeof contactSetting, label: value === 'all' ? 'Overall' : value[0].toUpperCase() + value.slice(1) }))} onChange={setContactSetting} label="Choose contact setting" />
+            </div>
+            <RingBreakdown rows={contactRows} centerLabel="classified cases" valueLabel="cases" />
+          </Panel>
+        )}
       </div>
-
-      {supplement && <InferenceCoverageSummary supplement={supplement} />}
     </div>
   );
 }
@@ -361,35 +388,6 @@ function OverviewStat({ label, value, unit }: { label: string; value: string; un
       <p className="mt-3 text-4xl font-bold tracking-tight tabular-nums text-foreground sm:text-5xl">{value}</p>
       {unit && <p className="mt-1 text-xs text-muted-foreground">{unit}</p>}
     </div>
-  );
-}
-
-function InferenceCoverageSummary({ supplement }: { supplement: DashboardSupplement }) {
-  const coverage = supplement.inference_coverage;
-  const fields = [
-    ['Body location', coverage.body_location],
-    ['Tissue and pathology', coverage.tissue_pathology],
-    ['Diagnosis', coverage.diagnosis],
-    ['Contact context', coverage.contact_context],
-  ] as const;
-
-  return (
-    <details className="rounded-lg border border-border/70 bg-card/60">
-      <summary className="flex min-h-11 cursor-pointer items-center px-5 text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Data coverage & provenance</summary>
-      <div className="border-t border-border/60 p-5">
-      <div className="grid divide-y divide-border/60 sm:grid-cols-2 sm:divide-x sm:divide-y-0">
-        {fields.map(([label, counts]) => (
-          <div key={label} className="p-3 first:pl-0 sm:[&:nth-child(2)]:pr-0">
-            <p className="text-xs font-medium text-foreground">{label}</p>
-            <p className="mt-2 text-xl font-semibold tabular-nums text-foreground">{fmt(counts.classified, 0)} / {fmt(counts.total, 0)}</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              classified in the draft. {fmt(counts.source_reported, 0)} source-reported, {fmt(counts.mapped, 0)} mapped through deterministic lookup, {fmt(counts.inferred, 0)} inferred from evidence, {fmt(counts.adjudicated, 0)} adjudicated, {fmt(counts.remaining_unknown, 0)} still unknown.
-            </p>
-          </div>
-        ))}
-      </div>
-      </div>
-    </details>
   );
 }
 
@@ -479,15 +477,22 @@ function CompactRanking({ rows }: { rows: InjuryProfileRow[] }) {
   );
 }
 
-function CommonInjuriesTab({ profiles, supplement }: { profiles: InjuryProfileRow[]; supplement?: DashboardSupplement }) {
+function CommonInjuriesTab({ dashboard, profiles, supplement }: {
+  dashboard: TeamDashboardData;
+  profiles: InjuryProfileRow[];
+  supplement?: DashboardSupplement;
+}) {
   const source = reportingDiagnosisRows(profiles, supplement);
   const settings = availableSettings(source, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
-  const rows = source.filter((row) => row.setting === setting && row.code !== 'unknown');
+  const rows = source.filter((row) => row.setting === setting);
   const injuryColors = commonInjuryColorMap(source);
-  const totalInjuries = source
-    .filter((row) => row.setting === setting)
-    .reduce((sum, row) => sum + row.time_loss_injuries, 0);
+  const totalInjuries = supplement?.rate_setting_metrics
+    .find((row) => row.setting === setting)?.time_loss_injuries
+    ?? (setting === 'all'
+      ? dashboard.headline.find((row) => row.key === 'time_loss_injuries')?.value
+      : dashboard.setting_metrics.find((row) => row.setting === setting)?.time_loss_injuries)
+    ?? 0;
   const settingTitle = setting === 'all' ? '' : `${setting[0].toUpperCase()}${setting.slice(1)} `;
 
   return (
@@ -508,7 +513,7 @@ function commonInjuryColorMap(rows: InjuryProfileRow[]) {
   const seen = new Set<string>();
   const visibleBySetting = new Map<Setting, Set<string>>();
   const addCode = (code: string) => {
-    if (code !== 'unknown' && !seen.has(code)) {
+    if (!seen.has(code)) {
       seen.add(code);
       codes.push(code);
     }
@@ -518,7 +523,7 @@ function commonInjuryColorMap(rows: InjuryProfileRow[]) {
     const visibleCodes = new Set<string>();
     for (const metric of METRICS) {
       [...rows]
-        .filter((row) => row.setting === setting && row.code !== 'unknown' && metricValue(row, metric.key) > 0)
+        .filter((row) => row.setting === setting && metricValue(row, metric.key) > 0)
         .sort((a, b) => metricValue(b, metric.key) - metricValue(a, metric.key) || a.label.localeCompare(b.label))
         .slice(0, 5)
         .forEach((row) => {
@@ -956,105 +961,125 @@ function BenchmarkCell({ value, average, groupStart = false }: {
   return <td className={`${divider} border-card px-3 text-center font-semibold tabular-nums sm:text-lg ${tone}`}>{fmt(value)}</td>;
 }
 
-function ExposureRowTooltip({ id, row }: { id: string; row?: TeamComparisonRow }) {
-  return (
-    <div id={id} aria-live="polite" className="mb-4 rounded-md border border-border bg-background/60 px-4 py-3 text-sm leading-relaxed text-popover-foreground">
-      {row ? (
-        <>
-          <p className="font-semibold text-foreground">{row.team_alias}</p>
-          <p className="mt-0.5 text-foreground"><span className="font-medium">Total exposure:</span> <span className="tabular-nums">{fmtHours(row.exposure_hours)} player-hours</span></p>
-          <p className="mt-1 text-muted-foreground">Match {fmtHours(row.match_hours)} h. Training {fmtHours(row.training_hours)} h.</p>
-        </>
-      ) : 'No club selected.'}
-    </div>
-  );
-}
-
-function ExposureTab({ dashboard, comparisons }: { dashboard: TeamDashboardData; comparisons: TeamComparisonRow[] }) {
-  const [hoveredId, setHoveredId] = useState<string>();
-  const [selectedId, setSelectedId] = useState<string>();
-  const tooltipId = useId();
-  const sorted = [...comparisons].sort((a, b) => b.exposure_hours - a.exposure_hours);
-  const max = Math.max(...sorted.map((row) => row.exposure_hours), 1);
-  const activeId = hoveredId ?? selectedId ?? sorted[0]?.comparison_id;
-  const activeRow = sorted.find((row) => row.comparison_id === activeId);
-  return (
-    <div>
-      <SectionHeading title="Exposure" />
-      <div className="grid overflow-hidden rounded-lg border border-border/70 bg-card/70 sm:grid-cols-2 xl:grid-cols-4">
-        <OverviewStat label="Total exposure" value={fmtHours(dashboard.coverage.hours)} unit="player-hours" />
-        <OverviewStat label="Match exposure" value={fmtHours(dashboard.coverage.match_hours)} unit="player-hours" />
-        <OverviewStat label="Training exposure" value={fmtHours(dashboard.coverage.training_hours)} unit="player-hours" />
-        <OverviewStat label="Distance" value={fmt(dashboard.coverage.distance_km)} unit="km" />
-      </div>
-      <div className="mt-6 space-y-5">
-        <ExposureSettingSplit matchHours={dashboard.coverage.match_hours} trainingHours={dashboard.coverage.training_hours} />
-        <Panel title="Exposure by month">
-          <div className="overflow-x-auto"><ExposureTrendChart rows={dashboard.monthly} /></div>
-        </Panel>
-        <Panel title="Club exposure comparison">
-          {sorted.length ? (
-            <>
-              <ExposureRowTooltip id={tooltipId} row={activeRow} />
-              <div className="max-h-[640px] space-y-1 overflow-y-auto pr-1">
-                {sorted.map((row, index) => (
-                  <button
-                    key={row.comparison_id}
-                    type="button"
-                    aria-describedby={tooltipId}
-                    aria-label={`${row.team_alias}: ${fmtHours(row.exposure_hours)} player-hours total exposure`}
-                    onMouseEnter={() => setHoveredId(row.comparison_id)}
-                    onMouseLeave={() => setHoveredId(undefined)}
-                    onFocus={() => setHoveredId(row.comparison_id)}
-                    onBlur={() => setHoveredId(undefined)}
-                    onClick={() => setSelectedId(row.comparison_id)}
-                    className={`grid min-h-12 w-full grid-cols-[30px_minmax(100px,0.5fr)_minmax(110px,1fr)_96px] items-center gap-3 rounded px-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${activeId === row.comparison_id ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
-                  >
-                    <span className="text-muted-foreground">{index + 1}</span>
-                    <span className="truncate font-semibold text-foreground">{row.team_alias}</span>
-                    <span className="h-3 overflow-hidden rounded-full bg-muted"><span className="block h-full rounded-full bg-primary" style={{ width: `${row.exposure_hours / max * 100}%` }} /></span>
-                    <span className="text-right text-base font-semibold tabular-nums text-foreground">{fmtHours(row.exposure_hours)}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : <EmptyState />}
-        </Panel>
-      </div>
-    </div>
-  );
-}
-
-function ExposureSettingSplit({
-  matchHours,
-  trainingHours,
+function ExposureTab({
+  dashboard,
+  comparisons,
+  exposurePreview,
 }: {
-  matchHours?: number | null;
-  trainingHours?: number | null;
+  dashboard: TeamDashboardData;
+  comparisons: TeamComparisonRow[];
+  exposurePreview?: ExposureReviewPreview;
 }) {
-  const max = Math.max(matchHours ?? 0, trainingHours ?? 0, 1);
-  const rows = [
-    { label: 'Match', value: matchHours ?? null, color: 'bg-primary' },
-    { label: 'Training', value: trainingHours ?? null, color: 'bg-primary/60' },
+  type ExposureMeasure = 'hours' | 'distance' | 'hsr';
+  const [monthlyMeasure, setMonthlyMeasure] = useState<ExposureMeasure>('hours');
+  const [comparisonMeasure, setComparisonMeasure] = useState<ExposureMeasure>('hours');
+  const coverage = dashboard.coverage;
+  const previewMonths = new Map(exposurePreview?.monthly.map((row) => [row.month, row]) ?? []);
+  const previewTeams = new Map(exposurePreview?.teams.map((row) => [row.team_alias, row]) ?? []);
+  const monthlyRows = dashboard.monthly.map((row) => {
+    const preview = row.month ? previewMonths.get(row.month) : undefined;
+    const exposureHours = (row.exposure_hours ?? 0) + (preview?.additional_hours ?? 0);
+    const matchHours = preview?.match_hours ?? 0;
+    return {
+      ...row,
+      exposure_hours: exposureHours,
+      distance_km: (row.distance_km ?? 0) + (preview?.additional_distance_km ?? 0),
+      hsr_distance_km: preview?.hsr_distance_km,
+      hsr_distance_denominator_km: preview?.hsr_distance_denominator_km,
+      match_exposure_hours: exposurePreview ? matchHours : undefined,
+      training_exposure_hours: exposurePreview ? Math.max(exposureHours - matchHours, 0) : undefined,
+    };
+  });
+  const comparisonRows = comparisons.map((row) => {
+    const preview = previewTeams.get(row.team_alias);
+    return {
+      ...row,
+      exposure_hours: row.exposure_hours + (preview?.additional_hours ?? 0),
+      distance_km: row.distance_km + (preview?.additional_distance_km ?? 0),
+      hsr_distance_km: preview?.hsr_distance_km,
+    };
+  });
+  const additionalHours = exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_hours, 0) ?? 0;
+  const additionalDistance = exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_distance_km, 0) ?? 0;
+  const totalHsr = exposurePreview?.monthly.reduce((sum, row) => sum + row.hsr_distance_km, 0) ?? 0;
+  const options: Array<{ value: ExposureMeasure; label: string }> = [
+    { value: 'hours', label: 'Hours' },
+    { value: 'distance', label: 'Distance' },
+    ...(exposurePreview ? [{ value: 'hsr' as const, label: 'HSR' }] : []),
   ];
-
   return (
-    <div className="grid overflow-hidden rounded-lg border border-border/70 bg-card/60 md:grid-cols-2">
-      {rows.map((row) => {
-        const width = row.value === null ? 0 : Math.max((row.value / max) * 100, row.value > 0 ? 3 : 0);
-        return (
-          <div key={row.label} className="border-b border-border/60 p-5 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="font-semibold text-foreground">{row.label}</p>
-              <p className="text-2xl font-semibold tabular-nums text-foreground">{fmtHours(row.value)} <span className="text-xs font-medium text-muted-foreground">h</span></p>
-            </div>
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
-              <div className={`h-full rounded-full ${row.color}`} style={{ width: `${width}%` }} />
-            </div>
-          </div>
-        );
-      })}
+    <div className="space-y-5 sm:space-y-6">
+      <SectionHeading title="Exposure" />
+      <section aria-labelledby="total-exposure-heading">
+        <h3 id="total-exposure-heading" className="mb-3 text-lg font-semibold text-foreground">Total exposure</h3>
+        <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          <OverviewStat label="Total hours" value={fmtHours(coverage.hours + additionalHours)} unit="player-hours" />
+          <OverviewStat label="Total distance" value={fmt(coverage.distance_km + additionalDistance)} unit="km" />
+          {exposurePreview && <OverviewStat label="HSR distance" value={fmt(totalHsr)} unit="km" />}
+        </div>
+      </section>
+      <Panel contentClassName="p-4 sm:p-5">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h3 className="text-lg font-semibold text-foreground">Monthly exposure</h3>
+          <Segmented value={monthlyMeasure} options={options} onChange={setMonthlyMeasure} label="Choose monthly exposure measure" scrollable={false} />
+        </div>
+        <ExposureTrendChart rows={monthlyRows} measure={monthlyMeasure} />
+      </Panel>
+      <ExposureComparison rows={comparisonRows} measure={comparisonMeasure} onMeasureChange={setComparisonMeasure} options={options} />
     </div>
+  );
+}
+
+function ExposureComparison({
+  rows,
+  measure,
+  onMeasureChange,
+  options,
+}: {
+  rows: Array<TeamComparisonRow & { hsr_distance_km?: number | null }>;
+  measure: 'hours' | 'distance' | 'hsr';
+  onMeasureChange: (measure: 'hours' | 'distance' | 'hsr') => void;
+  options: Array<{ value: 'hours' | 'distance' | 'hsr'; label: string }>;
+}) {
+  const metric = (row: typeof rows[number]) => measure === 'hours'
+    ? row.exposure_hours
+    : measure === 'distance' ? row.distance_km : row.hsr_distance_km;
+  const ranked = [...rows]
+    .filter((row) => typeof metric(row) === 'number' && Number.isFinite(metric(row)))
+    .sort((a, b) => (metric(b) ?? 0) - (metric(a) ?? 0));
+  const max = Math.max(...ranked.map((row) => metric(row) ?? 0), 1);
+  const label = measure === 'hours' ? 'player-hours' : 'km';
+  const measureLabel = measure === 'hours' ? 'Hours' : measure === 'distance' ? 'Distance' : 'HSR';
+  return (
+    <Panel contentClassName="p-4 sm:p-5">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-lg font-semibold text-foreground">Team comparison</h3>
+        <Segmented value={measure} options={options} onChange={onMeasureChange} label="Choose team comparison exposure measure" scrollable={false} />
+      </div>
+      {!ranked.length ? (
+        <EmptyState>{measureLabel} is not available in the approved team comparison contract.</EmptyState>
+      ) : (
+        <div className="space-y-1" aria-label={`Team comparison by ${measureLabel.toLowerCase()}`}>
+          <div className="mb-2 grid grid-cols-[minmax(72px,8rem)_minmax(0,1fr)_4.5rem] gap-3 px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:grid-cols-[minmax(100px,10rem)_minmax(0,1fr)_6rem]">
+            <span>Team</span><span>Total</span><span className="text-right">{label}</span>
+          </div>
+          {ranked.map((row) => {
+            const value = metric(row) ?? 0;
+            const displayValue = measure === 'hours' ? fmtHours(value) : fmt(value);
+            const width = value / max * 100;
+            return (
+              <div key={row.comparison_id} className="grid min-h-11 grid-cols-[minmax(72px,8rem)_minmax(0,1fr)_4.5rem] items-center gap-3 rounded-md px-2 text-sm hover:bg-muted/40 sm:min-h-8 sm:grid-cols-[minmax(100px,10rem)_minmax(0,1fr)_6rem]">
+                <span className="truncate font-medium text-foreground">{row.team_alias}</span>
+                <span className="relative h-3 rounded-sm bg-muted" aria-hidden="true">
+                  <span className="block h-full rounded-sm bg-primary" style={{ width: `${width}%` }} />
+                </span>
+                <span className="text-right font-semibold tabular-nums text-foreground">{displayValue}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -1306,6 +1331,7 @@ export function TeamDashboard({
   comparisons = [],
   leagueMetrics = [],
   supplement,
+  exposurePreview,
 }: {
   dashboard: TeamDashboardData;
   crest: string;
@@ -1313,16 +1339,20 @@ export function TeamDashboard({
   comparisons?: TeamComparisonRow[];
   leagueMetrics?: SettingMetricRow[];
   supplement?: DashboardSupplement;
+  exposurePreview?: ExposureReviewPreview;
 }) {
   const approvedProfiles = dashboard.injury_profiles ?? [];
-  const profiles = supplement
+  const profiles = withoutFrontFacingUnknown(supplement
     ? [
         ...approvedProfiles.filter((row) => !['body_location', 'injury_type'].includes(row.dimension)),
         ...supplement.body_locations,
         ...supplement.injury_types,
       ]
-    : approvedProfiles;
-  const injuryTypeFamilies = dashboard.injury_type_families;
+    : approvedProfiles);
+  const injuryTypeFamilies = withoutFrontFacingUnknown(dashboard.injury_type_families).map((family) => ({
+    ...family,
+    subtypes: withoutFrontFacingUnknown(family.subtypes),
+  }));
   const scopeLabel = dashboard.scope === 'league' ? 'League-wide' : teamName;
 
   return (
@@ -1339,7 +1369,6 @@ export function TeamDashboard({
         <div className="min-w-0">
           <h1 className="text-2xl font-bold leading-tight text-foreground sm:text-3xl">{teamName} Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">{scopeLabel} injury and exposure surveillance - {dashboard.season}</p>
-          {supplement && <span className="mt-3 inline-flex rounded-full border border-amber-400/40 bg-amber-400/10 px-3 py-1 text-[11px] font-medium text-amber-200">V3 inference preview - draft, not released</span>}
         </div>
       </header>
 
@@ -1356,8 +1385,8 @@ export function TeamDashboard({
 
         <TabsContent value="overview"><OverviewTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
         <TabsContent value="comparison"><TeamComparisonTab rows={comparisons} leagueMetrics={leagueMetrics} /></TabsContent>
-        <TabsContent value="exposure"><ExposureTab dashboard={dashboard} comparisons={comparisons} /></TabsContent>
-        <TabsContent value="common"><CommonInjuriesTab profiles={profiles} supplement={supplement} /></TabsContent>
+        <TabsContent value="exposure"><ExposureTab dashboard={dashboard} comparisons={comparisons} exposurePreview={exposurePreview} /></TabsContent>
+        <TabsContent value="common"><CommonInjuriesTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
         <TabsContent value="location"><LocationTab profiles={profiles} /></TabsContent>
         <TabsContent value="types"><InjuryTypesTab families={injuryTypeFamilies} /></TabsContent>
         <TabsContent value="impact"><ImpactTab profiles={profiles} supplement={supplement} /></TabsContent>

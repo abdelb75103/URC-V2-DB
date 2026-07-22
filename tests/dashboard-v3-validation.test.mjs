@@ -9,6 +9,7 @@ import {
   validateDraft9DiagnosisBuckets,
   validateDraft9RuleChecks,
   validateDraft9SeasonBoundCohort,
+  validateDraft9SettingDistributions,
   validateOriginClassCounts,
   validateLegacyMultiMatchRefusal,
 } from "../tools/dashboard-v3-validation.mjs";
@@ -227,6 +228,62 @@ test("draft.9 season-bound cohort includes undated counts, excludes them monthly
   assert.throws(
     () => validateDraft9SeasonBoundCohort({ ...row, rate_setting_metrics: [{ setting: "all", exposure_hours: 100.12, time_loss_injuries: 7 }] }),
     /one decimal/
+  );
+});
+
+test("severity and contact distributions uniquely reconcile all, match, and training", () => {
+  const row = {
+    team_key: "example",
+    descriptive_consequence_summary: { recorded_injuries: 8 },
+    rate_setting_metrics: [
+      { setting: "all", time_loss_injuries: 5 },
+      { setting: "match", time_loss_injuries: 3 },
+      { setting: "training", time_loss_injuries: 2 },
+    ],
+    severity_distribution: [
+      { setting: "all", key: "known", recorded_injuries: 6 },
+      { setting: "all", key: "unknown", recorded_injuries: 2 },
+      { setting: "match", key: "known", recorded_injuries: 4 },
+      { setting: "training", key: "known", recorded_injuries: 4 },
+    ],
+    contact_distribution: [
+      { setting: "all", key: "contact", recorded_injuries: 8, time_loss_injuries: 5 },
+      { setting: "match", key: "contact", recorded_injuries: 4, time_loss_injuries: 3 },
+      { setting: "training", key: "contact", recorded_injuries: 4, time_loss_injuries: 2 },
+    ],
+  };
+  assert.doesNotThrow(() => validateDraft9SettingDistributions(row));
+  assert.throws(
+    () => validateDraft9SettingDistributions({
+      ...row,
+      rate_setting_metrics: row.rate_setting_metrics.filter((item) => item.setting !== "training"),
+    }),
+    /missing rate setting training/
+  );
+  assert.throws(
+    () => validateDraft9SettingDistributions({
+      ...row,
+      severity_distribution: [...row.severity_distribution, row.severity_distribution[0]],
+    }),
+    /duplicate severity row all:known/
+  );
+  assert.throws(
+    () => validateDraft9SettingDistributions({
+      ...row,
+      contact_distribution: row.contact_distribution.map((item) => item.setting === "training"
+        ? { ...item, time_loss_injuries: 1 }
+        : item),
+    }),
+    /training contact rows do not partition time-loss cases/
+  );
+  assert.throws(
+    () => validateDraft9SettingDistributions({
+      ...row,
+      severity_distribution: row.severity_distribution.map((item) => item.setting === "match"
+        ? { ...item, recorded_injuries: 3 }
+        : item),
+    }),
+    /match severity and contact recorded-case partitions disagree/
   );
 });
 

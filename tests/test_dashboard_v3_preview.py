@@ -13,6 +13,7 @@ PREVIEW = (ROOT / "tools/sql/dashboard_v3_preview.sql").read_text()
 RECONCILIATION = (ROOT / "tools/sql/dashboard_v3_reconciliation.sql").read_text()
 GENERATOR = (ROOT / "tools/generate-dashboard-v3-preview.mjs").read_text()
 UI = (ROOT / "components/dashboard/team-dashboard.tsx").read_text()
+CHARTS = (ROOT / "components/dashboard/charts.tsx").read_text()
 INJURY_TYPE_DOSSIER = (ROOT / "components/dashboard/injury-type-dossier.tsx").read_text()
 PREVIEW_READER = (ROOT / "lib/reporting-preview.ts").read_text()
 REPORTING_TYPES = (ROOT / "lib/reporting-types.ts").read_text()
@@ -61,9 +62,30 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("consequence_unknown", PREVIEW)
         self.assertIn("rate_ineligible_time_loss_injuries", PREVIEW)
         self.assertIn("descriptive and rate time-loss cohorts do not reconcile", GENERATOR)
-        self.assertIn("V3 inference preview - draft, not released", UI)
+        self.assertNotIn("V3 inference preview - draft, not released", UI)
         self.assertNotIn("Exposure-aligned rate cohort", UI)
         self.assertNotIn("The approved V2 rate cohort uses positive recorded days", UI)
+
+    def test_profile_rings_have_independent_settings_and_setting_aware_severity(self) -> None:
+        severity_cte = PREVIEW.split("), severity as (", 1)[1].split("), match_scope as (", 1)[0]
+        self.assertIn("cross join settings st", severity_cte)
+        self.assertIn("st.setting_code = 'all' or c.setting_code = st.setting_code", severity_cte)
+        self.assertIn("'setting', v.setting_code", PREVIEW)
+        self.assertIn('.filter((item) => item.setting === "all")', GENERATOR)
+        self.assertIn("const [severitySetting, setSeveritySetting]", UI)
+        self.assertIn("const [contactSetting, setContactSetting]", UI)
+        self.assertIn("row.setting === severitySetting", UI)
+        self.assertIn("row.setting === contactSetting", UI)
+        self.assertIn('label="Choose severity setting"', UI)
+        self.assertIn('label="Choose contact setting"', UI)
+        self.assertNotIn("Data coverage & provenance", UI)
+        self.assertNotIn("InferenceCoverageSummary", UI)
+        self.assertIn('aria-live="polite" className="sr-only"', CHARTS)
+        self.assertIn("grid items-start gap-4 sm:grid-cols-[184px_minmax(0,1fr)]", CHARTS)
+        self.assertIn("CONTACT_RING_COLORS[row.key]", UI)
+        self.assertNotIn("isFrontFacingUnknown(row)", UI)
+        self.assertNotIn("{selected?.label ?? centerLabel}", CHARTS)
+        self.assertIn('aria-label={`${centerLabel} breakdown chart`}', CHARTS)
 
     def test_descriptive_and_rate_cohorts_are_not_mixed(self) -> None:
         self.assertIn("scoped_descriptive", PREVIEW)
@@ -266,7 +288,7 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("cross join settings st", PREVIEW)
         self.assertIn("'setting', p.setting_code", PREVIEW)
         self.assertIn("'Unknown diagnosis'", PREVIEW)
-        self.assertIn("row.code !== 'unknown'", UI)
+        self.assertIn("withoutFrontFacingUnknown", UI)
         for headline in (
             "Most common match injury", "Most common training injury",
             "Highest match burden", "Highest training burden",
@@ -316,7 +338,8 @@ class DashboardV3PreviewTests(unittest.TestCase):
     def test_draft_supplement_is_dev_only_with_complete_production_fallback(self) -> None:
         self.assertIn('process.env.NODE_ENV === "production"', PREVIEW_READER)
         self.assertIn("supplement ? matchMonthly : approvedMonthly", UI)
-        self.assertIn("supplement && <Panel title=\"Contact vs non-contact\"", UI)
+        self.assertIn("{supplement && (", UI)
+        self.assertIn('label="Choose contact setting"', UI)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ import {
   validateDraft9DiagnosisBuckets,
   validateDraft9RuleChecks,
   validateDraft9SeasonBoundCohort,
+  validateDraft9SettingDistributions,
   validateOriginClassCounts,
   validateLegacyMultiMatchRefusal,
 } from "./dashboard-v3-validation.mjs";
@@ -62,6 +63,7 @@ function validatePreview(payload) {
     validateDraft9SeasonBoundCohort(row);
     validateDraft9DiagnosisBuckets(row);
     validateDraft9ClassificationProfiles(row);
+    validateDraft9SettingDistributions(row);
     if (row.rule_version !== "urc-diagnosis-inference-v3-draft.9"
       || row.cohort_rule !== cohortRule) {
       throw new Error(`${row.team_key}: unexpected draft.9 rule metadata`);
@@ -84,17 +86,8 @@ function validatePreview(payload) {
 
     const overallRate = row.rate_setting_metrics.find((item) => item.setting === "all");
     const matchRate = row.rate_setting_metrics.find((item) => item.setting === "match");
-    if (!overallRate || !matchRate) {
-      throw new Error(`${row.team_key}: missing rate setting metrics`);
-    }
     if (overallRate.time_loss_injuries !== row.consequence_summary.positive_day_cases) {
       throw new Error(`${row.team_key}: overall rate metric does not match positive-day cohort`);
-    }
-
-    const severityTotal = row.severity_distribution
-      .reduce((sum, item) => sum + item.recorded_injuries, 0);
-    if (severityTotal !== row.consequence_summary.recorded_injuries) {
-      throw new Error(`${row.team_key}: severity bands do not partition the rate cohort`);
     }
 
     const matchScope = row.match_scope_summary;
@@ -102,19 +95,6 @@ function validatePreview(payload) {
       !== matchScope.positive_day_match_cases
       || matchScope.positive_day_match_cases !== matchRate.time_loss_injuries) {
       throw new Error(`${row.team_key}: match scope classes do not partition positive-day match cases`);
-    }
-
-    const contactTotal = row.contact_distribution
-      .filter((item) => item.setting === "all")
-      .reduce((sum, item) => sum + item.time_loss_injuries, 0);
-    if (contactTotal !== row.consequence_summary.positive_day_cases) {
-      throw new Error(`${row.team_key}: contact distribution does not partition positive-day cases`);
-    }
-    const contactRecordedTotal = row.contact_distribution
-      .filter((item) => item.setting === "all")
-      .reduce((sum, item) => sum + item.recorded_injuries, 0);
-    if (contactRecordedTotal !== row.consequence_summary.recorded_injuries) {
-      throw new Error(`${row.team_key}: contact distribution does not partition the rate cohort`);
     }
 
     const diagnosedTotal = row.common_injuries

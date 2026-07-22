@@ -184,31 +184,35 @@ test('team comparisons cross the client boundary with display aliases only', asy
   assert.match(reporting, /function teamDisplayAliases\(\)/);
   assert.match(reporting, /TEAM_DISPLAY_ALIAS_JSON/);
   assert.match(reporting, /all: overallSettingMetric\(row\.headline, row\.coverage\)/);
+  assert.match(reporting, /distance_km: row\.coverage\.distance_km/);
   assert.match(reporting, /team_alias: aliases\[internal_team_key\] \?\? `Club \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\}`/);
   const displayAliasFormat = /^Club \d{2}$/;
   assert.match('Club 01', displayAliasFormat);
   assert.doesNotMatch('Club 1', displayAliasFormat);
   assert.match(types, /comparison_id: string;[\s\S]*team_alias: string;/);
   assert.match(types, /team_alias: string;[\s\S]*all: SettingMetricRow \| null;/);
-  assert.match(envExample, /TEAM_DISPLAY_ALIAS_JSON=\{\"team-x\":\"Team Z\"\}/);
+  assert.match(envExample, /TEAM_DISPLAY_ALIAS_JSON='\{\"team-x\":\"Team Z\"\}'/);
+  assert.match(reporting, /process\.env\.NODE_ENV !== "production"/);
   assert.doesNotMatch(types, /export type TeamComparisonRow = \{[^}]*team_key:/);
   assert.doesNotMatch(types, /export type TeamComparisonRow = \{[^}]*\bteam:/);
   assert.doesNotMatch(dashboard, /row\.team_key|row\.team\b/);
   assert.doesNotMatch(dashboard, /Team [A-Z]\b/);
   assert.match(dashboard, /row\.team_alias/);
   assert.match(dashboard, /row\.dimension === 'diagnosis'/);
-  assert.match(dashboard, /return profiles\.filter\(\(row\) => row\.dimension === 'diagnosis'\)/);
+  assert.match(dashboard, /return withoutFrontFacingUnknown\(profiles\.filter\(\(row\) => row\.dimension === 'diagnosis'\)\)/);
 });
 
 test('team comparison overall setting is a validated projection of released headline fields', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
+  const priorAliases = process.env.TEAM_DISPLAY_ALIAS_JSON;
   process.env.WEB_READER_DB_URL = 'postgres://fixture';
+  process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
   globalThis.__urcWebReaderPool = {
     query: async () => ({
       rows: [{
         team_key: 'fixture-team',
         team: 'Fixture Team',
-        coverage: { exposure_rows: 1, exposed_players: 1, weeks: 1, hours: 999, distance_km: 0, included_exposure_status: 'included' },
+        coverage: { exposure_rows: 1, exposed_players: 1, weeks: 1, hours: 999, distance_km: 321.4, included_exposure_status: 'included' },
         headline: [
           { key: 'recorded_injuries', label: 'Recorded injuries', value: 14, unit: 'cases', formula: '' },
           { key: 'incidence_per_1000h', label: 'Incidence', value: 7.5, unit: '/1,000 h', numerator: 6, denominator: 800, formula: '' },
@@ -233,11 +237,19 @@ test('team comparison overall setting is a validated projection of released head
       burden_per_1000h: 93.75,
       mean_severity_days: 12.5,
     });
+    assert.equal(row.distance_km, 321.4);
+    assert.equal(row.team_alias, 'Team Q');
     assert.ok([row].some((comparison) => comparison.all));
+
+    process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Public club name' });
+    const [fallbackRow] = await getTeamComparisons();
+    assert.equal(fallbackRow.team_alias, 'Club 01');
   } finally {
     globalThis.__urcWebReaderPool = undefined;
     if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;
     else process.env.WEB_READER_DB_URL = priorUrl;
+    if (priorAliases === undefined) delete process.env.TEAM_DISPLAY_ALIAS_JSON;
+    else process.env.TEAM_DISPLAY_ALIAS_JSON = priorAliases;
   }
 });
 
@@ -481,4 +493,28 @@ test('exposure values use a dedicated one-decimal formatter', async () => {
   assert.match(charts, /function hours[\s\S]*?maximumFractionDigits: 1,[\s\S]*?minimumFractionDigits: 1/);
   assert.doesNotMatch(dashboard, /fmt\([^)]*exposure_hours, 0\)/);
   assert.doesNotMatch(charts, /count\(row\.exposure_hours\)/);
+});
+
+test('exposure tab switches approved measures and gates provisional HSR behind the local preview', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+
+  assert.match(dashboard, /Total hours[\s\S]*Total distance/);
+  assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);
+  assert.match(dashboard, /HSR distance/);
+  assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab')), /League mean|const mean\b/);
+  assert.match(dashboard, /monthlyMeasure[\s\S]*comparisonMeasure/);
+  assert.match(dashboard, /label="Choose monthly exposure measure"/);
+  assert.match(dashboard, /label="Choose team comparison exposure measure"/);
+  assert.ok((dashboard.match(/scrollable=\{false\}/g) ?? []).length >= 2);
+  assert.match(dashboard, /scrollable \? 'overflow-x-auto' : 'flex-wrap overflow-visible'/);
+  assert.match(dashboard, /distance_km/);
+  assert.match(charts, /match_exposure_hours/);
+  assert.match(charts, /hsr_distance_km|hsr_percentage/);
+  assert.match(charts, /HSR share/);
+  assert.match(charts, /firstReportedMonth/);
+  assert.match(charts, /sorted\.slice\(firstReportedMonth\)/);
+  assert.match(charts, /<BarChart aria-label=\{`Monthly \$\{exposureMeasureLabel\(measure\)\.toLowerCase\(\)\} chart`\} accessibilityLayer/);
+  assert.match(charts, /w-full min-w-0/);
+  assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function LocationTab')), /overflow-[xy]-auto|max-h-\[/);
 });

@@ -830,9 +830,10 @@ with pinned as (
   group by s.scope_key, st.setting_code, st.sort_order, d.total_hours, d.match_hours, d.training_hours
 ), severity as (
   select
-    scope_key,
-    severity_code as key,
-    case severity_code
+    c.scope_key,
+    st.setting_code,
+    c.severity_code as key,
+    case c.severity_code
       when 'zero_days_medical_attention_only' then '0 days recorded'
       when 'one_day' then '1 day'
       when 'two_to_three_days' then '2–3 days'
@@ -844,8 +845,10 @@ with pinned as (
     count(*)::int as recorded_injuries,
     count(*) filter (where is_time_loss)::int as time_loss_injuries,
     coalesce(sum(days_lost), 0)::numeric as days_lost
-  from scoped_cohort
-  group by scope_key, severity_code
+  from scoped_cohort c
+  cross join settings st
+  where st.setting_code = 'all' or c.setting_code = st.setting_code
+  group by c.scope_key, st.setting_code, st.sort_order, c.severity_code
 ), match_scope as (
   select
     scope_key,
@@ -1455,7 +1458,10 @@ with pinned as (
       from rate_settings r where r.scope_key = s.scope_key
     ), '[]'::jsonb),
     'severity_distribution', coalesce((
-      select jsonb_agg(to_jsonb(v) - 'scope_key' order by case v.key
+      select jsonb_agg((to_jsonb(v) - 'scope_key' - 'setting_code') || jsonb_build_object(
+        'setting', v.setting_code
+      ) order by case v.setting_code when 'all' then 1 when 'match' then 2 else 3 end,
+        case v.key
         when 'zero_days_medical_attention_only' then 1 when 'one_day' then 2
         when 'two_to_three_days' then 3 when 'four_to_seven_days' then 4
         when 'eight_to_twenty_eight_days' then 5 when 'greater_than_twenty_eight_days' then 6 else 7 end)

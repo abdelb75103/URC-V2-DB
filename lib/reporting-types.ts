@@ -54,6 +54,10 @@ export type SeverityRow = {
   days_lost: number;
 };
 
+export type SeveritySettingRow = SeverityRow & {
+  setting: 'all' | 'match' | 'training';
+};
+
 export type SettingMetricRow = {
   setting: 'all' | 'match' | 'training' | 'unknown';
   label: string;
@@ -152,7 +156,7 @@ export type DashboardSupplement = {
   consequence_summary: ConsequenceSummary;
   descriptive_consequence_summary: DescriptiveConsequenceSummary;
   rate_setting_metrics: SettingMetricRow[];
-  severity_distribution: SeverityRow[];
+  severity_distribution: SeveritySettingRow[];
   match_scope_summary: {
     positive_day_match_cases: number;
     confirmed_urc_match_cases: number;
@@ -170,10 +174,36 @@ export type DashboardSupplement = {
   inference_coverage: InferenceCoverage;
 };
 
+export type ExposureReviewPreview = {
+  status: 'private_review_override';
+  season: string;
+  generated_at: string;
+  source: string;
+  hsr_field: string;
+  source_file_count: number;
+  monthly: Array<{
+    month: string;
+    additional_hours: number;
+    additional_distance_km: number;
+    hsr_distance_km: number;
+    hsr_distance_denominator_km: number;
+    hsr_reporting_teams: number;
+    match_hours: number;
+  }>;
+  teams: Array<{
+    team_alias: string;
+    additional_hours: number;
+    additional_distance_km: number;
+    hsr_distance_km: number | null;
+    hsr_distance_denominator_km: number;
+  }>;
+};
+
 export type TeamComparisonRow = {
   comparison_id: string;
   team_alias: string;
   exposure_hours: number;
+  distance_km: number;
   match_hours: number | null;
   training_hours: number | null;
   all: SettingMetricRow | null;

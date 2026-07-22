@@ -205,6 +205,62 @@ export function validateDraft9SeasonBoundCohort(row) {
   }
 }
 
+export function validateDraft9SettingDistributions(row) {
+  const expectedSettings = ["all", "match", "training"];
+  const expectedSet = new Set(expectedSettings);
+  const rates = new Map();
+  for (const item of row.rate_setting_metrics ?? []) {
+    if (!expectedSet.has(item.setting)) {
+      throw new Error(`${row.team_key}: unexpected rate setting ${item.setting}`);
+    }
+    if (rates.has(item.setting)) {
+      throw new Error(`${row.team_key}: duplicate rate setting ${item.setting}`);
+    }
+    rates.set(item.setting, item);
+  }
+
+  for (const [field, rows] of [
+    ["severity", row.severity_distribution ?? []],
+    ["contact", row.contact_distribution ?? []],
+  ]) {
+    const keys = new Set();
+    for (const item of rows) {
+      if (!expectedSet.has(item.setting)) {
+        throw new Error(`${row.team_key}: unexpected ${field} setting ${item.setting}`);
+      }
+      const key = `${item.setting}:${item.key}`;
+      if (keys.has(key)) {
+        throw new Error(`${row.team_key}: duplicate ${field} row ${key}`);
+      }
+      keys.add(key);
+    }
+  }
+
+  for (const setting of expectedSettings) {
+    const rate = rates.get(setting);
+    if (!rate) throw new Error(`${row.team_key}: missing rate setting ${setting}`);
+    const severityRecorded = (row.severity_distribution ?? [])
+      .filter((item) => item.setting === setting)
+      .reduce((sum, item) => sum + item.recorded_injuries, 0);
+    const contactRows = (row.contact_distribution ?? [])
+      .filter((item) => item.setting === setting);
+    const contactRecorded = contactRows
+      .reduce((sum, item) => sum + item.recorded_injuries, 0);
+    const contactTimeLoss = contactRows
+      .reduce((sum, item) => sum + item.time_loss_injuries, 0);
+    if (severityRecorded !== contactRecorded) {
+      throw new Error(`${row.team_key}: ${setting} severity and contact recorded-case partitions disagree`);
+    }
+    if (contactTimeLoss !== rate.time_loss_injuries) {
+      throw new Error(`${row.team_key}: ${setting} contact rows do not partition time-loss cases`);
+    }
+    if (setting === "all"
+      && severityRecorded !== row.descriptive_consequence_summary.recorded_injuries) {
+      throw new Error(`${row.team_key}: overall severity rows do not partition recorded injuries`);
+    }
+  }
+}
+
 export function validateDraft9DiagnosisBuckets(row) {
   const overallRows = row.common_injuries.filter((item) => item.setting === "all");
   if (overallRows.some((item) => item.dimension !== "diagnosis" || !item.label)) {

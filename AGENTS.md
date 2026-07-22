@@ -35,7 +35,7 @@ The cross-cutting `audit` schema (`pipeline_runs`, `step_runs`, `record_events`,
 - The formal V2 audit boundary starts at the supplied canonical, pseudonymised intake file. Record its preparer, timestamp, mapping/codebook version, checksum, secure original-file locator/checksum where available, row reconciliation, and carried source-row locators; do not claim upstream reproducibility without its retained script/evidence.
 - Before live multi-entity ingest, preflight every manifest-facing display name against the canonical identity/alias dimension; fixture aliases and lowercase keys do not prove the exact intake spelling is registered.
 - If Step 0 finds unresolved provenance, reconstruction, or pseudonymisation issues, profile and checksum the legacy files in place. Do not copy them into the canonical intake boundary until an approved adapter produces a locator-enriched pseudonymised input.
-- Dashboards and reports must query shared views or exported results from the pipeline. Do not reimplement metrics or cleaning rules in presentation code.
+- Dashboards and reports must query shared views or exported results from the pipeline. Do not reimplement metrics or cleaning rules in presentation code. A private local review explicitly requested by Abdel may instead use a separate, Git-ignored, development-only aggregate preview artifact; it must remain disabled in production and must not overwrite an approved payload or imply release approval.
 - Keep source-reported, deterministically derived, inferred, and manually adjudicated values distinguishable. Never overwrite the original value.
 - Correct immutable ingested source representations only through a one-to-one restatement tied to registered rows. Allow deterministic field changes, preserve original values and stable IDs, emit row-level events, and require an exact checksummed restatement for published numeric drift.
 - A human decision fingerprint that includes mutable draft outputs is the immutable pre-decision evidence binding. Do not recompute it after applying the choice; bind changed artifacts separately through a fresh post-decision review.
@@ -104,6 +104,7 @@ Any later rule change must be versioned (`_v2` views via a new migration), justi
 
 Standing watch-outs learned during the pilot:
 
+- The 2024-25 curated layer contains July and August exposure rows, but every one is currently `excluded_from_primary` with `outside_official_analysis_window`; the approved league exposure series therefore begins in September. Do not describe those months as unreported or add them to an approved/released payload. For Abdel's explicitly approved private local review, they may be shown through the development-only aggregate preview boundary above so he can adjudicate them before any versioned rule change or release.
 - `reporting.team_metric_aggregates` and `reporting.latest_team_metric_aggregates` are the legacy headline path; new releases deliberately do not populate them. Do not "fix" that.
 - Leinster, Munster, Connacht, and Ulster report exposure weekly. Continue to confirm the grain from each current intake and pass `--reporting-grain weekly` explicitly; the frozen analysis views derive weekly handling from `curated.exposure.grain`. `reporting.teams.weekly_reporter` remains a documented placeholder and does not drive the metrics, so do not edit a frozen migration or add team-name inference to change it.
 - Teams released before the Phase 3.5 cohort amendment have `record_versions` predating current rule versions but exact release parity — do not reprocess them without a new recorded adjudication.
@@ -139,6 +140,9 @@ Binding consequences:
 - Confirm the target database and environment before any write or migration. Never assume a local connection is non-production.
 
 ## Web and Deployment Contracts
+
+- Keep public dashboard chart copy concise: use titles, values, and controls without generic instructional sublines. Do not surface internal adjudication, approval, draft-rule, or reporting-contract commentary inside chart panels; keep necessary methodological caveats in the methodology or limitations surfaces unless Abdel explicitly requests otherwise.
+- When Abdel asks to see provisional local dashboard data before adjudication, implement the reversible private preview promptly and keep methodological or approval commentary out of the visible chart UI. Scientific adjudication remains a release requirement, not a blocker to his private review.
 
 - Do not access or manage Vercel through the Vercel CLI, browser automation, plugins, connectors, or APIs for this project. Use only this repository's configured environment variables; deployments remain GitHub push-triggered.
 - Build V2 in a new private GitHub repository and a temporary Vercel preview project. Leave the current repository and live site unchanged until cutover.

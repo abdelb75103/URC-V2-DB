@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   Cell,
   LabelList,
@@ -176,24 +178,65 @@ function IncidenceTooltip({
   );
 }
 
-function ExposureTooltip({
+type ExposureMeasure = 'hours' | 'distance' | 'hsr';
+type ExposureMonthlyRow = AnalyticsRow & {
+  hsr_distance_km?: number;
+  hsr_distance_denominator_km?: number;
+  match_exposure_hours?: number;
+  training_exposure_hours?: number;
+  distance_remainder_km?: number;
+  hsr_percentage?: number;
+};
+
+function exposureMeasureLabel(measure: ExposureMeasure) {
+  if (measure === 'hours') return 'Player-hours';
+  if (measure === 'distance') return 'Distance';
+  return 'HSR distance';
+}
+
+function exposureMeasureUnit(measure: ExposureMeasure) {
+  return measure === 'hours' ? 'player-hours' : 'km';
+}
+
+function MonthlyExposureTooltip({
   active,
   label,
   payload,
+  measure,
 }: {
   active?: boolean;
   label?: string;
-  payload?: Array<{ payload?: AnalyticsRow }>;
+  payload?: Array<{ payload?: ExposureMonthlyRow }>;
+  measure: ExposureMeasure;
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
-  return (
-    <TooltipCard
-      title={`${label ?? row.month ?? 'Month'} - all recorded settings`}
-      rows={[{ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` }]}
-      cohort={`n = ${hours(row.exposure_hours)} player-hours.`}
-    />
-  );
+  const distance = row.distance_km ?? 0;
+  const hsrDistanceDenominator = row.hsr_distance_denominator_km ?? 0;
+  const hsrDistance = row.hsr_distance_km ?? 0;
+  const rows = measure === 'hours'
+    ? typeof row.match_exposure_hours === 'number' && typeof row.training_exposure_hours === 'number'
+      ? [
+          { label: 'Match', value: `${hours(row.match_exposure_hours)} player-hours` },
+          { label: 'Training', value: `${hours(row.training_exposure_hours)} player-hours` },
+          { label: 'Total', value: `${hours(row.exposure_hours)} player-hours` },
+        ]
+      : [{ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` }]
+    : measure === 'distance' && hsrDistanceDenominator > 0
+      ? [
+          { label: 'Total distance', value: `${number(distance)} km` },
+          { label: 'Distance with HSR data', value: `${number(hsrDistanceDenominator)} km` },
+          { label: 'HSR distance', value: `${number(hsrDistance)} km` },
+          { label: 'HSR share', value: `${number(hsrDistanceDenominator > 0 ? hsrDistance / hsrDistanceDenominator * 100 : 0, 1)}%` },
+        ]
+      : measure === 'distance'
+        ? [{ label: 'Total distance', value: `${number(distance)} km` }]
+        : [{ label: 'HSR distance', value: `${number(hsrDistance)} km` }];
+  return <TooltipCard title={label ?? row.month ?? 'Month'} rows={rows} cohort="Monthly exposure" />;
+}
+
+function formatHsrPercentage(value: unknown) {
+  return typeof value === 'number' && value > 0 ? `${number(value, 1)}%` : '';
 }
 
 export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
@@ -326,7 +369,7 @@ export function MatchIncidenceChart({ rows }: { rows: MonthlySettingRow[] }) {
   );
 }
 
-export type RingDatum = { key: string; label: string; value: number };
+export type RingDatum = { key: string; label: string; value: number; color?: string };
 
 export function RingBreakdown({
   rows,
@@ -344,8 +387,8 @@ export function RingBreakdown({
   if (!data.length) return <ChartEmpty compact reason={`No ${valueLabel} are available for this breakdown.`} />;
 
   return (
-    <div className="grid items-center gap-3 sm:grid-cols-[170px_1fr]">
-      <div className="relative mx-auto h-[160px] w-[160px]" aria-label={`${centerLabel} breakdown chart`}>
+    <div className="grid items-start gap-4 sm:grid-cols-[184px_minmax(0,1fr)]">
+      <div className="relative mx-auto h-[176px] w-[176px]" aria-label={`${centerLabel} breakdown chart`}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -354,8 +397,8 @@ export function RingBreakdown({
               nameKey="label"
               cx="50%"
               cy="50%"
-              innerRadius={48}
-              outerRadius={72}
+              innerRadius={55}
+              outerRadius={79}
               paddingAngle={1.5}
               stroke="none"
               isAnimationActive={false}
@@ -365,26 +408,21 @@ export function RingBreakdown({
               {data.map((row, index) => (
                 <Cell
                   key={row.key}
-                  fill={PROFILE_COLORS[index % PROFILE_COLORS.length]}
-                  opacity={selected && selected.key !== row.key ? 0.42 : 1}
+                  fill={row.color ?? PROFILE_COLORS[index % PROFILE_COLORS.length]}
+                  opacity={selectedKey && selected?.key !== row.key ? 0.42 : 1}
                 />
               ))}
             </Pie>
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 grid place-content-center text-center">
-          <strong className="max-w-[112px] text-lg leading-tight text-foreground">{selected?.label ?? centerLabel}</strong>
-          <span className="mt-1 text-xl font-semibold tabular-nums text-primary">{count(selected?.value)}</span>
-          <span className="text-[10px] font-medium text-muted-foreground">{valueLabel}</span>
+          <strong className="text-2xl font-semibold leading-none tabular-nums text-primary">{count(selected?.value)}</strong>
+          <span className="mt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{valueLabel}</span>
         </div>
       </div>
       <div className="space-y-1">
         {selected && (
-          <div aria-live="polite" className="mb-2 rounded-md border border-border bg-background/60 px-3 py-2 text-xs leading-relaxed text-popover-foreground">
-            <span className="font-semibold text-foreground">{selected.label}</span>
-            <span className="mx-1 text-muted-foreground">:</span>
-            <span className="font-medium tabular-nums text-foreground">{count(selected.value)} {valueLabel}</span>
-          </div>
+          <span aria-live="polite" className="sr-only">{selected.label}: {count(selected.value)} {valueLabel}.</span>
         )}
         {data.map((row, index) => {
           const active = selected?.key === row.key;
@@ -398,7 +436,7 @@ export function RingBreakdown({
               className={`grid min-h-11 w-full grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-2 rounded px-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
               aria-label={`${row.label}: ${count(row.value)} ${valueLabel}.`}
             >
-              <span className="h-2 w-2 rounded-full" style={{ background: PROFILE_COLORS[index % PROFILE_COLORS.length] }} />
+              <span className="h-2 w-2 rounded-full" style={{ background: row.color ?? PROFILE_COLORS[index % PROFILE_COLORS.length] }} />
               <span className="truncate text-muted-foreground">{row.label}</span>
               <span className="font-semibold tabular-nums text-foreground">{count(row.value)} <span className="font-normal text-muted-foreground">({Math.round(row.value / total * 100)}%)</span></span>
             </button>
@@ -409,58 +447,68 @@ export function RingBreakdown({
   );
 }
 
-export function ExposureTrendChart({ rows }: { rows: AnalyticsRow[] }) {
-  const data = useMemo(
-    () => sortSeasonMonths(rows.filter((row) => typeof row.exposure_hours === 'number') as Array<AnalyticsRow & { month: string }>),
-    [rows]
-  );
-  if (!data.length) return <ChartEmpty reason="No monthly player-hours are available in the approved exposure data." />;
+export function ExposureTrendChart({ rows, measure = 'hours' }: { rows: ExposureMonthlyRow[]; measure?: ExposureMeasure }) {
+  const data = useMemo(() => {
+    const sorted = sortSeasonMonths<ExposureMonthlyRow & { month: string }>(rows
+      .filter((row) => {
+        if (!row.month) return false;
+        if (measure === 'hours') return typeof row.exposure_hours === 'number';
+        if (measure === 'distance') return typeof row.distance_km === 'number';
+        return typeof row.hsr_distance_km === 'number';
+      })
+      .map((row) => ({
+        ...row,
+        distance_remainder_km: Math.max(
+          (row.hsr_distance_denominator_km ?? row.distance_km ?? 0) - (row.hsr_distance_km ?? 0),
+          0,
+        ),
+        hsr_percentage: (row.hsr_distance_denominator_km ?? 0) > 0
+          ? (row.hsr_distance_km ?? 0) / (row.hsr_distance_denominator_km ?? 1) * 100
+          : 0,
+      })) as Array<ExposureMonthlyRow & { month: string }>);
+    const firstReportedMonth = sorted.findIndex((row) => (
+      measure === 'hours' ? (row.exposure_hours ?? 0) : measure === 'distance' ? (row.distance_km ?? 0) : (row.hsr_distance_km ?? 0)
+    ) > 0);
+    return firstReportedMonth < 0 ? [] : sorted.slice(firstReportedMonth);
+  }, [measure, rows]);
+  if (!data.length) {
+    const description = `No monthly ${measure === 'hours' ? 'player-hours' : measure === 'distance' ? 'distance' : 'HSR distance'} are available.`;
+    return <ChartEmpty reason={description} />;
+  }
 
+  const unit = exposureMeasureUnit(measure);
   return (
-    <div className="h-[304px] min-w-[560px]" aria-label="Monthly player-hours chart">
+    <div className="h-[286px] w-full min-w-0" aria-label={`Monthly ${exposureMeasureLabel(measure).toLowerCase()} chart`}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart accessibilityLayer data={data} margin={{ top: 70, right: 14, bottom: 28, left: 30 }}>
-          <defs>
-            <linearGradient id="exposureHours" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={SETTING_COLORS.training} stopOpacity={0.38} />
-              <stop offset="100%" stopColor={SETTING_COLORS.training} stopOpacity={0.03} />
-            </linearGradient>
-          </defs>
+        <BarChart aria-label={`Monthly ${exposureMeasureLabel(measure).toLowerCase()} chart`} accessibilityLayer data={data} margin={{ top: 18, right: 10, bottom: 18, left: 16 }} barCategoryGap="24%">
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
-          <XAxis
-            dataKey="month"
-            tickFormatter={compactMonth}
-            tick={{ fill: AXIS, fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-            label={{ value: 'Month', position: 'insideBottom', fill: AXIS, fontSize: 12, offset: -12 }}
-          />
-          <YAxis
-            tickFormatter={(value) => `${Math.round(value / 1000)}k`}
-            tick={{ fill: AXIS, fontSize: 11 }}
-            tickLine={false}
-            axisLine={false}
-            label={{ value: 'Player-hours', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 10 }}
-          />
-          <Tooltip
-            content={<ExposureTooltip />}
-            cursor={{ stroke: SETTING_COLORS.training, strokeWidth: 1 }}
-            allowEscapeViewBox={{ x: false, y: false }}
-            position={{ x: 14, y: 10 }}
-            wrapperStyle={{ zIndex: 30 }}
-          />
-          <Area
-            type="monotone"
-            dataKey="exposure_hours"
-            name="Player-hours"
-            stroke={SETTING_COLORS.training}
-            fill="url(#exposureHours)"
-            strokeWidth={2.5}
-            activeDot={{ r: 5, strokeWidth: 2 }}
-            isAnimationActive={false}
-          />
-        </AreaChart>
+          <XAxis dataKey="month" tickFormatter={compactMonth} interval="preserveStartEnd" minTickGap={8} tick={{ fill: AXIS, fontSize: 10 }} tickLine={false} axisLine={false} />
+          <YAxis tickFormatter={(value) => measure === 'hours' && value >= 1000 ? `${Math.round(value / 1000)}k` : number(value, 0)} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={false} width={42} />
+          <Tooltip content={<MonthlyExposureTooltip measure={measure} />} cursor={{ fill: 'hsl(var(--muted) / 0.5)' }} allowEscapeViewBox={{ x: false, y: false }} wrapperStyle={{ zIndex: 30 }} />
+          {measure === 'hours' && typeof data[0]?.match_exposure_hours === 'number' ? (
+            <>
+              <Legend verticalAlign="top" height={26} iconType="square" />
+              <Bar dataKey="match_exposure_hours" name="Match" fill={SETTING_COLORS.match} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="training_exposure_hours" name="Training" fill={SETTING_COLORS.training} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+            </>
+          ) : measure === 'hours' ? (
+            <Bar dataKey="exposure_hours" name="Player-hours" fill={SETTING_COLORS.training} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          ) : measure === 'distance' && typeof data[0]?.hsr_distance_denominator_km === 'number' ? (
+            <>
+              <Legend verticalAlign="top" height={26} iconType="square" />
+              <Bar dataKey="hsr_distance_km" name="HSR distance" stackId="distance" fill="#f59e0b" isAnimationActive={false}>
+                <LabelList dataKey="hsr_percentage" position="insideBottom" formatter={formatHsrPercentage} fill="#ffffff" fontSize={9} fontWeight={600} />
+              </Bar>
+              <Bar dataKey="distance_remainder_km" name="Other reported distance" stackId="distance" fill={SETTING_COLORS.all} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+            </>
+          ) : measure === 'distance' ? (
+            <Bar dataKey="distance_km" name="Total distance" fill={SETTING_COLORS.all} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          ) : (
+            <Bar dataKey="hsr_distance_km" name="HSR distance" fill="#f59e0b" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          )}
+        </BarChart>
       </ResponsiveContainer>
+      <p className="mt-1 text-right text-[11px] text-muted-foreground">{unit}</p>
     </div>
   );
 }
