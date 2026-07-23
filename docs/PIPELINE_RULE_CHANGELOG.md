@@ -11,6 +11,27 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-24 — Source-reported time-loss injuries with missing usable duration
+
+| Field | Value |
+|---|---|
+| Rule version | `local_time_loss_missing_duration_decision_2026-07-24_v1` |
+| Status | accepted local analytical decision; not implemented in the live pipeline, database, releases, dashboards, or website |
+| Carry-forward | `not-yet-in-pipeline`; it requires a versioned analysis-view implementation before it can apply to Year 2 or any release |
+| Decision provenance | Abdel Babiker, 24 July 2026 |
+| Decision ledger | `outputs/urc_final_human_review_2024-25/urc_injury_analysis_release_decisions_2026-07-24.json` |
+| Current dataset evidence | `outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_2024-25.csv`, 2,301 rows, SHA-256 `5a01bcbca75c8902353d09557d1a3d579153fe05a9d903005eaf35399b57f0bc` |
+
+**Accepted rule.** A retained Injury with a valid `Date Injured`, no usable `Days Injured`, no valid or defensible closure date in either the `Confirmed Return Date` or `Fit For Selection Date` channel, and an affirmative source time-loss classification (`TRUE`, `Yes`, or `Time Loss`) counts in recorded injury counts and in the time-loss incidence numerator. It contributes no observed days lost to the burden numerator, leaves the exposure denominator unchanged, and is excluded from the complete-case mean-severity calculation unless a usable duration is subsequently supplied.
+
+**Observed scope and evidence.** The post-removal dataset has 90 rows meeting that definition: 64 source `TRUE`, 9 source `Yes`, and 17 source `Time Loss`. The equivalent pre-removal count was 91. The sole removed case was Scarlets source workbook row 1892 (`Ath_288`, 24/07/2024, `Non-Rugby`, source `Yes`, blank duration and return date), removed only from the included CSV by `included_injury_nonrugby_gym_removal_2026-07-23_v1`. Evidence is bound to the current manifest's ordered source-row mapping, the 51-column source-facing `injury_master_2024-25.csv`, the focused-cleanup audit that normalized the affirmative values, and the non-rugby/gym removal audit. Across the current included dataset, 90 of 1,013 source-reported Time Loss injuries have missing duration (8.9%). Missingness is uneven: Lions has 15 of 37 (40.5%) and Sharks 37 of 94 (39.4%). Consequently, known-duration burden totals are incomplete lower bounds; complete-case mean severity is incomplete and may be biased by missingness, rather than being assumed to be a lower bound.
+
+**Duration semantics.** `duration_missing_closure_unknown` means that final duration and defensible closure evidence are unavailable. It is not an assertion that the injury remained open: do not assign zero days, impute duration, or call it right-censored. `right_censored_open` is permitted only when source evidence confirms that the injury remained unresolved at a pre-specified observation end date, with that date and provenance recorded. The present 28-column CSV has no duration-status field, so these are recorded local analytical semantics rather than a dataset rewrite.
+
+**Scientific limit and implementation boundary.** The Lions, Sharks, and Stormers closure follow-up evidence identifies 64 of the 90 rows as requiring confirmation of closure/return status and true days lost. They therefore support missing-duration handling, not a presumption of open injury. Implementing the accepted numerator rule in a live release still requires a new versioned analysis view, a recorded adjudication, rerun, and re-release for affected team/seasons. Frozen views and all existing releases remain unchanged.
+
+---
+
 ## 2026-07-22 — Evidence-bound OSIICS and explicit body/type classification
 
 | Field | Value |
