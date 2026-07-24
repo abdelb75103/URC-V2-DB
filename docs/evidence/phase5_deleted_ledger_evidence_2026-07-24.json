@@ -2,10 +2,11 @@
   "artifact_type": "phase5_deleted_ledger_evidence",
   "season": "2024-25",
   "recorded_at": "2026-07-24",
-  "plan_reference": "docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md Phase 5, deletion manifest groups 4 and 7",
-  "purpose": "Records the ledger evidence files removed in Phase 5 together with the sha256 the ledger recorded for each. tools/replay.py skips byte verification for a ledger evidence entry only when the file is absent AND this manifest records that exact path with that exact sha256; a file that still exists is verified as before, and an unlisted missing file still fails the replay.",
-  "ledger_immutability_note": "data/2024-25/decisions/ledger.json is deliberately NOT modified. Its sha256 b92c35cdfc86acabfcc999be2c007e084495321c637d1866b0924ad2407a37fe is pinned in docs/evidence/lineage_cohort_2024-25.json, in tools/lineage_load.py EXPECTED_HASHES, and in the live lineage.baselines row that anchors the served release urc-2024-25-v4-6f04bd64d2a6-a2. The ledger keeps each evidence path and sha256 as the historical record; this manifest records only the deletion event.",
-  "entry_count": 29,
+  "plan_reference": "docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md Phase 5, deletion manifest groups 1, 4 and 7",
+  "purpose": "Records every hashed reference in data/2024-25/decisions/ledger.json whose file was deleted in Phase 5, together with the sha256 the ledger recorded for it. tools/replay.py skips byte verification for a reference only when the file is absent AND this manifest records that exact path with that exact sha256; a file that still exists is verified as before, and an unlisted missing file still fails the replay.",
+  "coverage": "Built by walking all three hashed-reference surfaces of the ledger: steps[*].evidence, baseline (master_v5_json, rendered_v5_workbook, source_v4), and open_items[*].evidence. None of the deleted files was ever Git-tracked, because outputs/ is Git-ignored; the 8 deleted step scripts under tools/ are recoverable from Git history.",
+  "ledger_immutability_note": "data/2024-25/decisions/ledger.json is deliberately NOT modified. Its sha256 b92c35cdfc86acabfcc999be2c007e084495321c637d1866b0924ad2407a37fe is pinned in docs/evidence/lineage_cohort_2024-25.json, in tools/lineage_load.py EXPECTED_HASHES, and in the live lineage.baselines row that anchors the served release urc-2024-25-v4-6f04bd64d2a6-a2. The ledger keeps each path and sha256 as the historical record; this manifest records only the deletion event. Any annotation inside the ledger itself would require re-pinning all three, which needs Abdel's adjudication.",
+  "entry_count": 30,
   "entries": [
     {
       "path": "outputs/urc_final_human_review_2024-25/urc_injury_analysis_release_decisions_2026-07-23.json",
@@ -78,6 +79,12 @@
       "group": "phase5_group_4_per_step_audit_and_qa_evidence"
     },
     {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_reviewed_master_with_exclusion_decisions_2024-25_successor_2026-07-23_v4.xlsx",
+      "sha256": "b17b77c8357c0532d7471044540ed575595f7d72c7483d13a6c1417e5cd712ba",
+      "group": "phase5_group_1_superseded_workbooks",
+      "note": "Pre-baseline source anchor pinned by ledger baseline.source_v4 and by data/2024-25/master/baseline_record.json. Deleted under Phase 5 group 1, authorised by the plan once v5 was verified (docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md, Phase 5 first bullet). Not recoverable from Git because outputs/ is Git-ignored. Consequence on the record: the v4-to-v5 cell-for-cell formatting comparison (plan acceptance criterion 2) can no longer be re-executed against its original target; the v5 baseline itself remains hash-verified. Restore from encrypted UCD-managed storage if a copy exists."
+    },
+    {
       "path": "outputs/urc_final_human_review_2024-25/urc_injury_sharks_squad_normalization_audit_2024-25_v2.csv",
       "sha256": "608272e4ad444da314412c04d163e28194029ff9d34034282fff6836f4d02740",
       "group": "phase5_group_4_per_step_audit_and_qa_evidence"
@@ -95,12 +102,14 @@
     {
       "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_fit_resolution_qa_2026-07-24.json",
       "sha256": "58ded9a5c83c687bbbc62aea3fdf32560bc7fafefb12887d70811ccfe78503de",
-      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence",
+      "note": "Also cited by ledger open_items source row 1735, which is still unresolved. Deleted under Phase 5 group 4; not recoverable from Git because outputs/ is Git-ignored. Restore from encrypted UCD-managed storage before adjudicating row 1735 if a copy exists."
     },
     {
       "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_inference_adjudication_2026-07-24.json",
       "sha256": "477a79418d1c2e0c2679d4775273f7716343cf5ebc5fcf3b0b0968aebb39a90a",
-      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence",
+      "note": "Also cited by ledger open_items source row 1735, which is still unresolved. Deleted under Phase 5 group 4; not recoverable from Git because outputs/ is Git-ignored. Restore from encrypted UCD-managed storage before adjudicating row 1735 if a copy exists."
     },
     {
       "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_inference_audit_2026-07-24.csv",
@@ -110,7 +119,8 @@
     {
       "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_inference_qa_2026-07-24.json",
       "sha256": "a39bf442525fb733ae5cf3f71f4d7154f86d458b49ebff14c1fe04f67a68b9a8",
-      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence",
+      "note": "Also cited by ledger open_items source row 1735, which is still unresolved. Deleted under Phase 5 group 4; not recoverable from Git because outputs/ is Git-ignored. Restore from encrypted UCD-managed storage before adjudicating row 1735 if a copy exists."
     },
     {
       "path": "tools/apply_adjudicated_included_injury_decisions.py",

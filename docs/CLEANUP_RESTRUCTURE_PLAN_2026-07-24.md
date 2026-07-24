@@ -1,9 +1,10 @@
 # URC 2024-25 Data Workflow: Cleanup and Restructure Plan
 
-Date: 2026-07-24. Status: approved in conversation by Abdel; execution NOT started.
-Gates: Phase 4 (live DB writes) and Phase 5 (deletions) each require a separate explicit go from Abdel. Everything else may proceed on the general go.
+Date: 2026-07-24. Status: **COMPLETE, all six phases executed 2026-07-24.** Phases 0 to 3 and 6 landed first; Phase 4 promoted the restated bundle `urc-2024-25-v4-6f04bd64d2a6-a2` after Abdel's recorded yes on the diff summary; Phase 5 deleted 93 items (354.5 MB) per the manifest below with Abdel's approval. See `docs/PIPELINE_RULE_CHANGELOG.md`, entry "2026-07-24: 2024-25 lineage restatement released, and Phase 5 cleanup executed", for the released figures, the equivalence argument for the performance-only migration, and the recorded deviation on ledger-evidence marking. This document is retained as the plan of record; it is not a live task list.
 
-This plan supersedes the workflow described in AGENTS.md sections "Included Dataset Column Cleanup" and the heavyweight per-release ceremony for this lineage. AGENTS.md is updated in Phase 6; until then, where AGENTS.md conflicts with this plan, this plan governs (Abdel's explicit direction, 2026-07-24). Scientific rules (IOC buckets, no imputation, preserve source values, pseudonymisation, privacy) are unchanged and still binding.
+Both hard gates are closed. Two items deliberately remain open and are not part of this plan: the ledger `open_items` (source rows 1735 and 210) await Abdel's adjudication, and the access-control restoration gate in `AGENTS.md` is untouched.
+
+This plan superseded the workflow described in the former AGENTS.md section "Included Dataset Column Cleanup" and the heavyweight per-release ceremony for this lineage. Phase 6 completed that AGENTS.md rewrite, so the temporary precedence this plan held over AGENTS.md has lapsed: **AGENTS.md is now the binding contract and governs where the two differ.** Scientific rules (IOC buckets, no imputation, preserve source values, pseudonymisation, privacy) are unchanged and still binding.
 
 ## Decisions locked (Abdel, 2026-07-24)
 

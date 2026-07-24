@@ -31,8 +31,8 @@ INCLUSION  what analysis consumes        data/2024-25/inclusion/
         2,301 rows x 28 columns          urc_injury_included_dataset_2024-25.csv
 ```
 
-Files are the intake, the database is the truth (after the pending
-restatement), rendered artifacts are exports. The master and inclusion layers
+Files are the intake, the database is the truth, rendered artifacts are
+exports. The master and inclusion layers
 visibly disagree on inferred cells by design: source preserved, inference
 labelled, both recorded in the ledger.
 
@@ -70,13 +70,20 @@ rule change with carry-forward status. Open items ride in the ledger's
 
 ## The database and website
 
-Supabase Postgres serves the currently approved 2024-25 releases through
+Supabase Postgres serves the approved 2024-25 releases through
 `reporting.latest_team_dashboard_v2` / `latest_league_dashboard_v2`; the
-website is read-only and fails closed. The restatement of the DB from the
-v5 baseline plus ledger, and the deletion cleanup of superseded local
-artifacts, are gated phases of `docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`
-awaiting Abdel's explicit go (Phases 4 and 5). Every live database write
-needs the exact hosted target approved; see `AGENTS.md`.
+website is read-only and fails closed. The restatement from the v5 baseline
+plus ledger landed on 2026-07-24 as bundle release
+`urc-2024-25-v4-6f04bd64d2a6-a2`, so the served dashboards are the lineage
+numbers; the V3 predecessor is retired, not deleted. The Phase 5 deletion
+cleanup is done too, so
+`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md` is complete and is now the plan
+of record rather than a task list. Released figures and the reasons behind
+the V4 release path are in `docs/PIPELINE_RULE_CHANGELOG.md`. After any
+accepted `release-league` promotion, run
+`python3 -m pipeline export-team-dashboards --season <season>` or the 16
+committed per-team parity exports under `content/reporting/` go stale. Every
+live database write needs the exact hosted target approved; see `AGENTS.md`.
 
 ## Privacy in one paragraph
 

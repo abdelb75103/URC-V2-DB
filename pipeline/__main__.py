@@ -5321,12 +5321,14 @@ def current_league_bundle_snapshot(season: str) -> tuple[dict[str, Any], dict[st
     rows = query_sql(
         f"""
         with current_bundle as (
-          select c.release_id, c.season, r.release_label, r.approved_at
-          from reporting.league_release_context_v2 c
-          join reporting.aggregate_releases r on r.id = c.release_id
-          where c.season = {params.text(season)} and r.status = 'approved'
-          order by r.approved_at desc nulls last, r.created_at desc, r.id desc
-          limit 1
+          -- Selected through the same view the website reads
+          -- (reporting.latest_approved_dashboard_bundle_v2), not a looser
+          -- "newest approved" rule, so an exported parity payload can never
+          -- diverge from the served bundle by construction.
+          select b.release_id, b.season, r.release_label, r.approved_at
+          from reporting.latest_approved_dashboard_bundle_v2 b
+          join reporting.aggregate_releases r on r.id = b.release_id
+          where b.season = {params.text(season)}
         )
         select b.release_id::text, b.release_label, b.approved_at,
           league.dashboard_payload as league,
@@ -5373,6 +5375,27 @@ def snapshot_current_league_bundle(args: argparse.Namespace) -> None:
         "output_path": str(output_path), **metadata}, indent=2))
 
 
+def assert_public_payload_is_publishable(payload: object, label: str) -> None:
+    """Refuse to write a payload carrying protected metadata into Git.
+
+    AGENTS.md names content/reporting/*.json as a surface that must never
+    carry a protected club-alias placeholder ("Team A" .. "Team Z") or a
+    player pseudonym. The release paths enforce that with a live SQL scan;
+    this is the local equivalent for the export path, checked against the
+    exact bytes about to be written.
+    """
+    serialized = json.dumps(payload, indent=2, sort_keys=True)
+    if re.search(r"\bTeam [A-Z]\b", serialized):
+        raise SystemExit(
+            f"refusing to export {label}: payload carries a protected club-alias "
+            "placeholder string"
+        )
+    if "Ath_" in serialized:
+        raise SystemExit(
+            f"refusing to export {label}: payload carries a player pseudonym"
+        )
+
+
 def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
     """Refresh the committed per-team parity exports from the approved bundle.
 
@@ -5383,20 +5406,40 @@ def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
     so this rewrites each one verbatim from the same approved bundle the site
     serves and records the release identity it came from. Run it after every
     accepted release-league promotion.
+
+    This is the only writer of the committed per-team payloads, so it applies
+    the same two guards every other dashboard emitter applies: internal keys
+    are stripped, and the serialized bytes are refused if they carry a
+    protected club-alias placeholder or a player pseudonym.
     """
     season = clean_text(args.season)
     if not season:
         raise SystemExit("--season is required")
     bundle, metadata = current_league_bundle_snapshot(season)
     written: list[str] = []
+    expected_paths: set[str] = set()
     for team in bundle["teams"]:
         team_key = clean_text(team.get("team_key"))
         dashboard = team.get("dashboard")
         if not team_key or not isinstance(dashboard, dict):
             raise SystemExit("approved bundle contains an incomplete team payload")
+        public = without_keys(dashboard, {"source_files", "pipeline_evidence"})
+        assert_public_payload_is_publishable(public, team_key)
         path = Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
-        write_json_atomic(path, dashboard)
+        write_json_atomic(path, public)
         written.append(str(path))
+        expected_paths.add(str(path))
+    stale = {
+        str(path)
+        for path in Path("content/reporting").glob(f"*_dashboard_{season}.json")
+        if str(path) not in expected_paths
+        and path.name != f"urc_dashboard_{season}.json"
+    }
+    if stale:
+        raise SystemExit(
+            "content/reporting holds per-team exports the approved bundle does "
+            f"not account for: {sorted(stale)}"
+        )
     print(json.dumps({
         "status": "team_parity_exported", "season": season,
         "team_count": len(written), "paths": written, **metadata,

@@ -17,6 +17,22 @@ const client = new Client({
   keepAlive: true
 });
 
+// A non-numeric override would splice NaN into the SET and abort the write,
+// and 0 would silently disable the statement timeout altogether for a live
+// write. Both are refused before connecting.
+const statementTimeoutMs = (() => {
+  const raw = process.env.PIPELINE_STATEMENT_TIMEOUT_MS;
+  if (raw === undefined || raw === "") return 900000;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    console.error(
+      `PIPELINE_STATEMENT_TIMEOUT_MS must be a positive integer number of milliseconds, got ${JSON.stringify(raw)}`
+    );
+    process.exit(2);
+  }
+  return parsed;
+})();
+
 try {
   await client.connect();
   await client.query("begin");
@@ -26,9 +42,7 @@ try {
   // the validation triggers (about 70s each), and that re-derivation is what
   // proves the stored snapshot equals the analytical candidate. Raising the
   // bound for the transaction is the fix; weakening the equality check is not.
-  await client.query(
-    `set local statement_timeout = ${Number(process.env.PIPELINE_STATEMENT_TIMEOUT_MS || 900000)}`
-  );
+  await client.query(`set local statement_timeout = ${statementTimeoutMs}`);
   if (paramsPath) {
     const params = JSON.parse(fs.readFileSync(paramsPath, "utf8"));
     await client.query("create temp table _pipeline_params (idx integer primary key, value jsonb) on commit drop");

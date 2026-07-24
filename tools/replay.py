@@ -30,6 +30,11 @@ DEFAULT_METHODOLOGY = ROOT / "docs/METHODOLOGY.md"
 DELETED_EVIDENCE_MANIFEST = (
     ROOT / "docs/evidence/phase5_deleted_ledger_evidence_2026-07-24.json"
 )
+# Living documents that gain content by design, so a pinned byte hash on them
+# can never hold. The ledger marks the changelog "mutable" on its step
+# evidence but not on its open-item evidence; this keeps the rule consistent
+# across both surfaces without editing the hash-pinned ledger.
+MUTABLE_BY_DESIGN = frozenset({"docs/PIPELINE_RULE_CHANGELOG.md"})
 REFERENCE_OUTPUT = (
     ROOT / "outputs/urc_final_human_review_2024-25/"
     "urc_injury_included_dataset_2024-25.csv"
@@ -137,45 +142,87 @@ def load_deleted_evidence(manifest_path: Path) -> set[tuple[str, str]]:
     if not manifest_path.exists():
         return set()
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    return {
-        (entry["path"], entry["sha256"]) for entry in payload.get("entries", [])
-    }
+    entries = payload.get("entries", [])
+    pairs = set()
+    for entry in entries:
+        path, expected = entry.get("path"), entry.get("sha256")
+        if not path or not expected:
+            raise ReplayError(
+                f"Deleted-evidence manifest entry lacks path or sha256: {entry}"
+            )
+        pairs.add((path, expected))
+    declared = payload.get("entry_count")
+    if declared is not None and declared != len(entries):
+        raise ReplayError(
+            f"Deleted-evidence manifest declares {declared} entries "
+            f"but lists {len(entries)}"
+        )
+    return pairs
+
+
+def hashed_ledger_references(
+    ledger: dict[str, Any]
+) -> list[tuple[str, dict[str, Any]]]:
+    """Yield (label, reference) for every hashed reference the ledger pins.
+
+    The ledger pins hashes on three surfaces, and all three must be verified:
+    per-step evidence, the baseline anchors (including the pre-baseline v4
+    source workbook), and the evidence backing each open item.
+    """
+    references: list[tuple[str, dict[str, Any]]] = []
+    for step in ledger.get("steps", []):
+        for evidence in step.get("evidence", []):
+            references.append((step["rule_version"], evidence))
+    baseline = ledger.get("baseline", {})
+    for key in ("master_v5_json", "rendered_v5_workbook", "source_v4"):
+        if isinstance(baseline.get(key), dict):
+            references.append((f"baseline.{key}", baseline[key]))
+    for item in ledger.get("open_items", []):
+        label = f"open_item.source_row_{item.get('source_workbook_row')}"
+        for evidence in item.get("evidence", []):
+            references.append((label, evidence))
+    return references
 
 
 def verify_ledger_evidence(
     ledger: dict[str, Any],
     deleted_evidence_manifest: Path = DELETED_EVIDENCE_MANIFEST,
 ) -> None:
-    """Verify every hashed evidence reference before replaying.
+    """Verify every hashed reference the ledger pins, before replaying.
 
-    Evidence entries marked "mutable": true (living documents such as the
-    rule changelog) are exempt from byte verification by recorded design;
-    everything else with a sha256 must match the file on disk.
+    Covers all three surfaces via `hashed_ledger_references`: per-step
+    evidence, the baseline anchors, and open-item evidence. Verifying only
+    the first surface is what let a deleted baseline anchor go unrecorded in
+    Phase 5, so the walk is deliberately exhaustive.
 
+    Two exemptions, both by recorded design. Entries marked "mutable": true,
+    and any reference to a path in MUTABLE_BY_DESIGN, are exempt from byte
+    verification: the rule changelog gains an entry on every accepted rule
+    change, so a byte hash on it can never hold, and the ledger already
+    marks it mutable on the step surface but not on the open-item surface.
     A file removed by the Phase 5 deletion manifest is exempt only while it
-    is absent and the deleted-evidence manifest records that exact path with
-    that exact sha256; the ledger keeps the path and hash as the historical
-    record, and any other missing file still fails.
+    is absent and the manifest records that exact path with that exact
+    sha256; the ledger keeps the path and hash as the historical record, and
+    any other missing file still fails.
     """
     deleted = load_deleted_evidence(deleted_evidence_manifest)
     problems = []
-    for step in ledger.get("steps", []):
-        for evidence in step.get("evidence", []):
-            path = evidence.get("path")
-            expected = evidence.get("sha256")
-            if not path or not expected or evidence.get("mutable"):
+    for label, evidence in hashed_ledger_references(ledger):
+        path = evidence.get("path")
+        expected = evidence.get("sha256")
+        if not path or not expected or evidence.get("mutable"):
+            continue
+        if path in MUTABLE_BY_DESIGN:
+            continue
+        target = Path(path)
+        if not target.exists():
+            if (path, expected) in deleted:
                 continue
-            target = Path(path)
-            if not target.exists():
-                if (path, expected) in deleted:
-                    continue
-                problems.append(f"{step['rule_version']}: missing {path}")
-                continue
-            actual = sha256_file(target)
-            if actual != expected:
-                problems.append(
-                    f"{step['rule_version']}: {path} sha256 {actual} != {expected}"
-                )
+            problems.append(f"{label}: missing {path}")
+            continue
+        actual = sha256_file(target)
+        if actual != expected:
+            problems.append(f"{label}: {path} sha256 {actual} != {expected}")
     if problems:
         raise ReplayError(
             "Ledger evidence verification failed:\n  " + "\n  ".join(problems)

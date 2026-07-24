@@ -283,6 +283,78 @@ class ReplayLedgerTests(unittest.TestCase):
         self.assertIn((1735, "date_outside_season_window"), flag_types)
         self.assertIn((20, "negative_or_non_integer_days_injured"), flag_types)
 
+    def test_evidence_verification_covers_baseline_and_open_item_surfaces(
+        self,
+    ) -> None:
+        # The Phase 5 audit gap: a deleted baseline anchor went unrecorded
+        # because only steps[*].evidence was ever walked.
+        evidence_ledger = {
+            "baseline": {
+                "source_v4": {"path": "gone/v4.xlsx", "sha256": "aaa"},
+            },
+            "open_items": [
+                {
+                    "source_workbook_row": 1735,
+                    "evidence": [
+                        {"path": "gone/qa.json", "sha256": "bbb"},
+                        # Living document, hash cannot hold, no mutable flag.
+                        {
+                            "path": "docs/PIPELINE_RULE_CHANGELOG.md",
+                            "sha256": "stale",
+                        },
+                    ],
+                }
+            ],
+        }
+        labels = [
+            label for label, _ in REPLAY.hashed_ledger_references(evidence_ledger)
+        ]
+        self.assertIn("baseline.source_v4", labels)
+        self.assertIn("open_item.source_row_1735", labels)
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = Path(temp) / "deleted.json"
+            manifest.write_text(json.dumps({"entries": []}), encoding="utf-8")
+            with self.assertRaises(REPLAY.ReplayError) as unrecorded:
+                REPLAY.verify_ledger_evidence(evidence_ledger, manifest)
+            message = str(unrecorded.exception)
+            self.assertIn("baseline.source_v4", message)
+            self.assertIn("open_item.source_row_1735", message)
+            # The stale changelog hash must not be reported, by design.
+            self.assertNotIn("PIPELINE_RULE_CHANGELOG", message)
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "entry_count": 2,
+                        "entries": [
+                            {"path": "gone/v4.xlsx", "sha256": "aaa"},
+                            {"path": "gone/qa.json", "sha256": "bbb"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            REPLAY.verify_ledger_evidence(evidence_ledger, manifest)
+
+    def test_deleted_evidence_manifest_must_be_internally_consistent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = Path(temp) / "deleted.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "entry_count": 5,
+                        "entries": [{"path": "a", "sha256": "b"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(REPLAY.ReplayError):
+                REPLAY.load_deleted_evidence(manifest)
+            manifest.write_text(
+                json.dumps({"entries": [{"path": "a"}]}), encoding="utf-8"
+            )
+            with self.assertRaises(REPLAY.ReplayError):
+                REPLAY.load_deleted_evidence(manifest)
+
     def test_deleted_phase5_evidence_is_skipped_only_when_manifested(self) -> None:
         evidence_ledger = {
             "steps": [
