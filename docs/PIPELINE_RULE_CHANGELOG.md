@@ -11,6 +11,20 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-24: Release-ceremony simplification for the restated 2024-25 injury lineage
+
+| Field | Value |
+|---|---|
+| Status | decided by Abdel 2026-07-24 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, decisions locked); applies from the plan's Phase 4 restatement onward |
+| Carry-forward | `carries-forward` for this lineage; the V1 preflight/whitelist ceremony remains the record for currently served releases until restatement |
+| Reason | The dual-write era ended: the master, ledger, and inclusion layers are byte-replayable and independently checked, so the per-release preflight/candidate/checksum-envelope ceremony no longer adds assurance proportionate to its cost for routine updates |
+
+**New path.** One authored decision record, one replay command (`tools/replay.py`), a printed diff summary with anomaly flags (out-of-window dates, negative durations, category drift) that flag but never block, and Abdel's recorded manual review as the gate. Releases regenerate from the v5 baseline plus ledger; superseded releases are retired, never deleted.
+
+**Unchanged.** Scientific rules (IOC buckets, no imputation, preserve source values, pseudonymisation, privacy), the live-write approval boundary for every hosted database action, and the audit contract (every change traceable to source row, rule version, and evidence).
+
+---
+
 ## 2026-07-24: Provenance correction, successor v3/v4 workbook serialization
 
 No derived value, classification, cohort, denominator, or published figure changed. Recorded here because a provenance claim in an accepted audit record was wrong and outputs are not under version control.
