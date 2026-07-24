@@ -1465,9 +1465,9 @@ join analysis.accepted_lineage_cohort_rules_v1 cohort
   on cohort.cohort_view_version = w.cohort_view_version
  and cohort.season = w.season
 cross join analysis.accepted_reporting_classification_rules_v4 rules
-left join body using (season)
-left join types using (season)
-left join profiles using (season);
+left join body on body.season = h.season
+left join types on types.season = h.season
+left join profiles on profiles.season = h.season;
 
 alter table reporting.league_release_context_v2
   drop constraint league_release_context_v2_analysis_version_check,
