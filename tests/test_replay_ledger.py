@@ -128,9 +128,9 @@ class ReplayLedgerTests(unittest.TestCase):
         headers, rows = REPLAY.load_master_table(
             master(
                 [
-                    row("A", "Ath_1"),
-                    row("A", "Ath_2", exclusion="Excluded"),
-                    row("A", "Ath_3"),
+                    row("A", "P1"),
+                    row("A", "P2", exclusion="Excluded"),
+                    row("A", "P3"),
                 ]
             )
         )
@@ -151,20 +151,20 @@ class ReplayLedgerTests(unittest.TestCase):
         headers, rows = REPLAY.load_master_table(
             master(
                 [
-                    row("A", "Ath_1", days=""),
-                    row("A", "Ath_2", days="2"),
-                    row("A", "Ath_3", days="9"),
+                    row("A", "P1", days=""),
+                    row("A", "P2", days="2"),
+                    row("A", "P3", days="9"),
                 ]
             )
         )
         selected, source_rows = REPLAY.select_inclusion(headers, rows)
         changes = [
-            entry(2, "Ath_1", "Days Injured", "", "2"),
-            entry(3, "Ath_2", "Days Injured", "", "2"),
-            entry(4, "Ath_3", "Days Injured", "", "2"),
+            entry(2, "P1", "Days Injured", "", "2"),
+            entry(3, "P2", "Days Injured", "", "2"),
+            entry(4, "P3", "Days Injured", "", "2"),
         ]
         replayed, retained, summaries, conflicts = REPLAY.apply_ledger(
-            headers, selected, source_rows, ledger(changes)
+            headers, selected, source_rows, ledger(changes), rows
         )
         self.assertEqual(retained, [2, 3, 4])
         self.assertEqual(
@@ -175,6 +175,7 @@ class ReplayLedgerTests(unittest.TestCase):
                 "entries": 3,
                 "applied": 1,
                 "materialized_in_master": 1,
+                "row_excluded_from_selection": 0,
                 "conflict": 1,
             },
         )
@@ -185,8 +186,8 @@ class ReplayLedgerTests(unittest.TestCase):
         headers, rows = REPLAY.load_master_table(
             master(
                 [
-                    row("A", "Ath_1"),
-                    row("A", "Ath_2", exclusion="Already excluded"),
+                    row("A", "P1"),
+                    row("A", "P2", exclusion="Already excluded"),
                 ]
             )
         )
@@ -194,7 +195,7 @@ class ReplayLedgerTests(unittest.TestCase):
         removals = [
             entry(
                 2,
-                "Ath_1",
+                "P1",
                 "Inclusion Status",
                 "Included",
                 "Excluded from included CSV",
@@ -202,7 +203,7 @@ class ReplayLedgerTests(unittest.TestCase):
             ),
             entry(
                 3,
-                "Ath_2",
+                "P2",
                 "Inclusion Status",
                 "Included",
                 "Excluded from included CSV",
@@ -210,7 +211,7 @@ class ReplayLedgerTests(unittest.TestCase):
             ),
         ]
         replayed, retained, summaries, conflicts = REPLAY.apply_ledger(
-            headers, selected, source_rows, ledger(removals)
+            headers, selected, source_rows, ledger(removals), rows
         )
         self.assertEqual(replayed, [])
         self.assertEqual(retained, [])
@@ -218,18 +219,55 @@ class ReplayLedgerTests(unittest.TestCase):
         self.assertEqual(summaries[0]["materialized_in_master"], 1)
         self.assertEqual(conflicts, [])
 
+    def test_rows_missing_from_master_entirely_are_conflicts(self) -> None:
+        headers, rows = REPLAY.load_master_table(master([row("A", "P1")]))
+        selected, source_rows = REPLAY.select_inclusion(headers, rows)
+        changes = [
+            entry(9, "P9", "Days Injured", "", "2"),
+            entry(
+                9,
+                "P9",
+                "Inclusion Status",
+                "Included",
+                "Excluded from included CSV",
+                "removed_from_inclusion_csv",
+            ),
+        ]
+        replayed, retained, summaries, conflicts = REPLAY.apply_ledger(
+            headers, selected, source_rows, ledger(changes), rows
+        )
+        self.assertEqual(summaries[0]["conflict"], 2)
+        self.assertTrue(
+            all(
+                conflict["reason"] == "source_row_missing_from_master"
+                for conflict in conflicts
+            )
+        )
+
+    def test_excluded_row_edits_classify_as_row_excluded(self) -> None:
+        headers, rows = REPLAY.load_master_table(
+            master([row("A", "P1"), row("A", "P2", exclusion="Excluded")])
+        )
+        selected, source_rows = REPLAY.select_inclusion(headers, rows)
+        changes = [entry(3, "P2", "Days Injured", "", "2")]
+        replayed, retained, summaries, conflicts = REPLAY.apply_ledger(
+            headers, selected, source_rows, ledger(changes), rows
+        )
+        self.assertEqual(summaries[0]["row_excluded_from_selection"], 1)
+        self.assertEqual(conflicts, [])
+
     def test_flag_generation_is_advisory_and_includes_fit_date_reversal(self) -> None:
         rows = [
             row(
                 "A",
-                "Ath_1",
+                "P1",
                 days="-1",
                 time_loss="Novel",
                 injured="26/07/2024",
                 fit="20/07/2024",
                 returned="30/06/2026",
             ),
-            row("A", "Ath_2", days="1.5", injured="01/01/2023"),
+            row("A", "P2", days="1.5", injured="01/01/2023"),
         ]
         allowed = {
             "TimeLoss vs Medical Attention": {"Unknown", "Time Loss"},

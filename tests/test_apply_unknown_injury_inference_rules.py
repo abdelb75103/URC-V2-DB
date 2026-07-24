@@ -15,7 +15,7 @@ SPEC.loader.exec_module(RULES)
 
 def row(source_row: int) -> dict[str, str]:
     return {
-        "Team": "Team", "PlayerID": f"Ath_{source_row}",
+        "Team": "Team", "PlayerID": f"P{source_row}",
         "Problem type": "Injury", "Confirmed Return Date": "",
         "Days Injured": "", "TimeLoss vs Medical Attention": "Unknown",
     }

@@ -308,6 +308,7 @@ def extract_workbook(workbook_path: Path) -> dict[str, Any]:
                     str(merged_range) for merged_range in worksheet.merged_cells.ranges
                 ],
                 "tables": _table_records(worksheet),
+                "sheet_properties": _sheet_properties(worksheet),
             }
         )
     return {
@@ -360,8 +361,35 @@ def render_workbook(data: dict[str, Any], output_path: Path) -> None:
                     showColumnStripes=style["show_column_stripes"],
                 )
             worksheet.add_table(table)
+        _apply_sheet_properties(worksheet, sheet.get("sheet_properties", {}))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     workbook.save(output_path)
+
+
+def _sheet_properties(worksheet: Any) -> dict[str, Any]:
+    """Rendering-affecting sheet-level properties.
+
+    Ephemeral view state (active selection, scroll position) is explicitly
+    outside the round-trip contract; zoom, visibility, and format defaults
+    are inside it because they change what a reviewer sees.
+    """
+    fmt = worksheet.sheet_format
+    return {
+        "state": worksheet.sheet_state,
+        "default_row_height": fmt.defaultRowHeight,
+        "default_col_width": fmt.defaultColWidth,
+        "zoom_scale": worksheet.sheet_view.zoomScale,
+    }
+
+
+def _apply_sheet_properties(worksheet: Any, properties: dict[str, Any]) -> None:
+    worksheet.sheet_state = properties.get("state", "visible")
+    if properties.get("default_row_height") is not None:
+        worksheet.sheet_format.defaultRowHeight = properties["default_row_height"]
+    if properties.get("default_col_width") is not None:
+        worksheet.sheet_format.defaultColWidth = properties["default_col_width"]
+    if properties.get("zoom_scale") is not None:
+        worksheet.sheet_view.zoomScale = properties["zoom_scale"]
 
 
 def _table_records(worksheet: Any) -> list[dict[str, Any]]:
@@ -477,6 +505,10 @@ def compare_workbooks(old_path: Path, new_path: Path) -> dict[str, Any]:
             "column_widths": (_column_widths(old_sheet), _column_widths(new_sheet)),
             "row_heights": (_row_heights(old_sheet), _row_heights(new_sheet)),
             "tables": (_table_records(old_sheet), _table_records(new_sheet)),
+            "sheet_properties": (
+                _sheet_properties(old_sheet),
+                _sheet_properties(new_sheet),
+            ),
         }
         for kind, (old_value, new_value) in structural.items():
             if old_value != new_value:

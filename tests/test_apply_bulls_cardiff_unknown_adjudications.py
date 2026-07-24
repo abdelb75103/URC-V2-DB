@@ -24,7 +24,7 @@ class BullsCardiffUnknownAdjudicationTests(unittest.TestCase):
         for csv_row in range(2, 143):
             rows.append({
                 "Team": "Bulls" if csv_row < 130 else "Cardiff",
-                "PlayerID": f"Ath_{csv_row}",
+                "PlayerID": f"P{csv_row}",
                 "Problem type": "Injury",
                 "Diagnosis": "Reviewed diagnosis",
                 "Description": "Reviewed description",

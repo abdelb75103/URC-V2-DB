@@ -30,7 +30,7 @@ def workbook_item(
         "source_workbook_row": row,
         "values": {
             "Team": team,
-            "PlayerID": f"Ath_{row}",
+            "PlayerID": f"P{row}",
             "Received/Injured In Team": received_team,
             "Exclusion Reason": reason,
             "Occasion category": occasion,

@@ -46,7 +46,8 @@ labelled, both recorded in the ledger.
   byte-for-byte; any conflict stops the line for review.
 - `python3 tools/intake.py --team <key> --season <s> --file <csv>`: new
   season intake, append-only; `--validate-against-baseline` reconciles a
-  team's file against the v5 baseline without writing.
+  team's file against the v5 baseline without touching the master (it
+  writes only a validation report).
 - `python3 tools/checks.py --season <s>`: standing comparability suite;
   structural problems FAIL, observations FLAG.
 
@@ -80,10 +81,10 @@ needs the exact hosted target approved; see `AGENTS.md`.
 ## Privacy in one paragraph
 
 Player data is pseudonymised before it reaches this repo; all of `data/` and
-`outputs/` are Git-ignored. The club-alias codebook is protected: alias
-strings (`Team A` through `Team Z`) never enter Git, the DB, or exports; the
-alias map lives only in Git-ignored `data/intake/team_alias_map.json` and
-encrypted UCD storage. Team pages are temporarily passwordless for Abdel's
+`outputs/` are Git-ignored. The club-alias codebook is protected: the
+single-letter club placeholder aliases never enter Git, the DB, or exports
+(exact strings and scope in `AGENTS.md`); the alias map lives only in
+Git-ignored `data/intake/team_alias_map.json` and encrypted UCD storage. Team pages are temporarily passwordless for Abdel's
 private review only; the password boundary must be restored before any
 sharing or cutover (executable gate in `AGENTS.md`).
 

@@ -191,8 +191,25 @@ def run_checks(root: Path, season: str) -> dict[str, Any]:
 
     index = {header: position for position, header in enumerate(headers)}
     exclusion_index = index["Exclusion Reason"]
+    team_index = index["Team"]
+    player_index = index["PlayerID"]
     signature_rows: dict[str, list[int]] = defaultdict(list)
     for row_number, row in enumerate(rows, start=2):
+        if is_blank(row[team_index]) or is_blank(row[player_index]):
+            failures.append(
+                {
+                    "check": "blank_row_identity",
+                    "row": row_number,
+                    "blank_fields": [
+                        field
+                        for field, position in (
+                            ("Team", team_index),
+                            ("PlayerID", player_index),
+                        )
+                        if is_blank(row[position])
+                    ],
+                }
+            )
         signature_rows[row_signature(row)].append(row_number)
         exclusion = row[exclusion_index]
         if not is_blank(exclusion) and not isinstance(exclusion, str):

@@ -37,7 +37,7 @@ HEADERS = [
 def row(**overrides: str) -> dict[str, str]:
     base = {
         "Team": "Team A",
-        "PlayerID": "Ath_1",
+        "PlayerID": "P1",
         "Date Injured": "01/09/2024",
         "Confirmed Return Date": "04/09/2024",
         "Days Injured": "",
@@ -134,7 +134,7 @@ class FocusedCleanupTests(unittest.TestCase):
             backup_manifest = root / "included.before.manifest.json"
             audit_path = root / "audit.csv"
             qa_path = root / "qa.json"
-            rows = [row(), row(PlayerID="Ath_2", **{"Days Injured": "0"})]
+            rows = [row(), row(PlayerID="P2", **{"Days Injured": "0"})]
 
             with input_csv.open("w", encoding="utf-8", newline="") as handle:
                 writer = csv.DictWriter(

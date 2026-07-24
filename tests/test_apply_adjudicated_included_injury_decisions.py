@@ -21,7 +21,7 @@ HEADERS = [
 
 def row(source_row: int, team: str = "Other") -> dict[str, str]:
     return {
-        "Team": team, "PlayerID": f"Ath_{source_row}", "Days Injured": "",
+        "Team": team, "PlayerID": f"P{source_row}", "Days Injured": "",
         "TimeLoss vs Medical Attention": "Time Loss", "Orchard Code": "",
         "Illness Code": "", "Description": "",
         "Received/Injured In Team": "",

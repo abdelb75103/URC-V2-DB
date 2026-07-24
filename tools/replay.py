@@ -129,6 +129,35 @@ def select_inclusion(
     return selected, source_rows
 
 
+def verify_ledger_evidence(ledger: dict[str, Any]) -> None:
+    """Verify every hashed evidence reference before replaying.
+
+    Evidence entries marked "mutable": true (living documents such as the
+    rule changelog) are exempt from byte verification by recorded design;
+    everything else with a sha256 must match the file on disk.
+    """
+    problems = []
+    for step in ledger.get("steps", []):
+        for evidence in step.get("evidence", []):
+            path = evidence.get("path")
+            expected = evidence.get("sha256")
+            if not path or not expected or evidence.get("mutable"):
+                continue
+            target = Path(path)
+            if not target.exists():
+                problems.append(f"{step['rule_version']}: missing {path}")
+                continue
+            actual = sha256_file(target)
+            if actual != expected:
+                problems.append(
+                    f"{step['rule_version']}: {path} sha256 {actual} != {expected}"
+                )
+    if problems:
+        raise ReplayError(
+            "Ledger evidence verification failed:\n  " + "\n  ".join(problems)
+        )
+
+
 def _is_removal(entry: dict[str, Any]) -> bool:
     return (
         entry.get("action") == "removed_from_inclusion_csv"
@@ -144,9 +173,11 @@ def apply_ledger(
     selected_rows: dict[int, list[Any]],
     ordered_source_rows: list[int],
     ledger: dict[str, Any],
+    master_rows: dict[int, list[Any]] | None = None,
 ) -> tuple[list[list[Any]], list[int], list[dict[str, Any]], list[dict[str, Any]]]:
     rows = {source_row: list(row) for source_row, row in selected_rows.items()}
     header_indexes = {header: index for index, header in enumerate(headers)}
+    master_rows = master_rows if master_rows is not None else {}
     summaries: list[dict[str, Any]] = []
     conflicts: list[dict[str, Any]] = []
 
@@ -165,12 +196,38 @@ def apply_ledger(
                 if source_row in rows:
                     del rows[source_row]
                     counts["applied"] += 1
-                else:
+                elif source_row in master_rows:
                     counts["materialized_in_master"] += 1
+                else:
+                    conflicts.append(
+                        {
+                            "rule_version": step["rule_version"],
+                            "source_workbook_row": source_row,
+                            "field": entry.get("field"),
+                            "reason": "source_row_missing_from_master",
+                        }
+                    )
+                    counts["conflict"] += 1
                 continue
 
             if source_row not in rows:
-                counts["materialized_in_master"] += 1
+                # A value entry can target a row the master now excludes
+                # (for example a later exclusion superseded the edit). That
+                # is not the same as the edit being materialized: classify
+                # it separately and treat a row missing from the master
+                # entirely as a conflict.
+                if source_row in master_rows:
+                    counts["row_excluded_from_selection"] += 1
+                else:
+                    conflicts.append(
+                        {
+                            "rule_version": step["rule_version"],
+                            "source_workbook_row": source_row,
+                            "field": entry.get("field"),
+                            "reason": "source_row_missing_from_master",
+                        }
+                    )
+                    counts["conflict"] += 1
                 continue
 
             field = entry["field"]
@@ -240,6 +297,9 @@ def apply_ledger(
                 "entries": len(step.get("entries", [])),
                 "applied": counts["applied"],
                 "materialized_in_master": counts["materialized_in_master"],
+                "row_excluded_from_selection": counts[
+                    "row_excluded_from_selection"
+                ],
                 "conflict": counts["conflict"],
             }
         )
@@ -388,6 +448,65 @@ def diff_csv(reference: Path, candidate: Path) -> list[dict[str, Any]]:
     return differences
 
 
+def _source_to_master_section() -> list[str]:
+    """Generate the dirty-source-to-master story from the per-team
+    Standardization Records (documented, not re-executed, for 2024-25)."""
+    records_dir = Path("data/2024-25/intake/standardization_records")
+    record_paths = sorted(records_dir.glob("*.json"))
+    lines = [
+        "## Source to master: per-team standardization (documented, not re-executed)",
+        "",
+        "For 2024-25 the dirty-source-to-master leg is evidenced by one",
+        "consolidated Standardization Record per team under",
+        "`data/2024-25/intake/standardization_records/` (source checksums,",
+        "steps applied, pseudonymisation notes, row reconciliation, and",
+        "explicit gaps). The go-forward scripted path for later seasons is",
+        "`tools/intake.py`.",
+        "",
+    ]
+    if not record_paths:
+        lines.extend(
+            [
+                "Standardization Records were not available when this document",
+                "was generated; regenerate after restoring them.",
+                "",
+            ]
+        )
+        return lines
+    lines.extend(
+        [
+            "| Team | Master rows | Included | Excluded | Sources | Steps | Gaps |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    total_gaps = 0
+    for record_path in record_paths:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        reconciliation = record.get("row_reconciliation", {})
+        gaps = record.get("gaps", [])
+        total_gaps += len(gaps)
+        lines.append(
+            f"| {record.get('team')} "
+            f"| {reconciliation.get('master_source_rows')} "
+            f"| {reconciliation.get('included_rows')} "
+            f"| {reconciliation.get('excluded_rows')} "
+            f"| {len(record.get('source_files', []))} "
+            f"| {len(record.get('steps_applied', []))} "
+            f"| {len(gaps)} |"
+        )
+    lines.extend(
+        [
+            "",
+            f"Recorded evidence gaps across teams: {total_gaps}. Each gap is",
+            "stated verbatim in its team record; gaps are never silently",
+            "filled. Where historical master-stage counts disagree with the",
+            "current manifest, both numbers are preserved in the record.",
+            "",
+        ]
+    )
+    return lines
+
+
 def write_methodology(ledger: dict[str, Any], path: Path) -> None:
     lines = [
         "# URC 2024-25 Inclusion Methodology",
@@ -401,6 +520,7 @@ def write_methodology(ledger: dict[str, Any], path: Path) -> None:
         "3. **Inclusion:** Contains only master rows with a blank exclusion reason after the ordered ledger is replayed. Analysis consumes this layer.",
         "",
     ]
+    lines.extend(_source_to_master_section())
     for step in ledger["steps"]:
         counts = Counter(entry["field"] for entry in step.get("entries", []))
         lines.extend(
@@ -451,15 +571,40 @@ def replay(
         )
 
     headers, master_rows = load_master_table(baseline)
+    verify_ledger_evidence(ledger)
+    record_path = Path(ledger["baseline"]["record"])
+    if record_path.exists():
+        actual_record_hash = sha256_file(record_path)
+        if actual_record_hash != ledger["baseline"]["record_sha256"]:
+            raise ReplayError(
+                "baseline_record.json hash mismatch: "
+                f"{actual_record_hash} != {ledger['baseline']['record_sha256']}"
+            )
+    else:
+        raise ReplayError(f"Baseline record does not exist: {record_path}")
     selected, ordered_source_rows = select_inclusion(headers, master_rows)
     rows, source_rows, summaries, conflicts = apply_ledger(
-        headers, selected, ordered_source_rows, ledger
+        headers, selected, ordered_source_rows, ledger, master_rows
     )
-    EXPORT.write_csv_atomic(output_path, headers, rows)
+    # Write a candidate first; the canonical output is promoted only after
+    # the conflict check passes, so a failing replay never clobbers the
+    # previous accepted CSV.
+    candidate_path = output_path.with_suffix(output_path.suffix + ".candidate")
+    EXPORT.write_csv_atomic(candidate_path, headers, rows)
     if not ledger.get("serialization", {}).get("trailing_newline", True):
-        raw = output_path.read_bytes()
+        raw = candidate_path.read_bytes()
         if raw.endswith(b"\n"):
-            output_path.write_bytes(raw[:-1])
+            candidate_path.write_bytes(raw[:-1])
+    if conflicts:
+        candidate_hash = sha256_file(candidate_path)
+        print(
+            f"CONFLICTS: {len(conflicts)}; canonical output NOT updated. "
+            f"Candidate retained at {candidate_path} (sha256 {candidate_hash})"
+        )
+        for conflict in conflicts:
+            print(f"  CONFLICT {json.dumps(conflict, sort_keys=True)}")
+        raise ReplayError("Replay produced conflicts; canonical output not promoted")
+    candidate_path.replace(output_path)
     output_hash = sha256_file(output_path)
     source_mapping_hash = mapping_sha256(source_rows)
     flags = generate_flags(
@@ -514,6 +659,7 @@ def print_summary(payload: dict[str, Any], output_path: Path) -> None:
             f"{step['order']:>2} {step['rule_version']}: "
             f"applied={step['applied']} "
             f"materialized_in_master={step['materialized_in_master']} "
+            f"row_excluded_from_selection={step['row_excluded_from_selection']} "
             f"conflict={step['conflict']}"
         )
     print("Anomaly flags")

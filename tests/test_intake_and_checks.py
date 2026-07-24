@@ -352,7 +352,9 @@ class IntakeAndChecksTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             details = json.loads(report.read_text())
             self.assertEqual(details["alignment"]["aligned_rows"], 1)
-            self.assertEqual(details["difference_counts"]["covered"], 1)
+            self.assertEqual(
+                details["difference_counts"]["covered_field_level"], 1
+            )
             self.assertEqual(details["difference_counts"]["unexplained"], 1)
             self.assertEqual(
                 details["unexplained_differences"][0]["field"],

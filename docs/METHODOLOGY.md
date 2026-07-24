@@ -8,6 +8,39 @@
 2. **Decision ledger:** Applies ordered, evidence-bound corrections, standardizations, inferences, adjudications, and inclusion removals.
 3. **Inclusion:** Contains only master rows with a blank exclusion reason after the ordered ledger is replayed. Analysis consumes this layer.
 
+## Source to master: per-team standardization (documented, not re-executed)
+
+For 2024-25 the dirty-source-to-master leg is evidenced by one
+consolidated Standardization Record per team under
+`data/2024-25/intake/standardization_records/` (source checksums,
+steps applied, pseudonymisation notes, row reconciliation, and
+explicit gaps). The go-forward scripted path for later seasons is
+`tools/intake.py`.
+
+| Team | Master rows | Included | Excluded | Sources | Steps | Gaps |
+|---|---:|---:|---:|---:|---:|---:|
+| Benetton | 43 | 28 | 15 | 21 | 3 | 3 |
+| Bulls | 105 | 87 | 18 | 20 | 2 | 2 |
+| Cardiff | 62 | 27 | 35 | 32 | 2 | 5 |
+| Connacht | 125 | 108 | 17 | 8 | 2 | 7 |
+| Dragons | 204 | 147 | 57 | 37 | 4 | 6 |
+| Edinburgh | 248 | 167 | 81 | 7 | 3 | 7 |
+| Glasgow Warriors | 438 | 271 | 167 | 8 | 3 | 7 |
+| Leinster | 272 | 228 | 44 | 8 | 2 | 5 |
+| Lions | 90 | 63 | 27 | 20 | 4 | 5 |
+| Munster | 125 | 101 | 24 | 11 | 2 | 5 |
+| Ospreys | 163 | 103 | 60 | 31 | 3 | 6 |
+| Scarlets | 200 | 144 | 56 | 31 | 3 | 6 |
+| Sharks | 480 | 396 | 84 | 20 | 4 | 5 |
+| Stormers | 176 | 157 | 19 | 20 | 3 | 4 |
+| Ulster | 196 | 164 | 32 | 8 | 2 | 5 |
+| Zebre | 133 | 110 | 23 | 20 | 3 | 6 |
+
+Recorded evidence gaps across teams: 84. Each gap is
+stated verbatim in its team record; gaps are never silently
+filled. Where historical master-stage counts disagree with the
+current manifest, both numbers are preserved in the record.
+
 ## 1. included_injury_focused_cleanup_2026-07-23_v1
 
 - Applied at: 2026-07-23T17:37:32Z

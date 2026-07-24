@@ -30,7 +30,7 @@ def make_row(
 ) -> dict[str, str]:
     return {
         "Team": team,
-        "PlayerID": player_id or f"Ath_{source_row}",
+        "PlayerID": player_id or f"P{source_row}",
         "Problem type": problem_type,
         "Date Injured": date_injured,
         "Confirmed Return Date": return_date,
@@ -61,24 +61,24 @@ class SourceCorrectionTests(unittest.TestCase):
         rows[indexed[CORRECTIONS.DRAGONS_SOURCE_ROW]].update(
             {
                 "Team": "Dragons",
-                "PlayerID": "Ath_144",
+                "PlayerID": "P144",
                 "Date Injured": CORRECTIONS.DRAGONS_OLD_DATE,
             }
         )
         rows[indexed[CORRECTIONS.EDINBURGH_UNCHANGED_SOURCE_ROW]].update(
-            {"Team": "Edinburgh", "PlayerID": "Ath_596"}
+            {"Team": "Edinburgh", "PlayerID": "P596"}
         )
         rows[indexed[CORRECTIONS.GLASGOW_UNCHANGED_SOURCE_ROW]].update(
             {
                 "Team": "Glasgow Warriors",
-                "PlayerID": "Ath_491",
+                "PlayerID": "P491",
                 "Problem type": "Illness",
             }
         )
         duplicate = make_row(
             CORRECTIONS.LIONS_RETAINED_SOURCE_ROW,
             team="Lions",
-            player_id="Ath_788",
+            player_id="P788",
             return_date="24/10/2024",
             days_injured="11",
         )
@@ -119,7 +119,7 @@ class SourceCorrectionTests(unittest.TestCase):
     def test_rejects_nonidentical_lions_rows(self) -> None:
         rows, source_rows, recurrence_rows = self.build_fixture()
         index = source_rows.index(CORRECTIONS.LIONS_REMOVED_SOURCE_ROW)
-        rows[index]["PlayerID"] = "Ath_not_duplicate"
+        rows[index]["PlayerID"] = "Pnot_duplicate"
         with self.assertRaisesRegex(ValueError, "not exact CSV duplicates"):
             CORRECTIONS.transform_dataset(rows, source_rows, recurrence_rows)
 
@@ -148,21 +148,21 @@ class SourceCorrectionTests(unittest.TestCase):
     def test_narrow_csv_patch_preserves_untouched_lines_byte_for_byte(self) -> None:
         headers = ["Team", "PlayerID", "Recurrence"]
         original_rows = [
-            {"Team": "A", "PlayerID": "Ath_1", "Recurrence": "New injury"},
-            {"Team": "B", "PlayerID": "Ath_2", "Recurrence": "New injury"},
-            {"Team": "C", "PlayerID": "Ath_3", "Recurrence": "Recurrence"},
+            {"Team": "A", "PlayerID": "P1", "Recurrence": "New injury"},
+            {"Team": "B", "PlayerID": "P2", "Recurrence": "New injury"},
+            {"Team": "C", "PlayerID": "P3", "Recurrence": "Recurrence"},
         ]
         transformed_rows = [
-            {"Team": "A", "PlayerID": "Ath_1", "Recurrence": "New case"},
-            {"Team": "C", "PlayerID": "Ath_3", "Recurrence": "Recurrence"},
+            {"Team": "A", "PlayerID": "P1", "Recurrence": "New case"},
+            {"Team": "C", "PlayerID": "P3", "Recurrence": "Recurrence"},
         ]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "included.csv"
-            untouched_line = 'C,Ath_3,"Recurrence"\n'
+            untouched_line = 'C,P3,"Recurrence"\n'
             path.write_text(
                 "Team,PlayerID,Recurrence\n"
-                "A,Ath_1,New injury\n"
-                "B,Ath_2,New injury\n"
+                "A,P1,New injury\n"
+                "B,P2,New injury\n"
                 + untouched_line,
                 encoding="utf-8",
             )
@@ -176,7 +176,7 @@ class SourceCorrectionTests(unittest.TestCase):
             )
             lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
             self.assertEqual(lines[2], untouched_line)
-            self.assertNotIn("Ath_2", path.read_text(encoding="utf-8"))
+            self.assertNotIn("P2", path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

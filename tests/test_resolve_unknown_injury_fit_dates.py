@@ -28,7 +28,7 @@ HEADERS = [
 def row(source_row: int) -> dict[str, str]:
     return {
         "Team": "Dragons",
-        "PlayerID": f"Ath_{source_row}",
+        "PlayerID": f"P{source_row}",
         "Problem type": "Injury",
         "Date Injured": "01/01/2025",
         "Fit For Selection Date": "",
@@ -45,11 +45,11 @@ class ResolveUnknownInjuryFitDatesTests(unittest.TestCase):
         source_master = [dict.fromkeys(HEADERS, "") for _ in range(1734)]
         indexed = {source_row: index for index, source_row in enumerate(source_rows)}
         values = {
-            210: ("Cardiff", "Ath_210", "", "10/02/25"),
-            359: ("Dragons", "Ath_359", "18/07/2024", "19/08/2025"),
-            470: ("Dragons", "Ath_470", "25/01/2025", "10/02/25q"),
-            505: ("Dragons", "Ath_505", "04/04/2025", "04/04/2025"),
-            1735: ("Ospreys", "Ath_1735", "26/07/2024", "20/07/2024"),
+            210: ("Cardiff", "P210", "", "10/02/25"),
+            359: ("Dragons", "P359", "18/07/2024", "19/08/2025"),
+            470: ("Dragons", "P470", "25/01/2025", "10/02/25q"),
+            505: ("Dragons", "P505", "04/04/2025", "04/04/2025"),
+            1735: ("Ospreys", "P1735", "26/07/2024", "20/07/2024"),
         }
         for source_row, (team, player, injured, fit) in values.items():
             rows[indexed[source_row]].update(

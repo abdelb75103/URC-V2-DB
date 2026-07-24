@@ -407,8 +407,13 @@ def validate_against_baseline(
             "method_counts": dict(sorted(method_counts.items())),
         },
         "covered_fields": sorted(covered_fields),
+        "coverage_granularity": (
+            "field_level: a difference counts as covered when its field "
+            "appears in the team's recorded change evidence; row-level "
+            "evidence does not exist for the documented-not-reexecuted era"
+        ),
         "difference_counts": {
-            "covered": len(covered_differences),
+            "covered_field_level": len(covered_differences),
             "unexplained": len(unexplained_differences),
             "total": len(covered_differences) + len(unexplained_differences),
         },
@@ -437,37 +442,64 @@ def append_intake(
             "recorded decision authorizes that exact append."
         )
     master_path = master_dir / f"master_{season}.json"
+    source_sha256 = sha256_file(source)
     if master_path.exists():
         payload = json.loads(master_path.read_text(encoding="utf-8"))
     else:
         payload = new_master(headers, source)
+    appended_sources = payload.setdefault("appended_sources", [])
+    if any(item.get("sha256") == source_sha256 for item in appended_sources):
+        raise IntakeError(
+            f"Source file already appended to this master (sha256 "
+            f"{source_sha256}); appends are idempotent by source hash"
+        )
     sheet = injury_sheet(payload)
     if sheet.get("values", [[]])[0] != headers:
         raise IntakeError("Existing master canonical header order does not match")
+    team_index = headers.index(TEAM_FIELD)
+    supplied_teams = sorted(
+        {str(row[team_index]) for row in rows if row[team_index] is not None}
+    )
+    if len(supplied_teams) > 1:
+        raise IntakeError(
+            f"Intake file mixes teams {supplied_teams}; one team per intake"
+        )
     previous_rows = len(sheet["values"]) - 1
     sheet["values"].extend(rows)
     sheet["max_row"] = len(sheet["values"])
     sheet["max_column"] = len(headers)
-    write_json(master_path, payload)
+    appended_sources.append(
+        {
+            "team_key": team_key,
+            "path": str(source),
+            "sha256": source_sha256,
+            "rows": len(rows),
+        }
+    )
 
     report = {
         "mode": "append",
         "team_key": team_key,
         "season": season,
         "source_file": str(source),
-        "source_sha256": sha256_file(source),
+        "source_sha256": source_sha256,
         "source_row_count": len(rows),
+        "team_values_in_rows": supplied_teams,
         "dropped_columns": dropped,
         "blank_rates": blank_rates(headers, rows),
         "master_path": str(master_path),
         "previous_master_rows": previous_rows,
         "appended_rows": len(rows),
         "master_rows_after": previous_rows + len(rows),
+        "force_append": force_append,
     }
     report_path = out_report or master_dir / (
         f"intake_{team_key}_{season}_{report['source_sha256'][:12]}.json"
     )
+    # Write the report first, then the master, so a crash between the two
+    # leaves evidence of the attempt rather than an unexplained master change.
     write_json(report_path, report)
+    write_json(master_path, payload)
     report["report_path"] = str(report_path)
     return report
 
@@ -480,6 +512,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--season", required=True)
     parser.add_argument("--file", type=Path, required=True)
     parser.add_argument("--validate-against-baseline", action="store_true")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Exit nonzero when validation finds unexplained differences or "
+            "unalignable rows (the Year 2 gate posture; 2024-25 archaeology "
+            "runs report-only by recorded design)"
+        ),
+    )
     parser.add_argument("--force-append", action="store_true")
     parser.add_argument("--out-report", type=Path)
     parser.add_argument(
@@ -544,18 +585,25 @@ def main(argv: list[str] | None = None) -> int:
                 / f"{args.team}_{args.season}_validation.json"
             )
             write_json(report_path, report)
+            unexplained = report["difference_counts"]["unexplained"]
+            unalignable = len(report["alignment"]["unalignable_rows"])
             print(
                 f"{args.team}: aligned {report['alignment']['aligned_rows']}/"
                 f"{report['alignment']['intake_rows']}, "
-                f"covered {report['difference_counts']['covered']}, "
-                f"unexplained {report['difference_counts']['unexplained']}"
+                "covered (field-level) "
+                f"{report['difference_counts']['covered_field_level']}, "
+                f"unexplained {unexplained}"
             )
-            if report["alignment"]["unalignable_rows"]:
-                print(
-                    "Unalignable intake rows: "
-                    f"{len(report['alignment']['unalignable_rows'])}"
-                )
+            if unalignable:
+                print(f"Unalignable intake rows: {unalignable}")
             print(f"Report: {report_path}")
+            if args.strict and (unexplained or unalignable):
+                print(
+                    "STRICT: validation failed with "
+                    f"{unexplained} unexplained differences and "
+                    f"{unalignable} unalignable rows"
+                )
+                return 1
             return 0
         report = append_intake(
             root,
