@@ -5403,9 +5403,16 @@ def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
     so the 16 per-team files go stale after every league release while the
     website keeps serving the bundle through reporting.latest_team_dashboard_v2.
     Those files are a parity and emergency export, never an application input,
-    so this rewrites each one verbatim from the same approved bundle the site
-    serves and records the release identity it came from. Run it after every
-    accepted release-league promotion.
+    so this rewrites each one from the same approved bundle the site serves and
+    records the release identity it came from. Run it after every accepted
+    release-league promotion.
+
+    Values are runtime-equivalent to the stored bundle, not character-identical
+    to its numeric text: a Postgres numeric such as 2.42234971686951152000
+    round-trips through an IEEE double and reserializes as 2.4223497168695114.
+    That is far beyond dashboard precision and these files are not application
+    inputs, so it is accepted rather than corrected, but "verbatim" would be
+    the wrong word for it.
 
     This is the only writer of the committed per-team payloads, so it applies
     the same two guards every other dashboard emitter applies: internal keys
@@ -5416,8 +5423,10 @@ def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
     if not season:
         raise SystemExit("--season is required")
     bundle, metadata = current_league_bundle_snapshot(season)
-    written: list[str] = []
-    expected_paths: set[str] = set()
+    # Resolve every target path and refuse an unaccounted stale export BEFORE
+    # writing anything, so a failure cannot leave a partial refresh alongside
+    # the stale file it was meant to catch.
+    planned: list[tuple[Path, object]] = []
     for team in bundle["teams"]:
         team_key = clean_text(team.get("team_key"))
         dashboard = team.get("dashboard")
@@ -5425,10 +5434,13 @@ def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
             raise SystemExit("approved bundle contains an incomplete team payload")
         public = without_keys(dashboard, {"source_files", "pipeline_evidence"})
         assert_public_payload_is_publishable(public, team_key)
-        path = Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
-        write_json_atomic(path, public)
-        written.append(str(path))
-        expected_paths.add(str(path))
+        planned.append(
+            (
+                Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json",
+                public,
+            )
+        )
+    expected_paths = {str(path) for path, _ in planned}
     stale = {
         str(path)
         for path in Path("content/reporting").glob(f"*_dashboard_{season}.json")
@@ -5440,6 +5452,9 @@ def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
             "content/reporting holds per-team exports the approved bundle does "
             f"not account for: {sorted(stale)}"
         )
+    written = [str(path) for path, _ in planned]
+    for path, public in planned:
+        write_json_atomic(path, public)
     print(json.dumps({
         "status": "team_parity_exported", "season": season,
         "team_count": len(written), "paths": written, **metadata,
