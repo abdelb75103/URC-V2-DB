@@ -3606,6 +3606,9 @@ OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION = "20260722140000"
 INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION = "20260722150000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-20_v3"
+LINEAGE_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-24_v4"
+INJURY_MASTER_LINEAGE_MIGRATION_VERSION = "20260724180000"
+LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION = "20260724181000"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
 # The five dashboard cohort-exclusion reason codes analysis.coverage_v1
 # cannot reproduce under its curated-only read rule (see
@@ -5430,37 +5433,60 @@ def release_league(args: argparse.Namespace) -> None:
         ("v2", "reporting_classification_2026-07-20_v1", "v2"),
         ("v3", "reporting_classification_2026-07-20_v1", "season_bound_2026-07-20_v1"),
         ("v3", "reporting_classification_2026-07-22_v2", "season_bound_2026-07-20_v1"),
+        ("v4", "reporting_classification_2026-07-22_v2", "lineage_2024-25_2026-07-24_v1"),
     }
     if (analysis_version, classification_view_version, cohort_view_version) not in supported_release_variants:
         raise SystemExit(
             "unsupported analysis/classification/cohort version combination; "
-            "V3 requires an accepted reporting classification and the season-bound cohort"
+            "V3 requires an accepted reporting classification and the season-bound cohort; "
+            "V4 requires the accepted OSIICS classification and lineage cohort"
         )
     uses_osiics_successor = (
-        classification_view_version == "reporting_classification_2026-07-22_v2"
+        analysis_version == "v3"
+        and classification_view_version == "reporting_classification_2026-07-22_v2"
     )
     # A classification-only successor inherits every non-classification field
     # from the approved immutable bundle. Recomputing the full dashboard is both
     # unnecessary and much slower than replacing the three affected sections.
     league_candidate_view = (
-        "analysis.league_dashboard_classification_incremental_20260722_v1"
-        if uses_osiics_successor else "analysis.league_dashboard_release_candidates_v4"
+        "analysis.league_dashboard_release_candidates_v6"
+        if analysis_version == "v4"
+        else (
+            "analysis.league_dashboard_classification_incremental_20260722_v1"
+            if uses_osiics_successor else "analysis.league_dashboard_release_candidates_v4"
+        )
     )
     team_candidate_view = (
-        "analysis.team_dashboard_classification_incremental_20260722_v1"
-        if uses_osiics_successor else "analysis.team_dashboard_release_candidates_v4"
+        "analysis.team_dashboard_release_candidates_v6"
+        if analysis_version == "v4"
+        else (
+            "analysis.team_dashboard_classification_incremental_20260722_v1"
+            if uses_osiics_successor else "analysis.team_dashboard_release_candidates_v4"
+        )
     )
     release_rule_version = (
-        SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
-        if analysis_version == "v3"
-        else LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+        LINEAGE_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+        if analysis_version == "v4"
+        else (
+            SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+            if analysis_version == "v3"
+            else LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+        )
     )
     release_reason_code = (
-        "league_dashboard_release_v3"
-        if analysis_version == "v3"
-        else "league_dashboard_release_v2"
+        "league_dashboard_release_v4"
+        if analysis_version == "v4"
+        else (
+            "league_dashboard_release_v3"
+            if analysis_version == "v3"
+            else "league_dashboard_release_v2"
+        )
     )
-    decision_recorded_at = "2026-07-19" if analysis_version == "v3" else "2026-07-14"
+    decision_recorded_at = (
+        "2026-07-24"
+        if analysis_version == "v4"
+        else "2026-07-19" if analysis_version == "v3" else "2026-07-14"
+    )
     if preflight and preflight_file_arg:
         raise SystemExit("--preflight cannot be combined with --preflight-file")
     if preflight_file_arg and not reviewer:
@@ -5477,12 +5503,20 @@ def release_league(args: argparse.Namespace) -> None:
             f"(code_version={provenance['code_version']})"
         )
 
-    required_migration = (
-        SEASON_BOUND_REPORTING_MIGRATION_VERSION
-        if analysis_version == "v3"
-        else ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION
-    )
-    required_migrations = [required_migration]
+    if analysis_version == "v4":
+        required_migrations = [
+            INJURY_MASTER_LINEAGE_MIGRATION_VERSION,
+            LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION,
+            OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION,
+            INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION,
+        ]
+    else:
+        required_migration = (
+            SEASON_BOUND_REPORTING_MIGRATION_VERSION
+            if analysis_version == "v3"
+            else ADJUDICATED_REPORTING_CLASSIFICATION_MIGRATION_VERSION
+        )
+        required_migrations = [required_migration]
     if uses_osiics_successor:
         required_migrations.extend([
             OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION,
@@ -5527,24 +5561,40 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit("accepted reporting classification evidence is missing")
     if cohort_view_version != "v2" and not cohort_evidence_sha256:
         raise SystemExit("accepted season-bound cohort evidence is missing")
-    if analysis_version == "v3":
+    if analysis_version in {"v3", "v4"}:
+        if analysis_version == "v4":
+            semantic_cohort_view = "analysis.lineage_injury_cohort_v1"
+            semantic_monthly_view = "analysis.lineage_league_monthly_v1"
+            semantic_summary_view = "analysis.lineage_league_summary_v1"
+            semantic_missing_error = "lineage semantic reconciliation returned no row"
+            semantic_mismatch_error = (
+                "lineage cohort, headline, or monthly reconciliation failed"
+            )
+        else:
+            semantic_cohort_view = "analysis.injury_cohort_by_build_season_bound_v3"
+            semantic_monthly_view = "analysis.season_bound_league_monthly_v3"
+            semantic_summary_view = "analysis.season_bound_league_summary_v3"
+            semantic_missing_error = "season-bound semantic reconciliation returned no row"
+            semantic_mismatch_error = (
+                "season-bound cohort, headline, or monthly reconciliation failed"
+            )
         semantic_params = SqlParams()
         semantic_rows = query_sql(
             f"""
             with cohort as (
               select c.*
-              from analysis.injury_cohort_by_build_season_bound_v3 c
+              from {semantic_cohort_view} c
               join analysis.league_member_releases_v2 m
                 using (curated_build_id, team_key, season)
               where c.season = {semantic_params.text(season)}
             ), monthly as (
               select coalesce(sum(exposure_hours), 0) as exposure_hours,
                      coalesce(sum(time_loss_injuries), 0) as time_loss_injuries
-              from analysis.season_bound_league_monthly_v3
+              from {semantic_monthly_view}
               where season = {semantic_params.text(season)}
             ), denominator as (
               select exposure_hours
-              from analysis.season_bound_league_summary_v3
+              from {semantic_summary_view}
               where season = {semantic_params.text(season)}
             )
             select
@@ -5561,7 +5611,7 @@ def release_league(args: argparse.Namespace) -> None:
             semantic_params.values,
         )
         if len(semantic_rows) != 1:
-            raise SystemExit("season-bound semantic reconciliation returned no row")
+            raise SystemExit(semantic_missing_error)
         semantic = semantic_rows[0]
         headline_by_key = {
             item.get("key"): item.get("value")
@@ -5582,7 +5632,7 @@ def release_league(args: argparse.Namespace) -> None:
                 semantic["monthly_exposure_hours"], semantic["exposure_hours"]
             )
         ):
-            raise SystemExit("season-bound cohort, headline, or monthly reconciliation failed")
+            raise SystemExit(semantic_mismatch_error)
     classification_adjudications: list[dict[str, Any]] = []
     if classification_view_version != "v2":
         rule_params = SqlParams()
@@ -5619,6 +5669,17 @@ def release_league(args: argparse.Namespace) -> None:
     cohort_adjudications: list[dict[str, Any]] = []
     if cohort_view_version != "v2":
         cohort_params = SqlParams()
+        if analysis_version == "v4":
+            cohort_adjudication_filter = f"""
+              and adjudication_ref = 'LINEAGE-01'
+              and evidence_locator = {cohort_params.text('docs/evidence/lineage_cohort_2024-25.json')}
+              and reviewer = 'Abdel Babiker'
+              and migration_version = {cohort_params.text(LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION)}
+            """
+        else:
+            cohort_adjudication_filter = """
+              and adjudication_ref = 'COHORT-01'
+            """
         cohort_adjudications = query_sql(
             f"""
             select adjudication_ref, cohort_view_version, season, decision,
@@ -5626,7 +5687,7 @@ def release_league(args: argparse.Namespace) -> None:
             from audit.reporting_cohort_rule_adjudications_v3
             where cohort_view_version = {cohort_params.text(cohort_view_version)}
               and season = {cohort_params.text(season)}
-              and adjudication_ref = 'COHORT-01'
+              {cohort_adjudication_filter}
             """,
             cohort_params.values,
         )
@@ -5653,7 +5714,7 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit(
             f"release-league requires 16 complete team dashboard payloads, found {len(team_payloads)}"
         )
-    if analysis_version == "v3" and any(
+    if analysis_version in {"v3", "v4"} and any(
         "injury_cohort_filters" in row["dashboard"].get("coverage", {})
         for row in team_payloads
     ):
@@ -5871,7 +5932,11 @@ def release_league(args: argparse.Namespace) -> None:
         "payload_candidate_validation_migration": (
             INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
             if uses_osiics_successor
-            else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+            else (
+                LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION
+                if analysis_version == "v4"
+                else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+            )
         ),
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
     }
@@ -11157,8 +11222,11 @@ def main() -> None:
         help="exact current approved bundle snapshot required for every bundle re-release",
     )
     league_release_parser.add_argument(
-        "--analysis-version", default="v2", choices=["v2", "v3"],
-        help="analytical candidate family; V3 requires the accepted season-bound cohort",
+        "--analysis-version", default="v2", choices=["v2", "v3", "v4"],
+        help=(
+            "analytical candidate family; V3 requires the accepted season-bound cohort "
+            "and V4 requires the accepted lineage cohort"
+        ),
     )
     league_release_parser.add_argument(
         "--classification-view-version", default="v2",
@@ -11170,7 +11238,11 @@ def main() -> None:
     )
     league_release_parser.add_argument(
         "--cohort-view-version", default="v2",
-        choices=["v2", "season_bound_2026-07-20_v1"],
+        choices=[
+            "v2",
+            "season_bound_2026-07-20_v1",
+            "lineage_2024-25_2026-07-24_v1",
+        ],
     )
     league_release_parser.add_argument(
         "--preflight",

@@ -1,0 +1,30 @@
+{
+  "adjudication_ref": "LINEAGE-01",
+  "artifacts": {
+    "inclusion_csv_sha256": "e8da3caf4934f62a521ccecd61abbbf4fa03a837621c4103862b0e87ac31fedb",
+    "ledger_sha256": "b92c35cdfc86acabfcc999be2c007e084495321c637d1866b0924ad2407a37fe",
+    "master_v5_json_sha256": "15b9af0da05aa57698487f4c8ebacf9923cec4e66846ac00b76fa3c2b75f2f63",
+    "source_row_mapping_sha256": "9910b585af28cc304e5beaf4806113bb770c0ef239d852ae1270c4ec1a4faf4f"
+  },
+  "cohort_view_version": "lineage_2024-25_2026-07-24_v1",
+  "decision": {
+    "classification_rule": "accepted reporting_classification_2026-07-22_v2 logic applied to the restated cohort with final canonical values overriding source values",
+    "days_lost_rule": "coalesce(parsed Days Injured, 0); unparsed or blank is censored",
+    "exposure_rule": "unchanged analysis.exposure_hours_by_build_season_bound_v3",
+    "inclusion_rule": "master rows with blank Exclusion Reason and no ledger removal entry",
+    "ioc_bucket_source": "curated.injuries codes via the verified lineage.master_source_bridge",
+    "problem_type_filter": "final Problem type equals Injury",
+    "setting_rule": "final Occasion category Match to match, Training to training, else unknown",
+    "time_loss_rule": "final Days Injured parsed as integer greater than zero",
+    "undated_rule": "season_attributed; excluded only from monthly series",
+    "value_authority": "lineage master rows plus ordered ledger final values",
+    "window_rule": "dated injuries must fall inside the registered season window"
+  },
+  "decision_context": "Phase 4 go recorded 2026-07-24; per-release diff review remains the release gate",
+  "reviewer": "Abdel Babiker",
+  "season": "2024-25",
+  "season_window": {
+    "end": "2025-06-30",
+    "start": "2024-07-01"
+  }
+}
