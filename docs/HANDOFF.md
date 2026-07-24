@@ -60,6 +60,13 @@ run replay, read the printed diff summary and flags, stop for Abdel's manual
 review. That review is the gate. Never hand-edit the workbook, the inclusion
 CSV, or any generated artifact.
 
+That one command plus one review covers the data layer, and stops there by
+design. Reaching the website is a separate, separately approved path: lineage
+load, `release-league` preflight, Abdel's recorded yes, promotion, then
+`export-team-dashboards`. Every live database write and every promotion needs
+his approval of the exact hosted target, so nothing crosses that line on one
+command (plan acceptance criterion 4, as amended 2026-07-25).
+
 ## The story of the data, generated
 
 `docs/METHODOLOGY.md` is generated from the ledger by
