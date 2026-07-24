@@ -14,9 +14,17 @@ if (!sqlPath) {
   process.exit(2);
 }
 
+// The Supavisor pooler can drop an over-long upstream query without the error
+// ever reaching the client, which leaves node waiting on a connection that
+// will never answer (observed 2026-07-24: 33 minutes, 0% CPU, nothing active
+// server-side). Bound the wait so that failure mode surfaces as an error
+// instead of a silent hang; raise PIPELINE_QUERY_TIMEOUT_MS for a genuinely
+// long read.
 const client = new Client({
   connectionString: process.env.SUPABASE_DB_URL,
-  connectionTimeoutMillis: 10000
+  connectionTimeoutMillis: 10000,
+  keepAlive: true,
+  query_timeout: Number(process.env.PIPELINE_QUERY_TIMEOUT_MS || 900000)
 });
 
 try {

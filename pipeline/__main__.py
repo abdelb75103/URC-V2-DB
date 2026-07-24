@@ -3609,6 +3609,7 @@ SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2
 LINEAGE_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-24_v4"
 INJURY_MASTER_LINEAGE_MIGRATION_VERSION = "20260724180000"
 LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION = "20260724181000"
+LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION = "20260724190000"
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
 # The five dashboard cohort-exclusion reason codes analysis.coverage_v1
 # cannot reproduce under its curated-only read rule (see
@@ -5448,8 +5449,17 @@ def release_league(args: argparse.Namespace) -> None:
     # A classification-only successor inherits every non-classification field
     # from the approved immutable bundle. Recomputing the full dashboard is both
     # unnecessary and much slower than replacing the three affected sections.
+    # V4 reads the lineage branch directly rather than
+    # analysis.*_dashboard_release_candidates_v6. Those v6 views are UNION ALL
+    # chains over every historical candidate generation, and a
+    # `analysis_version = 'v4'` filter does not prune the legacy branches, so
+    # each read plans and evaluates the whole stack (measured 2026-07-24: the
+    # lineage branch alone answers in ~53s, the same projection through v6 did
+    # not return in over 7 minutes and overran the pooler). The lineage
+    # candidate views added by 20260724190000 contain exactly the rows v6
+    # contributes for 'v4'; see that migration's header for the equivalence.
     league_candidate_view = (
-        "analysis.league_dashboard_release_candidates_v6"
+        "analysis.league_dashboard_release_candidates_lineage_v4"
         if analysis_version == "v4"
         else (
             "analysis.league_dashboard_classification_incremental_20260722_v1"
@@ -5457,7 +5467,7 @@ def release_league(args: argparse.Namespace) -> None:
         )
     )
     team_candidate_view = (
-        "analysis.team_dashboard_release_candidates_v6"
+        "analysis.team_dashboard_release_candidates_lineage_v4"
         if analysis_version == "v4"
         else (
             "analysis.team_dashboard_classification_incremental_20260722_v1"
@@ -5507,6 +5517,7 @@ def release_league(args: argparse.Namespace) -> None:
         required_migrations = [
             INJURY_MASTER_LINEAGE_MIGRATION_VERSION,
             LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION,
+            LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION,
             OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION,
             INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION,
         ]
@@ -5933,7 +5944,7 @@ def release_league(args: argparse.Namespace) -> None:
             INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
             if uses_osiics_successor
             else (
-                LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION
+                LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION
                 if analysis_version == "v4"
                 else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
             )

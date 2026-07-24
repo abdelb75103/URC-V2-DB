@@ -8,9 +8,13 @@ if (!sqlPath) {
   process.exit(2);
 }
 
+// keepAlive lets a dead pooler connection surface as a socket error rather
+// than an unbounded wait; see the note in sql_query.mjs. No query_timeout
+// here: a write must not be abandoned client-side on a timer.
 const client = new Client({
   connectionString: process.env.SUPABASE_DB_URL,
-  connectionTimeoutMillis: 10000
+  connectionTimeoutMillis: 10000,
+  keepAlive: true
 });
 
 try {
