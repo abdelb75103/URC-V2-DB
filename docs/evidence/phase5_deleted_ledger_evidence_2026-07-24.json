@@ -1,0 +1,156 @@
+{
+  "artifact_type": "phase5_deleted_ledger_evidence",
+  "season": "2024-25",
+  "recorded_at": "2026-07-24",
+  "plan_reference": "docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md Phase 5, deletion manifest groups 4 and 7",
+  "purpose": "Records the ledger evidence files removed in Phase 5 together with the sha256 the ledger recorded for each. tools/replay.py skips byte verification for a ledger evidence entry only when the file is absent AND this manifest records that exact path with that exact sha256; a file that still exists is verified as before, and an unlisted missing file still fails the replay.",
+  "ledger_immutability_note": "data/2024-25/decisions/ledger.json is deliberately NOT modified. Its sha256 b92c35cdfc86acabfcc999be2c007e084495321c637d1866b0924ad2407a37fe is pinned in docs/evidence/lineage_cohort_2024-25.json, in tools/lineage_load.py EXPECTED_HASHES, and in the live lineage.baselines row that anchors the served release urc-2024-25-v4-6f04bd64d2a6-a2. The ledger keeps each evidence path and sha256 as the historical record; this manifest records only the deletion event.",
+  "entry_count": 29,
+  "entries": [
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_analysis_release_decisions_2026-07-23.json",
+      "sha256": "37dfd12b1d2b2198911ab1cac56aa04d66c1e52aaa112fe03887ca11a0a6ae68",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_analysis_release_decisions_2026-07-24.json",
+      "sha256": "4bbc31009c84877f07a619ac3e568f7ed8fe4913b75bc2b35efeb516856b370c",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_bulls_cardiff_unknown_adjudication_audit_2026-07-24.csv",
+      "sha256": "ea588d8fc0ac8636f3d1c3330330576bf23e5506c880b64d20636150646e2105",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_bulls_cardiff_unknown_adjudication_decision_2026-07-24.json",
+      "sha256": "3168efe3770523ba3e0d32c38ea9dff59e1e37cda075ce4af7eb342059a4a4dd",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_bulls_cardiff_unknown_adjudication_qa_2026-07-24.json",
+      "sha256": "91a9fbe2162e3a2282625f2d4239a99ff8625b9a8c7333bd8c3af19c42560b5e",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_adjudicated_release_decisions_audit_2026-07-23.csv",
+      "sha256": "c63530bc989246cb592874b7956a88848831a87302b2711829847ea12c9c6300",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_adjudicated_release_decisions_qa_2026-07-23.json",
+      "sha256": "7df79f26fe4f1362c73d25a7dced1b577c609468f160ebbe233cf19e0e1cbfb5",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_focused_cleanup_audit_2026-07-23.csv",
+      "sha256": "59b0d922c8236692c4434f82e46a3d417e880f89fe4aeb20b2faa97214f3249f",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_focused_cleanup_qa_2026-07-23.json",
+      "sha256": "cac72a93cb920dab23ed6986323598d259aac558b31aff070a508917220aedc9",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_nonrugby_gym_removal_audit_2026-07-23.csv",
+      "sha256": "0c119530f3af5bf87307670df842626a853fe16aa6c43f9214954b82e696cfb0",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_nonrugby_gym_removal_qa_2026-07-23.json",
+      "sha256": "de08726d9800d17a3bfc62f26238ade8de37f52171d04f4209ff98b8d9267bcd",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_source_corrections_v2_audit_2026-07-23.csv",
+      "sha256": "17d09237fe3960c3f3e98b4ee6585d29a500fcb3e85849b28d886236a65d0212",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_included_dataset_source_corrections_v2_qa_2026-07-23.json",
+      "sha256": "99c8d040a6890e12bc8818f2fb890fe0d0f214fa3294f511cd4c96292d0b4c51",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_reviewed_master_successor_v2_audit_2026-07-23.json",
+      "sha256": "72452224cfcf1657c8b6962a77a923217d3bfe2829af001d8c1bbddf06f80113",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_sharks_squad_normalization_audit_2024-25_v2.csv",
+      "sha256": "608272e4ad444da314412c04d163e28194029ff9d34034282fff6836f4d02740",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_sharks_squad_normalization_qa_2024-25_v2.json",
+      "sha256": "8354540031660356a37be7c5fbc0a7fb6ac2b4c008003944cd158d2c3ae4ea60",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_fit_resolution_audit_2026-07-24.csv",
+      "sha256": "f547826c670651455af6fa4b964564cf328bea93b0566bc120d315e351137e08",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_fit_resolution_qa_2026-07-24.json",
+      "sha256": "58ded9a5c83c687bbbc62aea3fdf32560bc7fafefb12887d70811ccfe78503de",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_inference_adjudication_2026-07-24.json",
+      "sha256": "477a79418d1c2e0c2679d4775273f7716343cf5ebc5fcf3b0b0968aebb39a90a",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_inference_audit_2026-07-24.csv",
+      "sha256": "d27922d15d7b5e9ad25d7ffaafa4cc375d9f833c5314daa23eb45c8c14f0a106",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "outputs/urc_final_human_review_2024-25/urc_injury_unknown_inference_qa_2026-07-24.json",
+      "sha256": "a39bf442525fb733ae5cf3f71f4d7154f86d458b49ebff14c1fe04f67a68b9a8",
+      "group": "phase5_group_4_per_step_audit_and_qa_evidence"
+    },
+    {
+      "path": "tools/apply_adjudicated_included_injury_decisions.py",
+      "sha256": "5dbd9c8db75522996449b4a388674d43f469b5c20892b964635b7a37a576f0b2",
+      "group": "phase5_group_7_superseded_step_scripts"
+    },
+    {
+      "path": "tools/apply_bulls_cardiff_unknown_adjudications.py",
+      "sha256": "6effd32777c6941e59399fdea749ee24e11fb614b813c1547a6be073c1a072b0",
+      "group": "phase5_group_7_superseded_step_scripts"
+    },
+    {
+      "path": "tools/apply_included_injury_corrections_v2.py",
+      "sha256": "ec2706037a36b27e692095b4e6fcc7eacf4d6ecb46ac75d17a18b7e04ee4c1f9",
+      "group": "phase5_group_7_superseded_step_scripts"
+    },
+    {
+      "path": "tools/apply_sharks_squad_normalization.py",
+      "sha256": "cd866012265c58db92b9fac5f1732e119c0ab0914567d7fe8cffe513630f63e9",
+      "group": "phase5_group_7_superseded_step_scripts"
+    },
+    {
+      "path": "tools/apply_unknown_injury_inference_rules.py",
+      "sha256": "b5a8ffbf6fb5b6345649ed1067685a2349bcfeed3d5e5b068b7723acf601fe58",
+      "group": "phase5_group_7_superseded_step_scripts"
+    },
+    {
+      "path": "tools/cleanup_included_injury_dataset.py",
+      "sha256": "f7df1cb7ab7641d3bac9f8b5136cccec318cd5ed025b1740c435759dff2c5745",
+      "group": "phase5_group_7_superseded_step_scripts"
+    },
+    {
+      "path": "tools/remove_nonrugby_gym_injury_rows.py",
+      "sha256": "a274fbb2209c6565a007e30229df69c01973ed28e311bf8ea2fcb71928d2fb59",
+      "group": "phase5_group_7_superseded_step_scripts"
+    },
+    {
+      "path": "tools/resolve_unknown_injury_fit_dates.py",
+      "sha256": "bcde936ddda8f3f478e173c72408dc071a5f5b959eb5c98a2a7f8d8e7b5084b6",
+      "group": "phase5_group_7_superseded_step_scripts"
+    }
+  ]
+}

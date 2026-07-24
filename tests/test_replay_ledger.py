@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -281,6 +282,36 @@ class ReplayLedgerTests(unittest.TestCase):
         self.assertIn((1735, "category_outside_master_values"), flag_types)
         self.assertIn((1735, "date_outside_season_window"), flag_types)
         self.assertIn((20, "negative_or_non_integer_days_injured"), flag_types)
+
+    def test_deleted_phase5_evidence_is_skipped_only_when_manifested(self) -> None:
+        evidence_ledger = {
+            "steps": [
+                {
+                    "rule_version": "synthetic_v1",
+                    "evidence": [{"path": "gone/audit.csv", "sha256": "abc"}],
+                }
+            ]
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            manifest = Path(temp) / "deleted.json"
+            with self.assertRaises(REPLAY.ReplayError):
+                REPLAY.verify_ledger_evidence(evidence_ledger, manifest)
+            manifest.write_text(
+                json.dumps(
+                    {"entries": [{"path": "gone/audit.csv", "sha256": "abc"}]}
+                ),
+                encoding="utf-8",
+            )
+            REPLAY.verify_ledger_evidence(evidence_ledger, manifest)
+            # A recorded path whose recorded hash differs is still a failure.
+            manifest.write_text(
+                json.dumps(
+                    {"entries": [{"path": "gone/audit.csv", "sha256": "other"}]}
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(REPLAY.ReplayError):
+                REPLAY.verify_ledger_evidence(evidence_ledger, manifest)
 
     def test_csv_writer_uses_the_existing_export_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

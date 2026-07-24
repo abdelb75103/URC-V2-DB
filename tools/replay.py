@@ -27,6 +27,9 @@ DEFAULT_MANIFEST = (
     "urc_injury_included_dataset_2024-25.manifest.json"
 )
 DEFAULT_METHODOLOGY = ROOT / "docs/METHODOLOGY.md"
+DELETED_EVIDENCE_MANIFEST = (
+    ROOT / "docs/evidence/phase5_deleted_ledger_evidence_2026-07-24.json"
+)
 REFERENCE_OUTPUT = (
     ROOT / "outputs/urc_final_human_review_2024-25/"
     "urc_injury_included_dataset_2024-25.csv"
@@ -129,13 +132,32 @@ def select_inclusion(
     return selected, source_rows
 
 
-def verify_ledger_evidence(ledger: dict[str, Any]) -> None:
+def load_deleted_evidence(manifest_path: Path) -> set[tuple[str, str]]:
+    """Return the (path, sha256) pairs recorded as deleted in Phase 5."""
+    if not manifest_path.exists():
+        return set()
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    return {
+        (entry["path"], entry["sha256"]) for entry in payload.get("entries", [])
+    }
+
+
+def verify_ledger_evidence(
+    ledger: dict[str, Any],
+    deleted_evidence_manifest: Path = DELETED_EVIDENCE_MANIFEST,
+) -> None:
     """Verify every hashed evidence reference before replaying.
 
     Evidence entries marked "mutable": true (living documents such as the
     rule changelog) are exempt from byte verification by recorded design;
     everything else with a sha256 must match the file on disk.
+
+    A file removed by the Phase 5 deletion manifest is exempt only while it
+    is absent and the deleted-evidence manifest records that exact path with
+    that exact sha256; the ledger keeps the path and hash as the historical
+    record, and any other missing file still fails.
     """
+    deleted = load_deleted_evidence(deleted_evidence_manifest)
     problems = []
     for step in ledger.get("steps", []):
         for evidence in step.get("evidence", []):
@@ -145,6 +167,8 @@ def verify_ledger_evidence(ledger: dict[str, Any]) -> None:
                 continue
             target = Path(path)
             if not target.exists():
+                if (path, expected) in deleted:
+                    continue
                 problems.append(f"{step['rule_version']}: missing {path}")
                 continue
             actual = sha256_file(target)
