@@ -11,6 +11,59 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-24: Provenance correction, successor v3/v4 workbook serialization
+
+No derived value, classification, cohort, denominator, or published figure changed. Recorded here because a provenance claim in an accepted audit record was wrong and outputs are not under version control.
+
+The Sharks squad-normalization QA record (`outputs/urc_final_human_review_2024-25/urc_injury_sharks_squad_normalization_qa_2024-25_v2.json`) claims the v4 successor workbook was produced by a native Microsoft Excel save. It was not: the native save failed (preserved as `..._v3.failed_excel_ui_attempt.xlsx`) and v3/v4 were rebuilt by openpyxl re-serialization of the verified live values. Side effects (sharedStrings dropped, four built-in numFmt declarations trimmed, Review Queue empty formatted range truncated) are benign. Frozen vs v4 shows exactly 180 value diffs, all accounted for by existing audit records; the Excel open-verification of v4 remains valid. Full statement: `outputs/urc_final_human_review_2024-25/PROVENANCE_ADDENDUM_SHARKS_V3_V4_2026-07-24.md` (per `docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md` Phase 0).
+
+---
+
+## 2026-07-24: Bulls and Cardiff Unknown injury adjudications
+
+| Field | Value |
+|---|---|
+| Rule version | `bulls_cardiff_unknown_adjudication_2026-07-24_v1` |
+| Status | accepted and applied to the local 2024-25 included injury CSV only |
+| Carry-forward | `season-specific`; these are human-reviewed row decisions, not a general diagnosis-to-Time-Loss rule |
+| Decision provenance | Abdel Babiker, 24 July 2026 |
+| Decision ledger | `outputs/urc_final_human_review_2024-25/urc_injury_bulls_cardiff_unknown_adjudication_decision_2026-07-24.json` |
+| Resulting CSV | 2,301 rows × 28 columns, SHA-256 `e8da3caf4934f62a521ccecd61abbbf4fa03a837621c4103862b0e87ac31fedb` |
+
+**Accepted decisions.** After reviewing the recorded diagnoses, CSV rows 74, 76, 88, 92, 98, 100, 104, 115, 116, 135, and 137 were adjudicated from Unknown to Time Loss. CSV rows 35, 99, 111, 134, 140, and 142 remain Unknown because their evidence was not considered sufficient for a defensible Time Loss decision.
+
+**Methodological limit.** Diagnoses such as concussion, ACL injury, hamstring strain, patellar dislocation, and other substantial injuries can strongly support a row-level human decision, but diagnosis alone does not universally prove lost training or match availability. These values are therefore recorded as `adjudicated`, with the diagnosis and description retained as evidence. They do not silently create a reusable diagnosis-based classification rule.
+
+**Manual-edit reconciliation.** Abdel's pre-existing edits were reconciled against the prior accepted CSV state and added to the row-level audit. CSV row 138 changed from Unknown to Time Loss after concussion review. CSV row 1264 copied its existing Fit For Selection Date, `21/10/2024`, into Confirmed Return Date and recorded eight days injured. Row 1264 is source-labelled as Illness, so its Time Loss versus Medical Attention value was left Unknown rather than applying an injury-only classification rule.
+
+**Execution and provenance.** The batch preserves all 2,301 rows, all 28 columns, retained-row order, and the source-row mapping. The audit records exact old and new values, source workbook row, diagnosis evidence, action, reason, rule version, and `adjudicated` origin. The Unknown Injury cohort fell from 44 in Abdel's manually edited input to 33. No Excel workbook, database object, migration, analysis view, release, dashboard, or website was changed.
+
+---
+
+## 2026-07-24: Unknown injury classification and return-date evidence
+
+| Field | Value |
+|---|---|
+| Rule versions | `unknown_injury_fit_for_selection_2026-07-24_v1`; `unknown_injury_inference_2026-07-24_v1` |
+| Status | accepted and applied to the local 2024-25 included injury CSV only |
+| Carry-forward | `not-yet-in-pipeline`; later seasons require an approved versioned implementation or equivalent evidence review |
+| Decision provenance | Abdel Babiker, 24 July 2026 |
+| Adjudication ledger | `outputs/urc_final_human_review_2024-25/urc_injury_unknown_inference_adjudication_2026-07-24.json` |
+| Row-level audits | `urc_injury_unknown_fit_resolution_audit_2026-07-24.csv`; `urc_injury_unknown_inference_audit_2026-07-24.csv` |
+| Resulting CSV | 2,301 rows × 28 columns, SHA-256 `52fac7178b26a3adc7d83aaffe16f2099920a48dd2040fe8c26d1581702d395b` |
+
+**Accepted return-date rule.** When `Confirmed Return Date` is blank and a valid `Fit For Selection Date` is present, the fit date is accepted as the confirmed return date. With a valid injury date, elapsed calendar days exclude the injury day. A positive duration implies `Time Loss`; a same-day return implies `Medical Attention`. Without an injury date, the return date may be populated but duration and classification remain unresolved. This resolved source row 359 as 397 days and Time Loss, and source row 505 as zero days and Medical Attention. Source row 210 received a confirmed return date but remains Unknown because its injury date is absent.
+
+**Accepted inference rules.** A positive source `Games Missed` value establishes lost match availability and therefore implies `Time Loss`. This classified source row 209 as inferred Time Loss. Source `Required Surgery = Yes` also implies `Time Loss`; this classified source rows 185, 198, 202, 382, 468, 492, 498, 502, 512, 539, and 1764. These classification rules do not create a duration when defensible injury and return dates are unavailable. Audit rows label these values as `inferred` and retain the exact source evidence.
+
+**Accepted row-level correction.** At source row 470, the trailing `q` in `10/02/25q` was adjudicated as an extraneous character because removing it yields the otherwise complete date `10/02/2025`. With injury date `25/01/2025`, the derived duration is 16 days and the classification is inferred Time Loss. The corrected date is labelled `adjudicated`; duration is `derived`; classification is `inferred`.
+
+**Unresolved adjudication.** Source row 1735 remains unchanged and Unknown. Its Fit For Selection Date, `20/07/2024`, precedes its injury date, `26/07/2024`, by six days. Recorded clinical context is Ospreys, right anterior-thigh muscle injury, training, gradual non-contact onset, no recurrence, and no surgery. No date is silently corrected until a defensible adjudication is accepted.
+
+**Executed result and boundary.** Across the two batches, the Unknown injury cohort fell from 60 to 45. Row count, 28-column schema, retained-row order, and source-row mapping were unchanged. Pre-change CSV and manifest copies, exact old/new cell values, evidence origin, value origin, scripts, tests, hashes, and QA reconciliations are retained beside the working CSV. No Excel workbook, database object, migration, analysis view, release, dashboard, or website was changed.
+
+---
+
 ## 2026-07-24 — Source-reported time-loss injuries with missing usable duration
 
 | Field | Value |
