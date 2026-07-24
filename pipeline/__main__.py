@@ -5373,6 +5373,36 @@ def snapshot_current_league_bundle(args: argparse.Namespace) -> None:
         "output_path": str(output_path), **metadata}, indent=2))
 
 
+def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
+    """Refresh the committed per-team parity exports from the approved bundle.
+
+    release-league rewrites only content/reporting/urc_dashboard_<season>.json,
+    so the 16 per-team files go stale after every league release while the
+    website keeps serving the bundle through reporting.latest_team_dashboard_v2.
+    Those files are a parity and emergency export, never an application input,
+    so this rewrites each one verbatim from the same approved bundle the site
+    serves and records the release identity it came from. Run it after every
+    accepted release-league promotion.
+    """
+    season = clean_text(args.season)
+    if not season:
+        raise SystemExit("--season is required")
+    bundle, metadata = current_league_bundle_snapshot(season)
+    written: list[str] = []
+    for team in bundle["teams"]:
+        team_key = clean_text(team.get("team_key"))
+        dashboard = team.get("dashboard")
+        if not team_key or not isinstance(dashboard, dict):
+            raise SystemExit("approved bundle contains an incomplete team payload")
+        path = Path("content") / "reporting" / f"{team_key}_dashboard_{season}.json"
+        write_json_atomic(path, dashboard)
+        written.append(str(path))
+    print(json.dumps({
+        "status": "team_parity_exported", "season": season,
+        "team_count": len(written), "paths": written, **metadata,
+    }, indent=2))
+
+
 def record_failed_league_release_attempt(
     *, label: str, season: str, input_hash: str, output_hash: str,
     parameters: dict[str, Any], provenance: dict[str, str], failure_stage: str,
@@ -11271,6 +11301,10 @@ def main() -> None:
         help="named reviewer required with --preflight-file",
     )
     league_release_parser.set_defaults(func=release_league)
+
+    team_parity_parser = subcommands.add_parser("export-team-dashboards")
+    team_parity_parser.add_argument("--season", required=True)
+    team_parity_parser.set_defaults(func=export_team_dashboard_parity_json)
 
     diff_dashboard_json_parser = subcommands.add_parser("diff-dashboard-json")
     diff_dashboard_json_parser.add_argument("--old", required=True)
