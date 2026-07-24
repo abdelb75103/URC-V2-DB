@@ -169,6 +169,34 @@ class IntakeAndChecksTests(unittest.TestCase):
             self.assertEqual(sheet["values"][1][team_index], "Test Team")
             self.assertIsNone(sheet["values"][1][diagnosis_index])
 
+    def test_blank_team_rows_are_rejected_before_any_write(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self.setUpRoot(root)
+            source = root / "team.csv"
+            rows = [
+                ["" if header == "Team" else "v" for header in HEADERS]
+            ]
+            self.write_csv(source, HEADERS, rows)
+            result = self.run_intake(
+                root,
+                "--team",
+                "test",
+                "--season",
+                "2025-26",
+                "--file",
+                str(source),
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("non-blank Team", result.stderr)
+            master = root / "data/2025-26/master/master_2025-26.json"
+            self.assertFalse(master.exists())
+            self.assertFalse(
+                list((root / "data/2025-26").rglob("intake_*.json"))
+                if (root / "data/2025-26").exists()
+                else []
+            )
+
     def test_extra_columns_are_dropped_and_format_only_normalization_holds(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

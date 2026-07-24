@@ -464,6 +464,14 @@ def append_intake(
         raise IntakeError(
             f"Intake file mixes teams {supplied_teams}; one team per intake"
         )
+    if rows and (
+        not supplied_teams
+        or any(row[team_index] is None for row in rows)
+    ):
+        raise IntakeError(
+            "Every intake row must carry exactly one non-blank Team value "
+            "(supply --team-display when the file has no Team column)"
+        )
     previous_rows = len(sheet["values"]) - 1
     sheet["values"].extend(rows)
     sheet["max_row"] = len(sheet["values"])
