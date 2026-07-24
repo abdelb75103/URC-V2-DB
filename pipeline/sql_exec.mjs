@@ -20,6 +20,15 @@ const client = new Client({
 try {
   await client.connect();
   await client.query("begin");
+  // The target's default statement_timeout is 2 minutes, which is shorter than
+  // a legitimate promotion transaction: release-league re-derives the league
+  // payload and all 16 team payloads twice for its inserts and twice more in
+  // the validation triggers (about 70s each), and that re-derivation is what
+  // proves the stored snapshot equals the analytical candidate. Raising the
+  // bound for the transaction is the fix; weakening the equality check is not.
+  await client.query(
+    `set local statement_timeout = ${Number(process.env.PIPELINE_STATEMENT_TIMEOUT_MS || 900000)}`
+  );
   if (paramsPath) {
     const params = JSON.parse(fs.readFileSync(paramsPath, "utf8"));
     await client.query("create temp table _pipeline_params (idx integer primary key, value jsonb) on commit drop");
