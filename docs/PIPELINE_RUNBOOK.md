@@ -4,14 +4,14 @@ Status: current operating map. This document explains the accepted route; `AGENT
 
 ## 2024-25 injury-lineage restructure (2026-07-24)
 
-The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`); the DB and released dashboards will be restated from it at that plan's Phase 4 gate. The local route is four verbs under `tools/`:
+The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, complete). The DB and the released dashboards were restated from it on 2026-07-24 and are served as bundle release `urc-2024-25-v4-6f04bd64d2a6-a2`. The local route is four verbs under `tools/`:
 
 1. `render.py`: canonical master data table to the formatted master workbook (extract, render, compare, mark-excluded). Baseline hashes: `data/2024-25/master/baseline_record.json`.
 2. `replay.py`: v5 baseline plus `data/2024-25/decisions/ledger.json` to the inclusion CSV, its manifest, and generated `docs/METHODOLOGY.md`. Must reproduce the accepted CSV byte-for-byte; conflicts stop the line.
 3. `intake.py`: a new team/season standardized pseudonymised injury CSV into a season master, append-only; frozen seasons refuse appends; validate mode reconciles against a baseline without writing.
 4. `checks.py`: standing season-keyed comparability suite; structural FAIL, observations FLAG.
 
-Routine change loop: author one decision record, run replay, read the diff summary and flags, stop for Abdel's review. The table below remains the DB-side operating map; after the Phase 4 restatement, releases in this lineage use the simplified path recorded in the 2026-07-24 changelog entry.
+Routine change loop: author one decision record, run replay, read the diff summary and flags, stop for Abdel's review. That covers the data layer and stops there; reaching the website is the separate, separately approved release path (lineage load, `release-league` preflight, recorded yes, promotion, then `export-team-dashboards`). The table below remains the DB-side operating map; releases in this lineage now use the simplified path recorded in the 2026-07-24 changelog entry.
 
 ## Completion contract
 

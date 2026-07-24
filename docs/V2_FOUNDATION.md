@@ -12,9 +12,9 @@ The system must produce academically defensible cleaned datasets, analysis, dash
 
 - Supabase Postgres is the data system of record.
 - The hosted pilot database becomes production. Schema changes and destructive tests run locally first; no separate hosted staging database is planned.
-- The formal V2 audit boundary begins with a Munster intake file containing canonical columns and pseudonymous player IDs, but no row cleaning, deduplication, value inference, or exclusions. The intake manifest must state who prepared it, when, the mapping/codebook version, and the original submission checksum and secure UCD locator where available. Carry original sheet/row locators into the intake when available and reconcile row counts. Do not claim that upstream canonicalisation or pseudonymisation is reproducible unless its script and reconciliation evidence are retained in encrypted UCD storage.
+- The formal V2 audit boundary begins with a Munster intake file containing canonical columns and pseudonymous player IDs, but no row cleaning, deduplication, value inference, or exclusions. The intake manifest must state who prepared it, when, the mapping/codebook version, and the original submission checksum and secure locator where available. Carry original sheet/row locators into the intake when available and reconcile row counts. Do not claim that upstream canonicalisation or pseudonymisation is reproducible unless its script and reconciliation evidence are retained.
 - Supabase stores the complete pseudonymised lineage: ingested rows, stage state, transformations, exclusions, corrections, adjudications, curated records, analysis views, and releases.
-- Original identity mappings remain in encrypted UCD-managed storage. The re-identification codebook never enters Supabase, GitHub, Vercel, logs, test fixtures, or reports.
+- Original identity mappings stay outside this project entirely. The re-identification codebook never enters Supabase, GitHub, Vercel, logs, test fixtures, or reports.
 - The website exposes approved aggregate data only. It never returns player-level records or identifiers.
 - The web application is read-only. Python commands perform ingestion, cleaning, adjudication, analysis generation, and publishing.
 - Temporary pre-production review state, approved by Abdel on 14 July 2026: every `live` team dashboard is directly accessible without a password so Abdel can review the V2 website. The site still exposes approved aggregates only and has no Supabase Auth or admin interface.
@@ -22,7 +22,7 @@ The system must produce academically defensible cleaned datasets, analysis, dash
 - The executable restoration baseline is commit `2cbfb6e`; `AGENTS.md` § "Web and Deployment Contracts" lists the exact files, secrets/WAF controls, tests, and browser acceptance checks required before sharing or cutover.
 - The primary analysis window is the earliest official URC fixture through the URC final, inclusive. The same league-wide dates apply to every team. Preseason is excluded; late reporting is recorded as missing coverage rather than changing a team's study window.
 - The existing website remains live and unchanged during the V2 build.
-- The URC/UCD governance, ethics, and DPA approval covering hosted Supabase storage of pseudonymised player-level data is confirmed and recorded (Abdel, 9 July 2026). Pseudonymised data may be loaded into the approved live Supabase target; the re-identification codebook still never leaves encrypted UCD storage.
+- The URC/UCD governance, ethics, and DPA approval covering hosted Supabase storage of pseudonymised player-level data is confirmed and recorded (Abdel, 9 July 2026). Pseudonymised data may be loaded into the approved live Supabase target; the re-identification codebook still never enters it.
 
 ## Repository and Deployment
 
@@ -49,7 +49,7 @@ Do not use a `/v2` route or run both applications inside one codebase. That woul
 ## Trust Boundaries
 
 ```text
-Encrypted UCD storage
+Outside this project (encrypted, access-controlled)
   identifiable source files + re-identification codebook
                     |
                     | approved pseudonymised export
@@ -177,7 +177,7 @@ Munster is complete only when:
 8. The methodology log can be generated from run evidence without relying on memory.
 9. Security checks confirm that player-level data and password material cannot be retrieved from public routes or the repository.
 10. Desktop and mobile browser verification passes.
-11. A restore rehearsal proves the database can be rebuilt from migrations, retained pseudonymised inputs, adjudication evidence, and an approved backup. If the chosen Supabase plan lacks point-in-time recovery, retain encrypted logical backups in UCD-managed storage.
+11. A restore rehearsal proves the database can be rebuilt from migrations, retained pseudonymised inputs, adjudication evidence, and an approved backup. If the chosen Supabase plan lacks point-in-time recovery, retain encrypted logical backups outside the hosted target.
 
 After acceptance, freeze the schema, rules, reason codes, tests, and pipeline version before processing another team or season; later changes use additive versioned successors.
 

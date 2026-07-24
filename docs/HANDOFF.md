@@ -98,9 +98,9 @@ Player data is pseudonymised before it reaches this repo; all of `data/` and
 `outputs/` are Git-ignored. The club-alias codebook is protected: the
 single-letter club placeholder aliases never enter Git, the DB, or exports
 (exact strings and scope in `AGENTS.md`); the alias map lives only in
-Git-ignored `data/intake/team_alias_map.json` and encrypted UCD storage. Team pages are temporarily passwordless for Abdel's
-private review only; the password boundary must be restored before any
-sharing or cutover (executable gate in `AGENTS.md`).
+Git-ignored `data/intake/team_alias_map.json`. Team pages are temporarily
+passwordless for Abdel's private review only; the password boundary must be
+restored before any sharing or cutover (executable gate in `AGENTS.md`).
 
 ## Year 2 in one paragraph
 
