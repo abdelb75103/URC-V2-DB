@@ -26,9 +26,12 @@ import { withoutFrontFacingUnknown } from '@/lib/dashboard-visibility';
 import {
   ExposureTrendChart,
   ImpactBubbleChart,
-  MatchIncidenceChart,
-  MonthlyCasesChart,
   RingBreakdown,
+  SETTING_COLORS,
+  SEVERITY_BAND_COLORS,
+  SeasonTimelineChart,
+  SeverityArc,
+  Sparkline,
   profileColor,
 } from '@/components/dashboard/charts';
 
@@ -260,123 +263,392 @@ function OverviewTab({
   profiles: InjuryProfileRow[];
   supplement?: DashboardSupplement;
 }) {
-  const [caseSetting, setCaseSetting] = useState<Setting>('all');
-  const [severitySetting, setSeveritySetting] = useState<'all' | 'match' | 'training'>('all');
-  const [contactSetting, setContactSetting] = useState<'all' | 'match' | 'training'>('all');
+  const [setting, setSetting] = useState<Setting>('all');
+  const [showCases, setShowCases] = useState(true);
+  const [showIncidence, setShowIncidence] = useState(true);
+  const [locationMetric, setLocationMetric] = useState<LocationMetric>('incidence_per_1000h');
+  const [benchMetric, setBenchMetric] = useState<ProfileMetric>('incidence_per_1000h');
+  const [includeZeroDay, setIncludeZeroDay] = useState(true);
+  const [selectedCode, setSelectedCode] = useState<string>();
+  const [hoveredCode, setHoveredCode] = useState<string>();
+
   const headline = Object.fromEntries(dashboard.headline.map((row) => [row.key, row.value]));
-  const all = supplement?.rate_setting_metrics.find((row) => row.setting === 'all')
-    ?? dashboard.setting_metrics.find((row) => row.setting === 'all');
-  const match = supplement?.rate_setting_metrics.find((row) => row.setting === 'match')
-    ?? dashboard.setting_metrics.find((row) => row.setting === 'match');
-  const training = supplement?.rate_setting_metrics.find((row) => row.setting === 'training')
-    ?? dashboard.setting_metrics.find((row) => row.setting === 'training');
-  const diagnosisRows = reportingDiagnosisRows(profiles, supplement);
-  const highlights = [
-    ['Most common match injury', topRow(diagnosisRows, 'match', 'incidence_per_1000h'), 'incidence_per_1000h'],
-    ['Most common training injury', topRow(diagnosisRows, 'training', 'incidence_per_1000h'), 'incidence_per_1000h'],
-    ['Highest match burden', topRow(diagnosisRows, 'match', 'burden_per_1000h'), 'burden_per_1000h'],
-    ['Highest training burden', topRow(diagnosisRows, 'training', 'burden_per_1000h'), 'burden_per_1000h'],
-  ] as const;
+  const settingMetrics = supplement?.rate_setting_metrics ?? dashboard.setting_metrics;
+  const metricFor = (target: Setting) => settingMetrics.find((row) => row.setting === target);
+  const all = metricFor('all');
+  const match = metricFor('match');
+  const training = metricFor('training');
+  const active = metricFor(setting) ?? all;
+
+  // Body locations and setting metrics carry match/training rows on both payloads, but the
+  // approved (non-supplement) payload has only overall monthly and severity breakdowns. The
+  // filter is offered when any panel can honour it; panels that cannot stay on overall and
+  // say so, rather than silently ignoring the control.
+  const locationProfiles = profiles.filter((row) => row.dimension === 'body_location');
+  const settingOptions = availableSettings([...locationProfiles, ...settingMetrics], ['all', 'match', 'training']);
+  const settingFilterAvailable = settingOptions.length > 1;
+  const effectiveSetting: Setting = settingFilterAvailable && settingOptions.includes(setting) ? setting : 'all';
+  const perSettingMonthly = Boolean(supplement);
+  const perSettingSeverity = Boolean(supplement);
+  const filtered = effectiveSetting !== 'all';
+
   const recorded = supplement?.descriptive_consequence_summary.recorded_injuries
     ?? headline.recorded_injuries
     ?? dashboard.severity_distribution.reduce((sum, row) => sum + row.recorded_injuries, 0);
-  const monthlyRows = supplement?.monthly_by_setting.filter((row) => row.setting === caseSetting)
-    ?? (caseSetting === 'all' ? dashboard.monthly.map((row) => ({
-      month: row.month ?? '',
-      setting: 'all' as const,
-      recorded_injuries: row.recorded_injuries,
-      time_loss_injuries: row.time_loss_injuries,
-      exposure_hours: row.exposure_hours ?? null,
-      rate_time_loss_injuries: row.time_loss_injuries,
-      incidence_per_1000h: row.incidence_per_1000h ?? null,
-    })) : []);
-  const matchMonthly = supplement?.monthly_by_setting.filter((row) => row.setting === 'match') ?? [];
-  const approvedMonthly = dashboard.monthly.map((row) => ({
-    month: row.month ?? '',
-    setting: 'all' as const,
-    recorded_injuries: row.recorded_injuries,
-    time_loss_injuries: row.time_loss_injuries,
-    rate_time_loss_injuries: row.time_loss_injuries,
-    exposure_hours: row.exposure_hours ?? null,
-    incidence_per_1000h: row.incidence_per_1000h ?? null,
-  }));
+
+  const monthlyRows = supplement
+    ? supplement.monthly_by_setting.filter((row) => row.setting === effectiveSetting)
+    : dashboard.monthly.map((row) => ({
+        month: row.month ?? '',
+        setting: 'all' as const,
+        recorded_injuries: row.recorded_injuries,
+        time_loss_injuries: row.time_loss_injuries,
+        rate_time_loss_injuries: row.time_loss_injuries,
+        exposure_hours: row.exposure_hours ?? null,
+        incidence_per_1000h: row.incidence_per_1000h ?? null,
+      }));
+  const trend = sortByMonth(monthlyRows);
+
+  const locationSettings = availableSettings(locationProfiles, ['all', 'match', 'training']);
+  const locationSetting = locationSettings.includes(effectiveSetting) ? effectiveSetting : locationSettings[0] ?? 'all';
+  const { rows: locationRows, barRows, activeCode, selected } = resolveLocationView({
+    profiles: locationProfiles,
+    setting: locationSetting,
+    metric: locationMetric,
+    selectedCode,
+    hoveredCode,
+  });
+  const locationMax = Math.max(...barRows.map((row) => metricValue(row, locationMetric)), 0);
+
+  const severitySource = supplement
+    ? supplement.severity_distribution.filter((row) => row.setting === effectiveSetting)
+    : dashboard.severity_distribution;
+  const severityRows = [
+    { key: 'zero', label: '0 days (medical attention)', value: severitySource.find((row) => row.key === 'zero_days_medical_attention_only')?.recorded_injuries ?? 0 },
+    { key: 'one_to_seven', label: '1-7 days', value: severitySource.filter((row) => ['one_day', 'two_to_three_days', 'four_to_seven_days'].includes(row.key)).reduce((sum, row) => sum + row.recorded_injuries, 0) },
+    { key: 'eight_to_twenty_eight', label: '8-28 days', value: severitySource.find((row) => row.key === 'eight_to_twenty_eight_days')?.recorded_injuries ?? 0 },
+    { key: 'greater_than_twenty_eight', label: 'Over 28 days', value: severitySource.find((row) => row.key === 'greater_than_twenty_eight_days')?.recorded_injuries ?? 0 },
+  ]
+    .filter((row) => includeZeroDay || row.key !== 'zero')
+    .map((row) => ({ ...row, color: SEVERITY_BAND_COLORS[row.key] }));
+
   const contactRows = withoutFrontFacingUnknown(supplement?.contact_distribution ?? [])
-    .filter((row) => row.setting === contactSetting)
+    .filter((row) => row.setting === effectiveSetting)
     .map((row) => ({
       key: row.key,
       label: row.label,
       value: row.time_loss_injuries,
       color: CONTACT_RING_COLORS[row.key],
-    })) ?? [];
-  const severity = supplement?.severity_distribution.filter((row) => row.setting === severitySetting)
-    ?? dashboard.severity_distribution;
-  const severityRows = [
-    { key: 'zero', label: '0 days recorded', value: severity.find((row) => row.key === 'zero_days_medical_attention_only')?.recorded_injuries ?? 0 },
-    { key: 'one_to_seven', label: '1-7 days', value: severity.filter((row) => ['one_day', 'two_to_three_days', 'four_to_seven_days'].includes(row.key)).reduce((sum, row) => sum + row.recorded_injuries, 0) },
-    { key: 'eight_to_twenty_eight', label: '8-28 days', value: severity.find((row) => row.key === 'eight_to_twenty_eight_days')?.recorded_injuries ?? 0 },
-    { key: 'greater_than_twenty_eight', label: '>28 days', value: severity.find((row) => row.key === 'greater_than_twenty_eight_days')?.recorded_injuries ?? 0 },
-  ];
+    }));
 
   return (
-    <div className="space-y-8 sm:space-y-10">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-primary">Overview</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{dashboard.scope === 'league' ? 'League injury picture' : 'Team injury picture'}</h2>
-        </div>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          {dashboard.scope === 'league' ? 'League injury picture' : 'Team injury picture'}
+        </h2>
+        {settingFilterAvailable && (
+          <SettingControl value={effectiveSetting} settings={settingOptions} onChange={setSetting} />
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {highlights.map(([title, row, metric]) => (
-          <HighlightCard key={title} title={title} row={row} metric={metric} />
-        ))}
+        <StatTile
+          label={filtered ? 'Time-loss cases' : supplement ? 'Attributed records' : 'Recorded cases'}
+          value={filtered ? fmt(active?.time_loss_injuries, 0) : fmt(recorded, 0)}
+          unit="cases"
+        >
+          <Sparkline values={trend.map((row) => row.recorded_injuries ?? row.time_loss_injuries)} ariaLabel="Cases by month" />
+        </StatTile>
+        <StatTile
+          label="Incidence"
+          value={fmt(active?.incidence_per_1000h ?? (filtered ? null : headline.incidence_per_1000h))}
+          unit="injuries /1,000 h"
+        >
+          <Sparkline values={trend.map((row) => row.incidence_per_1000h)} color="#ffc45c" ariaLabel="Incidence by month" />
+        </StatTile>
+        <StatTile
+          label="Burden"
+          value={fmt(active?.burden_per_1000h ?? (filtered ? null : headline.burden_per_1000h))}
+          unit="days /1,000 h"
+        >
+          <BurdenSplit match={match} training={training} active={effectiveSetting} />
+        </StatTile>
+        <StatTile
+          label="Exposure"
+          value={fmtHours(filtered ? active?.exposure_hours : dashboard.coverage.hours)}
+          unit="player-hours"
+        >
+          <Sparkline values={trend.map((row) => row.exposure_hours)} color="#42d8b4" ariaLabel="Exposure hours by month" />
+        </StatTile>
       </div>
 
-      <div className="grid overflow-hidden rounded-lg border border-border/70 bg-card/70 sm:grid-cols-2 xl:grid-cols-4">
-        <OverviewStat label={supplement ? 'Attributed records' : 'Recorded cases'} value={fmt(recorded, 0)} />
-        <OverviewStat label="Incidence" value={fmt(supplement ? all?.incidence_per_1000h : headline.incidence_per_1000h ?? all?.incidence_per_1000h)} unit="/1,000 h" />
-        <OverviewStat label="Burden" value={fmt(supplement ? all?.burden_per_1000h : headline.burden_per_1000h ?? all?.burden_per_1000h)} unit="days /1,000 h" />
-        <OverviewStat label="Exposure" value={fmtHours(dashboard.coverage.hours)} unit="player-hours" />
-      </div>
-
-      <MatchTrainingVisual match={match} training={training} />
-
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Cases by month">
-          {supplement && <div className="mb-4 flex justify-end"><SettingControl value={caseSetting} settings={['all', 'match', 'training']} onChange={setCaseSetting} /></div>}
-          <div className="overflow-x-auto"><MonthlyCasesChart rows={monthlyRows} /></div>
-        </Panel>
-        <Panel title={supplement ? 'Match incidence by month' : 'Overall incidence by month'}>
-          <div className="overflow-x-auto"><MatchIncidenceChart rows={supplement ? matchMonthly : approvedMonthly} /></div>
-        </Panel>
-      </div>
-
-      <div className={`grid gap-5 ${supplement ? 'xl:grid-cols-2' : ''}`}>
-        <Panel>
-          <div className="mb-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center xl:min-h-[4.5rem]">
-            <div className="min-w-0">
-              <h3 className="text-lg font-semibold text-foreground">Severity distribution</h3>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Classified injuries by time-loss duration.</p>
-            </div>
-            {supplement && (
-              <Segmented value={severitySetting} options={['all', 'match', 'training'].map((value) => ({ value: value as typeof severitySetting, label: value === 'all' ? 'Overall' : value[0].toUpperCase() + value.slice(1) }))} onChange={setSeveritySetting} label="Choose severity setting" />
-            )}
+      <Panel contentClassName="p-4 sm:p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-foreground">Season timeline</h3>
+            <ScopeChip show={effectiveSetting !== 'all' && !perSettingMonthly} />
           </div>
-          <RingBreakdown rows={severityRows} centerLabel="classified cases" valueLabel="cases" />
-        </Panel>
-        {supplement && (
-          <Panel>
-            <div className="mb-6 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center xl:min-h-[4.5rem]">
-              <div className="min-w-0">
-                <h3 className="text-lg font-semibold text-foreground">Contact vs non-contact</h3>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Classified time-loss injuries by contact mechanism.</p>
+          <div className="flex flex-wrap gap-4">
+            <CheckToggle checked={showCases} onChange={setShowCases} label="Cases" swatch={SETTING_COLORS.all} />
+            <CheckToggle checked={showIncidence} onChange={setShowIncidence} label="Incidence" swatch="#ffc45c" />
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <SeasonTimelineChart rows={monthlyRows} showCases={showCases} showIncidence={showIncidence} />
+        </div>
+      </Panel>
+
+      <div className={`grid gap-5 ${contactRows.length ? 'xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]' : 'xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]'}`}>
+        <Panel contentClassName="p-4 sm:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-foreground">Injury Location</h3>
+            <Segmented
+              value={locationMetric}
+              options={[
+                { value: 'time_loss_injuries' as LocationMetric, label: 'Count' },
+                { value: 'incidence_per_1000h' as LocationMetric, label: 'Incidence' },
+                { value: 'burden_per_1000h' as LocationMetric, label: 'Burden' },
+              ]}
+              onChange={setLocationMetric}
+              label="Choose body map metric"
+            />
+          </div>
+          {locationRows.length ? (
+            <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start">
+              <BodyMap
+                rows={locationRows}
+                metric={locationMetric}
+                activeCode={activeCode}
+                onHover={setHoveredCode}
+                onSelect={setSelectedCode}
+              />
+              <div>
+                <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Top locations</p>
+                <ol className="space-y-1">
+                  {barRows.slice(0, 8).map((row) => {
+                    const value = metricValue(row, locationMetric);
+                    const isActive = row.code === activeCode;
+                    return (
+                      <li key={row.code}>
+                        <button
+                          type="button"
+                          onMouseEnter={() => setHoveredCode(row.code)}
+                          onFocus={() => setHoveredCode(row.code)}
+                          onMouseLeave={() => setHoveredCode(undefined)}
+                          onClick={() => setSelectedCode(row.code)}
+                          className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded px-1.5 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${isActive ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
+                          aria-label={`${row.label}: ${fmt(value)}`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate text-xs text-foreground">{row.label}</span>
+                            <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-muted">
+                              <span
+                                className="block h-full rounded-full"
+                                style={{
+                                  width: `${locationMax > 0 ? Math.max((value / locationMax) * 100, 2) : 0}%`,
+                                  background: locationHeatColor(value, locationMax),
+                                }}
+                              />
+                            </span>
+                          </span>
+                          <span className="text-xs font-semibold tabular-nums text-foreground">{fmt(value)}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+                {selected && (
+                  <p className="mt-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
+                    <span className="font-semibold text-foreground">{selected.label}</span>
+                    {' - '}
+                    {fmt(selected.time_loss_injuries, 0)} time-loss injuries, {fmt(selected.mean_severity_days)} mean days lost
+                  </p>
+                )}
               </div>
-              <Segmented value={contactSetting} options={['all', 'match', 'training'].map((value) => ({ value: value as typeof contactSetting, label: value === 'all' ? 'Overall' : value[0].toUpperCase() + value.slice(1) }))} onChange={setContactSetting} label="Choose contact setting" />
             </div>
-            <RingBreakdown rows={contactRows} centerLabel="classified cases" valueLabel="cases" />
+          ) : <EmptyState />}
+        </Panel>
+
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
+          <Panel contentClassName="p-4 sm:p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold text-foreground">Severity</h3>
+                <ScopeChip show={effectiveSetting !== 'all' && !perSettingSeverity} />
+              </div>
+              <CheckToggle checked={includeZeroDay} onChange={setIncludeZeroDay} label="Include 0-day" />
+            </div>
+            <SeverityArc rows={severityRows} />
           </Panel>
-        )}
+          {contactRows.length > 0 && (
+            <Panel contentClassName="p-4 sm:p-5">
+              <h3 className="mb-3 text-lg font-semibold text-foreground">Contact mechanism</h3>
+              <RingBreakdown rows={contactRows} centerLabel="classified cases" valueLabel="cases" />
+            </Panel>
+          )}
+        </div>
       </div>
+
+      <Panel contentClassName="p-4 sm:p-5">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-foreground">Match vs training</h3>
+          <MetricControl value={benchMetric} onChange={setBenchMetric} />
+        </div>
+        <SettingBench match={match} training={training} metric={benchMetric} />
+      </Panel>
+    </div>
+  );
+}
+
+function sortByMonth<T extends { month: string }>(rows: T[]) {
+  return [...rows].sort((a, b) => {
+    const left = Date.parse(a.month);
+    const right = Date.parse(b.month);
+    return Number.isNaN(left) || Number.isNaN(right) ? a.month.localeCompare(b.month) : left - right;
+  });
+}
+
+function StatTile({ label, value, unit, children }: {
+  label: string;
+  value: string;
+  unit?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Card className="min-w-0 border-border/70 bg-card/70 shadow-none">
+      <CardContent className="p-4 sm:p-5">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="mt-2 text-3xl font-bold leading-none tracking-tight tabular-nums text-foreground sm:text-4xl">{value}</p>
+        {unit && <p className="mt-1.5 text-[11px] text-muted-foreground">{unit}</p>}
+        <div className="mt-3">{children}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function BurdenSplit({ match, training, active }: {
+  match?: SettingMetricRow;
+  training?: SettingMetricRow;
+  active: Setting;
+}) {
+  const matchValue = match?.burden_per_1000h ?? 0;
+  const trainingValue = training?.burden_per_1000h ?? 0;
+  const max = Math.max(matchValue, trainingValue, 1);
+  const bars = [
+    { key: 'match', label: 'M', value: matchValue, color: SETTING_COLORS.match },
+    { key: 'training', label: 'T', value: trainingValue, color: SETTING_COLORS.training },
+  ];
+  return (
+    <div className="space-y-1.5" aria-label="Burden split by match and training">
+      {bars.map((bar) => (
+        <div key={bar.key} className="grid grid-cols-[0.75rem_minmax(0,1fr)] items-center gap-2">
+          <span className="text-[10px] font-medium text-muted-foreground">{bar.label}</span>
+          <span className="block h-2 overflow-hidden rounded-full bg-muted">
+            <span
+              className="block h-full rounded-full transition-opacity"
+              style={{
+                width: `${bar.value > 0 ? Math.max((bar.value / max) * 100, 3) : 0}%`,
+                background: bar.color,
+                opacity: active === 'all' || active === bar.key ? 1 : 0.35,
+              }}
+            />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScopeChip({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span className="rounded border border-border/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      Overall
+    </span>
+  );
+}
+
+function CheckToggle({ checked, onChange, label, swatch }: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  label: string;
+  swatch?: string;
+}) {
+  return (
+    <label className="inline-flex min-h-11 cursor-pointer select-none items-center gap-2 text-xs font-medium text-muted-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 rounded border-border accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+      {swatch && <span className="h-2 w-2 rounded-full" style={{ background: swatch }} aria-hidden="true" />}
+      {label}
+    </label>
+  );
+}
+
+function SettingBench({ match, training, metric }: {
+  match?: SettingMetricRow;
+  training?: SettingMetricRow;
+  metric: ProfileMetric;
+}) {
+  const meta = metricMeta(metric);
+  const rows = [
+    { key: 'match', label: 'Match', row: match, color: SETTING_COLORS.match },
+    { key: 'training', label: 'Training', row: training, color: SETTING_COLORS.training },
+  ];
+  const max = Math.max(...rows.map((entry) => settingMetricValue(entry.row, metric)), 0);
+  if (max <= 0) return <EmptyState />;
+
+  return (
+    <div className="space-y-4">
+      {rows.map((entry) => {
+        const value = settingMetricValue(entry.row, metric);
+        return (
+          <div key={entry.key} className="grid gap-2 sm:grid-cols-[5.5rem_minmax(0,1fr)_7rem] sm:items-center sm:gap-4">
+            <p className="text-sm font-semibold text-foreground">{entry.label}</p>
+            <div className="h-7 overflow-hidden rounded-md bg-muted/60">
+              <div
+                className="h-full rounded-md transition-[width] duration-300"
+                style={{ width: `${Math.max((value / max) * 100, 1.5)}%`, background: entry.color }}
+              />
+            </div>
+            <p className="text-right text-lg font-semibold tabular-nums text-foreground sm:text-xl">
+              {fmt(value)}
+              <span className="ml-1 text-[10px] font-normal text-muted-foreground">{meta.shortUnit}</span>
+            </p>
+          </div>
+        );
+      })}
+      <div className="grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-3">
+        <BenchFoot label="Match cases" value={fmt(match?.time_loss_injuries, 0)} />
+        <BenchFoot label="Training cases" value={fmt(training?.time_loss_injuries, 0)} />
+        <BenchFoot label="Match exposure share" value={matchExposureShare(match, training)} />
+      </div>
+    </div>
+  );
+}
+
+function settingMetricValue(row: SettingMetricRow | undefined, metric: ProfileMetric) {
+  const value = row?.[metric];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function matchExposureShare(match?: SettingMetricRow, training?: SettingMetricRow) {
+  const matchHours = match?.exposure_hours ?? 0;
+  const trainingHours = training?.exposure_hours ?? 0;
+  const total = matchHours + trainingHours;
+  if (!total) return 'Not available';
+  return `${Math.round((matchHours / total) * 100)}%`;
+}
+
+function BenchFoot({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-semibold tabular-nums text-foreground">{value}</p>
     </div>
   );
 }
@@ -388,69 +660,6 @@ function OverviewStat({ label, value, unit }: { label: string; value: string; un
       <p className="mt-3 text-4xl font-bold tracking-tight tabular-nums text-foreground sm:text-5xl">{value}</p>
       {unit && <p className="mt-1 text-xs text-muted-foreground">{unit}</p>}
     </div>
-  );
-}
-
-function MatchTrainingVisual({ match, training }: { match?: SettingMetricRow; training?: SettingMetricRow }) {
-  const maxIncidence = Math.max(match?.incidence_per_1000h ?? 0, training?.incidence_per_1000h ?? 0, 1);
-  return (
-    <Panel title="Match vs training">
-      <div className="grid gap-6 md:grid-cols-2">
-        <SettingPanel title="Match" row={match} maxIncidence={maxIncidence} />
-        <SettingPanel title="Training" row={training} maxIncidence={maxIncidence} />
-      </div>
-    </Panel>
-  );
-}
-
-function SettingPanel({ title, row, maxIncidence }: { title: string; row?: SettingMetricRow; maxIncidence: number }) {
-  const width = Math.max(((row?.incidence_per_1000h ?? 0) / maxIncidence) * 100, row?.incidence_per_1000h ? 3 : 0);
-  return (
-    <div className="relative overflow-hidden rounded-md border border-border/60 bg-background/35 p-5">
-      <div className="absolute inset-x-0 top-0 h-1 bg-primary" aria-hidden="true" />
-      <p className="text-sm font-semibold text-primary">{title}</p>
-      <div className="mt-4 h-3 overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
-      </div>
-      <div className="mt-5 grid grid-cols-3 gap-4">
-        <SettingValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" />
-        <SettingValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" />
-        <SettingValue label="Cases" value={fmt(row?.time_loss_injuries, 0)} />
-      </div>
-    </div>
-  );
-}
-
-function SettingValue({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-foreground sm:text-3xl">{value}</p>
-      {unit && <p className="text-[11px] text-muted-foreground">{unit}</p>}
-    </div>
-  );
-}
-
-function topRow(rows: InjuryProfileRow[], setting: Setting, metric: ProfileMetric) {
-  return [...rows]
-    .filter((row) => row.setting === setting)
-    .sort((a, b) => metricValue(b, metric) - metricValue(a, metric) || a.label.localeCompare(b.label))[0];
-}
-
-function HighlightCard({ title, row, metric }: { title: string; row?: InjuryProfileRow; metric: ProfileMetric }) {
-  const meta = metricMeta(metric);
-  return (
-    <Card className="overflow-hidden border-border/70 bg-card/70 shadow-none">
-      <div className="h-1.5" style={{ backgroundColor: row ? profileColor(row.code) : 'hsl(var(--border))' }} />
-      <CardContent className="p-5 sm:p-6">
-        <p className="text-[11px] font-medium text-muted-foreground">{title}</p>
-        <p className="mt-5 min-h-12 text-lg font-semibold leading-tight text-foreground sm:text-xl">{row?.label ?? 'Not available'}</p>
-        <p className="mt-5 text-sm tabular-nums text-muted-foreground">
-          <strong className="text-3xl text-foreground sm:text-4xl">{row ? fmt(row[metric]) : 'Not available'}</strong>{' '}
-          {row && <span className="text-xs">{meta.shortUnit}</span>}
-        </p>
-      </CardContent>
-    </Card>
   );
 }
 

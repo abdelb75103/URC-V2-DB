@@ -8,8 +8,10 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   LabelList,
   Legend,
+  Line,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -439,6 +441,234 @@ export function RingBreakdown({
               <span className="h-2 w-2 rounded-full" style={{ background: row.color ?? PROFILE_COLORS[index % PROFILE_COLORS.length] }} />
               <span className="truncate text-muted-foreground">{row.label}</span>
               <span className="font-semibold tabular-nums text-foreground">{count(row.value)} <span className="font-normal text-muted-foreground">({Math.round(row.value / total * 100)}%)</span></span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export const SEVERITY_BAND_COLORS: Record<string, string> = {
+  zero: '#94a3b8',
+  one_to_seven: '#02d5f0',
+  eight_to_twenty_eight: '#ffc45c',
+  greater_than_twenty_eight: '#ef7189',
+};
+
+export function Sparkline({
+  values,
+  color = SETTING_COLORS.all,
+  ariaLabel,
+}: {
+  values: Array<number | null>;
+  color?: string;
+  ariaLabel: string;
+}) {
+  const points = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (points.length < 2) return <div className="h-8" aria-hidden="true" />;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const span = max - min || 1;
+  const width = 100;
+  const height = 30;
+  const step = width / (points.length - 1);
+  const coords = points.map((value, index) => [index * step, height - ((value - min) / span) * (height - 4) - 2] as const);
+  const line = coords.map(([x, y], index) => `${index === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`).join(' ');
+  const area = `${line} L${width},${height} L0,${height} Z`;
+  const gradientId = `spark-${ariaLabel.replace(/\W+/g, '-').toLowerCase()}`;
+  const [lastX, lastY] = coords[coords.length - 1];
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="h-8 w-full" role="img" aria-label={ariaLabel}>
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gradientId})`} stroke="none" />
+      <path d={line} fill="none" stroke={color} strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r={2} fill={color} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function TimelineTooltip({
+  active,
+  label,
+  payload,
+}: {
+  active?: boolean;
+  label?: string;
+  payload?: Array<{ payload?: MonthlySettingRow }>;
+}) {
+  const row = payload?.[0]?.payload;
+  if (!active || !row) return null;
+  const rows = [{ label: 'Time-loss cases', value: `${count(row.time_loss_injuries)} cases` }];
+  if (typeof row.recorded_injuries === 'number') {
+    rows.unshift({ label: 'Recorded cases', value: `${count(row.recorded_injuries)} cases` });
+  }
+  if (typeof row.incidence_per_1000h === 'number') {
+    rows.push({ label: 'Incidence', value: `${number(row.incidence_per_1000h)} /1,000 h` });
+    rows.push({ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` });
+  }
+  return (
+    <TooltipCard
+      title={`${label ?? row.month} - ${settingLabel(row.setting)}`}
+      rows={rows}
+      cohort={`n = ${count(row.rate_time_loss_injuries ?? row.time_loss_injuries)} time-loss cases.`}
+    />
+  );
+}
+
+export function SeasonTimelineChart({
+  rows,
+  showCases,
+  showIncidence,
+}: {
+  rows: MonthlySettingRow[];
+  showCases: boolean;
+  showIncidence: boolean;
+}) {
+  const data = useMemo(() => sortSeasonMonths(rows), [rows]);
+  if (!data.length) return <ChartEmpty reason="No dated injury cases are available for the selected setting." />;
+  if (!showCases && !showIncidence) return <ChartEmpty reason="Select at least one series to plot." />;
+  const hasIncidence = data.some((row) => typeof row.incidence_per_1000h === 'number');
+
+  return (
+    <div className="h-[320px] min-w-[560px]" aria-label="Season timeline of injury cases and incidence">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart accessibilityLayer data={data} margin={{ top: 12, right: 16, bottom: 20, left: 8 }}>
+          <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
+          <XAxis
+            dataKey="month"
+            tickFormatter={compactMonth}
+            tick={{ fill: AXIS, fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis
+            yAxisId="cases"
+            allowDecimals={false}
+            tick={{ fill: AXIS, fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            label={{ value: 'Cases (n)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 11, offset: 4 }}
+          />
+          <YAxis
+            yAxisId="rate"
+            orientation="right"
+            tickFormatter={formatAxisTick}
+            tick={{ fill: AXIS, fontSize: 11 }}
+            tickLine={false}
+            axisLine={false}
+            label={{ value: '/1,000 h', angle: 90, position: 'insideRight', fill: AXIS, fontSize: 11, offset: 8 }}
+          />
+          <Tooltip
+            content={<TimelineTooltip />}
+            cursor={{ fill: 'hsl(var(--primary) / 0.08)' }}
+            wrapperStyle={{ zIndex: 30 }}
+          />
+          {showCases && (
+            <Bar
+              yAxisId="cases"
+              dataKey="time_loss_injuries"
+              name="Time-loss cases"
+              fill={SETTING_COLORS.all}
+              fillOpacity={0.45}
+              radius={[3, 3, 0, 0]}
+              maxBarSize={34}
+              isAnimationActive={false}
+            />
+          )}
+          {showIncidence && hasIncidence && (
+            <Line
+              yAxisId="rate"
+              type="monotone"
+              dataKey="incidence_per_1000h"
+              name="Incidence"
+              stroke="#ffc45c"
+              strokeWidth={2.5}
+              dot={{ r: 3, strokeWidth: 1.5 }}
+              activeDot={{ r: 5, strokeWidth: 2 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+export function SeverityArc({ rows }: { rows: RingDatum[] }) {
+  const data = rows.filter((row) => row.value > 0);
+  const total = data.reduce((sum, row) => sum + row.value, 0);
+  const [selectedKey, setSelectedKey] = useState<string>();
+  const selected = data.find((row) => row.key === selectedKey);
+  if (!data.length) return <ChartEmpty compact reason="No classified cases are available for this breakdown." />;
+
+  return (
+    <div>
+      <div className="relative mx-auto h-[124px] w-full max-w-[240px]" aria-label="Severity band breakdown">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="label"
+              cx="50%"
+              cy="98%"
+              startAngle={180}
+              endAngle={0}
+              innerRadius={72}
+              outerRadius={106}
+              paddingAngle={1.5}
+              stroke="none"
+              isAnimationActive={false}
+              onMouseEnter={(_, index: number) => setSelectedKey(data[index]?.key)}
+              onClick={(_, index: number) => setSelectedKey(data[index]?.key)}
+            >
+              {data.map((row, index) => (
+                <Cell
+                  key={row.key}
+                  fill={row.color ?? PROFILE_COLORS[index % PROFILE_COLORS.length]}
+                  opacity={selectedKey && selected?.key !== row.key ? 0.4 : 1}
+                />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-x-0 bottom-1 text-center">
+          <strong className="block text-2xl font-semibold leading-none tabular-nums text-primary">{count(selected?.value ?? total)}</strong>
+          <span className="mt-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {selected ? 'cases' : 'total cases'}
+          </span>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span>Least severe</span>
+        <span>Most severe</span>
+      </div>
+      <div className="mt-1 space-y-1">
+        {data.map((row, index) => {
+          const active = selected?.key === row.key;
+          return (
+            <button
+              key={row.key}
+              type="button"
+              onMouseEnter={() => setSelectedKey(row.key)}
+              onFocus={() => setSelectedKey(row.key)}
+              onClick={() => setSelectedKey(row.key)}
+              className={`grid min-h-11 w-full grid-cols-[8px_minmax(0,1fr)_auto] items-center gap-2 rounded px-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
+              aria-label={`${row.label}: ${count(row.value)} cases.`}
+            >
+              <span className="h-2 w-2 rounded-full" style={{ background: row.color ?? PROFILE_COLORS[index % PROFILE_COLORS.length] }} />
+              <span className="truncate text-muted-foreground">{row.label}</span>
+              <span className="font-semibold tabular-nums text-foreground">
+                {count(row.value)} <span className="font-normal text-muted-foreground">({Math.round((row.value / total) * 100)}%)</span>
+              </span>
             </button>
           );
         })}
