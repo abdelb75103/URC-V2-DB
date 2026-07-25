@@ -864,12 +864,13 @@ export function ComparisonScatterChart({
     return <ChartEmpty reason="No club has both a match and a training incidence in the approved comparison payload." />;
   }
   const pad = (values: number[]) => [0, Math.max(...values) * 1.15 || 1] as [number, number];
-  // Wide: the training mean is labelled outside the plot, so the right margin has
-  // to hold the whole string (~102px at fontSize 10, plus the 5px offset).
-  // Narrow: that margin would cost a third of a phone's width, so the label moves
-  // inside the plot and the plot takes the space back.
+  // The training mean is labelled at the right-hand end of its line in both
+  // layouts. Wide puts it outside the plot, which costs a right margin big enough
+  // to hold the whole string (~102px at fontSize 10, plus the 5px offset). On a
+  // phone that margin would cost a third of the card, so the label moves inside
+  // the plot, still right-aligned, and the plot takes the width back.
   const trainingLabel = narrow
-    ? { value: 'League training mean', position: 'insideTopLeft' as const, fill: SETTING_COLORS.training, fontSize: 10 }
+    ? { value: 'League training mean', position: 'insideTopRight' as const, fill: SETTING_COLORS.training, fontSize: 10 }
     : { value: 'League training mean', position: 'right' as const, fill: SETTING_COLORS.training, fontSize: 10 };
 
   return (
