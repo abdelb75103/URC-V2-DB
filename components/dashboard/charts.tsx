@@ -120,22 +120,12 @@ export function sortSeasonMonths<T extends { month: string }>(rows: T[]) {
  * Every monthly chart on the site plots from September (decision, 25 July 2026,
  * site-wide): earlier months sit outside the official analysis window. The month
  * is read from the label by name, never by date parsing. Rows must already be in
- * season order. `dropped` is how many pre-window months the chart is not showing,
- * so the panel can say so rather than silently hiding them.
+ * season order. The charts do not caption the months they drop (decision,
+ * 25 July 2026); the pre-window cases stay counted in the headline totals.
  */
 export function fromSeptember<T extends { month: string }>(rows: T[]) {
   const first = rows.findIndex((row) => monthIndex(row.month) === 8);
-  return first > 0 ? { rows: rows.slice(first), dropped: first } : { rows, dropped: 0 };
-}
-
-/** The one line a monthly chart shows when it has dropped pre-September months. */
-function PreWindowNote({ dropped }: { dropped: number }) {
-  if (dropped <= 0) return null;
-  return (
-    <p className="mt-2 text-xs text-muted-foreground">
-      {dropped === 1 ? 'One month' : `${count(dropped)} months`} recorded before September {dropped === 1 ? 'is' : 'are'} counted in the totals but not plotted.
-    </p>
-  );
+  return first > 0 ? rows.slice(first) : rows;
 }
 
 function settingLabel(setting: MonthlySettingRow['setting'] | InjuryProfileRow['setting'] | undefined) {
@@ -294,12 +284,11 @@ function formatHsrPercentage(value: unknown) {
 }
 
 export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
-  const { rows: data, dropped } = useMemo(() => fromSeptember(sortSeasonMonths(rows)), [rows]);
+  const data = useMemo(() => fromSeptember(sortSeasonMonths(rows)), [rows]);
   if (!data.length) return <ChartEmpty reason="No dated injury cases are available for the selected setting." />;
   const hasRecordedCases = data.every((row) => typeof row.recorded_injuries === 'number');
 
   return (
-    <>
     <div
       className="h-[286px] sm:min-w-[540px]"
       aria-label={hasRecordedCases ? 'Monthly recorded and time-loss injury cases chart' : 'Monthly time-loss injury cases chart'}
@@ -364,20 +353,17 @@ export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
         </AreaChart>
       </ResponsiveContainer>
     </div>
-    <PreWindowNote dropped={dropped} />
-    </>
   );
 }
 
 export function MatchIncidenceChart({ rows }: { rows: MonthlySettingRow[] }) {
-  const { rows: data, dropped } = useMemo(
+  const data = useMemo(
     () => fromSeptember(sortSeasonMonths(rows.filter((row) => row.exposure_hours !== null && row.incidence_per_1000h !== null))),
     [rows]
   );
   if (!data.length) return <ChartEmpty reason="No month has both an exposure denominator and an incidence rate for this view." />;
 
   return (
-    <>
     <div className="h-[286px] sm:min-w-[540px]" aria-label="Monthly injury incidence chart">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart accessibilityLayer data={data} margin={{ top: 70, right: 14, bottom: 28, left: 24 }}>
@@ -424,8 +410,6 @@ export function MatchIncidenceChart({ rows }: { rows: MonthlySettingRow[] }) {
         </AreaChart>
       </ResponsiveContainer>
     </div>
-    <PreWindowNote dropped={dropped} />
-    </>
   );
 }
 
@@ -588,13 +572,12 @@ export function SeasonTimelineChart({
   showCases: boolean;
   showIncidence: boolean;
 }) {
-  const { rows: data, dropped } = useMemo(() => fromSeptember(sortSeasonMonths(rows)), [rows]);
+  const data = useMemo(() => fromSeptember(sortSeasonMonths(rows)), [rows]);
   if (!data.length) return <ChartEmpty reason="No dated injury cases are available for the selected setting." />;
   if (!showCases && !showIncidence) return <ChartEmpty reason="Select at least one series to plot." />;
   const hasIncidence = data.some((row) => typeof row.incidence_per_1000h === 'number');
 
   return (
-    <>
     <div className="h-[320px] sm:min-w-[560px]" aria-label="Season timeline of injury cases and incidence">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart accessibilityLayer data={data} margin={{ top: 12, right: 16, bottom: 32, left: 12 }}>
@@ -658,8 +641,6 @@ export function SeasonTimelineChart({
         </ComposedChart>
       </ResponsiveContainer>
     </div>
-    <PreWindowNote dropped={dropped} />
-    </>
   );
 }
 
@@ -744,7 +725,7 @@ export function ExposureTrendChart({ rows, measure = 'hours', totalHoursColor = 
   /** Club identity colour for the single-series player-hours bars only. */
   totalHoursColor?: string;
 }) {
-  const { rows: data, dropped } = useMemo(() => {
+  const data = useMemo(() => {
     const sorted = sortSeasonMonths<ExposureMonthlyRow & { month: string }>(rows
       .filter((row) => {
         if (!row.month) return false;
@@ -764,11 +745,11 @@ export function ExposureTrendChart({ rows, measure = 'hours', totalHoursColor = 
       })) as Array<ExposureMonthlyRow & { month: string }>);
     // Pre-September months go first, then the leading unreported months, so a club
     // whose reporting starts later still opens on its own first reported month.
-    const { rows: inWindow, dropped } = fromSeptember(sorted);
+    const inWindow = fromSeptember(sorted);
     const firstReportedMonth = inWindow.findIndex((row) => (
       measure === 'hours' ? (row.exposure_hours ?? 0) : measure === 'distance' ? (row.distance_km ?? 0) : (row.hsr_distance_km ?? 0)
     ) > 0);
-    return { rows: firstReportedMonth < 0 ? [] : inWindow.slice(firstReportedMonth), dropped };
+    return firstReportedMonth < 0 ? [] : inWindow.slice(firstReportedMonth);
   }, [measure, rows]);
   if (!data.length) {
     const description = `No monthly ${measure === 'hours' ? 'player-hours' : measure === 'distance' ? 'distance' : 'HSR distance'} are available.`;
@@ -814,8 +795,7 @@ export function ExposureTrendChart({ rows, measure = 'hours', totalHoursColor = 
       </ResponsiveContainer>
     </div>
       <p className="mt-1 text-right text-[11px] text-muted-foreground">{unit}</p>
-      <PreWindowNote dropped={dropped} />
-    </div>
+      </div>
   );
 }
 
