@@ -339,7 +339,10 @@ test('comparison tab offers Overall when projected overall data exists', async (
 test('body map regions keep a reliable touch and pointer hit area', async () => {
   const bodyMap = await readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8');
 
-  assert.match(bodyMap, /pointerEvents:\s*enabled \? 'bounding-box' : 'none'/);
+  // Every controlled IOC region is hoverable, including regions with no cases, and
+  // reports 0 rather than being inert (decision, 25 July 2026).
+  assert.match(bodyMap, /pointerEvents:\s*'bounding-box' as const/);
+  assert.doesNotMatch(bodyMap, /enabled\s*\?/);
   assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
 });
 
@@ -359,7 +362,10 @@ test('injury impact uses a fixed log severity scale without changing burden bubb
   assert.match(impact, /Number\.isFinite\(value\) && value > 0/);
   assert.match(impact, /non-positive mean severity.*not shown because a logarithmic scale cannot represent those values/s);
   assert.match(impact, /bubble_burden: Math\.max\(row\.burden_per_1000h \?\? 0, 0\.01\)/);
-  assert.match(impact, /<ZAxis type="number" dataKey="bubble_burden" range=\{\[160, 1_100\]\} name="Burden" \/>/);
+  // The burden bubble range is unchanged; it is a named constant so the label
+  // collision placement can size a label against the bubble it must clear.
+  assert.match(impact, /const IMPACT_BUBBLE_SIZE = \[160, 1_100\] as const/);
+  assert.match(impact, /<ZAxis type="number" dataKey="bubble_burden" range=\{\[IMPACT_BUBBLE_SIZE\[0\], IMPACT_BUBBLE_SIZE\[1\]\]\} name="Burden" \/>/);
   assert.doesNotMatch(impact, /time_loss_injuries\s*[<>]/);
   assert.doesNotMatch(impact, /ReferenceArea|ReferenceLine|median\(/);
   assert.doesNotMatch(impact, /aboveLogDomainRows|pending chart-domain review/);
@@ -376,8 +382,8 @@ test('injury impact tooltip prioritises burden, gives exact small-sample caution
   assert.ok(tooltip.indexOf('>Burden<') < tooltip.indexOf('>Incidence<'), 'burden must be the primary tooltip metric');
   assert.match(tooltip, /n = \{count\(row\.time_loss_injuries\)\} time-loss .*\{count\(row\.days_lost\)\} total days lost/s);
   assert.doesNotMatch(tooltip, /Time-loss cases/);
-  assert.match(tooltip, /Caution: based on 1 injury\./);
-  assert.match(tooltip, /Small sample: interpret 2 injuries cautiously\./);
+  assert.match(tooltip, /Caution: based on 1 injury/);
+  assert.match(tooltip, /Small sample: interpret 2 injuries cautiously/);
   assert.match(tooltip, /aria-live="polite"/);
   assert.match(interaction, /r=\{22\}/);
   assert.match(interaction, /role="button"/);
@@ -513,7 +519,10 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   assert.match(charts, /hsr_distance_km|hsr_percentage/);
   assert.match(charts, /HSR share/);
   assert.match(charts, /firstReportedMonth/);
-  assert.match(charts, /sorted\.slice\(firstReportedMonth\)/);
+  // Monthly charts drop pre-September months first (decision, 25 July 2026,
+  // site-wide), then still open on the club's own first reported month.
+  assert.match(charts, /fromSeptember\(sorted\)/);
+  assert.match(charts, /inWindow\.slice\(firstReportedMonth\)/);
   assert.match(charts, /<BarChart aria-label=\{`Monthly \$\{exposureMeasureLabel\(measure\)\.toLowerCase\(\)\} chart`\} accessibilityLayer/);
   assert.match(charts, /w-full min-w-0/);
   assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function LocationTab')), /overflow-[xy]-auto|max-h-\[/);

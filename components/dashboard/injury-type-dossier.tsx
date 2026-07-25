@@ -39,6 +39,22 @@ function formatValue(value: number | null | undefined, digits = 1) {
   }).format(value);
 }
 
+// Rates show 1dp, and bars are drawn from that same rounded value, so two rows
+// displaying 3.1 render identical bars instead of contradicting the label.
+function formatMetric(value: number | null | undefined, metric: InjuryTypeMetric) {
+  if (metric === 'time_loss_injuries') return formatValue(value, 0);
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
+  return new Intl.NumberFormat('en-IE', {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1,
+  }).format(value);
+}
+
+/** The value a ranked bar is drawn from: rounded to what its label shows. */
+export function rankedTypeValue(value: number, metric: InjuryTypeMetric) {
+  return metric === 'time_loss_injuries' ? value : Math.round(value * 10) / 10;
+}
+
 function caseLabel(value: number) {
   return value === 1 ? 'time-loss case' : 'time-loss cases';
 }
@@ -58,7 +74,7 @@ export function InjuryTypeRanking({
   onHover: (code?: string) => void;
   onSelect: (code: string) => void;
 }) {
-  const max = Math.max(...rows.map((row) => metricValue(row, metric)), 1);
+  const max = Math.max(...rows.map((row) => rankedTypeValue(metricValue(row, metric), metric)), 1);
   const metricMeta = METRIC_LABELS[metric];
 
   return (
@@ -71,7 +87,7 @@ export function InjuryTypeRanking({
       </div>
       <div className="space-y-1">
         {rows.map((row, index) => {
-          const value = metricValue(row, metric);
+          const value = rankedTypeValue(metricValue(row, metric), metric);
           const active = activeCode === row.code;
           const selected = selectedCode === row.code;
           const color = INJURY_FAMILY_COLORS[row.code] ?? 'hsl(var(--primary))';
@@ -81,7 +97,7 @@ export function InjuryTypeRanking({
               key={row.code}
               type="button"
               aria-pressed={selected}
-              aria-label={`${row.label}, ranked ${index + 1} of ${rows.length}: ${formatValue(row[metric])} ${metricMeta.longUnit}. ${formatValue(row.time_loss_injuries, 0)} ${caseLabel(row.time_loss_injuries)}.`}
+              aria-label={`${row.label}, ranked ${index + 1} of ${rows.length}: ${formatMetric(row[metric], metric)} ${metricMeta.longUnit}. ${formatValue(row.time_loss_injuries, 0)} ${caseLabel(row.time_loss_injuries)}.`}
               onMouseEnter={() => onHover(row.code)}
               onMouseLeave={() => onHover()}
               onFocus={() => onHover(row.code)}
@@ -104,7 +120,7 @@ export function InjuryTypeRanking({
                   }}
                 />
               </span>
-              <span className="col-start-2 row-start-1 text-right text-base font-semibold tabular-nums text-foreground sm:col-start-auto sm:row-start-auto">{formatValue(row[metric])}</span>
+              <span className="col-start-2 row-start-1 text-right text-base font-semibold tabular-nums text-foreground sm:col-start-auto sm:row-start-auto">{formatMetric(row[metric], metric)}</span>
             </button>
           );
         })}
@@ -141,8 +157,8 @@ export function InjuryTypeDossier({
 
       <div className="grid grid-cols-3 border-y border-border/60">
         <DossierMetric label="Count" value={formatValue(row?.time_loss_injuries, 0)} unit="cases" active={metric === 'time_loss_injuries'} />
-        <DossierMetric label="Incidence" value={formatValue(row?.incidence_per_1000h)} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
-        <DossierMetric label="Burden" value={formatValue(row?.burden_per_1000h)} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
+        <DossierMetric label="Incidence" value={formatMetric(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
+        <DossierMetric label="Burden" value={formatMetric(row?.burden_per_1000h, 'burden_per_1000h')} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
       </div>
 
       <div className="flex flex-1 flex-col px-5 py-4">

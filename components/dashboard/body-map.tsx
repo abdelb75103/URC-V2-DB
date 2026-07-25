@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, type KeyboardEvent } from 'react';
+import { useId, useState, type KeyboardEvent } from 'react';
 import type { InjuryProfileRow } from '@/lib/reporting-types';
 
 export type LocationMetric = 'time_loss_injuries' | 'incidence_per_1000h' | 'burden_per_1000h';
@@ -32,14 +32,27 @@ const METRIC_LABELS: Record<LocationMetric, { label: string; unit: string }> = {
   burden_per_1000h: { label: 'burden', unit: ' days per 1,000 player-hours' },
 };
 
+/** Fallback name for a region the payload carries no row for, cased like the payload labels. */
+function regionLabel(code: string) {
+  const words = code.replaceAll('_', ' ');
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
 function valueFor(row: InjuryProfileRow | undefined, metric: LocationMetric) {
   const value = row?.[metric];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
+/** A true zero carries no heat, so "few" can never look like "none". */
+const UNTINTED_FILL = 'hsl(205 30% 22% / 0.35)';
+
+// The ramp is drawn over a dark navy backdrop, so its low end has to keep a
+// lightness and opacity floor: at 0.22 alpha the smallest regions rendered as
+// near-black brown and were unreadable. That floor lifts non-zero values only.
 export function locationHeatColor(value: number, max: number) {
+  if (!(value > 0)) return UNTINTED_FILL;
   const ratio = max > 0 ? Math.min(Math.max(value / max, 0), 1) : 0;
-  return `hsla(${48 - ratio * 48}, 92%, 54%, ${0.22 + ratio * 0.76})`;
+  return `hsla(${48 - ratio * 48}, 92%, ${62 - ratio * 8}%, ${0.55 + ratio * 0.45})`;
 }
 
 export function BodyMap({
@@ -56,21 +69,36 @@ export function BodyMap({
   onSelect: (code: string) => void;
 }) {
   const byCode = new Map(rows.map((row) => [row.code, row]));
+  // The plotted maximum stays driven by the regions that carry data, so making
+  // the empty regions hoverable never changes another region's colour.
   const max = Math.max(...rows.map((row) => valueFor(row, metric)), 0);
   const tooltipId = useId();
-  const activeRow = activeCode ? byCode.get(activeCode) : undefined;
+  // Regions with no payload row are hoverable too, and the shared location view
+  // only resolves codes that carry data, so the map keeps its own hover state and
+  // still reports every hover upward for the panels that can use it.
+  const [hoveredRegion, setHoveredRegion] = useState<string>();
+  const handleHover = (code?: string) => {
+    setHoveredRegion(code);
+    onHover(code);
+  };
+  const effectiveCode = hoveredRegion ?? activeCode;
+  const activeRow = effectiveCode ? byCode.get(effectiveCode) : undefined;
   const activeValue = valueFor(activeRow, metric);
   const metricMeta = METRIC_LABELS[metric];
 
   return (
     <div className="relative">
       <div id={tooltipId} aria-live="polite" className="sr-only">
-        {activeRow ? (
+        {effectiveCode ? (
           <>
-            <span className="font-semibold text-foreground">{activeRow.label}</span>
+            <span className="font-semibold text-foreground">{activeRow?.label ?? regionLabel(effectiveCode)}</span>
             <span className="mx-1 text-muted-foreground">:</span>
             <span className="font-medium tabular-nums text-foreground">{activeValue.toLocaleString(undefined, { maximumFractionDigits: 1 })} {metricMeta.label}{metricMeta.unit}</span>
-            <span className="block mt-0.5 text-muted-foreground">n = {activeRow.time_loss_injuries} time-loss injuries.</span>
+            <span className="block mt-0.5 text-muted-foreground">
+              {activeRow
+                ? `n = ${activeRow.time_loss_injuries} time-loss injuries.`
+                : '0 means no cases were recorded in this bucket.'}
+            </span>
           </>
         ) : 'No body location selected.'}
       </div>
@@ -88,8 +116,8 @@ export function BodyMap({
           byCode={byCode}
           metric={metric}
           max={max}
-          activeCode={activeCode}
-          onHover={onHover}
+          activeCode={effectiveCode}
+          onHover={handleHover}
           onSelect={onSelect}
           tooltipId={tooltipId}
         />
@@ -99,8 +127,8 @@ export function BodyMap({
           byCode={byCode}
           metric={metric}
           max={max}
-          activeCode={activeCode}
-          onHover={onHover}
+          activeCode={effectiveCode}
+          onHover={handleHover}
           onSelect={onSelect}
           tooltipId={tooltipId}
         />
@@ -140,6 +168,8 @@ function BodyFigure({
       {REGIONS.map((code) => {
         if ((code === 'chest' || code === 'abdomen') && view === 'back') return null;
         if ((code === 'thoracic_spine' || code === 'lumbosacral') && view === 'front') return null;
+        // Every controlled IOC bucket is drawn and hoverable, whether or not the
+        // payload carries a row for it: an absent row reads as a recorded 0.
         const row = byCode.get(code);
         const value = valueFor(row, metric);
         return (
@@ -147,10 +177,9 @@ function BodyFigure({
             key={code}
             code={code}
             view={view}
-            label={row?.label ?? code.replaceAll('_', ' ')}
+            label={row?.label ?? regionLabel(code)}
             value={value}
             metric={metric}
-            enabled={Boolean(row)}
             fill={locationHeatColor(value, max)}
             active={activeCode === code}
             dimmed={Boolean(activeCode && activeCode !== code)}
@@ -170,7 +199,6 @@ function Region({
   label,
   value,
   metric,
-  enabled,
   fill,
   active,
   dimmed,
@@ -183,7 +211,6 @@ function Region({
   label: string;
   value: number;
   metric: LocationMetric;
-  enabled: boolean;
   fill: string;
   active: boolean;
   dimmed: boolean;
@@ -191,35 +218,28 @@ function Region({
   onSelect: (code: string) => void;
   tooltipId: string;
 }) {
-  const interactionProps = enabled
-    ? {
-        role: 'button',
-        tabIndex: 0,
-        'aria-label': `${label}, ${view} view: ${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${METRIC_LABELS[metric].label}${METRIC_LABELS[metric].unit}`,
-        'aria-describedby': tooltipId,
-        onMouseEnter: () => onHover(code),
-        onMouseLeave: () => onHover(),
-        onFocus: () => onHover(code),
-        onBlur: () => onHover(),
-        onClick: () => onSelect(code),
-        onKeyDown: (event: KeyboardEvent<SVGElement>) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            onSelect(code);
-          }
-        },
-      }
-    : { 'aria-hidden': true as const };
   const common = {
     fill,
     stroke: active ? 'hsl(0 0% 96%)' : 'hsl(34 95% 63% / 0.55)',
     strokeWidth: active ? 2.5 : 1,
     opacity: dimmed ? 0.25 : 1,
-    pointerEvents: enabled ? 'bounding-box' : 'none',
-    className: enabled
-      ? 'cursor-pointer outline-none transition-[opacity,stroke] duration-150 focus-visible:stroke-white'
-      : 'outline-none',
-    ...interactionProps,
+    pointerEvents: 'bounding-box' as const,
+    className: 'cursor-pointer outline-none transition-[opacity,stroke] duration-150 focus-visible:stroke-white',
+    role: 'button',
+    tabIndex: 0,
+    'aria-label': `${label}, ${view} view: ${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} ${METRIC_LABELS[metric].label}${METRIC_LABELS[metric].unit}`,
+    'aria-describedby': tooltipId,
+    onMouseEnter: () => onHover(code),
+    onMouseLeave: () => onHover(),
+    onFocus: () => onHover(code),
+    onBlur: () => onHover(),
+    onClick: () => onSelect(code),
+    onKeyDown: (event: KeyboardEvent<SVGElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onSelect(code);
+      }
+    },
   };
 
   switch (code) {

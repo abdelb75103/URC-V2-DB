@@ -72,12 +72,14 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("st.setting_code = 'all' or c.setting_code = st.setting_code", severity_cte)
         self.assertIn("'setting', v.setting_code", PREVIEW)
         self.assertIn('.filter((item) => item.setting === "all")', GENERATOR)
-        self.assertIn("const [severitySetting, setSeveritySetting]", UI)
-        self.assertIn("const [contactSetting, setContactSetting]", UI)
-        self.assertIn("row.setting === severitySetting", UI)
-        self.assertIn("row.setting === contactSetting", UI)
-        self.assertIn('label="Choose severity setting"', UI)
-        self.assertIn('label="Choose contact setting"', UI)
+        # The Overview drives severity and contact from one global setting control
+        # (redesign 2026-07-25); panels that cannot honour it show a scope chip
+        # rather than silently returning overall data.
+        self.assertIn("const [setting, setSetting] = useState<Setting>('all')", UI)
+        self.assertIn("severity_distribution.filter((row) => row.setting === effectiveSetting)", UI)
+        self.assertIn("contact_distribution ?? [])", UI)
+        self.assertIn("row.setting === effectiveSetting", UI)
+        self.assertIn("<ScopeChip", UI)
         self.assertNotIn("Data coverage & provenance", UI)
         self.assertNotIn("InferenceCoverageSummary", UI)
         self.assertIn('aria-live="polite" className="sr-only"', CHARTS)
@@ -289,12 +291,10 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("'setting', p.setting_code", PREVIEW)
         self.assertIn("'Unknown diagnosis'", PREVIEW)
         self.assertIn("withoutFrontFacingUnknown", UI)
-        for headline in (
-            "Most common match injury", "Most common training injury",
-            "Highest match burden", "Highest training burden",
-        ):
-            self.assertIn(headline, UI)
-        self.assertIn("{row?.label ?? 'Not available'}", UI)
+        for surface in ("Match vs training", "settingOptions", "SettingBench"):
+            self.assertIn(surface, UI)
+        self.assertIn("metricFor('match')", UI)
+        self.assertIn("metricFor('training')", UI)
 
     def test_draft9_uses_one_season_bound_for_injuries_and_exposure(self) -> None:
         rule = "season_bound_2024-07-01_2025-06-30_no_exposure_window"
@@ -319,9 +319,9 @@ class DashboardV3PreviewTests(unittest.TestCase):
 
     def test_requested_dashboard_surfaces_exist(self) -> None:
         for label in (
-            "Cases by month",
-            "Match incidence by month",
-            "Contact vs non-contact",
+            "Season timeline",
+            "Contact mechanism",
+            "Injury Location",
             "Team Comparison",
             "Exposure",
             "Common Injuries",
@@ -337,9 +337,9 @@ class DashboardV3PreviewTests(unittest.TestCase):
 
     def test_draft_supplement_is_dev_only_with_complete_production_fallback(self) -> None:
         self.assertIn('process.env.NODE_ENV === "production"', PREVIEW_READER)
-        self.assertIn("supplement ? matchMonthly : approvedMonthly", UI)
-        self.assertIn("{supplement && (", UI)
-        self.assertIn('label="Choose contact setting"', UI)
+        self.assertIn("supplement.monthly_by_setting.filter((row) => row.setting === effectiveSetting)", UI)
+        self.assertIn("const perSettingMonthly = Boolean(supplement)", UI)
+        self.assertIn("const perSettingSeverity = Boolean(supplement)", UI)
 
 
 if __name__ == "__main__":

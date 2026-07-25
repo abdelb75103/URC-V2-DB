@@ -309,6 +309,19 @@ export async function getTeamComparisons(
 }
 
 function normalizeTeamComparisons(rawRows: unknown[]): TeamComparisonRow[] {
+  return normalizeTeamComparisonsWithKeys(rawRows).rows;
+}
+
+/**
+ * Same normalization, but also returns the internal-key to comparison_id map so
+ * a caller that still holds the viewing team's key can mark that team's own row.
+ * The map never crosses the server-component boundary; only the single
+ * comparison_id belonging to the page's own team does.
+ */
+function normalizeTeamComparisonsWithKeys(rawRows: unknown[]): {
+  rows: TeamComparisonRow[];
+  comparisonIdByTeamKey: Map<string, string>;
+} {
   const internalRows = rawRows.map((raw) => {
     const row = comparisonSourceRowSchema.parse(raw);
     const metric = (setting: SettingMetricRow["setting"]) => {
@@ -344,20 +357,32 @@ function normalizeTeamComparisons(rawRows: unknown[]): TeamComparisonRow[] {
   // those pages; restoring team-scoped passwords closes that vector, leaving only
   // each authorised team able to identify itself.
   const aliases = teamDisplayAliases();
-  return internalRows
+  const comparisonIdByTeamKey = new Map<string, string>();
+  const rows = internalRows
     .sort((a, b) => b.exposure_hours - a.exposure_hours
       || a.internal_team_key.localeCompare(b.internal_team_key))
-    .map(({ internal_team_key, ...row }, index) => ({
-      ...row,
-      comparison_id: `comparison-${String(index + 1).padStart(2, "0")}`,
-      team_alias: aliases[internal_team_key] ?? `Club ${String(index + 1).padStart(2, "0")}`,
-    }));
+    .map(({ internal_team_key, ...row }, index) => {
+      const comparisonRow = {
+        ...row,
+        comparison_id: `comparison-${String(index + 1).padStart(2, "0")}`,
+        team_alias: aliases[internal_team_key] ?? `Club ${String(index + 1).padStart(2, "0")}`,
+      };
+      comparisonIdByTeamKey.set(internal_team_key, comparisonRow.comparison_id);
+      return comparisonRow;
+    });
+  return { rows, comparisonIdByTeamKey };
 }
 
 export type TeamPageData = {
   dashboard: DashboardData | undefined;
   comparisons: TeamComparisonRow[];
   leagueMetrics: SettingMetricRow[];
+  /**
+   * The comparison_id of the team whose page this is, matched on the internal
+   * team key while it is still in scope. A viewer already knows which club's
+   * page they opened, so marking their own row discloses no other club's alias.
+   */
+  viewer_comparison_id: string | null;
 };
 
 /**
@@ -370,7 +395,7 @@ export async function getTeamPageData(
   season = "2024-25"
 ): Promise<TeamPageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [] };
+  if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
 
   const result = await pool.query(
     `select
@@ -405,14 +430,17 @@ export async function getTeamPageData(
     league_metrics: leagueMetricsSourceSchema.nullable(),
   }).parse(result.rows[0]);
 
+  const { rows, comparisonIdByTeamKey } = normalizeTeamComparisonsWithKeys(snapshot.comparisons);
+
   return {
     dashboard: snapshot.dashboard
       ? normalizeDashboardRow(snapshot.dashboard, "team")
       : undefined,
-    comparisons: normalizeTeamComparisons(snapshot.comparisons),
+    comparisons: rows,
     leagueMetrics: snapshot.league_metrics
       ? normalizeLeagueMetrics(snapshot.league_metrics)
       : [],
+    viewer_comparison_id: comparisonIdByTeamKey.get(teamId) ?? null,
   };
 }
 

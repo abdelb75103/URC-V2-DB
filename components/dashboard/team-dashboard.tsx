@@ -24,8 +24,10 @@ import {
 import { resolveLocationView } from '@/lib/location-view';
 import { withoutFrontFacingUnknown } from '@/lib/dashboard-visibility';
 import {
+  ComparisonScatterChart,
   ExposureTrendChart,
   ImpactBubbleChart,
+  RankSlopeChart,
   RingBreakdown,
   SETTING_COLORS,
   SEVERITY_BAND_COLORS,
@@ -33,7 +35,10 @@ import {
   SeverityArc,
   Sparkline,
   profileColor,
+  type ComparisonScatterRow,
+  type RankSlopeSeries,
 } from '@/components/dashboard/charts';
+import type { TeamColorSet } from '@/lib/team-color';
 
 type ProfileMetric =
   | 'time_loss_injuries'
@@ -125,6 +130,36 @@ function fmt(value: number | null | undefined, digits = 1) {
     maximumFractionDigits: digits,
     minimumFractionDigits: Number.isInteger(value) ? 0 : digits,
   }).format(value);
+}
+
+// Ranked lists draw bars from unrounded values, so a shared 1dp label made
+// visibly different bars read as the same number. Every ranked rate shows 1dp
+// (decision, 2026-07-25), and the bars are drawn from that same rounded value so
+// two rows displaying 3.1 render identical bars instead of contradicting the label.
+const RANKED_LIST_DIGITS: Record<ProfileMetric, number> = {
+  time_loss_injuries: 0,
+  incidence_per_1000h: 1,
+  burden_per_1000h: 1,
+  mean_severity_days: 1,
+};
+
+function fmtFixed(value: number | null | undefined, digits: number) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
+  return new Intl.NumberFormat('en-IE', {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  }).format(value);
+}
+
+function fmtRanked(value: number | null | undefined, metric: ProfileMetric) {
+  const digits = RANKED_LIST_DIGITS[metric];
+  return digits === 0 ? fmt(value, 0) : fmtFixed(value, digits);
+}
+
+/** The value a ranked bar is drawn from: rounded to what its label shows. */
+function rankedBarValue(value: number, metric: ProfileMetric) {
+  const factor = 10 ** RANKED_LIST_DIGITS[metric];
+  return Math.round(value * factor) / factor;
 }
 
 function fmtHours(value: number | null | undefined) {
@@ -307,6 +342,9 @@ function OverviewTab({
         exposure_hours: row.exposure_hours ?? null,
         incidence_per_1000h: row.incidence_per_1000h ?? null,
       }));
+  // Every monthly chart plots from September and says how many pre-window months
+  // it dropped (handled inside the chart components). The KPI sparklines and every
+  // headline total stay on the full set, so the tiles keep reconciling.
   const trend = sortByMonth(monthlyRows);
 
   const locationSettings = availableSettings(locationProfiles, ['all', 'match', 'training']);
@@ -371,9 +409,7 @@ function OverviewTab({
           label="Burden"
           value={fmt(active?.burden_per_1000h ?? (filtered ? null : headline.burden_per_1000h))}
           unit="days /1,000 h"
-        >
-          <BurdenSplit match={match} training={training} active={effectiveSetting} />
-        </StatTile>
+        />
         <StatTile
           label="Exposure"
           value={fmtHours(filtered ? active?.exposure_hours : dashboard.coverage.hours)}
@@ -521,50 +557,17 @@ function StatTile({ label, value, unit, children }: {
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
         <p className="mt-2 text-3xl font-bold leading-none tracking-tight tabular-nums text-foreground sm:text-4xl">{value}</p>
         {unit && <p className="mt-1.5 text-[11px] text-muted-foreground">{unit}</p>}
-        <div className="mt-3">{children}</div>
+        {children && <div className="mt-3">{children}</div>}
       </CardContent>
     </Card>
   );
 }
 
-function BurdenSplit({ match, training, active }: {
-  match?: SettingMetricRow;
-  training?: SettingMetricRow;
-  active: Setting;
-}) {
-  const matchValue = match?.burden_per_1000h ?? 0;
-  const trainingValue = training?.burden_per_1000h ?? 0;
-  const max = Math.max(matchValue, trainingValue, 1);
-  const bars = [
-    { key: 'match', label: 'M', value: matchValue, color: SETTING_COLORS.match },
-    { key: 'training', label: 'T', value: trainingValue, color: SETTING_COLORS.training },
-  ];
-  return (
-    <div className="space-y-1.5" aria-label="Burden split by match and training">
-      {bars.map((bar) => (
-        <div key={bar.key} className="grid grid-cols-[0.75rem_minmax(0,1fr)] items-center gap-2">
-          <span className="text-[10px] font-medium text-muted-foreground">{bar.label}</span>
-          <span className="block h-2 overflow-hidden rounded-full bg-muted">
-            <span
-              className="block h-full rounded-full transition-opacity"
-              style={{
-                width: `${bar.value > 0 ? Math.max((bar.value / max) * 100, 3) : 0}%`,
-                background: bar.color,
-                opacity: active === 'all' || active === bar.key ? 1 : 0.35,
-              }}
-            />
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ScopeChip({ show }: { show: boolean }) {
+function ScopeChip({ show, label = 'Overall' }: { show: boolean; label?: string }) {
   if (!show) return null;
   return (
     <span className="rounded border border-border/70 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-      Overall
+      {label}
     </span>
   );
 }
@@ -607,7 +610,7 @@ function SettingBench({ match, training, metric }: {
       {rows.map((entry) => {
         const value = settingMetricValue(entry.row, metric);
         return (
-          <div key={entry.key} className="grid gap-2 sm:grid-cols-[5.5rem_minmax(0,1fr)_7rem] sm:items-center sm:gap-4">
+          <div key={entry.key} className="grid gap-2 sm:grid-cols-[5.5rem_minmax(0,1fr)_9rem] sm:items-center sm:gap-4">
             <p className="text-sm font-semibold text-foreground">{entry.label}</p>
             <div className="h-7 overflow-hidden rounded-md bg-muted/60">
               <div
@@ -615,9 +618,11 @@ function SettingBench({ match, training, metric }: {
                 style={{ width: `${Math.max((value / max) * 100, 1.5)}%`, background: entry.color }}
               />
             </div>
-            <p className="text-right text-lg font-semibold tabular-nums text-foreground sm:text-xl">
+            {/* The unit sits on its own line and never breaks inside itself, so a
+                long one (days/1,000 h) cannot push the value out of the card. */}
+            <p className="min-w-0 text-right text-lg font-semibold tabular-nums text-foreground sm:text-xl">
               {fmt(value)}
-              <span className="ml-1 text-[10px] font-normal text-muted-foreground">{meta.shortUnit}</span>
+              <span className="block whitespace-nowrap text-[10px] font-normal text-muted-foreground">{meta.shortUnit}</span>
             </p>
           </div>
         );
@@ -703,6 +708,9 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
       : dashboard.setting_metrics.find((row) => row.setting === setting)?.time_loss_injuries)
     ?? 0;
   const settingTitle = setting === 'all' ? '' : `${setting[0].toUpperCase()}${setting.slice(1)} `;
+  // The tab's own setting control already filtered these rows, so the slope panel
+  // honours the filter directly and needs no scope chip of its own.
+  const slopeSeries = rankSlopeSeries(source, setting, injuryColors);
 
   return (
     <div>
@@ -712,9 +720,87 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
         </div>
         <SettingControl value={setting} settings={settings.length ? settings : ['all', 'match', 'training']} onChange={setSetting} />
       </div>
-      {rows.length ? <CommonInjuryRankings rows={rows} totalInjuries={totalInjuries} injuryColors={injuryColors} /> : <EmptyState />}
+      {rows.length ? (
+        <>
+          <CommonInjuryRankings rows={rows} totalInjuries={totalInjuries} injuryColors={injuryColors} />
+          <section aria-labelledby="common-injuries-slope" className="mt-8">
+            <h3 id="common-injuries-slope" className="mb-4 text-lg font-semibold text-foreground">
+              How rankings shift across metrics
+            </h3>
+            <Panel contentClassName="p-4 sm:p-5">
+              <RankSlopeChart
+                series={slopeSeries}
+                metricLabels={METRICS.map((metric) => metric.label)}
+                maxRank={Math.max(...slopeSeries.flatMap((entry) => entry.points.map((point) => point.rank)), 1)}
+              />
+            </Panel>
+          </section>
+        </>
+      ) : <EmptyState />}
     </div>
   );
+}
+
+/**
+ * Competition ranking on the rounded value each card displays, so the chart can
+ * never imply a gap the label denies, and the card ranked first in a lane is
+ * always rank 1 here. Ranking runs over every ranked row for the metric, not
+ * just the plotted union, so a plotted line can legitimately sit below rank 5.
+ */
+function rankIn(ranked: InjuryProfileRow[], row: InjuryProfileRow, metric: ProfileMetric) {
+  const value = rankedBarValue(metricValue(row, metric), metric);
+  return 1 + ranked.filter((other) => rankedBarValue(metricValue(other, metric), metric) > value).length;
+}
+
+/** Rows shown by the four lanes for this setting, as one line each. */
+function rankSlopeSeries(
+  source: InjuryProfileRow[],
+  setting: Setting,
+  injuryColors: Map<string, InjuryCardColor>,
+): RankSlopeSeries[] {
+  const scoped = source.filter((row) => row.setting === setting);
+  const rankedByMetric = METRICS.map((metric) => rankedForMetric(scoped, metric.key));
+  const codes = rankedLaneCodes(source, setting);
+  return [...codes]
+    .map((code) => scoped.find((row) => row.code === code))
+    .filter((row): row is InjuryProfileRow => Boolean(row))
+    .map((row) => ({
+      code: row.code,
+      label: row.label,
+      color: injuryColors.get(row.code)?.background ?? profileColor(row.code),
+      points: METRICS.map((metric, index) => ({
+        rank: rankIn(rankedByMetric[index], row, metric.key),
+        // Formatted like the cards above, so a whole number reads as 104 in both
+        // places rather than 104 on the card and 104.0 here. The rank still comes
+        // from the rounded value, so display and position cannot disagree.
+        value: fmt(metricValue(row, metric.key), RANKED_LIST_DIGITS[metric.key]),
+      })),
+    }))
+    .sort((a, b) => a.points[0].rank - b.points[0].rank || a.label.localeCompare(b.label));
+}
+
+
+/**
+ * One ranked lane: the rows with a value for this metric, highest first. The
+ * lanes, the colour map and the slope panel all read their selection from here,
+ * so they cannot drift apart when a sort changes.
+ */
+function rankedForMetric(rows: InjuryProfileRow[], metric: ProfileMetric) {
+  return [...rows]
+    .filter((row) => metricValue(row, metric) > 0)
+    .sort((a, b) => metricValue(b, metric) - metricValue(a, metric) || a.label.localeCompare(b.label));
+}
+
+const RANKED_LANE_SIZE = 5;
+
+/** The codes on screen for one setting: the union of each metric's top five. */
+function rankedLaneCodes(rows: InjuryProfileRow[], setting: Setting) {
+  const codes = new Set<string>();
+  const scoped = rows.filter((row) => row.setting === setting);
+  for (const metric of METRICS) {
+    for (const row of rankedForMetric(scoped, metric.key).slice(0, RANKED_LANE_SIZE)) codes.add(row.code);
+  }
+  return codes;
 }
 
 function commonInjuryColorMap(rows: InjuryProfileRow[]) {
@@ -729,17 +815,8 @@ function commonInjuryColorMap(rows: InjuryProfileRow[]) {
   };
 
   for (const setting of ['all', 'match', 'training'] as const) {
-    const visibleCodes = new Set<string>();
-    for (const metric of METRICS) {
-      [...rows]
-        .filter((row) => row.setting === setting && metricValue(row, metric.key) > 0)
-        .sort((a, b) => metricValue(b, metric.key) - metricValue(a, metric.key) || a.label.localeCompare(b.label))
-        .slice(0, 5)
-        .forEach((row) => {
-          addCode(row.code);
-          visibleCodes.add(row.code);
-        });
-    }
+    const visibleCodes = rankedLaneCodes(rows, setting);
+    visibleCodes.forEach(addCode);
     visibleBySetting.set(setting, visibleCodes);
   }
 
@@ -836,10 +913,7 @@ function CommonInjuryLane({
   totalInjuries: number;
   injuryColors: Map<string, InjuryCardColor>;
 }) {
-  const ranked = [...rows]
-    .filter((row) => metricValue(row, metric.key) > 0)
-    .sort((a, b) => metricValue(b, metric.key) - metricValue(a, metric.key) || a.label.localeCompare(b.label))
-    .slice(0, 5);
+  const ranked = rankedForMetric(rows, metric.key).slice(0, RANKED_LANE_SIZE);
 
   return (
     <section aria-labelledby={`common-injuries-${metric.key}`}>
@@ -934,9 +1008,15 @@ function deltaTone(delta: number) {
 function TeamComparisonTab({
   rows,
   leagueMetrics,
+  teamName,
+  viewerComparisonId,
+  teamColor,
 }: {
   rows: TeamComparisonRow[];
   leagueMetrics: SettingMetricRow[];
+  teamName: string;
+  viewerComparisonId?: string | null;
+  teamColor?: TeamColorSet;
 }) {
   const comparisonSettings: Array<{ value: ComparisonSetting; label: string }> = [
     { value: 'all', label: 'Overall' },
@@ -984,7 +1064,28 @@ function TeamComparisonTab({
   const settingLabel = activeSetting === 'all' ? 'overall' : activeSetting;
   const metricLabel = metric === 'incidence_per_1000h' ? 'incidence' : 'burden';
   const metricUnit = metric === 'incidence_per_1000h' ? 'injuries /1,000 hours' : 'days /1,000 hours';
-  const alphabetical = [...rows].sort((a, b) => a.team_alias.localeCompare(b.team_alias));
+  // The viewer's own row leads the table; the rest stay alphabetical by alias.
+  const alphabetical = [...rows].sort((a, b) => {
+    if (a.comparison_id === viewerComparisonId) return -1;
+    if (b.comparison_id === viewerComparisonId) return 1;
+    return a.team_alias.localeCompare(b.team_alias);
+  });
+  // Positions, dot area and crosshairs all read released comparison fields; the
+  // panel is fixed to match against training, so the setting control above it
+  // does not apply and says so with a chip.
+  const scatterRows: ComparisonScatterRow[] = rows
+    .filter((row) => (
+      typeof row.match?.incidence_per_1000h === 'number'
+      && typeof row.training?.incidence_per_1000h === 'number'
+    ))
+    .map((row) => ({
+      comparison_id: row.comparison_id,
+      label: row.comparison_id === viewerComparisonId ? teamName : row.team_alias,
+      match_incidence: row.match?.incidence_per_1000h ?? 0,
+      training_incidence: row.training?.incidence_per_1000h ?? 0,
+      exposure_hours: row.exposure_hours,
+      is_viewer: row.comparison_id === viewerComparisonId,
+    }));
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -1012,6 +1113,9 @@ function TeamComparisonTab({
                 metricLabel={metricLabel}
                 setting={activeSetting}
                 active={activeId === row.comparison_id}
+                isViewer={row.comparison_id === viewerComparisonId}
+                viewerColor={teamColor?.mark}
+                viewerName={teamName}
                 onHover={setHoveredId}
                 onSelect={setSelectedId}
               />
@@ -1050,7 +1154,7 @@ function TeamComparisonTab({
                         onClick={() => setSelectedId(row.comparison_id)}
                         className="flex min-h-12 w-full items-center rounded px-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:text-base lg:min-h-8"
                       >
-                        {row.team_alias}
+                        {row.comparison_id === viewerComparisonId ? teamName : row.team_alias}
                       </button>
                     </td>
                     <BenchmarkCell value={row.match?.incidence_per_1000h} average={matchBenchmark?.incidence_per_1000h} />
@@ -1068,6 +1172,18 @@ function TeamComparisonTab({
             <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-amber-400/55" />within ±10%</span>
             <span><i className="mr-1 inline-block h-2.5 w-2.5 rounded-sm bg-red-500/55" />≥10% above</span>
           </div>
+        </Panel>
+        <Panel contentClassName="p-4 sm:p-5">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-semibold text-foreground">Match against training incidence</h3>
+            <ScopeChip show label="Match & training" />
+          </div>
+          <ComparisonScatterChart
+            rows={scatterRows}
+            leagueMatchIncidence={matchBenchmark?.incidence_per_1000h}
+            leagueTrainingIncidence={trainingBenchmark?.incidence_per_1000h}
+            viewerColor={teamColor?.mark}
+          />
         </Panel>
       </div>
     </div>
@@ -1115,6 +1231,9 @@ function ComparisonBarRow({
   metricLabel,
   setting,
   active,
+  isViewer = false,
+  viewerColor,
+  viewerName,
   onHover,
   onSelect,
 }: {
@@ -1126,16 +1245,20 @@ function ComparisonBarRow({
   metricLabel: string;
   setting: ComparisonSetting;
   active: boolean;
+  isViewer?: boolean;
+  viewerColor?: string;
+  viewerName?: string;
   onHover: (id?: string) => void;
   onSelect: (id: string) => void;
 }) {
   const animatedValue = useAnimatedNumber(value);
   const metricRow = row[setting];
+  const label = isViewer && viewerName ? viewerName : row.team_alias;
   return (
     <button
       data-row-id={row.comparison_id}
       type="button"
-      aria-label={`${row.team_alias}, ${setting} ${metricLabel}: ${fmt(value)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
+      aria-label={`${label}${isViewer ? ', this team' : ''}, ${setting} ${metricLabel}: ${fmtRanked(value, metric)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
       onMouseEnter={() => onHover(row.comparison_id)}
       onMouseLeave={() => onHover(undefined)}
       onFocus={() => onHover(row.comparison_id)}
@@ -1144,14 +1267,16 @@ function ComparisonBarRow({
       className={`group grid min-h-12 w-full grid-cols-[26px_minmax(84px,140px)_minmax(80px,1fr)_76px] items-center gap-3 rounded px-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-14 sm:gap-4 lg:min-h-10 ${active ? 'bg-muted/70' : 'hover:bg-muted/40'}`}
     >
       <span className="tabular-nums text-xs text-muted-foreground transition-colors duration-300 group-hover:text-foreground">{rank}</span>
-      <span className="truncate font-semibold text-foreground sm:text-base">{row.team_alias}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="truncate font-semibold text-foreground sm:text-base">{label}</span>
+      </span>
       <span className="h-4 overflow-hidden rounded-full bg-muted sm:h-5">
         <span
-          className={`block h-full rounded-full bg-primary transition-[width,filter] ease-[cubic-bezier(0.22,1,0.36,1)] duration-[900ms] ${active ? 'brightness-125' : ''}`}
-          style={{ width: `${(value / max) * 100}%` }}
+          className={`block h-full rounded-full transition-[width,filter] ease-[cubic-bezier(0.22,1,0.36,1)] duration-[900ms] ${isViewer && viewerColor ? '' : 'bg-primary'} ${active ? 'brightness-125' : ''}`}
+          style={{ width: `${(value / max) * 100}%`, background: isViewer ? viewerColor : undefined }}
         />
       </span>
-      <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmt(animatedValue)}</span>
+      <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmtRanked(animatedValue, metric)}</span>
     </button>
   );
 }
@@ -1174,10 +1299,16 @@ function ExposureTab({
   dashboard,
   comparisons,
   exposurePreview,
+  viewerComparisonId,
+  teamColor,
+  teamName,
 }: {
   dashboard: TeamDashboardData;
   comparisons: TeamComparisonRow[];
   exposurePreview?: ExposureReviewPreview;
+  viewerComparisonId?: string | null;
+  teamColor?: TeamColorSet;
+  teamName?: string;
 }) {
   type ExposureMeasure = 'hours' | 'distance' | 'hsr';
   const [monthlyMeasure, setMonthlyMeasure] = useState<ExposureMeasure>('hours');
@@ -1232,9 +1363,17 @@ function ExposureTab({
           <h3 className="text-lg font-semibold text-foreground">Monthly exposure</h3>
           <Segmented value={monthlyMeasure} options={options} onChange={setMonthlyMeasure} label="Choose monthly exposure measure" scrollable={false} />
         </div>
-        <ExposureTrendChart rows={monthlyRows} measure={monthlyMeasure} />
+        <ExposureTrendChart rows={monthlyRows} measure={monthlyMeasure} totalHoursColor={teamColor?.mark} />
       </Panel>
-      <ExposureComparison rows={comparisonRows} measure={comparisonMeasure} onMeasureChange={setComparisonMeasure} options={options} />
+      <ExposureComparison
+        rows={comparisonRows}
+        measure={comparisonMeasure}
+        onMeasureChange={setComparisonMeasure}
+        options={options}
+        viewerComparisonId={viewerComparisonId}
+        teamName={teamName}
+        teamColor={teamColor}
+      />
     </div>
   );
 }
@@ -1244,11 +1383,17 @@ function ExposureComparison({
   measure,
   onMeasureChange,
   options,
+  viewerComparisonId,
+  teamColor,
+  teamName,
 }: {
   rows: Array<TeamComparisonRow & { hsr_distance_km?: number | null }>;
   measure: 'hours' | 'distance' | 'hsr';
   onMeasureChange: (measure: 'hours' | 'distance' | 'hsr') => void;
   options: Array<{ value: 'hours' | 'distance' | 'hsr'; label: string }>;
+  viewerComparisonId?: string | null;
+  teamColor?: TeamColorSet;
+  teamName?: string;
 }) {
   const metric = (row: typeof rows[number]) => measure === 'hours'
     ? row.exposure_hours
@@ -1276,11 +1421,17 @@ function ExposureComparison({
             const value = metric(row) ?? 0;
             const displayValue = measure === 'hours' ? fmtHours(value) : fmt(value);
             const width = value / max * 100;
+            const isViewer = row.comparison_id === viewerComparisonId;
             return (
-              <div key={row.comparison_id} className="grid min-h-11 grid-cols-[minmax(72px,8rem)_minmax(0,1fr)_4.5rem] items-center gap-3 rounded-md px-2 text-sm hover:bg-muted/40 sm:min-h-8 sm:grid-cols-[minmax(100px,10rem)_minmax(0,1fr)_6rem]">
-                <span className="truncate font-medium text-foreground">{row.team_alias}</span>
+              <div key={row.comparison_id} className={`grid min-h-11 grid-cols-[minmax(72px,8rem)_minmax(0,1fr)_4.5rem] items-center gap-3 rounded-md px-2 text-sm hover:bg-muted/40 sm:min-h-8 sm:grid-cols-[minmax(100px,10rem)_minmax(0,1fr)_6rem] ${isViewer ? 'bg-muted/40' : ''}`}>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate font-medium text-foreground">{isViewer && teamName ? teamName : row.team_alias}</span>
+                </span>
                 <span className="relative h-3 rounded-sm bg-muted" aria-hidden="true">
-                  <span className="block h-full rounded-sm bg-primary" style={{ width: `${width}%` }} />
+                  <span
+                    className={`block h-full rounded-sm ${isViewer && teamColor ? '' : 'bg-primary'}`}
+                    style={{ width: `${width}%`, background: isViewer ? teamColor?.mark : undefined }}
+                  />
                 </span>
                 <span className="text-right font-semibold tabular-nums text-foreground">{displayValue}</span>
               </div>
@@ -1318,6 +1469,7 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
         </div>
       </div>
       {rows.length ? (
+        <div className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel contentClassName="p-4">
               <MetricBars
@@ -1342,8 +1494,102 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
               </div>
             </Panel>
           </div>
+          <LocationSettingSplit profiles={locationProfiles} />
+        </div>
       ) : <EmptyState />}
     </div>
+  );
+}
+
+/**
+ * Match against training per body region, read from the released per-setting
+ * body_location rows. It shows both settings at once, so the tab's setting
+ * control does not apply to it. Counts are the default because match and
+ * training rates rest on different exposure denominators.
+ */
+function LocationSettingSplit({ profiles }: { profiles: InjuryProfileRow[] }) {
+  const [metric, setMetric] = useState<ProfileMetric>('time_loss_injuries');
+  const match = new Map(profiles.filter((row) => row.setting === 'match').map((row) => [row.code, row]));
+  const training = new Map(profiles.filter((row) => row.setting === 'training').map((row) => [row.code, row]));
+  const rows = [...new Set([...match.keys(), ...training.keys()])]
+    .map((code) => {
+      const matchRow = match.get(code);
+      const trainingRow = training.get(code);
+      return {
+        code,
+        label: matchRow?.label ?? trainingRow?.label ?? code,
+        match: matchRow ? metricValue(matchRow, metric) : 0,
+        training: trainingRow ? metricValue(trainingRow, metric) : 0,
+      };
+    })
+    .filter((row) => row.match > 0 || row.training > 0)
+    .sort((a, b) => Math.max(b.match, b.training) - Math.max(a.match, a.training)
+      || a.label.localeCompare(b.label));
+  const max = Math.max(...rows.map((row) => Math.max(row.match, row.training)), 0);
+  const meta = metricMeta(metric);
+  const barWidth = (value: number) => `${max > 0 ? Math.max((value / max) * 100, value > 0 ? 2 : 0) : 0}%`;
+
+  return (
+    <Panel contentClassName="p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-foreground">Match against training by region</h3>
+          <ScopeChip show label="Match & training" />
+        </div>
+        <MetricControl value={metric} onChange={setMetric} locationOnly />
+      </div>
+      {rows.length ? (
+        <>
+          <div className="overflow-x-auto">
+            <div className="min-w-[300px]">
+              <div className="mb-2 grid grid-cols-[2rem_minmax(0,1fr)_7rem_minmax(0,1fr)_2rem] sm:grid-cols-[2.5rem_minmax(0,1fr)_7.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <span />
+                <span className="flex items-center justify-start gap-1.5">
+                  <i className="h-2 w-2 shrink-0 rounded-full" style={{ background: SETTING_COLORS.match }} aria-hidden="true" />
+                  Match, {meta.longUnit}
+                </span>
+                <span />
+                <span className="flex items-center justify-end gap-1.5">
+                  Training, {meta.longUnit}
+                  <i className="h-2 w-2 shrink-0 rounded-full" style={{ background: SETTING_COLORS.training }} aria-hidden="true" />
+                </span>
+                <span />
+              </div>
+              <ul className="space-y-1">
+                {rows.map((row) => (
+                  <li
+                    key={row.code}
+                    className="grid min-h-8 grid-cols-[2rem_minmax(0,1fr)_7rem_minmax(0,1fr)_2rem] sm:grid-cols-[2.5rem_minmax(0,1fr)_7.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 rounded px-0.5 hover:bg-muted/40"
+                  >
+                    <span className="text-left text-[11px] tabular-nums text-muted-foreground">
+                      <span className="sr-only">{row.label} match </span>
+                      {fmtRanked(row.match, metric)}
+                    </span>
+                    <span className="flex h-3 justify-end overflow-hidden rounded-sm bg-muted/60">
+                      <span className="block h-full rounded-sm" style={{ width: barWidth(row.match), background: SETTING_COLORS.match }} />
+                    </span>
+                    <span className="truncate text-center text-xs text-foreground">{row.label}</span>
+                    <span className="flex h-3 justify-start overflow-hidden rounded-sm bg-muted/60">
+                      <span className="block h-full rounded-sm" style={{ width: barWidth(row.training), background: SETTING_COLORS.training }} />
+                    </span>
+                    <span className="text-right text-[11px] tabular-nums text-muted-foreground">
+                      <span className="sr-only">training </span>
+                      {fmtRanked(row.training, metric)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+          {/* Kept for the rate metrics only: a methodological caveat, not an instruction. */}
+          {metric !== 'time_loss_injuries' && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Match and training rates rest on different exposure denominators.
+            </p>
+          )}
+        </>
+      ) : <EmptyState>No body region has both a match and a training row.</EmptyState>}
+    </Panel>
   );
 }
 
@@ -1356,8 +1602,8 @@ function LocationDetail({ row, metric }: { row?: InjuryProfileRow; metric: Profi
       </div>
       <div className="grid grid-cols-3 border-t border-border/60 xl:flex xl:flex-1 xl:flex-col">
         <LocationMetricValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} active={metric === 'time_loss_injuries'} />
-        <LocationMetricValue label="Incidence" value={fmt(row?.incidence_per_1000h)} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
-        <LocationMetricValue label="Burden" value={fmt(row?.burden_per_1000h)} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
+        <LocationMetricValue label="Incidence" value={fmtRanked(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
+        <LocationMetricValue label="Burden" value={fmtRanked(row?.burden_per_1000h, 'burden_per_1000h')} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
       </div>
     </div>
   );
@@ -1382,7 +1628,7 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
   heatMapColors?: boolean;
   showSummary?: boolean;
 }) {
-  const max = Math.max(...rows.map((row) => metricValue(row, metric)), 1);
+  const max = Math.max(...rows.map((row) => rankedBarValue(metricValue(row, metric), metric)), 1);
   const meta = metricMeta(metric);
   const tooltipId = useId();
   const activeRow = rows.find((row) => row.code === activeCode) ?? rows[0];
@@ -1393,20 +1639,20 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
           <>
             <span className="font-semibold text-foreground">{activeRow.label}</span>
             <span className="mx-1 text-muted-foreground">:</span>
-            <span className="font-medium tabular-nums text-foreground">{fmt(activeRow[metric])} {meta.longUnit}</span>
+            <span className="font-medium tabular-nums text-foreground">{fmtRanked(activeRow[metric], metric)} {meta.longUnit}</span>
             <span className="block mt-0.5 text-muted-foreground">n = {fmt(activeRow.time_loss_injuries, 0)} time-loss cases.</span>
           </>
         ) : 'No injury type selected.'}
       </div>
       {rows.map((row) => {
-        const value = metricValue(row, metric);
+        const value = rankedBarValue(metricValue(row, metric), metric);
         const active = activeCode === row.code;
         return (
           <button
             key={row.code}
             type="button"
             aria-describedby={tooltipId}
-            aria-label={`${row.label}: ${fmt(row[metric])} ${meta.longUnit}. ${row.setting === 'all' ? 'All settings' : row.setting} cohort; n = ${fmt(row.time_loss_injuries, 0)} time-loss cases.`}
+            aria-label={`${row.label}: ${fmtRanked(row[metric], metric)} ${meta.longUnit}. ${row.setting === 'all' ? 'All settings' : row.setting} cohort; n = ${fmt(row.time_loss_injuries, 0)} time-loss cases.`}
             onMouseEnter={() => onHover(row.code)}
             onMouseLeave={() => onHover()}
             onFocus={() => onHover(row.code)}
@@ -1425,7 +1671,7 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
                 }}
               />
             </span>
-            <span className="min-w-16 text-right text-base font-semibold tabular-nums text-foreground">{fmt(row[metric])}</span>
+            <span className="min-w-16 text-right text-base font-semibold tabular-nums text-foreground">{fmtRanked(row[metric], metric)}</span>
           </button>
         );
       })}
@@ -1541,6 +1787,8 @@ export function TeamDashboard({
   leagueMetrics = [],
   supplement,
   exposurePreview,
+  viewerComparisonId = null,
+  teamColor,
 }: {
   dashboard: TeamDashboardData;
   crest: string;
@@ -1549,6 +1797,13 @@ export function TeamDashboard({
   leagueMetrics?: SettingMetricRow[];
   supplement?: DashboardSupplement;
   exposurePreview?: ExposureReviewPreview;
+  /** The viewing team's own comparison row, resolved server-side (§1.0). */
+  viewerComparisonId?: string | null;
+  /**
+   * Resolved club identity colours. Absent on the league page, where every
+   * accent-coloured mark falls back to the --primary brand cyan.
+   */
+  teamColor?: TeamColorSet;
 }) {
   const approvedProfiles = dashboard.injury_profiles ?? [];
   const profiles = withoutFrontFacingUnknown(supplement
@@ -1576,7 +1831,12 @@ export function TeamDashboard({
           <Image src={crest} alt={`${teamName} crest`} fill sizes="64px" className="object-contain" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold leading-tight text-foreground sm:text-3xl">{teamName} Dashboard</h1>
+          <h1
+            className="text-2xl font-bold leading-tight text-foreground sm:text-3xl"
+            style={teamColor && teamColor.source !== 'achromatic' ? { color: teamColor.text } : undefined}
+          >
+            {teamName} Dashboard
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">{scopeLabel} injury and exposure surveillance - {dashboard.season}</p>
         </div>
       </header>
@@ -1593,8 +1853,25 @@ export function TeamDashboard({
         </div>
 
         <TabsContent value="overview"><OverviewTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
-        <TabsContent value="comparison"><TeamComparisonTab rows={comparisons} leagueMetrics={leagueMetrics} /></TabsContent>
-        <TabsContent value="exposure"><ExposureTab dashboard={dashboard} comparisons={comparisons} exposurePreview={exposurePreview} /></TabsContent>
+        <TabsContent value="comparison">
+          <TeamComparisonTab
+            rows={comparisons}
+            leagueMetrics={leagueMetrics}
+            teamName={teamName}
+            viewerComparisonId={viewerComparisonId}
+            teamColor={teamColor}
+          />
+        </TabsContent>
+        <TabsContent value="exposure">
+          <ExposureTab
+            dashboard={dashboard}
+            comparisons={comparisons}
+            exposurePreview={exposurePreview}
+            viewerComparisonId={viewerComparisonId}
+            teamColor={teamColor}
+            teamName={teamName}
+          />
+        </TabsContent>
         <TabsContent value="common"><CommonInjuriesTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
         <TabsContent value="location"><LocationTab profiles={profiles} /></TabsContent>
         <TabsContent value="types"><InjuryTypesTab families={injuryTypeFamilies} /></TabsContent>

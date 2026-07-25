@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getTeamById } from '@/config/teams';
 import { getTeamPageData } from '@/lib/reporting';
+import { resolveTeamPalette } from '@/lib/team-color';
 import { getDashboardSupplement } from '@/lib/reporting-preview';
 import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
 import { LockedShell } from '@/components/locked-shell';
@@ -34,12 +35,15 @@ export default async function TeamPage({
   let comparisons: TeamComparisonRow[] = [];
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
+  let viewerComparisonId: string | null = null;
   try {
-    ({ dashboard, comparisons, leagueMetrics } = await getTeamPageData(team.id));
+    ({ dashboard, comparisons, leagueMetrics, viewer_comparison_id: viewerComparisonId } =
+      await getTeamPageData(team.id));
   } catch {
     dashboard = undefined;
     comparisons = [];
     leagueMetrics = [];
+    viewerComparisonId = null;
   }
   try {
     supplement = await getDashboardSupplement(team.id);
@@ -67,6 +71,8 @@ export default async function TeamPage({
       comparisons={comparisons}
       leagueMetrics={leagueMetrics}
       supplement={supplement}
+      viewerComparisonId={viewerComparisonId}
+      teamColor={resolveTeamPalette(team)}
     />
   );
 }

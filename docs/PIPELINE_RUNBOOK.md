@@ -53,6 +53,71 @@ The 2024-25 V3 league bundle is an additive successor cohort. It does not rewrit
 
 Use the normal `release-league` command with the successor classification tuple. The utility selects the versioned incremental candidates automatically. Those candidates start from the currently approved immutable league and team payloads and replace exactly three classification-dependent keys: `body_locations`, `injury_types`, and `injury_profiles`. Headline, exposure, monthly, setting, severity, coverage, method, limitations, and every other payload key are inherited unchanged. Promotion still inserts a new immutable bundle, validates all 16 member identities and canonical hashes, retires rather than deletes the predecessor, and records the run and reviewer. A rule that changes cohort membership, denominators, severity, or any other dashboard section must use a new full-release version; it must not be routed through this incremental path.
 
+## Retained V1 release ceremony (pre-restatement)
+
+The 2024-25 injury lineage uses the simplified path recorded in the 2026-07-24 changelog entry: regenerate from baseline plus ledger, read the diff summary, obtain Abdel's recorded yes, then rewrite the per-team parity exports with `export-team-dashboards`. No preflight/candidate/checksum-envelope ceremony for routine updates; anomaly checks flag but do not block.
+
+The ceremony below is retained as the record of how the retired pre-restatement releases were produced, and as the **governing path for any team/season outside that lineage**. Run it one step at a time with Abdel's per-team sign-off.
+
+### Flag-level detail
+
+**Profile gate (stage 0).** The checksummed profile JSON is the approval envelope and must match the manifest's team/season, profile/mapping metadata, decision, AI-review/approval fields, empty unresolved-adjudication list, and approved input checksums. `ingest --manifest` is required and fails before row loading or SQL unless that evidence is complete, current, checksum-matched, and approved with a `compatible` or `adapter_required` decision. `adapter_required` also requires matching-version JSON with a non-empty, structurally valid `mappings` list as defined in the profiling gate. **Profile approval never authorizes a database action:** reconfirm the exact hosted target and obtain separate approval for each named live action.
+
+**Registration (stage 2).** Each file checksum must match the manifest/profile approval. Profile approval does not authorize either live ingest.
+
+**Curated build (stage 6).** `build-curated` requires exactly one processed injury source and one processed exposure source for the team/season, and refuses a season with no fixtures. The release gate requires exactly one active, non-stale build.
+
+**Before any release.** Commit implementation changes first: `release`, including preflight, refuses a dirty Git tree.
+
+**First release for a team/season.**
+
+```bash
+python3 -m pipeline release --team <LegacyName> --season <season> --preflight
+```
+
+Executes the release gates read-only and writes the exact public-dashboard candidate to Git-ignored `data/reporting/<team_key>_dashboard_<season>_<release_hash>_preflight.json`. It never inserts a release and refuses a preflight output under `content/reporting`. Review the candidate, then run `reconcile-curated` and `verify-analysis-parity` with `--dashboard-file <candidate>` before obtaining Abdel's explicit sign-off. Then:
+
+```bash
+python3 -m pipeline release --team <LegacyName> --season <season> \
+  --preflight-file <candidate> --preflight-reviewer "Abdel Babiker"
+```
+
+The CLI blocks before SQL if any field except `generated_at` changed, and records both reviewer and candidate checksum in audit parameters. It inserts an invisible draft with an open audit run, verifies and serializes that exact snapshot, then atomically promotes it to approved/succeeded. A failed attempt is retired/failed and an identical retry receives a new immutable label. If local artifact export fails after promotion, cleanup restores the exact prior approved predecessor when one existed. Confirm independently with `diff-dashboard-json --preflight-release --old <candidate> --new content/reporting/<team_key>_dashboard_<season>.json`; only `generated_at` may differ.
+
+**Re-release for a team/season.** Snapshot the old JSON from HEAD first:
+
+```bash
+git show HEAD:content/reporting/<team_key>_dashboard_<season>.json \
+  > data/reporting/<team_key>_dashboard_<season>_previous.json
+python3 -m pipeline release --team <LegacyName> --season <season> \
+  --previous-dashboard-file data/reporting/<team_key>_dashboard_<season>_previous.json
+```
+
+The CLI caches, parses, and hashes that snapshot before its first database query, requires its contents to exactly match the latest accepted full release, applies the historical whitelist to both the current candidate and serialized draft, and records the predecessor identity plus checksum in audit parameters. Any non-whitelisted drift blocks the release. Promotion serializes on the team row, rechecks that predecessor, and atomically retires superseded approved full releases. Confirm independently with `diff-dashboard-json --old <previous> --new content/reporting/<team_key>_dashboard_<season>.json`, which must return `ALLOWED_ONLY`.
+
+**Whitelist scope.** Only `generated_at`, internal-key stripping, coverage shape, and regenerated method/limitations narrative. Any numeric, label, team-name, or analysis-window drift blocks the re-release unless separately adjudicated and approved.
+
+**Per-team closeout.** Commit that team's `content/reporting/*.json` before the next team's release, then query for protected-alias pattern hits after live loads and before closeout.
+
+**League bundle.** A team release does not update the website by itself. After all intended member releases are accepted:
+
+```bash
+python3 -m pipeline release-league --season <season> --snapshot-current \
+  --output data/reporting/<bundle_previous>.json
+```
+
+Run the exact intended `release-league` analysis/classification/cohort combination with `--preflight`, review that canonical 16-team candidate, and obtain separate approval before promotion with `--preflight-file`/`--preflight-reviewer` plus `--previous-bundle-file` when a predecessor exists.
+
+**Analysis tuples.** The served 2024-25 lineage restatement uses `--analysis-version v4 --classification-view-version reporting_classification_2026-07-22_v2 --cohort-view-version lineage_2024-25_2026-07-24_v1` (release `urc-2024-25-v4-6f04bd64d2a6-a2`, promoted 2026-07-24). The earlier season-bound V3 tuple `--analysis-version v3 --classification-view-version reporting_classification_2026-07-20_v1 --cohort-view-version season_bound_2026-07-20_v1` is retired history, kept only to read the retired releases. Do not substitute the broader dev-only diagnosis preview.
+
+**Mandatory after every accepted `release-league` promotion:**
+
+```bash
+python3 -m pipeline export-team-dashboards --season <season>
+```
+
+Otherwise the 16 committed per-team parity exports under `content/reporting/` go stale against the served bundle. That command reads the approved bundle through the existing snapshot path and rewrites them.
+
 ## How to explain one row
 
 Start with the intake checksum and source row number, then follow this chain:
