@@ -799,6 +799,8 @@ export function ExposureTrendChart({ rows, measure = 'hours', totalHoursColor = 
   );
 }
 
+const SCATTER_NARROW_BELOW = 640;
+
 export type ComparisonScatterRow = {
   comparison_id: string;
   label: string;
@@ -847,20 +849,35 @@ export function ComparisonScatterChart({
 }) {
   const others = rows.filter((row) => !row.is_viewer);
   const viewer = rows.filter((row) => row.is_viewer);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const measure = () => setNarrow(box.clientWidth > 0 && box.clientWidth < SCATTER_NARROW_BELOW);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
   if (!rows.length) {
     return <ChartEmpty reason="No club has both a match and a training incidence in the approved comparison payload." />;
   }
   const pad = (values: number[]) => [0, Math.max(...values) * 1.15 || 1] as [number, number];
+  // Wide: the training mean is labelled outside the plot, so the right margin has
+  // to hold the whole string (~102px at fontSize 10, plus the 5px offset).
+  // Narrow: that margin would cost a third of a phone's width, so the label moves
+  // inside the plot and the plot takes the space back.
+  const trainingLabel = narrow
+    ? { value: 'League training mean', position: 'insideTopLeft' as const, fill: SETTING_COLORS.training, fontSize: 10 }
+    : { value: 'League training mean', position: 'right' as const, fill: SETTING_COLORS.training, fontSize: 10 };
 
   return (
     <section aria-label="Match against training incidence for every club. Horizontal position is match incidence, vertical position is training incidence, and dot area is reported exposure.">
-      <div className="overflow-x-auto pb-2">
+      <div className="pb-2" ref={boxRef}>
         <div className="h-[360px] sm:min-w-[620px]">
           <ResponsiveContainer width="100%" height="100%">
-            {/* The right margin has to hold the whole "League training mean" label,
-                which recharts draws outside the plot at the line's right end: at
-                fontSize 10 it measures ~102px plus the 5px label offset. */}
-            <ScatterChart accessibilityLayer margin={{ top: 34, right: 116, bottom: 32, left: 14 }}>
+            <ScatterChart accessibilityLayer margin={{ top: 34, right: narrow ? 16 : 116, bottom: 32, left: 14 }}>
               <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
               <XAxis
                 type="number"
@@ -904,7 +921,7 @@ export function ComparisonScatterChart({
                   stroke={SETTING_COLORS.training}
                   strokeDasharray="4 4"
                   strokeOpacity={0.85}
-                  label={{ value: 'League training mean', position: 'right', fill: SETTING_COLORS.training, fontSize: 10 }}
+                  label={trainingLabel}
                 />
               )}
               <Scatter
