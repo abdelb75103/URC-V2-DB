@@ -86,34 +86,45 @@ function compactMonth(value: string) {
   return value.replace(/\s\d{4}$/, '');
 }
 
-function monthOrder(value: string) {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? value : parsed;
+const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+/**
+ * The zero-based month in a payload label such as `Sep 2024`, or -1.
+ *
+ * Read from the label itself rather than from `new Date(label)`: Safari rejects
+ * `"Sep 2024"` as an invalid date where V8 accepts it, which silently sorted the
+ * season alphabetically on iPhone and left the timeline showing September alone.
+ * Never reintroduce date parsing of a free-form month label here.
+ */
+function monthIndex(value: string) {
+  const name = value.trim().slice(0, 3).toLowerCase();
+  return MONTH_NAMES.indexOf(name);
 }
 
-function sortSeasonMonths<T extends { month: string }>(rows: T[]) {
+/** A sortable season-order key for a payload month label, or null. */
+function monthOrder(value: string) {
+  const month = monthIndex(value);
+  const year = Number(value.match(/\d{4}/)?.[0]);
+  return month < 0 || !Number.isFinite(year) ? null : year * 12 + month;
+}
+
+export function sortSeasonMonths<T extends { month: string }>(rows: T[]) {
   return [...rows].sort((a, b) => {
     const aOrder = monthOrder(a.month);
     const bOrder = monthOrder(b.month);
-    return typeof aOrder === 'number' && typeof bOrder === 'number'
-      ? aOrder - bOrder
-      : String(aOrder).localeCompare(String(bOrder));
+    return aOrder !== null && bOrder !== null ? aOrder - bOrder : a.month.localeCompare(b.month);
   });
 }
 
 /**
  * Every monthly chart on the site plots from September (decision, 25 July 2026,
- * site-wide): earlier months sit outside the official analysis window. Month
- * labels are read as dates where they parse and by name where they do not, so no
- * month name is hard-coded against a parsed date. Rows must already be in season
- * order. `dropped` is how many pre-window months the chart is not showing, so the
- * panel can say so rather than silently hiding them.
+ * site-wide): earlier months sit outside the official analysis window. The month
+ * is read from the label by name, never by date parsing. Rows must already be in
+ * season order. `dropped` is how many pre-window months the chart is not showing,
+ * so the panel can say so rather than silently hiding them.
  */
 export function fromSeptember<T extends { month: string }>(rows: T[]) {
-  const first = rows.findIndex((row) => {
-    const parsed = new Date(row.month);
-    return Number.isNaN(parsed.getTime()) ? /^sep/i.test(row.month.trim()) : parsed.getMonth() === 8;
-  });
+  const first = rows.findIndex((row) => monthIndex(row.month) === 8);
   return first > 0 ? { rows: rows.slice(first), dropped: first } : { rows, dropped: 0 };
 }
 
@@ -138,16 +149,14 @@ export type TooltipRow = { label: string; value: string; color?: string };
 /**
  * The one tooltip surface every chart uses: a dark, slightly transparent panel,
  * a bold header naming the category, and one compact row per series drawn in
- * that series' own colour. `cohort` carries the released sample size, which is
- * the only sample-size signal available on hover.
+ * that series' own colour. Nothing else. The cohort footer was removed on
+ * 25 July 2026: the hover states the values and stops there.
  */
 function TooltipCard({
   title,
-  cohort,
   rows,
 }: {
   title: string;
-  cohort?: string;
   rows: TooltipRow[];
 }) {
   return (
@@ -171,7 +180,6 @@ function TooltipCard({
           </div>
         ))}
       </dl>
-      {cohort && <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{cohort}</p>}
     </div>
   );
 }
@@ -197,9 +205,6 @@ function CasesTooltip({
       ] : [
         { label: 'Time-loss cases', value: `${count(row.time_loss_injuries)} cases`, color: '#ffc45c' },
       ]}
-      cohort={hasRecordedCases
-        ? `${settingLabel(row.setting)} · n = ${count(row.recorded_injuries)} recorded cases`
-        : `${settingLabel(row.setting)} · n = ${count(row.time_loss_injuries)} time-loss cases`}
     />
   );
 }
@@ -223,7 +228,6 @@ function IncidenceTooltip({
         { label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` },
         { label: 'Time-loss cases', value: `${count(row.rate_time_loss_injuries)} cases` },
       ]}
-      cohort={`${settingLabel(row.setting)} · n = ${count(row.rate_time_loss_injuries)} time-loss cases`}
     />
   );
 }
@@ -282,7 +286,7 @@ function MonthlyExposureTooltip({
       : measure === 'distance'
         ? [{ label: 'Total distance', value: `${number(distance)} km`, color: SETTING_COLORS.all }]
         : [{ label: 'HSR distance', value: `${number(hsrDistance)} km`, color: '#f59e0b' }];
-  return <TooltipCard title={label ?? row.month ?? 'Month'} rows={rows} cohort="Monthly exposure" />;
+  return <TooltipCard title={label ?? row.month ?? 'Month'} rows={rows} />;
 }
 
 function formatHsrPercentage(value: unknown) {
@@ -297,7 +301,7 @@ export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
   return (
     <>
     <div
-      className="h-[286px] min-w-[540px]"
+      className="h-[286px] sm:min-w-[540px]"
       aria-label={hasRecordedCases ? 'Monthly recorded and time-loss injury cases chart' : 'Monthly time-loss injury cases chart'}
     >
       <ResponsiveContainer width="100%" height="100%">
@@ -374,7 +378,7 @@ export function MatchIncidenceChart({ rows }: { rows: MonthlySettingRow[] }) {
 
   return (
     <>
-    <div className="h-[286px] min-w-[540px]" aria-label="Monthly injury incidence chart">
+    <div className="h-[286px] sm:min-w-[540px]" aria-label="Monthly injury incidence chart">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart accessibilityLayer data={data} margin={{ top: 70, right: 14, bottom: 28, left: 24 }}>
           <defs>
@@ -571,7 +575,6 @@ function TimelineTooltip({
     <TooltipCard
       title={label ?? row.month}
       rows={rows}
-      cohort={`${settingLabel(row.setting)} · n = ${count(row.rate_time_loss_injuries ?? row.time_loss_injuries)} time-loss cases`}
     />
   );
 }
@@ -592,7 +595,7 @@ export function SeasonTimelineChart({
 
   return (
     <>
-    <div className="h-[320px] min-w-[560px]" aria-label="Season timeline of injury cases and incidence">
+    <div className="h-[320px] sm:min-w-[560px]" aria-label="Season timeline of injury cases and incidence">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart accessibilityLayer data={data} margin={{ top: 12, right: 16, bottom: 32, left: 12 }}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
@@ -872,7 +875,7 @@ export function ComparisonScatterChart({
   return (
     <section aria-label="Match against training incidence for every club. Horizontal position is match incidence, vertical position is training incidence, and dot area is reported exposure.">
       <div className="overflow-x-auto pb-2">
-        <div className="h-[360px] min-w-[620px]">
+        <div className="h-[360px] sm:min-w-[620px]">
           <ResponsiveContainer width="100%" height="100%">
             {/* The right margin has to hold the whole "League training mean" label,
                 which recharts draws outside the plot at the line's right end: at
@@ -1380,7 +1383,7 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
           onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
           className="overflow-x-auto pb-2"
         >
-          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[430px] min-w-[680px]">
+          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[430px] sm:min-w-[680px]">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart accessibilityLayer margin={{ top: 30, right: 30, bottom: 34, left: 24 }}>
                 <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
@@ -1458,11 +1461,25 @@ export type RankSlopeSeries = {
   points: RankSlopePoint[];
 };
 
-const SLOPE_WIDTH = 960;
 const SLOPE_PLOT_TOP = 46;
 const SLOPE_PLOT_HEIGHT = 300;
-const SLOPE_GUTTER = 190;
 const SLOPE_HEIGHT = SLOPE_PLOT_TOP + SLOPE_PLOT_HEIGHT + 30;
+
+/**
+ * Two layouts, chosen from the measured container width. The wide one labels
+ * both gutters. A phone cannot carry two gutters and four column headings in
+ * 350px, and scaling the wide viewBox down to fit would put the labels at about
+ * 5px, so the narrow layout drops the right gutter and shortens the labels
+ * instead. Neither layout scrolls sideways.
+ */
+const SLOPE_LAYOUTS = {
+  wide: { width: 960, left: 190, right: 190, labelLimit: 24, fontSize: 12, bothGutters: true },
+  // The narrow right margin is the last column heading's half-width, not padding:
+  // at 14 the centred "Severity" ran off the viewBox.
+  narrow: { width: 380, left: 100, right: 34, labelLimit: 13, fontSize: 11, bothGutters: false },
+} as const;
+
+const SLOPE_NARROW_BELOW = 640;
 
 function truncateLabel(label: string, limit = 24) {
   return label.length > limit ? `${label.slice(0, limit - 1)}…` : label;
@@ -1504,12 +1521,24 @@ export function RankSlopeChart({
   maxRank: number;
 }) {
   const [activeCode, setActiveCode] = useState<string>();
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    const measure = () => setNarrow(box.clientWidth > 0 && box.clientWidth < SLOPE_NARROW_BELOW);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
   if (series.length < 2 || metricLabels.length < 2) {
     return <ChartEmpty reason="At least two ranked injuries are needed to compare rankings across metrics." />;
   }
 
-  const plotWidth = SLOPE_WIDTH - SLOPE_GUTTER * 2;
-  const columnX = (index: number) => SLOPE_GUTTER + (index * plotWidth) / (metricLabels.length - 1);
+  const layout = narrow ? SLOPE_LAYOUTS.narrow : SLOPE_LAYOUTS.wide;
+  const plotWidth = layout.width - layout.left - layout.right;
+  const columnX = (index: number) => layout.left + (index * plotWidth) / (metricLabels.length - 1);
   const rankY = (rank: number) => SLOPE_PLOT_TOP + ((rank - 1) / Math.max(maxRank - 1, 1)) * SLOPE_PLOT_HEIGHT;
   const active = series.find((entry) => entry.code === activeCode);
   const leftLabelY = slopeLabelSlots(series.map((entry) => rankY(entry.points[0].rank)));
@@ -1519,25 +1548,27 @@ export function RankSlopeChart({
     .join('; ')}`;
 
   return (
-    <div className="relative">
-      {/* The svg scales to its box, so the minimum width is the viewBox width:
-          anything narrower shrinks the gutter labels below a readable size
-          instead of scrolling, which is the trade the panel wants. */}
-      <div className="overflow-x-auto pb-2">
-        <div className="min-w-[960px]">
+    <div className="relative" ref={boxRef}>
+      <div className="pb-2">
+        <div>
           <svg
-            viewBox={`0 0 ${SLOPE_WIDTH} ${SLOPE_HEIGHT}`}
+            viewBox={`0 0 ${layout.width} ${SLOPE_HEIGHT}`}
             className="h-auto w-full"
             role="group"
             aria-label={`Rank of each injury across ${metricLabels.join(', ')}. Rank 1 is highest. Focus a line for its four ranks.`}
             onMouseLeave={() => setActiveCode(undefined)}
           >
-            <text x={18} y={SLOPE_PLOT_TOP + SLOPE_PLOT_HEIGHT / 2} fill={AXIS} fontSize={12} textAnchor="middle" transform={`rotate(-90 18 ${SLOPE_PLOT_TOP + SLOPE_PLOT_HEIGHT / 2})`}>
-              Rank (1 = highest)
-            </text>
+            {/* The narrow layout gives its whole gutter to the injury labels, so the
+                rotated title would cross them. Rank order still reads top to bottom
+                and the accessible description states it. */}
+            {layout.bothGutters && (
+              <text x={14} y={SLOPE_PLOT_TOP + SLOPE_PLOT_HEIGHT / 2} fill={AXIS} fontSize={layout.fontSize} textAnchor="middle" transform={`rotate(-90 14 ${SLOPE_PLOT_TOP + SLOPE_PLOT_HEIGHT / 2})`}>
+                Rank (1 = highest)
+              </text>
+            )}
             {metricLabels.map((label, index) => (
               <g key={label}>
-                <text x={columnX(index)} y={SLOPE_PLOT_TOP - 20} fill={AXIS} fontSize={13} fontWeight={600} textAnchor="middle">{label}</text>
+                <text x={columnX(index)} y={SLOPE_PLOT_TOP - 20} fill={AXIS} fontSize={layout.fontSize + 1} fontWeight={600} textAnchor="middle">{label}</text>
                 <line
                   x1={columnX(index)}
                   x2={columnX(index)}
@@ -1591,39 +1622,43 @@ export function RankSlopeChart({
                   {/* Leader lines: the label sits in its own evenly spaced slot, so
                       each one is tied back to the dot it describes. */}
                   <polyline
-                    points={`${SLOPE_GUTTER - 10},${leftLabelY[seriesIndex]} ${SLOPE_GUTTER - 6},${points[0][1]} ${points[0][0]},${points[0][1]}`}
-                    fill="none"
-                    stroke={entry.color}
-                    strokeWidth={1}
-                    strokeOpacity={isActive ? 0.9 : 0.4}
-                  />
-                  <polyline
-                    points={`${SLOPE_WIDTH - SLOPE_GUTTER + 10},${rightLabelY[seriesIndex]} ${SLOPE_WIDTH - SLOPE_GUTTER + 6},${points[points.length - 1][1]} ${points[points.length - 1][0]},${points[points.length - 1][1]}`}
+                    points={`${layout.left - 10},${leftLabelY[seriesIndex]} ${layout.left - 6},${points[0][1]} ${points[0][0]},${points[0][1]}`}
                     fill="none"
                     stroke={entry.color}
                     strokeWidth={1}
                     strokeOpacity={isActive ? 0.9 : 0.4}
                   />
                   <text
-                    x={SLOPE_GUTTER - 14}
+                    x={layout.left - 14}
                     y={leftLabelY[seriesIndex] + 4}
                     textAnchor="end"
-                    fontSize={12}
+                    fontSize={layout.fontSize}
                     fontWeight={isActive ? 700 : 500}
                     fill={entry.color}
                   >
-                    {truncateLabel(entry.label)}
+                    {truncateLabel(entry.label, layout.labelLimit)}
                   </text>
-                  <text
-                    x={SLOPE_WIDTH - SLOPE_GUTTER + 14}
-                    y={rightLabelY[seriesIndex] + 4}
-                    textAnchor="start"
-                    fontSize={12}
-                    fontWeight={isActive ? 700 : 500}
-                    fill={entry.color}
-                  >
-                    {truncateLabel(entry.label)}
-                  </text>
+                  {layout.bothGutters && (
+                    <>
+                      <polyline
+                        points={`${layout.width - layout.right + 10},${rightLabelY[seriesIndex]} ${layout.width - layout.right + 6},${points[points.length - 1][1]} ${points[points.length - 1][0]},${points[points.length - 1][1]}`}
+                        fill="none"
+                        stroke={entry.color}
+                        strokeWidth={1}
+                        strokeOpacity={isActive ? 0.9 : 0.4}
+                      />
+                      <text
+                        x={layout.width - layout.right + 14}
+                        y={rightLabelY[seriesIndex] + 4}
+                        textAnchor="start"
+                        fontSize={layout.fontSize}
+                        fontWeight={isActive ? 700 : 500}
+                        fill={entry.color}
+                      >
+                        {truncateLabel(entry.label, layout.labelLimit)}
+                      </text>
+                    </>
+                  )}
                 </g>
               );
             })}
@@ -1634,7 +1669,7 @@ export function RankSlopeChart({
         <div
           className="pointer-events-none absolute z-30"
           style={{
-            left: `clamp(0.5rem, ${(columnX(1) / SLOPE_WIDTH) * 100}%, calc(100% - 12rem))`,
+            left: `clamp(0.5rem, ${(columnX(1) / layout.width) * 100}%, calc(100% - 12rem))`,
             top: `${(rankY(active.points[0].rank) / SLOPE_HEIGHT) * 100}%`,
           }}
         >

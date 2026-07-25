@@ -34,6 +34,7 @@ import {
   SeasonTimelineChart,
   SeverityArc,
   Sparkline,
+  sortSeasonMonths,
   profileColor,
   type ComparisonScatterRow,
   type RankSlopeSeries,
@@ -346,6 +347,12 @@ function OverviewTab({
   // it dropped (handled inside the chart components). The KPI sparklines and every
   // headline total stay on the full set, so the tiles keep reconciling.
   const trend = sortByMonth(monthlyRows);
+  // The burden tile's own series. Monthly burden is a released value on the
+  // approved monthly rows but is not carried per setting, so this one series is
+  // always the overall season shape.
+  const burdenTrend = sortByMonth(
+    dashboard.monthly.map((row) => ({ month: row.month ?? '', burden_per_1000h: row.burden_per_1000h ?? null }))
+  ).map((row) => row.burden_per_1000h);
 
   const locationSettings = availableSettings(locationProfiles, ['all', 'match', 'training']);
   const locationSetting = locationSettings.includes(effectiveSetting) ? effectiveSetting : locationSettings[0] ?? 'all';
@@ -409,7 +416,9 @@ function OverviewTab({
           label="Burden"
           value={fmt(active?.burden_per_1000h ?? (filtered ? null : headline.burden_per_1000h))}
           unit="days /1,000 h"
-        />
+        >
+          <Sparkline values={burdenTrend} color="#ef7189" ariaLabel="Burden by month" />
+        </StatTile>
         <StatTile
           label="Exposure"
           value={fmtHours(filtered ? active?.exposure_hours : dashboard.coverage.hours)}
@@ -537,12 +546,13 @@ function OverviewTab({
   );
 }
 
+/**
+ * Season order for the sparkline series. Delegates to the charts module so the
+ * tiles and the plots order a season identically, and so neither of them parses
+ * a month label as a date: Safari rejects `"Sep 2024"` where V8 accepts it.
+ */
 function sortByMonth<T extends { month: string }>(rows: T[]) {
-  return [...rows].sort((a, b) => {
-    const left = Date.parse(a.month);
-    const right = Date.parse(b.month);
-    return Number.isNaN(left) || Number.isNaN(right) ? a.month.localeCompare(b.month) : left - right;
-  });
+  return sortSeasonMonths(rows);
 }
 
 function StatTile({ label, value, unit, children }: {
