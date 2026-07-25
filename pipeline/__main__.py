@@ -3607,9 +3607,26 @@ INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION = "20260722150000"
 LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-14_v2"
 SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-20_v3"
 LINEAGE_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-24_v4"
+ANALYSIS_WINDOW_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION = "league_dashboard_release_2026-07-25_v5"
 INJURY_MASTER_LINEAGE_MIGRATION_VERSION = "20260724180000"
 LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION = "20260724181000"
 LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION = "20260724190000"
+ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION = "20260725190000"
+ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION = "analysis_window_2024-25_2026-07-25_v1"
+ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR = "docs/evidence/analysis_window_2024-25_v5.json"
+ANALYSIS_WINDOW_V5_EVIDENCE_SHA256 = "c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d"
+ANALYSIS_WINDOW_V5_INJURY_AUDIT_LOCATOR = (
+    "docs/evidence/analysis_window_2024-25_v5_injury_cohort_audit.csv"
+)
+ANALYSIS_WINDOW_V5_EXPOSURE_EVIDENCE_LOCATOR = (
+    "docs/evidence/analysis_window_2024-25_v5_exposure_cohort_evidence.csv"
+)
+ANALYSIS_WINDOW_V5_SQL_RECONCILIATION_LOCATOR = (
+    "docs/evidence/analysis_window_2024-25_v5_sql_reconciliation.json"
+)
+ANALYSIS_WINDOW_V5_CANDIDATE_PERFORMANCE_LOCATOR = (
+    "docs/evidence/analysis_window_2024-25_v5_candidate_performance.json"
+)
 DASHBOARD_EXPORT_GRAIN_LABELS = {"weekly": "weekly", "session": "session-level", "mixed": "mixed-grain"}
 # The five dashboard cohort-exclusion reason codes analysis.coverage_v1
 # cannot reproduce under its curated-only read rule (see
@@ -5523,12 +5540,14 @@ def release_league(args: argparse.Namespace) -> None:
         ("v3", "reporting_classification_2026-07-20_v1", "season_bound_2026-07-20_v1"),
         ("v3", "reporting_classification_2026-07-22_v2", "season_bound_2026-07-20_v1"),
         ("v4", "reporting_classification_2026-07-22_v2", "lineage_2024-25_2026-07-24_v1"),
+        ("v5", "reporting_classification_2026-07-22_v2", ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION),
     }
     if (analysis_version, classification_view_version, cohort_view_version) not in supported_release_variants:
         raise SystemExit(
             "unsupported analysis/classification/cohort version combination; "
             "V3 requires an accepted reporting classification and the season-bound cohort; "
-            "V4 requires the accepted OSIICS classification and lineage cohort"
+            "V4 requires the accepted OSIICS classification and lineage cohort; "
+            "V5 requires the accepted OSIICS classification and analysis-window cohort"
         )
     uses_osiics_successor = (
         analysis_version == "v3"
@@ -5537,7 +5556,7 @@ def release_league(args: argparse.Namespace) -> None:
     # A classification-only successor inherits every non-classification field
     # from the approved immutable bundle. Recomputing the full dashboard is both
     # unnecessary and much slower than replacing the three affected sections.
-    # V4 reads the lineage branch directly rather than
+    # V4 and V5 read their respective candidate branches directly rather than
     # analysis.*_dashboard_release_candidates_v6. Those v6 views are UNION ALL
     # chains over every historical candidate generation, and a
     # `analysis_version = 'v4'` filter does not prune the legacy branches, so
@@ -5547,43 +5566,63 @@ def release_league(args: argparse.Namespace) -> None:
     # candidate views added by 20260724190000 contain exactly the rows v6
     # contributes for 'v4'; see that migration's header for the equivalence.
     league_candidate_view = (
-        "analysis.league_dashboard_release_candidates_lineage_v4"
-        if analysis_version == "v4"
+        "analysis.league_dashboard_release_candidates_analysis_window_v5"
+        if analysis_version == "v5"
         else (
-            "analysis.league_dashboard_classification_incremental_20260722_v1"
-            if uses_osiics_successor else "analysis.league_dashboard_release_candidates_v4"
+            "analysis.league_dashboard_release_candidates_lineage_v4"
+            if analysis_version == "v4"
+            else (
+                "analysis.league_dashboard_classification_incremental_20260722_v1"
+                if uses_osiics_successor else "analysis.league_dashboard_release_candidates_v4"
+            )
         )
     )
     team_candidate_view = (
-        "analysis.team_dashboard_release_candidates_lineage_v4"
-        if analysis_version == "v4"
+        "analysis.team_dashboard_release_candidates_analysis_window_v5"
+        if analysis_version == "v5"
         else (
-            "analysis.team_dashboard_classification_incremental_20260722_v1"
-            if uses_osiics_successor else "analysis.team_dashboard_release_candidates_v4"
+            "analysis.team_dashboard_release_candidates_lineage_v4"
+            if analysis_version == "v4"
+            else (
+                "analysis.team_dashboard_classification_incremental_20260722_v1"
+                if uses_osiics_successor else "analysis.team_dashboard_release_candidates_v4"
+            )
         )
     )
     release_rule_version = (
-        LINEAGE_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
-        if analysis_version == "v4"
+        ANALYSIS_WINDOW_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+        if analysis_version == "v5"
         else (
-            SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
-            if analysis_version == "v3"
-            else LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+            LINEAGE_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+            if analysis_version == "v4"
+            else (
+                SEASON_BOUND_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+                if analysis_version == "v3"
+                else LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+            )
         )
     )
     release_reason_code = (
-        "league_dashboard_release_v4"
-        if analysis_version == "v4"
+        "league_dashboard_release_v5"
+        if analysis_version == "v5"
         else (
-            "league_dashboard_release_v3"
-            if analysis_version == "v3"
-            else "league_dashboard_release_v2"
+            "league_dashboard_release_v4"
+            if analysis_version == "v4"
+            else (
+                "league_dashboard_release_v3"
+                if analysis_version == "v3"
+                else "league_dashboard_release_v2"
+            )
         )
     )
     decision_recorded_at = (
-        "2026-07-24"
-        if analysis_version == "v4"
-        else "2026-07-19" if analysis_version == "v3" else "2026-07-14"
+        "2026-07-25"
+        if analysis_version == "v5"
+        else (
+            "2026-07-24"
+            if analysis_version == "v4"
+            else "2026-07-19" if analysis_version == "v3" else "2026-07-14"
+        )
     )
     if preflight and preflight_file_arg:
         raise SystemExit("--preflight cannot be combined with --preflight-file")
@@ -5594,6 +5633,21 @@ def release_league(args: argparse.Namespace) -> None:
     if not preflight and not preflight_file_arg:
         raise SystemExit("league release requires --preflight or a reviewed --preflight-file")
 
+    v5_evidence_sha256s: dict[str, str] = {}
+    if analysis_version == "v5":
+        for locator in (
+            ANALYSIS_WINDOW_V5_INJURY_AUDIT_LOCATOR,
+            ANALYSIS_WINDOW_V5_EXPOSURE_EVIDENCE_LOCATOR,
+            ANALYSIS_WINDOW_V5_SQL_RECONCILIATION_LOCATOR,
+            ANALYSIS_WINDOW_V5_CANDIDATE_PERFORMANCE_LOCATOR,
+        ):
+            evidence_path = Path(locator)
+            if not evidence_path.is_file():
+                raise SystemExit(f"V5 row-level evidence is missing: {locator}")
+            v5_evidence_sha256s[locator] = hashlib.sha256(
+                evidence_path.read_bytes()
+            ).hexdigest()
+
     provenance = run_provenance()
     if provenance["code_version"].endswith("-dirty"):
         raise SystemExit(
@@ -5601,7 +5655,16 @@ def release_league(args: argparse.Namespace) -> None:
             f"(code_version={provenance['code_version']})"
         )
 
-    if analysis_version == "v4":
+    if analysis_version == "v5":
+        required_migrations = [
+            INJURY_MASTER_LINEAGE_MIGRATION_VERSION,
+            LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION,
+            LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION,
+            OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION,
+            INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION,
+            ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION,
+        ]
+    elif analysis_version == "v4":
         required_migrations = [
             INJURY_MASTER_LINEAGE_MIGRATION_VERSION,
             LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION,
@@ -5659,9 +5722,17 @@ def release_league(args: argparse.Namespace) -> None:
     if classification_view_version != "v2" and not classification_evidence_sha256:
         raise SystemExit("accepted reporting classification evidence is missing")
     if cohort_view_version != "v2" and not cohort_evidence_sha256:
-        raise SystemExit("accepted season-bound cohort evidence is missing")
-    if analysis_version in {"v3", "v4"}:
-        if analysis_version == "v4":
+        raise SystemExit("accepted cohort evidence is missing")
+    if analysis_version in {"v3", "v4", "v5"}:
+        if analysis_version == "v5":
+            semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
+            semantic_monthly_view = "analysis.analysis_window_monthly_v5"
+            semantic_summary_view = "analysis.analysis_window_league_summary_v5"
+            semantic_missing_error = "analysis-window semantic reconciliation returned no row"
+            semantic_mismatch_error = (
+                "analysis-window cohort, headline, or monthly reconciliation failed"
+            )
+        elif analysis_version == "v4":
             semantic_cohort_view = "analysis.lineage_injury_cohort_v1"
             semantic_monthly_view = "analysis.lineage_league_monthly_v1"
             semantic_summary_view = "analysis.lineage_league_summary_v1"
@@ -5768,7 +5839,15 @@ def release_league(args: argparse.Namespace) -> None:
     cohort_adjudications: list[dict[str, Any]] = []
     if cohort_view_version != "v2":
         cohort_params = SqlParams()
-        if analysis_version == "v4":
+        if analysis_version == "v5":
+            cohort_adjudication_filter = f"""
+              and adjudication_ref = 'ANALYSIS-WINDOW-01'
+              and evidence_sha256 = {cohort_params.text(ANALYSIS_WINDOW_V5_EVIDENCE_SHA256)}
+              and evidence_locator = {cohort_params.text(ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR)}
+              and reviewer = 'Abdel Babiker'
+              and migration_version = {cohort_params.text(ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION)}
+            """
+        elif analysis_version == "v4":
             cohort_adjudication_filter = f"""
               and adjudication_ref = 'LINEAGE-01'
               and evidence_locator = {cohort_params.text('docs/evidence/lineage_cohort_2024-25.json')}
@@ -5791,7 +5870,7 @@ def release_league(args: argparse.Namespace) -> None:
             cohort_params.values,
         )
         if len(cohort_adjudications) != 1:
-            raise SystemExit("exact season-bound cohort adjudication evidence is incomplete")
+            raise SystemExit("exact cohort adjudication evidence is incomplete")
     preflight_league_sha256 = sha256_json(dashboard)
 
     team_payload_params = SqlParams()
@@ -5813,7 +5892,7 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit(
             f"release-league requires 16 complete team dashboard payloads, found {len(team_payloads)}"
         )
-    if analysis_version in {"v3", "v4"} and any(
+    if analysis_version in {"v3", "v4", "v5"} and any(
         "injury_cohort_filters" in row["dashboard"].get("coverage", {})
         for row in team_payloads
     ):
@@ -6032,11 +6111,16 @@ def release_league(args: argparse.Namespace) -> None:
             INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
             if uses_osiics_successor
             else (
-                LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION
-                if analysis_version == "v4"
-                else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+                ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION
+                if analysis_version == "v5"
+                else (
+                    LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION
+                    if analysis_version == "v4"
+                    else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+                )
             )
         ),
+        "analysis_window_v5_evidence_sha256s": v5_evidence_sha256s,
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
     }
     if predecessor is not None:
@@ -11321,10 +11405,11 @@ def main() -> None:
         help="exact current approved bundle snapshot required for every bundle re-release",
     )
     league_release_parser.add_argument(
-        "--analysis-version", default="v2", choices=["v2", "v3", "v4"],
+        "--analysis-version", default="v2", choices=["v2", "v3", "v4", "v5"],
         help=(
             "analytical candidate family; V3 requires the accepted season-bound cohort "
-            "and V4 requires the accepted lineage cohort"
+            "and V4 requires the accepted lineage cohort; V5 requires the accepted "
+            "analysis-window cohort"
         ),
     )
     league_release_parser.add_argument(
@@ -11341,6 +11426,7 @@ def main() -> None:
             "v2",
             "season_bound_2026-07-20_v1",
             "lineage_2024-25_2026-07-24_v1",
+            ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION,
         ],
     )
     league_release_parser.add_argument(

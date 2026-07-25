@@ -1,0 +1,57 @@
+{
+  "artifact": "analysis_window_2024-25_v5_exposure_cohort_evidence.csv",
+  "status": "pending_post_migration_row_view_export",
+  "generator": "read-only v5 row-view JSON filtered to approved_member_build=true and changed rows, then piped directly to tools/generate_analysis_window_v5_evidence.py exposure-evidence --input-json -",
+  "source_view": "analysis.analysis_window_effective_exposure_cohort_v5",
+  "cohort_view_version": "analysis_window_2024-25_2026-07-25_v1",
+  "evidence_ref": "ANALYSIS-WINDOW-01",
+  "purpose": "Committed, row-level evidence for every exposure row whose v5 effective eligibility differs from its historical status, including semantic pre-URC match-rule exclusions.",
+  "input_contract": {
+    "required_columns": [
+      "stable_source_row_id",
+      "curated_build_id",
+      "approved_member_build",
+      "team",
+      "reporting_grain",
+      "period_start",
+      "period_end",
+      "historical_eligibility_status",
+      "historical_exclusion_reasons",
+      "effective_v5_eligibility_status",
+      "effective_v5_exclusion_reasons",
+      "outside_official_analysis_window_removed",
+      "pre_urc_match_rule_rejected",
+      "pre_urc_match_evidence_class",
+      "pre_urc_match_evidence_value",
+      "exposure_hours",
+      "rule_basis_code"
+    ],
+    "semantic_evidence_classes": [
+      "explicit_match",
+      "explicit_friendly",
+      "explicit_opponent_fixture",
+      "semantic_non_urc_match",
+      "verified_currie_cup_match"
+    ]
+  },
+  "output_contract": {
+    "stable_identifier": "The committed CSV uses source_row_evidence_key and curated_build_evidence_key, deterministic SHA-256 keys. It never writes stable_source_row_id or curated_build_id.",
+    "build_binding": "Every input row must carry approved_member_build=true from the v5 row view, each team may contribute only one curated build, and duplicate stable source-row identifiers are rejected.",
+    "semantic_evidence": "The committed CSV keeps a controlled semantic evidence class and a deterministic SHA-256 fingerprint. It never writes the raw source label.",
+    "selection": "The input and output contain only approved member-build rows with outside_official_analysis_window_removed or pre_urc_match_rule_rejected set true.",
+    "reason_guard": "A removed outside_official_analysis_window reason is valid only when it was the sole historical reason preventing inclusion."
+  },
+  "required_reconciliation": {
+    "pre_urc_match_rule_rejected_rows": 815,
+    "pre_urc_match_rule_rejected_hours": 865.83,
+    "rejected_rows_by_team": {
+      "Cardiff": { "rows": 164, "hours": 180.391667 },
+      "Dragons": { "rows": 348, "hours": 296.138333 },
+      "Ospreys": { "rows": 32, "hours": 23.623333 },
+      "Scarlets": { "rows": 169, "hours": 183.943333 },
+      "Sharks": { "rows": 46, "hours": 106.937222 },
+      "Zebre": { "rows": 56, "hours": 74.796111 }
+    }
+  },
+  "generation_gate": "Generate only from reviewed read-only v5 row-view results after the additive v5 migration exists. Pipe the JSON array directly to standard input, so raw semantic labels are held in memory only. The generator performs no database access and fails when the 815-row and 865.830-hour rejection reconciliation does not hold."
+}

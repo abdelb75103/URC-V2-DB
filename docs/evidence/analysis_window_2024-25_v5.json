@@ -1,0 +1,111 @@
+{
+  "evidence_version": "analysis_window_2024-25_v5",
+  "decision_ref": "ANALYSIS-WINDOW-01",
+  "reviewer": "Abdel Babiker",
+  "decision_recorded_at": "2026-07-25",
+  "decision_source": "Accepted analysis-window v5 execution handoff and documented before/after decision.",
+  "season": "2024-25",
+  "analysis_tuple": {
+    "analysis_version": "v5",
+    "classification_view_version": "reporting_classification_2026-07-22_v2",
+    "cohort_view_version": "analysis_window_2024-25_2026-07-25_v1"
+  },
+  "window": {
+    "start": "2024-09-01",
+    "end": "2025-06-30",
+    "inclusive": true
+  },
+  "lineage_boundary": {
+    "injury_master_rebuilt": false,
+    "injury_ledger_changed": false,
+    "injury_inclusion_csv_regenerated": false,
+    "exposure_files_recleaned": false,
+    "exposure_files_reingested": false,
+    "curated_exposure_builds_created": false,
+    "implementation_method": "immutable reporting-window record and additive v5 analysis views expose effective eligibility without mutating historical source, processing, curated, or release evidence"
+  },
+  "injury_rule": {
+    "dated_eligibility": "A dated included injury is v5-eligible only when its injury date is within the inclusive reporting window and all existing cohort rules are satisfied.",
+    "dated_pre_window_status": "Valid cleaned injury, excluded only from the v5 reporting cohort; it is not a master or inclusion exclusion.",
+    "undated_season_attributed": "Retain in applicable totals and non-monthly breakdowns; exclude from monthly series.",
+    "monthly_binding": "Every v5 monthly reader must bind to analysis_window_2024-25_2026-07-25_v1. Monthly time-loss totals must equal dated time-loss totals from that same v5 cohort.",
+    "authoritative_lineage": "The 3,060-row master, ordered decision ledger, and accepted 2,301-row inclusion CSV remain unchanged."
+  },
+  "exposure_rule": {
+    "historical_state_preserved": true,
+    "readmit_condition": "Remove outside_official_analysis_window only when it is the sole historical reason preventing inclusion and the effective reporting period overlaps the inclusive v5 reporting window.",
+    "other_exclusions": "Retain every other historical exclusion, including rehabilitation, return-to-play, international, other-team, academy, validity, and quality exclusions.",
+    "weekly_period_rule": "A weekly row covers its recorded start date through the following six calendar days. It remains weekly and is never converted to sessions.",
+    "pre_urc_match_scope": {
+      "start": "2024-09-01",
+      "end": "2024-09-19",
+      "inclusive": true,
+      "rule": "Exclude only clearly evidenced match, friendly, opponent-fixture, or equivalent non-URC match activity in the newly opened pre-URC band.",
+      "explicit_evidence_examples": [
+        "match",
+        "friendly",
+        "vs",
+        "versus"
+      ],
+      "semantic_interpretation": "Apply equivalent context deterministically, not one exact regular expression. Retain ambiguous labels, warm-ups, top-ups, captain's runs, Game -N training-cycle labels, and blank labels unless other evidence clearly identifies a non-URC match.",
+      "verified_required_cases": "The two verified Sharks Currie Cup match sessions dated 2024-09-08 and 2024-09-14 are excluded.",
+      "scope_limit": "Do not generalise this pre-URC rule to existing-window rows, the rest of the season, or a league-wide URC-opponent rule."
+    },
+    "match_hours": {
+      "method": "fixture-derived matches_played multiplied by 20.0",
+      "registered_urc_fixtures": 151,
+      "team_participations": 302,
+      "expected_hours": 6040.0,
+      "preseason_friendlies_included": false
+    }
+  },
+  "expected_reconciliation": {
+    "league": {
+      "included_exposure_rows": 64511,
+      "exposure_hours": 81352.919497,
+      "match_hours": 6040.0,
+      "training_hours": 75312.919497,
+      "recorded_injuries": 1658,
+      "time_loss_injuries": 785,
+      "days_lost": 17573,
+      "time_loss_incidence_per_1000_hours": 9.6493,
+      "burden_per_1000_hours": 216.0095,
+      "undated_season_attributed_injuries_in_applicable_totals": 6,
+      "weekly_reporters_with_zero_row_movement": 4
+    },
+    "pre_urc_semantic_exclusions": {
+      "rejected_rows": 815,
+      "rejected_hours": 865.83,
+      "by_team": [
+        { "team": "Cardiff", "rows": 164, "hours": 180.391667 },
+        { "team": "Dragons", "rows": 348, "hours": 296.138333 },
+        { "team": "Ospreys", "rows": 32, "hours": 23.623333 },
+        { "team": "Scarlets", "rows": 169, "hours": 183.943333 },
+        { "team": "Sharks", "rows": 46, "hours": 106.937222 },
+        { "team": "Zebre", "rows": 56, "hours": 74.796111 }
+      ]
+    },
+    "injury_change_flag": {
+      "team": "Dragons",
+      "recorded_injuries_removed": 27,
+      "time_loss_injuries_removed": 25,
+      "days_lost_removed": 1599
+    }
+  },
+  "verification_contract": {
+    "existing_v4_tuple_remains_available": true,
+    "all_team_payloads_must_reconcile": 16,
+    "league_payloads_must_reconcile": 1,
+    "weekly_reporters_remain_weekly": true,
+    "monthly_excludes_all_undated_injuries": true,
+    "no_non_window_historical_exclusion_is_removed": true,
+    "candidate_must_use_a_direct_v5_path": true
+  },
+  "evidence_artifact_locators": {
+    "before_after_report": "docs/ANALYSIS_WINDOW_2024-25_BEFORE_AFTER.md",
+    "injury_cohort_audit": "docs/evidence/analysis_window_2024-25_v5_injury_cohort_audit.csv",
+    "exposure_cohort_evidence": "docs/evidence/analysis_window_2024-25_v5_exposure_cohort_evidence.csv",
+    "exposure_cohort_evidence_schema": "docs/evidence/analysis_window_2024-25_v5_exposure_cohort_evidence.schema.json",
+    "row_identifier_policy": "Each row-level artefact uses a deterministic evidence key derived from the stable source-row identifier rather than a direct identifier or protected metadata."
+  }
+}

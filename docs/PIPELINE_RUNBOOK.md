@@ -53,6 +53,145 @@ The 2024-25 V3 league bundle is an additive successor cohort. It does not rewrit
 
 Use the normal `release-league` command with the successor classification tuple. The utility selects the versioned incremental candidates automatically. Those candidates start from the currently approved immutable league and team payloads and replace exactly three classification-dependent keys: `body_locations`, `injury_types`, and `injury_profiles`. Headline, exposure, monthly, setting, severity, coverage, method, limitations, and every other payload key are inherited unchanged. Promotion still inserts a new immutable bundle, validates all 16 member identities and canonical hashes, retires rather than deletes the predecessor, and records the run and reviewer. A rule that changes cohort membership, denominators, severity, or any other dashboard section must use a new full-release version; it must not be routed through this incremental path.
 
+### 2024-25 analysis-window v5 full release
+
+Status: accepted and independently reviewed locally; live migration and promotion pending.
+This is a full successor release because the reporting cohort, exposure denominator,
+monthly series, and headline figures change. It is not a classification-only
+incremental release.
+
+The exact v5 tuple is:
+
+```text
+analysis_version=v5
+classification_view_version=reporting_classification_2026-07-22_v2
+cohort_view_version=analysis_window_2024-25_2026-07-25_v1
+```
+
+The immutable rule evidence is
+`docs/evidence/analysis_window_2024-25_v5.json`
+(`c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d`).
+The reviewed migration path is
+`supabase/migrations/20260725190000_analysis_window_reporting_v5.sql`;
+its SHA-256 is
+`23970db6b4bc38aa91f2ca0ecf41203603c6361dc1c0fc4235a55a5f2dfcccde`.
+Do not alter any frozen migration or historical `v4` view.
+
+The required sequence is:
+
+1. Complete and verify the additive v5 migration, direct v5 candidate views,
+   release-path support, and focused tests locally. Do not apply the migration.
+2. Generate the safe injury-side evidence without replaying the inclusion
+   lineage:
+
+   ```bash
+   python3 tools/generate_analysis_window_v5_evidence.py injury-audit
+   ```
+
+   This produces the 208-row, hashed-key v5 injury cohort audit. It neither
+   writes the inclusion CSV nor its manifest.
+3. Obtain the mandatory independent review, inspect the migration SHA, static
+   scans, and local reconciliation. The v5 acceptance targets are 64,511
+   included exposure rows, 81,352.919497 exposure hours, 6,040 fixture-derived
+   match hours, 1,658 recorded injuries, 785 time-loss injuries, and 17,573
+   days lost. The 815 semantic pre-URC exclusions must total 865.830 hours;
+   the four weekly reporters move zero rows.
+4. Obtain Abdel's explicit approval for the named live Supabase/Postgres
+   target and this exact additive migration. Apply only the reviewed file with
+   `node pipeline/sql_exec.mjs supabase/migrations/20260725190000_analysis_window_reporting_v5.sql`, then
+   register its version in `supabase_migrations.schema_migrations`. The command
+   requires `SUPABASE_DB_URL` to be set from the safely parsed pooler value.
+5. Perform read-only post-migration reconciliation. Stream the reviewed,
+   build-pinned evidence result directly into the generator:
+
+   ```bash
+   node pipeline/sql_query.mjs \
+     tools/sql/analysis_window_v5_exposure_evidence.sql |
+     python3 tools/generate_analysis_window_v5_evidence.py \
+       exposure-evidence --input-json -
+   ```
+
+   The committed SQL fixes the season, requires `approved_member_build = true`,
+   and selects only changed rows. It includes `curated_build_id` in the
+   in-memory stream so the generator can reject superseded builds, duplicate
+   source rows, or multiple builds for one team. The committed output hashes
+   build IDs, stable source rows, and raw semantic labels, so none of those raw
+   values is written to disk. It must pass the six recorded team-level
+   rejection row/hour contracts as well as the league 815-row and 865.830-hour
+   gate before promotion.
+6. Run the complete read-only SQL contract and require every returned
+   `passed` value to be `true`:
+
+   ```bash
+   node pipeline/sql_query.mjs \
+     tests/analysis_window_v5_sql_reconciliation.sql |
+     tee docs/evidence/analysis_window_2024-25_v5_sql_reconciliation.json |
+     node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const r=JSON.parse(s);if(!r.length||r.some(x=>x.passed!==true))process.exit(1);console.log(`V5 SQL contracts passed: ${r.length}`)})'
+   ```
+
+   Then run the direct candidate performance contract:
+
+   ```bash
+   node pipeline/sql_query.mjs \
+     tests/analysis_window_v5_candidate_performance.sql |
+     tee docs/evidence/analysis_window_2024-25_v5_candidate_performance.json |
+     node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const [r]=JSON.parse(s);if(!r||!r.candidate_payloads_passed||Number(r.elapsed_ms)>120000)process.exit(1);console.log(`V5 direct candidate payloads: ${r.elapsed_ms} ms`)})'
+   ```
+
+   The combined direct league-plus-16-team candidate read must complete in no
+   more than 120,000 ms on the configured live pooler. This is the objective
+   guard against accidentally routing v5 through the historical union chain.
+   The two committed JSON files retain the complete non-sensitive assertion
+   rows, payload byte counts, candidate counts, and measured elapsed time.
+7. Review the generated exposure evidence and exact hashes, then create an
+   intentional evidence checkpoint commit. The working tree must be clean
+   before the following preflight. This commit binds the exact migration,
+   injury audit, exposure evidence, SQL reconciliation, and direct candidate
+   performance result used for promotion. Record all five SHA-256 values in
+   `docs/ANALYSIS_WINDOW_2024-25_BEFORE_AFTER.md` before committing.
+8. Snapshot the v4 predecessor, then preflight the exact v5 tuple:
+
+   ```bash
+   python3 -m pipeline release-league --season 2024-25 --snapshot-current \
+     --output data/reporting/urc_dashboard_2024-25_v4_previous.json
+
+   python3 -m pipeline release-league --season 2024-25 \
+     --analysis-version v5 \
+     --classification-view-version reporting_classification_2026-07-22_v2 \
+     --cohort-view-version analysis_window_2024-25_2026-07-25_v1 \
+     --preflight \
+     --output data/reporting/urc_dashboard_2024-25_v5_preflight.json
+   ```
+
+   Review all 16 team payloads, the league candidate, the Dragons change flag,
+   candidate hashes, evidence hashes, and v4 rollback route. The preflight is
+   read-only and is not promotion approval.
+9. Obtain a separate recorded approval for the exact v5 `release-league`
+   promotion, then promote the reviewed candidate:
+
+   ```bash
+   python3 -m pipeline release-league --season 2024-25 \
+     --analysis-version v5 \
+     --classification-view-version reporting_classification_2026-07-22_v2 \
+     --cohort-view-version analysis_window_2024-25_2026-07-25_v1 \
+     --previous-bundle-file data/reporting/urc_dashboard_2024-25_v4_previous.json \
+     --preflight-file data/reporting/urc_dashboard_2024-25_v5_preflight.json \
+     --preflight-reviewer "Abdel Babiker"
+
+   python3 -m pipeline export-team-dashboards --season 2024-25
+   ```
+
+   Reconcile all 16 parity exports with the approved bundle. Then record the
+   actual migration SHA, exposure-evidence hash, release ID, generated
+   timestamp, and deployed verification in the before/after report and change
+   log.
+
+Rollback is reporting-only and retains every v5 object and evidence record:
+re-promote the last approved tuple
+`v4 / reporting_classification_2026-07-22_v2 /
+lineage_2024-25_2026-07-24_v1`, then regenerate parity exports from that
+approved v4 bundle.
+
 ## Retained V1 release ceremony (pre-restatement)
 
 The 2024-25 injury lineage uses the simplified path recorded in the 2026-07-24 changelog entry: regenerate from baseline plus ledger, read the diff summary, obtain Abdel's recorded yes, then rewrite the per-team parity exports with `export-team-dashboards`. No preflight/candidate/checksum-envelope ceremony for routine updates; anomaly checks flag but do not block.

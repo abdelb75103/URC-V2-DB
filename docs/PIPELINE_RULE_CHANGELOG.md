@@ -11,6 +11,30 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-25: Accepted 2024-25 analysis-window v5 rule
+
+| Field | Value |
+|---|---|
+| Status | `implemented-locally`: accepted rule, independently reviewed additive migration, and evidence contract; live migration and promotion remain pending |
+| Rule version | `analysis_window_2024-25_2026-07-25_v1` with `analysis_version` `v5` and classification `reporting_classification_2026-07-22_v2` |
+| Carry-forward | `versioned-successor-ready`; after the tracked live migration is applied, the framework carries forward with a newly registered window per season. The 2024-25 dates and pre-URC semantic evidence are season-specific. |
+| Decision provenance | Abdel Babiker, 25 July 2026, `ANALYSIS-WINDOW-01` |
+| Immutable evidence | `docs/evidence/analysis_window_2024-25_v5.json`, SHA-256 `c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d` |
+| Reviewed migration | `20260725190000_analysis_window_reporting_v5.sql`; SHA-256 `23970db6b4bc38aa91f2ca0ecf41203603c6361dc1c0fc4235a55a5f2dfcccde` |
+| Runtime records | Live adjudication row, migration tracking row, release ID, promotion timestamp, exposure-evidence hash, and deployed verification pending the separate approved actions |
+
+**What changes.** The 2024-25 reporting cohort becomes the inclusive period 1 September 2024 through 30 June 2025 for both injuries and exposure. Dated injuries before 1 September are valid cleaned records but outside the v5 cohort. Six undated, season-attributed injuries remain in applicable totals and non-monthly breakdowns, while remaining outside monthly series. The v5 monthly successor must bind to the same v5 cohort identity as the headline and other cohort-derived readers, correcting the frozen lineage monthly reader's former season-bound binding.
+
+**Exposure semantics.** The v5 row-level effective exposure cohort starts from historical eligibility and reasons. It removes `outside_official_analysis_window` only when that is the sole reason preventing inclusion and the row's native reporting period overlaps the v5 window. All other historical exclusions remain effective. Weekly rows retain their recorded start plus six-day period and are never converted to sessions. Only in the newly opened 1 to 19 September pre-URC band, clearly evidenced non-URC match, friendly, or opponent-fixture activity is excluded. Ambiguity is inclusionary. Warm-ups, top-ups, captain's runs, `Game -N` training-cycle labels, and blanks remain unless other evidence is decisive. This rule does not alter existing-window rows or generalise a league-wide URC-opponent rule.
+
+**Lineage boundary.** This is not a re-clean. It does not rebuild or recolour the 3,060-row injury master, alter the decision ledger, regenerate the accepted 2,301-row inclusion CSV, re-clean or re-ingest exposure files, create new curated exposure builds, or run the full pipeline. Historical curated values remain immutable; v5 exposes effective eligibility through additive views. Fixture-derived match hours remain `151 × 2 × 20.0 = 6,040` and pre-season friendlies never enter match hours.
+
+**Acceptance targets, not live claims.** The reviewed v5 target is 64,511 included exposure rows, 81,352.919497 exposure hours, 75,312.919497 training hours, 1,658 recorded injuries, 785 time-loss injuries, and 17,573 days lost. It retains 6 undated injuries in applicable totals. The pre-URC semantic rule rejects 815 potential additions carrying 865.830 hours. Dragons is the largest injury-side change, with 27 fewer recorded injuries, 25 fewer time-loss injuries, and 1,599 fewer days lost. These remain promotion acceptance checks until read-only post-migration reconciliation confirms them.
+
+**Audit and rollback.** `tools/generate_analysis_window_v5_evidence.py` generates the committed injury cohort audit from the accepted inclusion CSV plus source-row mapping using deterministic evidence keys, never a player identifier. It produces 208 window-excluded injury rows, including 140 positive-day time-loss rows and 4,920 days lost. The exposure evidence is generated only after a reviewed row-view result is available: raw semantic labels are streamed as JSON to standard input and written only as a controlled evidence class plus deterministic fingerprint. Roll back reporting by re-promoting the retained v4 tuple `v4 / reporting_classification_2026-07-22_v2 / lineage_2024-25_2026-07-24_v1`; retain the additive v5 migration, adjudication, and evidence.
+
+---
+
 ## 2026-07-24: 2024-25 lineage restatement released, and Phase 5 cleanup executed
 
 | Field | Value |
@@ -40,7 +64,7 @@ The manifest is built by walking all three surfaces on which the ledger pins has
 
 The criterion was not implementable as written without violating a stronger rule. A genuine single command from edit to website would perform a live database write and a release promotion without stopping, and `AGENTS.md` binds every live write and every promotion to Abdel's explicit approval of the exact hosted target. The criterion predates that boundary being settled; the gates are worth more than the convenience. Amended wording: one command plus one review through the data layer, with the website reached by the separate, separately approved release path. Carry-forward: `carries-forward` as the definition of done for this lineage and later seasons. Recorded in `docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md` criterion 4, which retains the original wording alongside the amendment. The alternative considered and declined was building a development-only local preview command; it remains available if Abdel later wants the literal property.
 
-**Unchanged.** The replay byte-match (`e8da3caf...` inclusion CSV, `9910b585...` source-row mapping), the frozen `_v1` view family, the scientific rules, the two open ledger items (source rows 1735 and 210, still awaiting adjudication), the intentionally unpopulated `reporting.team_metric_aggregates`, the July and August exposure rows excluded as `outside_official_analysis_window`, and the access-control restoration gate, which this work does not touch.
+**Unchanged in v4.** The replay byte-match (`e8da3caf...` inclusion CSV, `9910b585...` source-row mapping), the frozen `_v1` view family, the scientific rules, the two open ledger items (source rows 1735 and 210, still awaiting adjudication), the intentionally unpopulated `reporting.team_metric_aggregates`, the historical July and August exposure exclusions, and the access-control restoration gate, which this work does not touch. The separately accepted v5 effective-cohort rule is recorded above; it does not mutate those historical rows.
 
 ---
 
