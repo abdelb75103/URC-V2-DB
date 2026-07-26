@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import io
+import json
 import os
 import sys
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -133,6 +136,35 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             '"dirty_worktree_override": dirty_release_override',
             self.source,
         )
+
+    def test_dirty_tree_override_rejects_release_owned_files_only(self) -> None:
+        self.assertEqual(
+            pipeline.release_owned_dirty_paths(
+                [
+                    "components/dashboard/charts.tsx",
+                    "pipeline/__main__.py",
+                    "docs/evidence/example.json",
+                ]
+            ),
+            ["docs/evidence/example.json", "pipeline/__main__.py"],
+        )
+        pipeline.validate_dirty_release_override(
+            ["components/dashboard/charts.tsx"],
+            ["components/dashboard/charts.tsx"],
+        )
+        with self.assertRaisesRegex(SystemExit, "unapproved paths"):
+            pipeline.validate_dirty_release_override(
+                [
+                    "components/dashboard/charts.tsx",
+                    "components/dashboard/team-dashboard.tsx",
+                ],
+                ["components/dashboard/charts.tsx"],
+            )
+        with self.assertRaisesRegex(SystemExit, "release-owned files"):
+            pipeline.validate_dirty_release_override(
+                ["config/teams.ts"],
+                ["config/teams.ts"],
+            )
 
     def test_v4_rollback_tuple_still_reaches_its_lineage_candidate_view(self) -> None:
         queries: list[str] = []
@@ -263,6 +295,82 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             pipeline.release_league(
                 release_args((V5_TUPLE[0], V5_TUPLE[1], "lineage_2024-25_2026-07-24_v1"))
             )
+
+    def test_plan_mode_separates_access_levels_without_database_access(self) -> None:
+        args = release_args(V5_TUPLE)
+        args.plan = True
+        args.snapshot_current = True
+        output = io.StringIO()
+        with (
+            patch.object(pipeline, "query_sql") as query,
+            patch.object(pipeline, "run_sql") as write,
+            redirect_stdout(output),
+        ):
+            pipeline.release_league(args)
+        query.assert_not_called()
+        write.assert_not_called()
+        plan = json.loads(output.getvalue())
+        self.assertEqual(plan["database_access"], "none")
+        self.assertEqual(
+            [step["stage"] for step in plan["steps"]],
+            [
+                "local",
+                "live_write",
+                "read_only_live",
+                "read_only_live",
+                "human_review",
+                "live_write",
+            ],
+        )
+        self.assertEqual(
+            plan["steps"][-1]["includes"],
+            "promotion and 16-team parity export",
+        )
+
+    def test_first_safe_mismatch_covers_coverage_and_headline_denominators(self) -> None:
+        dashboard = {
+            "headline": [
+                {"key": "recorded_injuries", "value": 10},
+                {"key": "time_loss_injuries", "value": 4},
+                {"key": "incidence_per_1000h", "denominator": 99},
+                {"key": "burden_per_1000h", "denominator": 100},
+            ],
+            "coverage": {"hours": 100},
+        }
+        semantic = {
+            "recorded_injuries": 10,
+            "time_loss_injuries": 4,
+            "monthly_time_loss_injuries": 4,
+            "dated_time_loss_injuries": 4,
+            "monthly_exposure_hours": 100,
+            "exposure_hours": 100,
+        }
+        self.assertEqual(
+            pipeline.first_release_payload_mismatch(dashboard, semantic),
+            ("headline.incidence_per_1000h.denominator", 99, 100),
+        )
+
+    def test_preflight_and_promotion_write_workflow_manifests(self) -> None:
+        self.assertIn("urc_league_release_preflight_manifest_v1", self.source)
+        self.assertIn("reviewed_preflight_manifest_sha256", self.source)
+        self.assertIn("urc_league_release_manifest_v1", self.source)
+        self.assertIn("write_team_dashboard_parity_exports(", self.source)
+        self.assertIn("league preflight manifest is required", self.source)
+        for bound_field in (
+            "candidate_views",
+            "required_migrations",
+            "member_input_hash",
+            "league_payload_sha256",
+            "team_payload_sha256s",
+            "evidence_sha256s",
+            "classification_evidence_sha256",
+            "cohort_evidence_sha256",
+            "classification_adjudications_sha256",
+            "cohort_adjudications_sha256",
+            "provenance",
+            "dirty_worktree_paths",
+        ):
+            self.assertIn(f'"{bound_field}"', self.source)
 
 
 if __name__ == "__main__":

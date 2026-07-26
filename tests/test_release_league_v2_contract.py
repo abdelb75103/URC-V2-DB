@@ -4,13 +4,14 @@ import inspect
 from pathlib import Path
 import unittest
 
-from pipeline.__main__ import release_league
+from pipeline.__main__ import load_league_release_candidate, release_league
 
 
 class ReleaseLeagueV2ContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = inspect.getsource(release_league)
+        cls.candidate_source = inspect.getsource(load_league_release_candidate)
 
     def test_preflight_reviews_one_public_bundle(self) -> None:
         self.assertIn('"schema_version": "urc_dashboard_bundle_v2"', self.source)
@@ -72,10 +73,17 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertIn("INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION", self.source)
 
     def test_preflight_preserves_postgres_canonical_numeric_text(self) -> None:
-        self.assertIn("document::text as bundle_payload_json", self.source)
+        self.assertIn("document::text as bundle_payload_json", self.candidate_source)
         self.assertIn("write_text_atomic(output_path, canonical_bundle_json", self.source)
         self.assertIn("reviewed_canonical_sha256 != bundle_payload_sha256", self.source)
         self.assertIn("reviewed preflight canonical hash", self.source)
+
+    def test_candidate_loader_expands_each_build_pinned_view_once(self) -> None:
+        self.assertEqual(self.candidate_source.count("from {league_candidate_view}"), 1)
+        self.assertEqual(self.candidate_source.count("from {team_candidate_view}"), 1)
+        self.assertIn("candidates as team_payloads", self.candidate_source)
+        self.assertIn("hashes as team_payload_sha256s", self.candidate_source)
+        self.assertIn("candidate_assembly_reads", self.source)
 
     def test_payload_validation_migration_uses_hashes_and_member_identities(self) -> None:
         migration = (

@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import inspect
+import os
+from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from pipeline.__main__ import (
     assert_public_payload_is_publishable,
     current_league_bundle_snapshot,
     export_team_dashboard_parity_json,
+    write_parity_export_set,
+    write_team_dashboard_parity_exports,
     without_keys,
 )
 
@@ -21,7 +27,10 @@ class ExportTeamDashboardParityTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.source = inspect.getsource(export_team_dashboard_parity_json)
+        cls.source = (
+            inspect.getsource(write_team_dashboard_parity_exports)
+            + inspect.getsource(export_team_dashboard_parity_json)
+        )
         cls.snapshot_source = inspect.getsource(current_league_bundle_snapshot)
 
     def test_exports_come_from_the_approved_bundle(self) -> None:
@@ -40,7 +49,7 @@ class ExportTeamDashboardParityTests(unittest.TestCase):
     def test_writes_the_committed_per_team_paths(self) -> None:
         self.assertIn('f"{team_key}_dashboard_{season}.json"', self.source)
         self.assertIn('Path("content") / "reporting"', self.source)
-        self.assertIn("write_json_atomic(path, public)", self.source)
+        self.assertIn("write_parity_export_set(planned)", self.source)
 
     def test_rejects_an_incomplete_payload_instead_of_writing_it(self) -> None:
         self.assertIn("approved bundle contains an incomplete team payload", self.source)
@@ -48,6 +57,53 @@ class ExportTeamDashboardParityTests(unittest.TestCase):
     def test_records_the_release_identity_it_exported(self) -> None:
         self.assertIn("**metadata", self.source)
         self.assertIn('"team_parity_exported"', self.source)
+
+    def test_expected_release_is_checked_before_any_parity_write(self) -> None:
+        with (
+            patch(
+                "pipeline.__main__.current_league_bundle_snapshot",
+                return_value=(
+                    {"schema_version": "urc_dashboard_bundle_v2", "teams": []},
+                    {"release_label": "later-release"},
+                ),
+            ),
+            self.assertRaisesRegex(SystemExit, "approved bundle changed"),
+        ):
+            write_team_dashboard_parity_exports(
+                "2024-25",
+                expected_release_label="just-promoted-release",
+            )
+
+    def test_parity_set_restores_prior_files_after_nth_replace_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first = Path(temp_dir) / "first.json"
+            second = Path(temp_dir) / "second.json"
+            first.write_text('{"version":"old-first"}\n')
+            second.write_text('{"version":"old-second"}\n')
+            real_replace = os.replace
+            interrupted = False
+
+            def fail_second(source: object, target: object) -> None:
+                nonlocal interrupted
+                if Path(target) == second and not interrupted:
+                    real_replace(source, target)
+                    interrupted = True
+                    raise KeyboardInterrupt("injected parity interruption")
+                real_replace(source, target)
+
+            with (
+                patch("pipeline.__main__.os.replace", side_effect=fail_second),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                write_parity_export_set(
+                    [
+                        (first, {"version": "new-first"}),
+                        (second, {"version": "new-second"}),
+                    ]
+                )
+
+            self.assertEqual(first.read_text(), '{"version":"old-first"}\n')
+            self.assertEqual(second.read_text(), '{"version":"old-second"}\n')
 
     def test_internal_keys_never_reach_the_committed_payload(self) -> None:
         payload = {

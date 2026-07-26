@@ -99,7 +99,61 @@ denominators and every non-coverage section are unchanged. None alters source,
 cohort or metric data.
 Do not alter any frozen migration or historical `v4` view.
 
-The required sequence is:
+#### Routine approved v5 data-update path
+
+Use the plan mode first when preparing a new reviewed change. It performs no
+database access and prints the exact local, read-only live and approved
+live-write stages:
+
+```bash
+python3 -m pipeline release-league --season 2024-25 \
+  --analysis-version v5 \
+  --classification-view-version reporting_classification_2026-07-22_v2 \
+  --cohort-view-version analysis_window_2024-25_2026-07-25_v1 \
+  --plan
+```
+
+After the data decision and exact hosted refresh are separately approved, the
+normal execution path is four commands: refresh the v5 snapshots, snapshot the
+approved predecessor, produce one definitive preflight, then promote the exact
+reviewed file. Promotion now regenerates and hashes all 16 parity exports
+automatically. Do not run a second combined payload reconstruction or a
+separate routine `export-team-dashboards` command.
+
+The preflight loads the build-pinned league and 16 team candidates once. That
+single result supplies the reviewed bundle, PostgreSQL canonical hashes and
+downstream equality checks. It writes a Git-ignored
+`<preflight>.manifest.json` sidecar recording the tuple, migration
+prerequisites, evidence hashes, candidate hashes, reconciliation status and
+timings, plus the exact code/dependency provenance and authorised dirty paths.
+Promotion requires and validates that sidecar, performs the existing
+immutable database readback, regenerates parity exports, and writes a
+Git-ignored release manifest with the export-set hash and rollback tuple.
+The parity files are staged as one set; an interrupted replacement restores
+the previous set before the command reports the post-promotion failure.
+New promotions require the sidecar. The
+`--allow-legacy-preflight-without-manifest` escape hatch exists only for an
+explicitly approved historical candidate; it is recorded in the audit
+parameters and must never be used for a newly generated preflight.
+
+Failures report the first safe aggregate mismatch in reading order, including
+coverage hours and both headline rate denominators. A parity-export failure
+after database promotion is reported explicitly as a promoted release requiring
+`export-team-dashboards`; rerun that export command before closeout.
+
+| Routine release spine | Commands | Candidate expansion |
+|---|---:|---:|
+| Before | 7: refresh, two timing reads, predecessor, preflight, promotion, parity export | League and team candidates were read for payloads, then expanded again for canonical hashing |
+| Now | 4: refresh, predecessor, preflight, promotion plus parity export | One combined build-pinned read for candidate assembly; promotion retains one separate database validation read |
+
+The direct snapshot timings measured in the accepted v5 run were about 8 ms for
+the league and 25 ms for all teams. The new path removes the duplicate combined
+candidate expansion, so routine candidate loading should remain in the
+tens-of-milliseconds range rather than paying that graph twice. Semantic,
+evidence, protected-alias and immutable-promotion gates remain unchanged, so
+whole-command time still depends on those required checks.
+
+The initial v5 implementation and migration sequence was:
 
 1. Complete and verify the additive v5 migration, direct v5 candidate views,
    release-path support, and focused tests locally. Do not apply the migration.
@@ -208,10 +262,12 @@ The required sequence is:
    intentional evidence checkpoint commit. By default the working tree must be
    clean before preflight. When Abdel explicitly authorises concurrent work,
    commit every release-owned file and set
-   `PIPELINE_ALLOW_DIRTY_RELEASE_LEAGUE=1`; the release records
-   `dirty_worktree_override=true` and leaves unrelated paths untouched. Never
-   use this exception to release uncommitted pipeline, migration, evidence or
-   payload changes. This commit binds the exact migration,
+   `PIPELINE_ALLOW_DIRTY_RELEASE_LEAGUE=1` plus the exact comma-separated
+   unrelated paths in `PIPELINE_ALLOWED_DIRTY_RELEASE_LEAGUE_PATHS`. The
+   release records both values, rejects every dirty path outside that exact
+   allowlist, and always rejects uncommitted pipeline, migration, test,
+   evidence, runbook, lockfile or reporting-payload changes. This commit binds
+   the exact migration,
    injury audit, exposure evidence, SQL reconciliation, and direct candidate
    performance result used for promotion. Record the SHA-256 values for all
    four migrations, the injury audit, exposure evidence, SQL reconciliation
@@ -237,7 +293,8 @@ The required sequence is:
    candidate hashes, evidence hashes, and v4 rollback route. The preflight is
    read-only and is not promotion approval.
 9. Obtain a separate recorded approval for the exact v5 `release-league`
-   promotion, then promote the reviewed candidate:
+   promotion, then promote the reviewed candidate. Successful promotion also
+   regenerates and hashes the 16 parity exports:
 
    ```bash
    node pipeline/run_with_pooler.mjs python3 -m pipeline \
@@ -248,15 +305,12 @@ The required sequence is:
      --previous-bundle-file data/reporting/urc_dashboard_2024-25_v4_previous.json \
      --preflight-file data/reporting/urc_dashboard_2024-25_v5_preflight.json \
      --preflight-reviewer "Abdel Babiker"
-
-   node pipeline/run_with_pooler.mjs python3 -m pipeline \
-     export-team-dashboards --season 2024-25
    ```
 
-   Reconcile all 16 parity exports with the approved bundle. Then record the
-   actual migration SHA, exposure-evidence hash, release ID, generated
-   timestamp, and deployed verification in the before/after report and change
-   log.
+   Confirm that the command reports `team_count=16`, an export-set hash and a
+   release-manifest path. Then record the actual migration SHA,
+   exposure-evidence hash, release ID, generated timestamp, and deployed
+   verification in the before/after report and change log.
 
 Rollback is reporting-only and retains every v5 object and evidence record:
 re-promote the last approved tuple
@@ -321,13 +375,18 @@ Run the exact intended `release-league` analysis/classification/cohort combinati
 
 **Analysis tuples.** The served 2024-25 lineage restatement uses `--analysis-version v4 --classification-view-version reporting_classification_2026-07-22_v2 --cohort-view-version lineage_2024-25_2026-07-24_v1` (release `urc-2024-25-v4-6f04bd64d2a6-a2`, promoted 2026-07-24). The earlier season-bound V3 tuple `--analysis-version v3 --classification-view-version reporting_classification_2026-07-20_v1 --cohort-view-version season_bound_2026-07-20_v1` is retired history, kept only to read the retired releases. Do not substitute the broader dev-only diagnosis preview.
 
-**Mandatory after every accepted `release-league` promotion:**
+**Parity export after `release-league`.** Successful promotion now refreshes
+the 16 committed per-team parity exports automatically and reports their
+aggregate export-set hash. If that post-promotion step fails, the command says
+that the database promotion succeeded and exits non-zero. Recover the local
+parity state with:
 
 ```bash
 python3 -m pipeline export-team-dashboards --season <season>
 ```
 
-Otherwise the 16 committed per-team parity exports under `content/reporting/` go stale against the served bundle. That command reads the approved bundle through the existing snapshot path and rewrites them.
+That recovery command reads the approved bundle through the existing snapshot
+path and rewrites the same 16 files.
 
 ## How to explain one row
 
