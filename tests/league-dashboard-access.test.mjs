@@ -37,6 +37,7 @@ test('league dashboard uses the approved database consumer view and fails closed
   assert.match(page, /force-dynamic/);
   assert.match(page, /Dashboard unavailable/);
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
+  assert.doesNotMatch(page, /getExposureReviewPreview|exposurePreview/);
 
   assert.match(reporting, /reporting\.latest_league_dashboard_v3/);
   assert.match(reporting, /where season = \$1/);

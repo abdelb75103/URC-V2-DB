@@ -2,8 +2,8 @@ import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 import { LockedShell } from '@/components/locked-shell';
 import { StaticImages } from '@/lib/placeholder-images';
 import { getLeaguePageData } from '@/lib/reporting';
-import { getDashboardSupplement, getExposureReviewPreview } from '@/lib/reporting-preview';
-import type { DashboardSupplement, ExposureReviewPreview, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
+import { getDashboardSupplement } from '@/lib/reporting-preview';
+import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -13,7 +13,6 @@ export default async function UrcOverallPage() {
   let comparisons: TeamComparisonRow[] = [];
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
-  let exposurePreview: ExposureReviewPreview | undefined;
   try {
     ({ dashboard, comparisons, leagueMetrics } = await getLeaguePageData());
   } catch {
@@ -25,11 +24,6 @@ export default async function UrcOverallPage() {
     supplement = await getDashboardSupplement('urc');
   } catch {
     supplement = undefined;
-  }
-  try {
-    exposurePreview = await getExposureReviewPreview();
-  } catch {
-    exposurePreview = undefined;
   }
 
   if (!dashboard) {
@@ -52,7 +46,6 @@ export default async function UrcOverallPage() {
       comparisons={comparisons}
       leagueMetrics={leagueMetrics}
       supplement={supplement}
-      exposurePreview={exposurePreview}
     />
   );
 }
