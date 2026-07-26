@@ -58,17 +58,18 @@ select
   case when count(distinct exposure.reporting_grain) = 1
     then min(exposure.reporting_grain) else 'mixed' end as exposure_grain,
   coalesce(scope.scope_status_counts, '{}'::jsonb) as scope_status_counts,
-  window.season_start as analysis_window_start,
-  window.season_end as analysis_window_end
+  reporting_window.season_start as analysis_window_start,
+  reporting_window.season_end as analysis_window_end
 from member_exposure exposure
-join analysis.reporting_season_windows_v3 window
-  on window.season = exposure.season
- and window.cohort_view_version =
+join analysis.reporting_season_windows_v3 reporting_window
+  on reporting_window.season = exposure.season
+ and reporting_window.cohort_view_version =
    'analysis_window_2024-25_2026-07-25_v1'
 left join scope_counts scope
   using (curated_build_id, team_key, season)
 group by exposure.curated_build_id, exposure.team_key, exposure.season,
-  scope.scope_status_counts, window.season_start, window.season_end;
+  scope.scope_status_counts, reporting_window.season_start,
+  reporting_window.season_end;
 
 create unique index analysis_window_team_coverage_v5_snapshot_key
   on analysis.analysis_window_team_coverage_v5_snapshot
