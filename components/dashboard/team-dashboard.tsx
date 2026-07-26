@@ -27,7 +27,6 @@ import {
   ComparisonScatterChart,
   ExposureTrendChart,
   ImpactBubbleChart,
-  RingBreakdown,
   SETTING_COLORS,
   SEVERITY_BAND_COLORS,
   SeasonTimelineChart,
@@ -120,6 +119,9 @@ const FALLBACK_INJURY_COLORS = [
 const CONTACT_RING_COLORS: Record<string, string> = {
   contact: '#a78bfa',
   non_contact: '#fb923c',
+  // Contact mechanism keeps its unclassified share visible (request, 2026-07-26):
+  // the reader needs to know how much of the split is not evidenced.
+  unknown: '#94a3b8',
 };
 
 function fmt(value: number | null | undefined, digits = 1) {
@@ -374,14 +376,18 @@ function OverviewTab({
     .filter((row) => includeZeroDay || row.key !== 'zero')
     .map((row) => ({ ...row, color: SEVERITY_BAND_COLORS[row.key] }));
 
-  const contactRows = withoutFrontFacingUnknown(supplement?.contact_distribution ?? [])
+  // Unlike the other breakdowns this one keeps its Unknown slice, so the ring
+  // reads as a share of all cases rather than of the classified ones only.
+  const contactOrder = ['contact', 'non_contact', 'unknown'];
+  const contactRows = (supplement?.contact_distribution ?? [])
     .filter((row) => row.setting === effectiveSetting)
     .map((row) => ({
       key: row.key,
       label: row.label,
       value: row.time_loss_injuries,
-      color: CONTACT_RING_COLORS[row.key],
-    }));
+      color: CONTACT_RING_COLORS[row.key] ?? CONTACT_RING_COLORS.unknown,
+    }))
+    .sort((a, b) => contactOrder.indexOf(a.key) - contactOrder.indexOf(b.key));
 
   return (
     <div className="space-y-5">
@@ -441,7 +447,7 @@ function OverviewTab({
         </div>
       </Panel>
 
-      <div className={`grid gap-5 ${contactRows.length ? 'xl:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]' : 'xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]'}`}>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h3 className="text-lg font-semibold text-foreground">Injury Location</h3>
@@ -512,33 +518,36 @@ function OverviewTab({
           ) : <EmptyState />}
         </Panel>
 
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
-          <Panel contentClassName="p-4 sm:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-semibold text-foreground">Severity</h3>
-                <ScopeChip show={effectiveSetting !== 'all' && !perSettingSeverity} />
-              </div>
-              <CheckToggle checked={includeZeroDay} onChange={setIncludeZeroDay} label="Include 0-day" />
+        <Panel contentClassName="p-4 sm:p-5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-foreground">Severity</h3>
+              <ScopeChip show={effectiveSetting !== 'all' && !perSettingSeverity} />
             </div>
-            <SeverityArc rows={severityRows} />
-          </Panel>
-          {contactRows.length > 0 && (
-            <Panel contentClassName="p-4 sm:p-5">
-              <h3 className="mb-3 text-lg font-semibold text-foreground">Contact mechanism</h3>
-              <RingBreakdown rows={contactRows} centerLabel="classified cases" valueLabel="cases" />
-            </Panel>
-          )}
-        </div>
+            <CheckToggle checked={includeZeroDay} onChange={setIncludeZeroDay} label="Include 0-day" />
+          </div>
+          <SeverityArc rows={severityRows} />
+        </Panel>
       </div>
 
-      <Panel contentClassName="p-4 sm:p-5">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-lg font-semibold text-foreground">Match vs training</h3>
-          <MetricControl value={benchMetric} onChange={setBenchMetric} />
-        </div>
-        <SettingBench match={match} training={training} metric={benchMetric} />
-      </Panel>
+      {/* Contact mechanism sits beside the match/training bench so the setting
+          split is read with the mechanism that produced it. The bench keeps the
+          wider column; the ring is the compact square card. */}
+      <div className={`grid gap-5 ${contactRows.length ? 'xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : ''}`}>
+        {contactRows.length > 0 && (
+          <Panel contentClassName="p-4 sm:p-5">
+            <h3 className="mb-3 text-lg font-semibold text-foreground">Contact mechanism</h3>
+            <SeverityArc rows={contactRows} scaleLabels={null} ariaLabel="Contact mechanism breakdown" />
+          </Panel>
+        )}
+        <Panel contentClassName="p-4 sm:p-5">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold text-foreground">Match vs training</h3>
+            <MetricControl value={benchMetric} onChange={setBenchMetric} />
+          </div>
+          <SettingBench match={match} training={training} metric={benchMetric} />
+        </Panel>
+      </div>
     </div>
   );
 }
@@ -634,10 +643,9 @@ function SettingBench({ match, training, metric }: {
           </div>
         );
       })}
-      <div className="grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-3">
+      <div className="grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2">
         <BenchFoot label="Match cases" value={fmt(match?.time_loss_injuries, 0)} />
         <BenchFoot label="Training cases" value={fmt(training?.time_loss_injuries, 0)} />
-        <BenchFoot label="Match exposure share" value={matchExposureShare(match, training)} />
       </div>
     </div>
   );
@@ -646,14 +654,6 @@ function SettingBench({ match, training, metric }: {
 function settingMetricValue(row: SettingMetricRow | undefined, metric: ProfileMetric) {
   const value = row?.[metric];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function matchExposureShare(match?: SettingMetricRow, training?: SettingMetricRow) {
-  const matchHours = match?.exposure_hours ?? 0;
-  const trainingHours = training?.exposure_hours ?? 0;
-  const total = matchHours + trainingHours;
-  if (!total) return 'Not available';
-  return `${Math.round((matchHours / total) * 100)}%`;
 }
 
 function BenchFoot({ label, value }: { label: string; value: string }) {
@@ -1477,7 +1477,11 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
               </div>
             </Panel>
           </div>
-          <LocationSettingSplit profiles={locationProfiles} />
+          <SettingSplitBars
+            profiles={locationProfiles}
+            title="Match against training by region"
+            emptyMessage="No body region has both a match and a training row."
+          />
         </div>
       ) : <EmptyState />}
     </div>
@@ -1485,12 +1489,17 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
 }
 
 /**
- * Match against training per body region, read from the released per-setting
- * body_location rows. It shows both settings at once, so the tab's setting
- * control does not apply to it. Counts are the default because match and
- * training rates rest on different exposure denominators.
+ * Match against training per category, read from the released per-setting rows
+ * (body regions on the location tab, injury type families on the types tab). It
+ * shows both settings at once, so the tab's setting control does not apply to
+ * it. Counts are the default because match and training rates rest on different
+ * exposure denominators.
  */
-function LocationSettingSplit({ profiles }: { profiles: InjuryProfileRow[] }) {
+function SettingSplitBars({ profiles, title, emptyMessage }: {
+  profiles: ProfileMetricRow[];
+  title: string;
+  emptyMessage: string;
+}) {
   const [metric, setMetric] = useState<ProfileMetric>('time_loss_injuries');
   const match = new Map(profiles.filter((row) => row.setting === 'match').map((row) => [row.code, row]));
   const training = new Map(profiles.filter((row) => row.setting === 'training').map((row) => [row.code, row]));
@@ -1516,7 +1525,7 @@ function LocationSettingSplit({ profiles }: { profiles: InjuryProfileRow[] }) {
     <Panel contentClassName="p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-foreground">Match against training by region</h3>
+          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
           <ScopeChip show label="Match & training" />
         </div>
         <MetricControl value={metric} onChange={setMetric} locationOnly />
@@ -1571,7 +1580,7 @@ function LocationSettingSplit({ profiles }: { profiles: InjuryProfileRow[] }) {
             </p>
           )}
         </>
-      ) : <EmptyState>No body region has both a match and a training row.</EmptyState>}
+      ) : <EmptyState>{emptyMessage}</EmptyState>}
     </Panel>
   );
 }
@@ -1695,25 +1704,32 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
         </div>
       </div>
       {rows.length ? (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
-          <Panel contentClassName="p-4">
-            <InjuryTypeRanking
-              rows={rows}
-              metric={metric as InjuryTypeMetric}
-              activeCode={activeCode}
-              selectedCode={pinnedCode}
-              onHover={setHoveredCode}
-              onSelect={setSelectedCode}
-            />
-          </Panel>
-          <Panel contentClassName="p-4">
-            <InjuryTypeDossier
-              row={activeRow}
-              metric={metric as InjuryTypeMetric}
-              rank={activeRank}
-              total={rows.length}
-            />
-          </Panel>
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
+            <Panel contentClassName="p-4">
+              <InjuryTypeRanking
+                rows={rows}
+                metric={metric as InjuryTypeMetric}
+                activeCode={activeCode}
+                selectedCode={pinnedCode}
+                onHover={setHoveredCode}
+                onSelect={setSelectedCode}
+              />
+            </Panel>
+            <Panel contentClassName="p-4">
+              <InjuryTypeDossier
+                row={activeRow}
+                metric={metric as InjuryTypeMetric}
+                rank={activeRank}
+                total={rows.length}
+              />
+            </Panel>
+          </div>
+          <SettingSplitBars
+            profiles={classifiedFamilies}
+            title="Match against training by injury type"
+            emptyMessage="No injury type has both a match and a training row."
+          />
         </div>
       ) : <EmptyState />}
     </div>

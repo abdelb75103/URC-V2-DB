@@ -645,7 +645,20 @@ export function SeasonTimelineChart({
   );
 }
 
-export function SeverityArc({ rows }: { rows: RingDatum[] }) {
+/**
+ * Half-ring band breakdown. Severity keeps its ordered least-to-most scale
+ * labels; other ordered-but-unranked breakdowns (contact mechanism) pass
+ * `scaleLabels={null}` to drop the scale row and reuse the same mark.
+ */
+export function SeverityArc({
+  rows,
+  scaleLabels = ['Least severe', 'Most severe'],
+  ariaLabel = 'Severity band breakdown',
+}: {
+  rows: RingDatum[];
+  scaleLabels?: [string, string] | null;
+  ariaLabel?: string;
+}) {
   const data = rows.filter((row) => row.value > 0);
   const total = data.reduce((sum, row) => sum + row.value, 0);
   const [selectedKey, setSelectedKey] = useState<string>();
@@ -654,7 +667,7 @@ export function SeverityArc({ rows }: { rows: RingDatum[] }) {
 
   return (
     <div>
-      <div className="relative mx-auto h-[124px] w-full max-w-[240px]" aria-label="Severity band breakdown">
+      <div className="relative mx-auto h-[124px] w-full max-w-[240px]" aria-label={ariaLabel}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -690,11 +703,13 @@ export function SeverityArc({ rows }: { rows: RingDatum[] }) {
           </span>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-        <span>Least severe</span>
-        <span>Most severe</span>
-      </div>
-      <div className="mt-1 space-y-1">
+      {scaleLabels && (
+        <div className="mt-3 flex items-center justify-between px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <span>{scaleLabels[0]}</span>
+          <span>{scaleLabels[1]}</span>
+        </div>
+      )}
+      <div className={`${scaleLabels ? 'mt-1' : 'mt-3'} space-y-1`}>
         {data.map((row, index) => {
           const active = selected?.key === row.key;
           return (
