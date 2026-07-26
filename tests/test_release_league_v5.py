@@ -61,6 +61,8 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             pipeline.ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION,
             pipeline.ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION,
             pipeline.ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION,
+            pipeline.CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION,
+            pipeline.CONTACT_DISTRIBUTION_READER_V4_MIGRATION_VERSION,
         ]
 
         def query(sql: str, _values: list[object] | None = None) -> list[dict[str, str]]:

@@ -5,6 +5,7 @@ import type {
   AnalyticsRow,
   Coverage,
   DashboardData,
+  DistributionRow,
   HeadlineMetric,
   InjuryProfileRow,
   InjuryTypeFamilyRow,
@@ -95,6 +96,14 @@ const severityRowSchema = z.object({
   days_lost: z.number(),
 });
 
+const distributionRowSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  setting: z.enum(["all", "match", "training", "unknown"]),
+  recorded_injuries: z.number(),
+  time_loss_injuries: z.number(),
+});
+
 const coverageSchema = z
   .object({
     exposure_rows: z.number(),
@@ -158,6 +167,9 @@ const dashboardRowSchema = z.object({
   injury_profiles: z.array(injuryProfileSchema),
   injury_type_families: z.array(injuryTypeFamilySchema),
   severity_distribution: z.array(severityRowSchema),
+  // Optional: releases published before the 2026-07-26 contact-ring change do
+  // not carry this key, and the v3 reader views do not project it.
+  contact_distribution: z.array(distributionRowSchema).nullish(),
   prior_season: z.object({
     season: z.string(),
     status: z.string(),
@@ -226,9 +238,9 @@ function teamDisplayAliases(): Record<string, string> {
 /**
  * Reads the latest approved release for a team from
  * reporting.latest_team_dashboard_v5 and validates it into DashboardData.
- * The V4 consumer view keeps the allowlisted immutable snapshot projection,
+ * The V5 consumer view keeps the allowlisted immutable snapshot projection,
  * adds the versioned injury-type family roll-up, and follows audited
- * correction-aware bundle promotion.
+ * correction-aware bundle promotion while retaining contact distribution.
  *
  * Fail-closed contract:
  * - No reader credential or no approved release -> undefined (the dynamic
@@ -246,7 +258,8 @@ export async function getTeamDashboard(
   const result = await pool.query(
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
-            injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
+            injury_types, injury_profiles, injury_type_families, severity_distribution,
+            contact_distribution, prior_season,
             limitations
      from reporting.latest_team_dashboard_v5
      where team_key = $1 and season = $2`,
@@ -273,7 +286,8 @@ export async function getLeagueDashboard(
   const result = await pool.query(
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
-            injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
+            injury_types, injury_profiles, injury_type_families, severity_distribution,
+            contact_distribution, prior_season,
             limitations
      from reporting.latest_league_dashboard_v5
      where season = $1`,
@@ -403,7 +417,8 @@ export async function getTeamPageData(
        (select to_jsonb(team_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
+                 injury_types, injury_profiles, injury_type_families, severity_distribution,
+                 contact_distribution, prior_season,
                  limitations
           from reporting.latest_team_dashboard_v5
           where team_key = $1 and season = $2
@@ -416,6 +431,8 @@ export async function getTeamPageData(
            where season = $2
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
+       -- Deliberately still v3: this subquery projects only coverage, headline
+       -- and setting_metrics, so it gains nothing from the v4 contact column.
        (select to_jsonb(league_metrics_row) from (
           select coverage, headline, setting_metrics
           from reporting.latest_league_dashboard_v5
@@ -463,7 +480,8 @@ export async function getLeaguePageData(
        (select to_jsonb(league_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
+                 injury_types, injury_profiles, injury_type_families, severity_distribution,
+                 contact_distribution, prior_season,
                  limitations
           from reporting.latest_league_dashboard_v5
           where season = $1
@@ -612,6 +630,11 @@ function normalizeDashboardRow(
       })),
     })) as InjuryTypeFamilyRow[],
     severity_distribution: row.severity_distribution.map(stripNulls) as SeverityRow[],
+    ...(row.contact_distribution
+      ? {
+          contact_distribution: row.contact_distribution.map(stripNulls) as DistributionRow[],
+        }
+      : {}),
     prior_season: row.prior_season,
     limitations: row.limitations,
   };

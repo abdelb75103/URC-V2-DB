@@ -111,7 +111,7 @@ export type DescriptiveConsequenceSummary = {
 export type DistributionRow = {
   key: string;
   label: string;
-  setting: 'all' | 'match' | 'training';
+  setting: 'all' | 'match' | 'training' | 'unknown';
   recorded_injuries: number;
   time_loss_injuries: number;
 };
@@ -232,6 +232,9 @@ export type DashboardData = {
   injury_profiles: InjuryProfileRow[];
   injury_type_families: InjuryTypeFamilyRow[];
   severity_distribution: SeverityRow[];
+  // Optional: releases published before the 2026-07-26 contact-ring change do
+  // not carry this key.
+  contact_distribution?: DistributionRow[];
   prior_season: {
     season: string;
     status: string;
