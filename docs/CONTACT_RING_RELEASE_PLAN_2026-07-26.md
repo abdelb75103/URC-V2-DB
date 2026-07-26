@@ -187,11 +187,14 @@ whether the existing rows keep their implicit overall meaning. Separate plan.
 Left in `charts.tsx` on purpose as a generic primitive. Delete it only if you
 want the cleanup, and never as a side effect of this work.
 
-## Open question for Abdel
+## Decided: Unknown stays
 
-The ring keeps its Unknown slice, so its total is all cases rather than
-classified cases only. Every other breakdown on the site hides front-facing
-unknowns via `withoutFrontFacingUnknown`. That divergence is intentional and was
-requested, and for a mechanism field an unknown share is a real coverage
-statement rather than noise. **Confirm before the migration is written**, because
-whether Unknown is emitted gets baked into the view.
+**Abdel, 26 July 2026: the Unknown slice stays.** The ring's total is therefore
+all cases, not classified cases only, and the views must emit `unknown` rows.
+
+Every other breakdown on the site hides front-facing unknowns via
+`withoutFrontFacingUnknown`. This divergence is intentional: for a mechanism
+field, the unknown share (9% of recorded cases) is a real coverage statement
+rather than noise, and hiding it would silently inflate the contact and
+non-contact percentages. Do not "harmonise" this with the other breakdowns, and
+do not route the contact rows through `withoutFrontFacingUnknown`.
