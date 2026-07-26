@@ -20,9 +20,19 @@ if (!sqlPath) {
 // server-side). Bound the wait so that failure mode surfaces as an error
 // instead of a silent hang; raise PIPELINE_QUERY_TIMEOUT_MS for a genuinely
 // long read.
+const connectionTimeoutMillis = (() => {
+  const raw = process.env.PIPELINE_CONNECTION_TIMEOUT_MS || "10000";
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    console.error("PIPELINE_CONNECTION_TIMEOUT_MS must be a positive integer");
+    process.exit(2);
+  }
+  return parsed;
+})();
+
 const client = new Client({
   connectionString: process.env.SUPABASE_DB_URL,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis,
   keepAlive: true,
   query_timeout: Number(process.env.PIPELINE_QUERY_TIMEOUT_MS || 900000)
 });

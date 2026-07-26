@@ -11,9 +11,19 @@ if (!sqlPath) {
 // keepAlive lets a dead pooler connection surface as a socket error rather
 // than an unbounded wait; see the note in sql_query.mjs. No query_timeout
 // here: a write must not be abandoned client-side on a timer.
+const connectionTimeoutMillis = (() => {
+  const raw = process.env.PIPELINE_CONNECTION_TIMEOUT_MS || "10000";
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    console.error("PIPELINE_CONNECTION_TIMEOUT_MS must be a positive integer");
+    process.exit(2);
+  }
+  return parsed;
+})();
+
 const client = new Client({
   connectionString: process.env.SUPABASE_DB_URL,
-  connectionTimeoutMillis: 10000,
+  connectionTimeoutMillis,
   keepAlive: true
 });
 

@@ -1,6 +1,8 @@
 -- Read-only post-migration contract. Run only against the explicitly approved
 -- hosted target after applying 20260725190000, never as part of a browser or
 -- deployment workflow. One row per assertion makes any mismatch visible.
+set local statement_timeout = '10min';
+
 with members as (
   select curated_build_id, team_key, season
   from analysis.league_member_releases_v2
@@ -41,9 +43,7 @@ with members as (
     ('pre_urc_rejected_rows', 815::numeric),
     ('pre_urc_rejected_hours', 865.830::numeric),
     ('weekly_row_moves', 0::numeric),
-    ('undated_injuries', 6::numeric),
-    ('team_candidate_payloads', 16::numeric),
-    ('league_candidate_payloads', 1::numeric)
+    ('undated_injuries', 6::numeric)
 ), actual(contract_name, actual_numeric) as (
   select 'included_exposure_rows', count(*)::numeric
   from member_exposure
@@ -90,14 +90,6 @@ with members as (
   select 'undated_injuries', count(*)::numeric
   from member_injuries
   where is_undated
-  union all
-  select 'team_candidate_payloads', count(*)::numeric
-  from analysis.team_dashboard_release_candidates_analysis_window_v5
-  where season = '2024-25'
-  union all
-  select 'league_candidate_payloads', count(*)::numeric
-  from analysis.league_dashboard_release_candidates_analysis_window_v5
-  where season = '2024-25'
 ), monthly_contract as (
   select
     (

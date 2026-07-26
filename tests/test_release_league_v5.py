@@ -53,6 +53,8 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             pipeline.OSIICS_EXACT_REPORTING_CLASSIFICATION_MIGRATION_VERSION,
             pipeline.INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION,
             pipeline.ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION,
+            pipeline.ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION,
+            pipeline.ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION,
         ]
 
         def query(sql: str, _values: list[object] | None = None) -> list[dict[str, str]]:
@@ -91,6 +93,14 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             sql for sql in queries if "supabase_migrations.schema_migrations" in sql
         )
         self.assertIn(pipeline.ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION, migration_query)
+        self.assertIn(
+            pipeline.ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION,
+            migration_query,
+        )
+        self.assertIn(
+            pipeline.ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION,
+            migration_query,
+        )
 
     def test_v4_rollback_tuple_still_reaches_its_lineage_candidate_view(self) -> None:
         queries: list[str] = []
@@ -144,6 +154,8 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             "ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR",
             "ANALYSIS_WINDOW_V5_EVIDENCE_SHA256",
             "ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION",
+            "ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION",
+            "ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION",
             "ANALYSIS_WINDOW_V5_INJURY_AUDIT_LOCATOR",
             "ANALYSIS_WINDOW_V5_EXPOSURE_EVIDENCE_LOCATOR",
             "ANALYSIS_WINDOW_V5_SQL_RECONCILIATION_LOCATOR",

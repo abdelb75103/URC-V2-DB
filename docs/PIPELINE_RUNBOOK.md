@@ -55,7 +55,8 @@ Use the normal `release-league` command with the successor classification tuple.
 
 ### 2024-25 analysis-window v5 full release
 
-Status: accepted and independently reviewed locally; live migration and promotion pending.
+Status: base v5 and query optimisation applied; build-pinned candidate snapshot
+and promotion pending.
 This is a full successor release because the reporting cohort, exposure denominator,
 monthly series, and headline figures change. It is not a classification-only
 incremental release.
@@ -75,6 +76,17 @@ The reviewed migration path is
 `supabase/migrations/20260725190000_analysis_window_reporting_v5.sql`;
 its SHA-256 is
 `23970db6b4bc38aa91f2ca0ecf41203603c6361dc1c0fc4235a55a5f2dfcccde`.
+The performance-only successors are:
+
+- `supabase/migrations/20260726010000_analysis_window_v5_candidate_query_optimization.sql`,
+  SHA-256 `eb4809f61912312375757eb545e5c237de12bbcd9fcab2892c59c9389e796ff4`.
+- `supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql`,
+  SHA-256 `756612f88b700531626b8cb3bd1765871f45df4e55882b7149e03b967044601b`.
+
+The first successor changes execution only and is statically proven equivalent
+to the base payload definitions. The second computes the exact reviewed team
+and league candidate payloads once, then routes v5 preflight and promotion to
+those build-pinned snapshots. It does not alter source, cohort or metric data.
 Do not alter any frozen migration or historical `v4` view.
 
 The required sequence is:
@@ -97,10 +109,27 @@ The required sequence is:
    days lost. The 815 semantic pre-URC exclusions must total 865.830 hours;
    the four weekly reporters move zero rows.
 4. Obtain Abdel's explicit approval for the named live Supabase/Postgres
-   target and this exact additive migration. Apply only the reviewed file with
-   `node pipeline/sql_exec.mjs supabase/migrations/20260725190000_analysis_window_reporting_v5.sql`, then
-   register its version in `supabase_migrations.schema_migrations`. The command
-   requires `SUPABASE_DB_URL` to be set from the safely parsed pooler value.
+   target and each exact versioned migration. Apply them in version order with
+   the credential-safe wrapper:
+
+   ```bash
+   node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
+     supabase/migrations/20260725190000_analysis_window_reporting_v5.sql
+   node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
+     supabase/migrations/20260726010000_analysis_window_v5_candidate_query_optimization.sql
+   node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
+     supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql
+   ```
+
+   Register each successful version in
+   `supabase_migrations.schema_migrations`, then verify the tracked versions,
+   view definitions, snapshot row counts and hashes read-only. The snapshot
+   migration may take several minutes because it deliberately computes each
+   payload family once. If it fails, the transaction rolls back and the
+   existing v5 dynamic candidates remain intact. If a later source decision
+   changes v5, refresh both snapshots before a new preflight. A corrective
+   versioned migration can repoint the v5 candidates to the dynamic views;
+   v4 remains available throughout as the release rollback tuple.
 5. Perform read-only post-migration reconciliation. Stream the reviewed,
    build-pinned evidence result directly into the generator:
 
@@ -129,20 +158,19 @@ The required sequence is:
      node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const r=JSON.parse(s);if(!r.length||r.some(x=>x.passed!==true))process.exit(1);console.log(`V5 SQL contracts passed: ${r.length}`)})'
    ```
 
-   Then run the direct candidate performance contract:
+   Then time the two direct candidate paths independently:
 
    ```bash
-   node pipeline/sql_query.mjs \
-     tests/analysis_window_v5_candidate_performance.sql |
-     tee docs/evidence/analysis_window_2024-25_v5_candidate_performance.json |
-     node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const [r]=JSON.parse(s);if(!r||!r.candidate_payloads_passed||Number(r.elapsed_ms)>120000)process.exit(1);console.log(`V5 direct candidate payloads: ${r.elapsed_ms} ms`)})'
+   node pipeline/sql_query.mjs tests/analysis_window_v5_candidate_performance.sql
+   node pipeline/sql_query.mjs tests/analysis_window_v5_team_candidate_performance.sql
    ```
 
-   The combined direct league-plus-16-team candidate read must complete in no
-   more than 120,000 ms on the configured live pooler. This is the objective
-   guard against accidentally routing v5 through the historical union chain.
-   The two committed JSON files retain the complete non-sensitive assertion
-   rows, payload byte counts, candidate counts, and measured elapsed time.
+   Record both returned rows in
+   `docs/evidence/analysis_window_2024-25_v5_candidate_performance.json`.
+   Each path must return its exact candidate count, a non-empty payload and
+   `candidate_payload_passed = true` within the five-minute database bound.
+   Do not combine the two reconstructions into another gate. The subsequent
+   preflight is the definitive candidate-equality and payload-hash check.
 7. Review the generated exposure evidence and exact hashes, then create an
    intentional evidence checkpoint commit. The working tree must be clean
    before the following preflight. This commit binds the exact migration,

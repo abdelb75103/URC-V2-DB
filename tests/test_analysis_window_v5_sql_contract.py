@@ -7,10 +7,19 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20260725190000_analysis_window_reporting_v5.sql"
+OPTIMIZATION_MIGRATION = (
+    ROOT
+    / "supabase/migrations/20260726010000_analysis_window_v5_candidate_query_optimization.sql"
+)
+SNAPSHOT_MIGRATION = (
+    ROOT
+    / "supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql"
+)
 V4_MIGRATION = ROOT / "supabase/migrations/20260724181000_lineage_restated_reporting_v4.sql"
 V4_FAST_PATH = ROOT / "supabase/migrations/20260724190000_lineage_v4_candidate_fast_path.sql"
 RECONCILIATION = ROOT / "tests/analysis_window_v5_sql_reconciliation.sql"
 PERFORMANCE = ROOT / "tests/analysis_window_v5_candidate_performance.sql"
+TEAM_PERFORMANCE = ROOT / "tests/analysis_window_v5_team_candidate_performance.sql"
 EXPOSURE_EXTRACTION = ROOT / "tools/sql/analysis_window_v5_exposure_evidence.sql"
 EXPOSURE_EVIDENCE_SCHEMA = (
     ROOT / "docs/evidence/analysis_window_2024-25_v5_exposure_cohort_evidence.schema.json"
@@ -28,10 +37,13 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.sql = MIGRATION.read_text(encoding="utf-8")
+        cls.optimization = OPTIMIZATION_MIGRATION.read_text(encoding="utf-8")
+        cls.snapshot = SNAPSHOT_MIGRATION.read_text(encoding="utf-8")
         cls.v4 = V4_MIGRATION.read_text(encoding="utf-8")
         cls.v4_fast_path = V4_FAST_PATH.read_text(encoding="utf-8")
         cls.reconciliation = RECONCILIATION.read_text(encoding="utf-8")
         cls.performance = PERFORMANCE.read_text(encoding="utf-8")
+        cls.team_performance = TEAM_PERFORMANCE.read_text(encoding="utf-8")
         cls.exposure_extraction = EXPOSURE_EXTRACTION.read_text(encoding="utf-8")
         cls.exposure_evidence_schema = json.loads(
             EXPOSURE_EVIDENCE_SCHEMA.read_text(encoding="utf-8")
@@ -197,6 +209,140 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
         self.assertIn("context.analysis_version <> 'v5'", self.sql)
         self.assertIn("V4 releases against the lineage candidate view", self.v4_fast_path)
 
+    def test_v5_payloads_materialise_shared_components_once_per_candidate(self) -> None:
+        team_payload = self.optimization.split(
+            "create or replace view analysis.team_dashboard_payload_analysis_window_v5",
+            1,
+        )[1].split(
+            "create or replace view analysis.league_dashboard_payload_analysis_window_v5",
+            1,
+        )[0]
+        league_payload = self.optimization.split(
+            "create or replace view analysis.league_dashboard_payload_analysis_window_v5",
+            1,
+        )[1].split(
+            "create view analysis.team_dashboard_release_candidates_analysis_window_v5",
+            1,
+        )[0]
+        for payload in (team_payload, league_payload):
+            for cte in (
+                "effective_profiles_data as materialized",
+                "diagnosis_data as materialized",
+                "setting_data as materialized",
+                "monthly_data as materialized",
+                "severity_data as materialized",
+                "summary_data as materialized",
+            ):
+                self.assertIn(cte, payload)
+            self.assertEqual(2, payload.count("from setting_data x"))
+            self.assertEqual(1, payload.count("from monthly_data x"))
+            self.assertEqual(1, payload.count("from severity_data x"))
+        self.assertIn("exposure_data as materialized", team_payload)
+        self.assertIn("join summary_data s", team_payload)
+        self.assertIn("join exposure_data e", team_payload)
+        self.assertIn("from summary_data h", league_payload)
+
+    def test_v5_optimization_changes_execution_only_not_payload_semantics(self) -> None:
+        base_team = self.sql.split(
+            "create view analysis.team_dashboard_payload_analysis_window_v5", 1
+        )[1].split(
+            "create view analysis.league_dashboard_payload_analysis_window_v5", 1
+        )[0]
+        optimized_team = self.optimization.split(
+            "create or replace view analysis.team_dashboard_payload_analysis_window_v5",
+            1,
+        )[1].split(
+            "create or replace view analysis.league_dashboard_payload_analysis_window_v5",
+            1,
+        )[0]
+        base_league = self.sql.split(
+            "create view analysis.league_dashboard_payload_analysis_window_v5", 1
+        )[1].split("-- Direct V5 branches", 1)[0]
+        optimized_league = self.optimization.split(
+            "create or replace view analysis.league_dashboard_payload_analysis_window_v5",
+            1,
+        )[1].split("comment on view analysis.team_dashboard_payload", 1)[0]
+
+        def normalize(
+            definition: str, replacements: dict[str, str]
+        ) -> str:
+            cte_start = definition.index("\nwith effective_profiles_data as materialized")
+            body_start = definition.index("), body as (", cte_start)
+            definition = (
+                definition[:cte_start]
+                + "\nwith body as ("
+                + definition[body_start + len("), body as (") :]
+            )
+            for optimized, original in replacements.items():
+                definition = definition.replace(optimized, original)
+            return definition.strip()
+
+        self.assertEqual(
+            base_team.strip(),
+            normalize(
+                optimized_team,
+                {
+                    "from effective_profiles_data p":
+                        "from analysis.analysis_window_effective_injury_profiles_v5 p",
+                    "from diagnosis_data p":
+                        "from analysis.analysis_window_diagnosis_profiles_v5 p",
+                    "from setting_data x":
+                        "from analysis.analysis_window_setting_split_v5 x",
+                    "from monthly_data x":
+                        "from analysis.analysis_window_monthly_v5 x",
+                    "from severity_data x":
+                        "from analysis.analysis_window_severity_distribution_v5 x",
+                    "join summary_data s":
+                        "join analysis.analysis_window_team_summary_v5 s",
+                    "join exposure_data e":
+                        "join analysis.exposure_hours_by_build_analysis_window_v5 e",
+                },
+            ),
+        )
+        self.assertEqual(
+            base_league.strip(),
+            normalize(
+                optimized_league,
+                {
+                    "from effective_profiles_data p":
+                        "from analysis.analysis_window_league_effective_injury_profiles_v5 p",
+                    "from diagnosis_data p":
+                        "from analysis.analysis_window_league_diagnosis_profiles_v5 p",
+                    "from setting_data x":
+                        "from analysis.analysis_window_league_setting_split_v5 x",
+                    "from monthly_data x":
+                        "from analysis.analysis_window_league_monthly_v5 x",
+                    "from severity_data x":
+                        "from analysis.analysis_window_league_severity_distribution_v5 x",
+                    "from summary_data h":
+                        "from analysis.analysis_window_league_summary_v5 h",
+                },
+            ),
+        )
+
+    def test_v5_release_candidates_read_exact_build_pinned_snapshots(self) -> None:
+        for view in (
+            "analysis.team_dashboard_payload_analysis_window_v5_snapshot",
+            "analysis.league_dashboard_payload_analysis_window_v5_snapshot",
+        ):
+            self.assertIn(f"create materialized view {view}", self.snapshot)
+        self.assertIn(
+            "create or replace view analysis.team_dashboard_release_candidates_analysis_window_v5",
+            self.snapshot,
+        )
+        self.assertIn(
+            "create or replace view analysis.league_dashboard_release_candidates_analysis_window_v5",
+            self.snapshot,
+        )
+        self.assertIn(
+            "from analysis.team_dashboard_payload_analysis_window_v5_snapshot",
+            self.snapshot,
+        )
+        self.assertIn(
+            "from analysis.league_dashboard_payload_analysis_window_v5_snapshot",
+            self.snapshot,
+        )
+
     def test_release_constraints_accept_v5_only_with_its_recorded_date_and_cohort(self) -> None:
         self.assertIn("analysis_version in ('v2', 'v3', 'v4', 'v5')", self.sql)
         self.assertIn(
@@ -249,18 +395,24 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
         )
         self.assertIn(
             "analysis.team_dashboard_release_candidates_analysis_window_v5",
+            self.team_performance,
+        )
+        for performance in (self.performance, self.team_performance):
+            self.assertIn("octet_length(candidate.dashboard::text)", performance)
+            self.assertIn("candidate_payload_passed", performance)
+            self.assertIn("payload as materialized", performance)
+            self.assertIn("completed as materialized", performance)
+            self.assertIn(
+                "extract(epoch from (completed_at - started_at))",
+                performance,
+            )
+        self.assertNotIn(
+            "analysis.team_dashboard_release_candidates_analysis_window_v5",
             self.performance,
         )
-        self.assertIn(
-            "octet_length(candidate.dashboard::text)",
-            self.performance,
-        )
-        self.assertIn("candidate_payloads_passed", self.performance)
-        self.assertIn("payload_aggregate as materialized", self.performance)
-        self.assertIn("completed as materialized", self.performance)
-        self.assertIn(
-            "extract(epoch from (completed_at - started_at))",
-            self.performance,
+        self.assertNotIn(
+            "analysis.league_dashboard_release_candidates_analysis_window_v5",
+            self.team_performance,
         )
 
     def test_v4_migration_remains_a_predecessor_not_a_modified_target(self) -> None:

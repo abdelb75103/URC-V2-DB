@@ -1,15 +1,15 @@
--- League candidate timing contract. The release preflight performs definitive
--- candidate equality and hash validation, so this measures one real payload
--- path without rebuilding the team payload family in the same query.
+-- Team candidate timing contract. This is separate from the league query so
+-- the same two payload families are not forced through one duplicate gate.
 set local statement_timeout = '5min';
 
 with started as materialized (
   select clock_timestamp() as started_at
 ), payload as materialized (
   select
+    candidate.team_key,
     octet_length(candidate.dashboard::text) as dashboard_bytes,
     started.started_at
-  from analysis.league_dashboard_release_candidates_analysis_window_v5 candidate
+  from analysis.team_dashboard_release_candidates_analysis_window_v5 candidate
   cross join started
   where candidate.season = '2024-25'
     and candidate.analysis_version = 'v5'
@@ -30,7 +30,7 @@ select
   dashboard_bytes,
   round(extract(epoch from (completed_at - started_at)) * 1000, 3)
     as elapsed_ms,
-  candidate_count = 1
+  candidate_count = 16
     and coalesce(dashboard_bytes, 0) > 0
     as candidate_payload_passed
 from completed;
