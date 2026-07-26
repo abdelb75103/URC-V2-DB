@@ -382,6 +382,7 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
             "V5 league candidate snapshot must contain exactly one row",
             "full join analysis.league_member_releases_v2 member",
             "V5 candidate snapshots do not match the approved tuple",
+            "V5 shared injury and classification snapshots do not reconcile",
         ):
             self.assertIn(required, self.snapshot_refresh)
         refresh_order = [

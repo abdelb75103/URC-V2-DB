@@ -134,10 +134,14 @@ The required sequence is:
    Each registration proves the expected objects and bindings before inserting
    its one exact tracking row. Then verify all four tracked versions,
    view definitions, snapshot row counts and hashes read-only. The snapshot
-   migration may take several minutes because it deliberately computes each
-   payload family once. If it fails, the transaction rolls back and the
-   existing v5 dynamic candidates remain intact. If a later source decision
-   changes v5, obtain fresh explicit approval for the live refresh, then
+   shared-cohort migration deliberately leaves its three materialised views
+   unpopulated, so V5 candidates are intentionally unavailable between the two
+   migrations while V4 continues serving unchanged. The candidate-snapshot
+   migration populates all five snapshots atomically. If it fails, retry that
+   migration after correcting the cause. A corrective versioned rollback must
+   restore every V5 aggregate view's dynamic source binding, not only repoint
+   the candidate views; V4 remains the live release throughout. If a later
+   source decision changes v5, obtain fresh explicit approval for the live refresh, then
    refresh the three shared cohorts and both payload snapshots in one
    repeatable-read transaction with
    `node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs

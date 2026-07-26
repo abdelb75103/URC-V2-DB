@@ -27,6 +27,27 @@ begin
   ) <> 1 then
     raise exception 'V5 league candidate snapshot must contain exactly one row';
   end if;
+  if (
+    select count(*)
+    from analysis.analysis_window_injury_cohort_v5_snapshot
+  ) <> (
+    select count(*)
+    from analysis.analysis_window_reporting_classification_v5_snapshot
+  ) or exists (
+    select 1
+    from analysis.analysis_window_injury_cohort_v5_snapshot injury
+    left join analysis.analysis_window_reporting_classification_v5_snapshot
+      classification
+      using (injury_id, curated_build_id, team_key, season)
+    where classification.injury_id is null
+  ) or exists (
+    select 1
+    from analysis.analysis_window_reporting_classification_v5_snapshot
+    group by injury_id, curated_build_id, team_key, season
+    having count(*) <> 1
+  ) then
+    raise exception 'V5 shared injury and classification snapshots do not reconcile';
+  end if;
   if exists (
     select 1
     from analysis.team_dashboard_payload_analysis_window_v5_snapshot snapshot
