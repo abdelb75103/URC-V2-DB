@@ -145,12 +145,16 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
         self.assertIn("ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION", self.source)
         for view in (
             "analysis.analysis_window_injury_cohort_v5",
-            "analysis.analysis_window_monthly_v5",
+            "analysis.analysis_window_league_monthly_v5",
             "analysis.analysis_window_league_summary_v5",
             "analysis.league_dashboard_release_candidates_analysis_window_v5",
             "analysis.team_dashboard_release_candidates_analysis_window_v5",
         ):
             self.assertIn(view, self.source)
+        self.assertNotIn(
+            'semantic_monthly_view = "analysis.analysis_window_monthly_v5"',
+            self.source,
+        )
         for value in (
             "league_dashboard_release_v5",
             "ANALYSIS_WINDOW_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION",

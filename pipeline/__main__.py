@@ -5732,7 +5732,7 @@ def release_league(args: argparse.Namespace) -> None:
     if analysis_version in {"v3", "v4", "v5"}:
         if analysis_version == "v5":
             semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
-            semantic_monthly_view = "analysis.analysis_window_monthly_v5"
+            semantic_monthly_view = "analysis.analysis_window_league_monthly_v5"
             semantic_summary_view = "analysis.analysis_window_league_summary_v5"
             semantic_missing_error = "analysis-window semantic reconciliation returned no row"
             semantic_mismatch_error = (
@@ -5786,17 +5786,6 @@ def release_league(args: argparse.Namespace) -> None:
             """,
             semantic_params.values,
         )
-        if os.environ.get("PIPELINE_DEBUG_RELEASE_AGGREGATES") == "1":
-            print(
-                json.dumps(
-                    {
-                        "semantic_params": semantic_params.values,
-                        "semantic_rows": semantic_rows,
-                    },
-                    sort_keys=True,
-                ),
-                file=sys.stderr,
-            )
         if len(semantic_rows) != 1:
             raise SystemExit(semantic_missing_error)
         semantic = semantic_rows[0]
