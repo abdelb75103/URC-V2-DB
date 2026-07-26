@@ -1,7 +1,7 @@
 # 2024-25 analysis window: before and after
 
-Date: 25 July 2026  
-Status: live v5 migrations applied and reconciled; promotion pending
+Date: 26 July 2026
+Status: released live, exported and reconciled; deployment verification pending
 Scope: URC 2024-25 injury and exposure reporting
 
 ## Decision
@@ -17,7 +17,7 @@ exposure data. The exact release tuple is:
 
 ## Headline comparison
 
-| Metric | Current v4 | Approved v5 target | Change |
+| Metric | Previous v4 | Released v5 | Change |
 |---|---:|---:|---:|
 | Injury reporting window | 1 Jul 2024 to 30 Jun 2025 | 1 Sep 2024 to 30 Jun 2025 | Removes July and August injuries |
 | Exposure effective window | Existing cleaner and v4 cohort limits | 1 Sep 2024 to 30 Jun 2025 | Adds eligible September and late-June exposure |
@@ -93,35 +93,46 @@ The v5 process will instead create a separate cohort audit CSV or workbook. It c
 
 ## Provenance and implementation record
 
-The target is projected from read-only database queries and local source reconciliation completed on 25 July 2026. After the v5 release, update this section rather than creating a competing report.
+The figures below were confirmed against the promoted immutable bundle and its
+build-pinned live candidates on 26 July 2026.
 
 | Record | Value |
 |---|---|
-| Current release tuple | `v4 / reporting_classification_2026-07-22_v2 / lineage_2024-25_2026-07-24_v1` |
-| Target analysis version | `v5` |
-| Target classification version | `reporting_classification_2026-07-22_v2` |
-| Proposed cohort version | `analysis_window_2024-25_2026-07-25_v1` |
+| Live release tuple | `v5 / reporting_classification_2026-07-22_v2 / analysis_window_2024-25_2026-07-25_v1` |
+| Retained rollback tuple | `v4 / reporting_classification_2026-07-22_v2 / lineage_2024-25_2026-07-24_v1` |
 | Base migration | `supabase/migrations/20260725190000_analysis_window_reporting_v5.sql`, SHA-256 `23970db6b4bc38aa91f2ca0ecf41203603c6361dc1c0fc4235a55a5f2dfcccde` |
 | Query optimisation migration | `supabase/migrations/20260726010000_analysis_window_v5_candidate_query_optimization.sql`, SHA-256 `eb4809f61912312375757eb545e5c237de12bbcd9fcab2892c59c9389e796ff4` |
 | Shared-cohort snapshot migration | `supabase/migrations/20260726015000_analysis_window_v5_shared_cohort_snapshots.sql`, SHA-256 `622376306cda12840a684ad110b9ed21f52ec25448ef05d67f19f479a13799c0` |
 | Candidate snapshot migration | `supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql`, SHA-256 `9deca17947a98d4667302793ad0b2326e1188964b113b1c975eff0ce20b357d5` |
+| Coverage snapshot correction | `supabase/migrations/20260726120000_analysis_window_v5_coverage_payload_snapshots.sql`, SHA-256 `83d3950b6a1838c73e089aa10d4913025fb48ba85a7637115168e89c5a3cbdfa` |
 | Cohort adjudication reference | `ANALYSIS-WINDOW-01` |
 | Immutable evidence manifest | `docs/evidence/analysis_window_2024-25_v5.json`, SHA-256 `c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d` |
 | Injury cohort audit | `docs/evidence/analysis_window_2024-25_v5_injury_cohort_audit.csv`, SHA-256 `8e76205760df2666130abec5d942a4699fc301b9fb410cb1803850a4f4edd3e3`; 208 rows, 140 positive-day time-loss rows, 4,920 days lost |
 | Exposure cohort evidence | `docs/evidence/analysis_window_2024-25_v5_exposure_cohort_evidence.csv`, SHA-256 `4a09c4c9140ad54f95f5339113bd4dda735719cca4641329f09a10e1c14c2978`; 4,937 changed rows, including 815 rejected rows and 865.830 hours |
 | SQL reconciliation | `docs/evidence/analysis_window_2024-25_v5_sql_reconciliation.json`, SHA-256 `cbcf5c21d6dfc437a42cfd4eb975c03fff213baa24380344e91c71817c053efb`; 28 of 28 contracts passed |
-| Candidate performance | `docs/evidence/analysis_window_2024-25_v5_candidate_performance.json`, SHA-256 `0c531e9a98253d518a02d3cb05a92701d757e8cd588eb92c161338226fc6ee41`; league 9.231 ms, 16 teams 32.624 ms |
-| V5 bundle release ID | Pending |
-| V5 generated timestamp | Pending |
+| Candidate performance | `docs/evidence/analysis_window_2024-25_v5_candidate_performance.json`, SHA-256 `6e06490f0f42de0a8136e5b4bfa66021f210922fdc19c7278991025e593819c8`; league 8.071 ms, 16 teams 24.586 ms |
+| Corrected preflight | League payload SHA-256 `f6661135291033420d74b4b6e3787dda8e3298530c03ccc1e56052b6f74333bd`; canonical bundle SHA-256 `45169a66a7da0aa507ed5521b899a990280d56d4cf90e084b9ace6e5c5835ca2`; reviewed file SHA-256 `1012dd54cb098b49514517aede4a13899056c168b4cab0cec09b3eac0b2bdcd9` |
+| V5 bundle release | `a5a07fca-1be6-4ead-9a6b-648a3475c205`, label `urc-2024-25-v5-45169a66a7da-a1`, approved `2026-07-26T11:12:36.275606+00:00` |
+| Payload generated timestamp | `2026-07-20T13:16:48+00:00` (retained build/member generation timestamp) |
 | Final live reconciliation | Exact targets confirmed: 64,511 rows; 81,352.919497 hours; 6,040 match hours; 75,312.919497 training hours; 1,658 recorded injuries; 785 time-loss injuries; 17,573 days lost; 6 undated injuries; 0 weekly-row moves |
-| Deployed verification | Pending GitHub-triggered deployment and route verification |
+| Dashboard coverage detail | 1,110 exposed player identities within teams; 1,961 exposure periods; 251,884.371929 km. All 16 team exports were regenerated twice with identical aggregate file hash `a2d217073ae5beb2ca8a770c2f4512b520505305d4ce0b1b1adebc2603f27029`. |
+| Deployed verification | Pending final GitHub push-triggered deployment and route verification |
+
+The first v5 promotion, release
+`d5b010b0-eb83-4f5c-b619-a791239a2893`, correctly changed the scientific
+headline and denominator but exposed a payload defect: several descriptive
+coverage counters were inherited from v4. It was retired, not deleted. The
+additive `20260726120000` correction computes shared coverage snapshots once
+from the effective v5 cohort, proves that every non-coverage payload section is
+unchanged, and makes coverage hours equal both rate denominators. The corrected
+bundle above is the only approved live release.
 
 ## Post-release confirmation checklist
 
-- Replace projected figures with exact live v5 values.
-- Record the migration path and hash.
-- Record the exposure cohort evidence hash after it is generated directly from the reviewed v5 row view.
-- Record the v5 bundle release ID.
-- Confirm all 16 team payloads reconcile with the league bundle.
+- Exact live v5 figures recorded.
+- All five tracked migration paths and hashes recorded.
+- Cohort and exposure evidence hashes recorded.
+- Corrected release ID and candidate hashes recorded.
+- All 16 team payloads reconcile with the league bundle.
 - Confirm the website displays the v5 cohort and refreshed values.
-- Confirm the v4 tuple remains available for rollback.
+- The v4 candidate and immutable retired release remain available for rollback.

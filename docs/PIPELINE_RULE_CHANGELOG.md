@@ -35,13 +35,13 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `migrated-and-reconciled`: accepted rule, independent review, four tracked live migrations, shared build-pinned cohorts, and 28 passing live contracts; promotion remains pending |
+| Status | `released`: accepted rule, independent review, five tracked live migrations, corrected build-pinned coverage, 28 passing live contracts, and approved 16-team bundle |
 | Rule version | `analysis_window_2024-25_2026-07-25_v1` with `analysis_version` `v5` and classification `reporting_classification_2026-07-22_v2` |
 | Carry-forward | `versioned-successor-ready`; after the tracked live migration is applied, the framework carries forward with a newly registered window per season. The 2024-25 dates and pre-URC semantic evidence are season-specific. |
 | Decision provenance | Abdel Babiker, 25 July 2026, `ANALYSIS-WINDOW-01` |
 | Immutable evidence | `docs/evidence/analysis_window_2024-25_v5.json`, SHA-256 `c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d` |
-| Reviewed migrations | Base `20260725190000` (`23970db6...`); query optimisation `20260726010000` (`eb4809f6...`); shared cohorts `20260726015000` (`62237630...`); candidate snapshots `20260726020000` (`9deca179...`) |
-| Runtime records | All four migrations tracked. Exposure evidence `4a09c4c9...`, SQL reconciliation `cbcf5c21...`, and candidate performance `0c531e9a...` are committed evidence. Release ID, promotion timestamp and deployed verification remain pending. |
+| Reviewed migrations | Base `20260725190000` (`23970db6...`); query optimisation `20260726010000` (`eb4809f6...`); shared cohorts `20260726015000` (`62237630...`); candidate snapshots `20260726020000` (`9deca179...`); coverage correction `20260726120000` (`83d3950b...`) |
+| Runtime records | All five migrations tracked. Exposure evidence `4a09c4c9...`, SQL reconciliation `cbcf5c21...`, and corrected candidate performance `6e06490f...` are committed evidence. Live release `a5a07fca-1be6-4ead-9a6b-648a3475c205`, label `urc-2024-25-v5-45169a66a7da-a1`, approved 26 July 2026. |
 
 **What changes.** The 2024-25 reporting cohort becomes the inclusive period 1 September 2024 through 30 June 2025 for both injuries and exposure. Dated injuries before 1 September are valid cleaned records but outside the v5 cohort. Six undated, season-attributed injuries remain in applicable totals and non-monthly breakdowns, while remaining outside monthly series. The v5 monthly successor must bind to the same v5 cohort identity as the headline and other cohort-derived readers, correcting the frozen lineage monthly reader's former season-bound binding.
 
@@ -50,6 +50,19 @@ Every change that alters a derived value, classification, cohort, denominator, o
 **Lineage boundary.** This is not a re-clean. It does not rebuild or recolour the 3,060-row injury master, alter the decision ledger, regenerate the accepted 2,301-row inclusion CSV, re-clean or re-ingest exposure files, create new curated exposure builds, or run the full pipeline. Historical curated values remain immutable; v5 exposes effective eligibility through additive views. Fixture-derived match hours remain `151 × 2 × 20.0 = 6,040` and pre-season friendlies never enter match hours.
 
 **Live reconciliation.** The tracked live views and build-pinned snapshots return 64,511 included exposure rows, 81,352.919497 exposure hours, 75,312.919497 training hours, 1,658 recorded injuries, 785 time-loss injuries, and 17,573 days lost. They retain 6 undated injuries in applicable totals. The pre-URC semantic rule rejects 815 potential additions carrying 865.830 hours. Dragons is the largest injury-side change, with 27 fewer recorded injuries, 25 fewer time-loss injuries, and 1,599 fewer days lost. All 28 numeric, monthly, exclusion and classification identity contracts passed.
+
+**Coverage payload correction and release.** The first v5 promotion correctly
+changed headline metrics and exposure hours but retained v4 values for
+`coverage.exposure_rows`, exposed players, exposure periods, distance and
+coverage windows. Release `d5b010b0-eb83-4f5c-b619-a791239a2893` was retired,
+not deleted. Additive migration `20260726120000` derives those fields once from
+the shared effective exposure cohort, patches only `coverage`, proves all
+non-coverage jsonb sections unchanged, and fails unless team and league hours
+equal the incidence and burden denominators. The corrected approved bundle is
+`a5a07fca-1be6-4ead-9a6b-648a3475c205`; its league payload SHA-256 is
+`f6661135291033420d74b4b6e3787dda8e3298530c03ccc1e56052b6f74333bd`
+and canonical bundle SHA-256 is
+`45169a66a7da0aa507ed5521b899a990280d56d4cf90e084b9ace6e5c5835ca2`.
 
 **Audit and rollback.** `tools/generate_analysis_window_v5_evidence.py` generates the committed injury cohort audit from the accepted inclusion CSV plus source-row mapping using deterministic evidence keys, never a player identifier. It produces 208 window-excluded injury rows, including 140 positive-day time-loss rows and 4,920 days lost. The exposure evidence is generated only after a reviewed row-view result is available: raw semantic labels are streamed as JSON to standard input and written only as a controlled evidence class plus deterministic fingerprint. Roll back reporting by re-promoting the retained v4 tuple `v4 / reporting_classification_2026-07-22_v2 / lineage_2024-25_2026-07-24_v1`; retain the additive v5 migration, adjudication, and evidence.
 

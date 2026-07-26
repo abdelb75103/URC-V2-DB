@@ -4,7 +4,7 @@ Status: current operating map. This document explains the accepted route; `AGENT
 
 ## 2024-25 injury-lineage restructure (2026-07-24)
 
-The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, complete). The DB and the released dashboards were restated from it on 2026-07-24 and are served as bundle release `urc-2024-25-v4-6f04bd64d2a6-a2`. The local route is four verbs under `tools/`:
+The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, complete). The live dashboards now serve the accepted analysis-window v5 bundle `urc-2024-25-v5-45169a66a7da-a1`; the 24 July v4 bundle remains retained for rollback. The local route is four verbs under `tools/`:
 
 1. `render.py`: canonical master data table to the formatted master workbook (extract, render, compare, mark-excluded). Baseline hashes: `data/2024-25/master/baseline_record.json`.
 2. `replay.py`: v5 baseline plus `data/2024-25/decisions/ledger.json` to the inclusion CSV, its manifest, and generated `docs/METHODOLOGY.md`. Must reproduce the accepted CSV byte-for-byte; conflicts stop the line.
@@ -55,8 +55,8 @@ Use the normal `release-league` command with the successor classification tuple.
 
 ### 2024-25 analysis-window v5 full release
 
-Status: all four v5 migrations applied and tracked; live reconciliation passed;
-promotion pending.
+Status: all five v5 migrations are applied and tracked; corrected release
+`urc-2024-25-v5-45169a66a7da-a1` is approved and all 16 parity exports reconcile.
 This is a full successor release because the reporting cohort, exposure denominator,
 monthly series, and headline figures change. It is not a classification-only
 incremental release.
@@ -84,13 +84,18 @@ The performance-only successors are:
   SHA-256 `622376306cda12840a684ad110b9ed21f52ec25448ef05d67f19f479a13799c0`.
 - `supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql`,
   SHA-256 `9deca17947a98d4667302793ad0b2326e1188964b113b1c975eff0ce20b357d5`.
+- `supabase/migrations/20260726120000_analysis_window_v5_coverage_payload_snapshots.sql`,
+  SHA-256 `83d3950b6a1838c73e089aa10d4913025fb48ba85a7637115168e89c5a3cbdfa`.
 
 The first successor changes execution only and is statically proven equivalent
 to the base payload definitions. The shared-cohort successor computes the
 accepted injury, classification and exposure rows once and statically preserves
 every downstream aggregate definition. The final successor computes the exact
 reviewed team and league payloads from those shared rows, then routes v5
-preflight and promotion to the build-pinned snapshots. None alters source,
+preflight and promotion to the build-pinned snapshots. The fifth migration
+corrects cohort-derived coverage counters that the original payload inherited
+from v4; it patches only the coverage object and proves that headline
+denominators and every non-coverage section are unchanged. None alters source,
 cohort or metric data.
 Do not alter any frozen migration or historical `v4` view.
 
@@ -129,16 +134,22 @@ The required sequence is:
      supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql
    node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
      tools/sql/register_analysis_window_v5_snapshot_migration.sql
+   node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
+     supabase/migrations/20260726120000_analysis_window_v5_coverage_payload_snapshots.sql
+   node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
+     tools/sql/register_analysis_window_v5_coverage_snapshot_migration.sql
    ```
 
    Each registration proves the expected objects and bindings before inserting
-   its one exact tracking row. Then verify all four tracked versions,
+   its one exact tracking row. Then verify all five tracked versions,
    view definitions, snapshot row counts and hashes read-only. The snapshot
    shared-cohort migration deliberately leaves its three materialised views
    unpopulated, so V5 candidates are intentionally unavailable between the two
    migrations while V4 continues serving unchanged. The candidate-snapshot
-   migration populates all five snapshots atomically. If it fails, retry that
-   migration after correcting the cause. A corrective versioned rollback must
+   migration populates its five snapshots atomically, then the coverage
+   correction creates the final shared coverage and patched-candidate
+   snapshots. If either fails, correct the cause and retry only the failed,
+   untracked migration. A corrective versioned rollback must
    restore every V5 aggregate view's dynamic source binding, not only repoint
    the candidate views; V4 remains the live release throughout. If a later
    source decision changes v5, obtain fresh explicit approval for the live refresh, then
@@ -194,8 +205,13 @@ The required sequence is:
    Do not combine the two reconstructions into another gate. The subsequent
    preflight is the definitive candidate-equality and payload-hash check.
 7. Review the generated exposure evidence and exact hashes, then create an
-   intentional evidence checkpoint commit. The working tree must be clean
-   before the following preflight. This commit binds the exact migration,
+   intentional evidence checkpoint commit. By default the working tree must be
+   clean before preflight. When Abdel explicitly authorises concurrent work,
+   commit every release-owned file and set
+   `PIPELINE_ALLOW_DIRTY_RELEASE_LEAGUE=1`; the release records
+   `dirty_worktree_override=true` and leaves unrelated paths untouched. Never
+   use this exception to release uncommitted pipeline, migration, evidence or
+   payload changes. This commit binds the exact migration,
    injury audit, exposure evidence, SQL reconciliation, and direct candidate
    performance result used for promotion. Record the SHA-256 values for all
    four migrations, the injury audit, exposure evidence, SQL reconciliation

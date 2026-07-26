@@ -4,31 +4,13 @@
     "Incidence = pooled time-loss injuries / pooled exposure hours \u00d7 1,000.",
     "Burden = pooled days lost / pooled exposure hours \u00d7 1,000.",
     "Season-attributed undated injuries are included in counts and breakdowns but excluded from monthly series.",
-    "Match exposure = registered fixtures in the season window \u00d7 15 players \u00d7 80 minutes / 60 per team.",
-    "Training exposure = included curated exposure in the season window minus match exposure.",
+    "Match exposure = registered fixtures in the reporting window \u00d7 15 players \u00d7 80 minutes / 60 per team.",
+    "Training exposure = effective included exposure in the reporting window minus fixture-derived match exposure.",
     "IOC-aligned body-location and tissue/pathology categories use the accepted mappings.",
     "Injury rows and values are restated from the reviewed 2024-25 master workbook and its ordered decision ledger."
   ],
   "season": "2024-25",
   "monthly": [
-    {
-      "month": "Jul 2024",
-      "days_lost": 42,
-      "distance_km": 0,
-      "exposure_hours": 0,
-      "burden_per_1000h": null,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": null
-    },
-    {
-      "month": "Aug 2024",
-      "days_lost": 0,
-      "distance_km": 0,
-      "exposure_hours": 0,
-      "burden_per_1000h": null,
-      "time_loss_injuries": 0,
-      "incidence_per_1000h": null
-    },
     {
       "month": "Sep 2024",
       "days_lost": 223,
@@ -123,7 +105,7 @@
   "coverage": {
     "hours": 3919.4036108,
     "weeks": 21,
-    "distance_km": 14291,
+    "distance_km": 14290.959306853,
     "match_hours": 420,
     "exposure_rows": 953,
     "exposure_grain": "weekly",
@@ -134,7 +116,7 @@
     "scope_status_counts": {
       "scope_unknown_included": 953
     },
-    "analysis_window_start": "2024-07-01",
+    "analysis_window_start": "2024-09-01",
     "included_exposure_status": "included"
   },
   "headline": [
@@ -142,33 +124,33 @@
       "key": "recorded_injuries",
       "unit": "injuries",
       "label": "Recorded injuries",
-      "value": 228,
-      "formula": "count(eligible injury rows in registered season window, including season-attributed undated rows)"
+      "value": 207,
+      "formula": "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"
     },
     {
       "key": "time_loss_injuries",
       "unit": "injuries",
       "label": "Time-loss injuries",
-      "value": 50,
+      "value": 49,
       "formula": "count(eligible injury rows where days lost > 0)"
     },
     {
       "key": "incidence_per_1000h",
       "unit": "per 1,000 player-hours",
       "label": "Incidence",
-      "value": 12.757042898624663,
+      "value": 12.501902040652169,
       "formula": "pooled time-loss injuries / pooled exposure hours * 1000",
-      "numerator": 50,
+      "numerator": 49,
       "denominator": 3919.4036108
     },
     {
       "key": "severity_mean_days",
       "unit": "days lost per injury",
       "label": "Mean severity",
-      "value": 33.04,
+      "value": 32.857142857142854,
       "formula": "pooled days lost / pooled time-loss injuries",
-      "numerator": 1652,
-      "denominator": 50
+      "numerator": 1610,
+      "denominator": 49
     },
     {
       "key": "severity_median_days",
@@ -181,29 +163,30 @@
       "key": "burden_per_1000h",
       "unit": "days lost per 1,000 player-hours",
       "label": "Burden",
-      "value": 421.49269737055886,
+      "value": 410.77678133571413,
       "formula": "pooled days lost / pooled exposure hours * 1000",
-      "numerator": 1652,
+      "numerator": 1610,
       "denominator": 3919.4036108
     }
   ],
   "limitations": [
-    "The registered season window, rather than team-specific exposure coverage, defines both numerator and denominator eligibility.",
+    "The immutable reporting window, rather than team-specific exposure coverage, defines numerator and denominator eligibility.",
+    "Historical exposure state is retained; V5 exposes effective eligibility without mutating curated rows.",
     "Season-attributed undated injuries are retained in counts and breakdowns but cannot be month-plotted.",
     "Unknown-setting injuries are included in overall metrics but have no match/training rate.",
     "Exact diagnoses are not inferred; accepted IA-02/ACL-01 reporting classification is applied separately.",
-    "Superseded database-side injury cleaning is retired; the reviewed master-plus-ledger lineage is the authoritative injury record."
+    "The reviewed master-plus-ledger lineage is the authoritative injury record."
   ],
   "generated_at": "2026-07-10T21:28:37+00:00",
   "injury_types": [
     {
       "key": "muscle_injury",
       "label": "Muscle injury",
-      "days_lost": 1099,
-      "burden_per_1000h": 280.39980291177005,
-      "mean_severity_days": 40.7037037037037,
-      "time_loss_injuries": 27,
-      "incidence_per_1000h": 6.888803165257317
+      "days_lost": 1057,
+      "burden_per_1000h": 269.6838868769254,
+      "mean_severity_days": 40.65384615384615,
+      "time_loss_injuries": 26,
+      "incidence_per_1000h": 6.633662307284824
     },
     {
       "key": "joint_sprain",
@@ -303,16 +286,6 @@
       "mean_severity_days": 37.5,
       "time_loss_injuries": 26,
       "incidence_per_1000h": 7.429837449946544
-    },
-    {
-      "key": "unknown",
-      "label": "Unknown",
-      "days_lost": 42,
-      "exposure_hours": null,
-      "burden_per_1000h": null,
-      "mean_severity_days": 42,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": null
     }
   ],
   "body_locations": [
@@ -373,11 +346,11 @@
     {
       "key": "lower_leg",
       "label": "Lower leg",
-      "days_lost": 423,
-      "burden_per_1000h": 107.92458292236465,
-      "mean_severity_days": 38.45454545454545,
-      "time_loss_injuries": 11,
-      "incidence_per_1000h": 2.806549437697426
+      "days_lost": 381,
+      "burden_per_1000h": 97.20866688751993,
+      "mean_severity_days": 38.1,
+      "time_loss_injuries": 10,
+      "incidence_per_1000h": 2.5514085797249324
     },
     {
       "key": "lumbosacral",
@@ -427,8 +400,8 @@
   ],
   "analysis_window": {
     "end": "2025-06-30",
-    "basis": "Registered season window; no team exposure-window restriction.",
-    "start": "2024-07-01"
+    "basis": "Immutable 2024-25 reporting window with effective row-level exposure eligibility.",
+    "start": "2024-09-01"
   },
   "injury_profiles": [
     {
@@ -447,13 +420,13 @@
       "code": "lower_leg",
       "label": "Lower leg",
       "setting": "all",
-      "days_lost": 423,
+      "days_lost": 381,
       "dimension": "body_location",
       "exposure_hours": 3919.4036108,
-      "burden_per_1000h": 107.92458292236465,
-      "mean_severity_days": 38.45454545454545,
-      "time_loss_injuries": 11,
-      "incidence_per_1000h": 2.806549437697426
+      "burden_per_1000h": 97.20866688751993,
+      "mean_severity_days": 38.1,
+      "time_loss_injuries": 10,
+      "incidence_per_1000h": 2.5514085797249324
     },
     {
       "code": "head",
@@ -780,18 +753,6 @@
       "incidence_per_1000h": 0.28576297884409785
     },
     {
-      "code": "lower_leg",
-      "label": "Lower leg",
-      "setting": "unknown",
-      "days_lost": 42,
-      "dimension": "body_location",
-      "exposure_hours": null,
-      "burden_per_1000h": null,
-      "mean_severity_days": 42,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": null
-    },
-    {
       "code": "thigh__muscle_injury",
       "label": "Thigh \u00b7 Muscle injury",
       "setting": "all",
@@ -807,13 +768,13 @@
       "code": "lower_leg__muscle_injury",
       "label": "Lower leg \u00b7 Muscle injury",
       "setting": "all",
-      "days_lost": 379,
+      "days_lost": 337,
       "dimension": "injury_profile",
       "exposure_hours": 3919.4036108,
-      "burden_per_1000h": 96.69838517157494,
-      "mean_severity_days": 42.111111111111114,
-      "time_loss_injuries": 9,
-      "incidence_per_1000h": 2.2962677217524394
+      "burden_per_1000h": 85.98246913673023,
+      "mean_severity_days": 42.125,
+      "time_loss_injuries": 8,
+      "incidence_per_1000h": 2.041126863779946
     },
     {
       "code": "head__brain_spinal_cord_injury",
@@ -1248,28 +1209,16 @@
       "incidence_per_1000h": 0.28576297884409785
     },
     {
-      "code": "lower_leg__muscle_injury",
-      "label": "Lower leg \u00b7 Muscle injury",
-      "setting": "unknown",
-      "days_lost": 42,
-      "dimension": "injury_profile",
-      "exposure_hours": null,
-      "burden_per_1000h": null,
-      "mean_severity_days": 42,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": null
-    },
-    {
       "code": "muscle_injury",
       "label": "Muscle injury",
       "setting": "all",
-      "days_lost": 1099,
+      "days_lost": 1057,
       "dimension": "injury_type",
       "exposure_hours": 3919.4036108,
-      "burden_per_1000h": 280.39980291177005,
-      "mean_severity_days": 40.7037037037037,
-      "time_loss_injuries": 27,
-      "incidence_per_1000h": 6.888803165257317
+      "burden_per_1000h": 269.6838868769254,
+      "mean_severity_days": 40.65384615384615,
+      "time_loss_injuries": 26,
+      "incidence_per_1000h": 6.633662307284824
     },
     {
       "code": "joint_sprain",
@@ -1536,18 +1485,6 @@
       "incidence_per_1000h": 0.28576297884409785
     },
     {
-      "code": "muscle_injury",
-      "label": "Muscle injury",
-      "setting": "unknown",
-      "days_lost": 42,
-      "dimension": "injury_type",
-      "exposure_hours": null,
-      "burden_per_1000h": null,
-      "mean_severity_days": 42,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": null
-    },
-    {
       "code": "compound__thigh__muscle_injury",
       "label": "Thigh \u00b7 Muscle injury",
       "setting": "all",
@@ -1563,13 +1500,13 @@
       "code": "compound__lower_leg__muscle_injury",
       "label": "Lower leg \u00b7 Muscle injury",
       "setting": "all",
-      "days_lost": 379,
+      "days_lost": 337,
       "dimension": "diagnosis",
       "exposure_hours": 3919.4036108,
-      "burden_per_1000h": 96.69838517157494,
-      "mean_severity_days": 42.111111111111114,
-      "time_loss_injuries": 9,
-      "incidence_per_1000h": 2.2962677217524394
+      "burden_per_1000h": 85.98246913673023,
+      "mean_severity_days": 42.125,
+      "time_loss_injuries": 8,
+      "incidence_per_1000h": 2.041126863779946
     },
     {
       "code": "concussion",
@@ -2002,18 +1939,6 @@
       "mean_severity_days": 3,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.28576297884409785
-    },
-    {
-      "code": "compound__lower_leg__muscle_injury",
-      "label": "Lower leg \u00b7 Muscle injury",
-      "setting": "unknown",
-      "days_lost": 42,
-      "dimension": "diagnosis",
-      "exposure_hours": null,
-      "burden_per_1000h": null,
-      "mean_severity_days": 42,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": null
     }
   ],
   "setting_metrics": [
@@ -2036,16 +1961,6 @@
       "mean_severity_days": 37.5,
       "time_loss_injuries": 26,
       "incidence_per_1000h": 7.429837449946544
-    },
-    {
-      "label": "Unknown",
-      "setting": "unknown",
-      "days_lost": 42,
-      "exposure_hours": null,
-      "burden_per_1000h": null,
-      "mean_severity_days": 42,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": null
     }
   ],
   "severity_distribution": [
@@ -2053,7 +1968,7 @@
       "key": "zero_days_medical_attention_only",
       "label": "Medical attention",
       "days_lost": 0,
-      "recorded_injuries": 178,
+      "recorded_injuries": 158,
       "time_loss_injuries": 0
     },
     {
@@ -2087,9 +2002,9 @@
     {
       "key": "greater_than_twenty_eight_days",
       "label": ">28 days",
-      "days_lost": 1301,
-      "recorded_injuries": 24,
-      "time_loss_injuries": 24
+      "days_lost": 1259,
+      "recorded_injuries": 23,
+      "time_loss_injuries": 23
     }
   ]
 }

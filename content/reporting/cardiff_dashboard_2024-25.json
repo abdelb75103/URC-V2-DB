@@ -4,39 +4,21 @@
     "Incidence = pooled time-loss injuries / pooled exposure hours \u00d7 1,000.",
     "Burden = pooled days lost / pooled exposure hours \u00d7 1,000.",
     "Season-attributed undated injuries are included in counts and breakdowns but excluded from monthly series.",
-    "Match exposure = registered fixtures in the season window \u00d7 15 players \u00d7 80 minutes / 60 per team.",
-    "Training exposure = included curated exposure in the season window minus match exposure.",
+    "Match exposure = registered fixtures in the reporting window \u00d7 15 players \u00d7 80 minutes / 60 per team.",
+    "Training exposure = effective included exposure in the reporting window minus fixture-derived match exposure.",
     "IOC-aligned body-location and tissue/pathology categories use the accepted mappings.",
     "Injury rows and values are restated from the reviewed 2024-25 master workbook and its ordered decision ledger."
   ],
   "season": "2024-25",
   "monthly": [
     {
-      "month": "Jul 2024",
-      "days_lost": 138,
-      "distance_km": 0,
-      "exposure_hours": 0,
-      "burden_per_1000h": null,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": null
-    },
-    {
-      "month": "Aug 2024",
-      "days_lost": 100,
-      "distance_km": 0,
-      "exposure_hours": 0,
-      "burden_per_1000h": null,
-      "time_loss_injuries": 3,
-      "incidence_per_1000h": null
-    },
-    {
       "month": "Sep 2024",
       "days_lost": 17,
-      "distance_km": 946.19483623,
-      "exposure_hours": 265.415,
-      "burden_per_1000h": 64.05063768061338,
+      "distance_km": 1922.73883623,
+      "exposure_hours": 567.22,
+      "burden_per_1000h": 29.97073445929269,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 3.767684569447846
+      "incidence_per_1000h": 1.7629843799583935
     },
     {
       "month": "Oct 2024",
@@ -112,20 +94,20 @@
     }
   ],
   "coverage": {
-    "hours": 5775.506666666667,
+    "hours": 6077.3116666666665,
     "weeks": 0,
-    "distance_km": 20071.3,
+    "distance_km": 21047.83042261,
     "match_hours": 360,
-    "exposure_rows": 5662,
+    "exposure_rows": 5873,
     "exposure_grain": "session",
-    "training_hours": 5415.506666666667,
+    "training_hours": 5717.3116666666665,
     "exposed_players": 73,
-    "exposure_periods": 172,
+    "exposure_periods": 178,
     "analysis_window_end": "2025-06-30",
     "scope_status_counts": {
-      "in_scope_explicit": 5662
+      "in_scope_explicit": 5873
     },
-    "analysis_window_start": "2024-07-01",
+    "analysis_window_start": "2024-09-01",
     "included_exposure_status": "included"
   },
   "headline": [
@@ -133,131 +115,123 @@
       "key": "recorded_injuries",
       "unit": "injuries",
       "label": "Recorded injuries",
-      "value": 27,
-      "formula": "count(eligible injury rows in registered season window, including season-attributed undated rows)"
+      "value": 22,
+      "formula": "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"
     },
     {
       "key": "time_loss_injuries",
       "unit": "injuries",
       "label": "Time-loss injuries",
-      "value": 16,
+      "value": 11,
       "formula": "count(eligible injury rows where days lost > 0)"
     },
     {
       "key": "incidence_per_1000h",
       "unit": "per 1,000 player-hours",
       "label": "Incidence",
-      "value": 2.7703197179814527,
+      "value": 1.8100108408679605,
       "formula": "pooled time-loss injuries / pooled exposure hours * 1000",
-      "numerator": 16,
-      "denominator": 5775.506666666667
+      "numerator": 11,
+      "denominator": 6077.3116666666665
     },
     {
       "key": "severity_mean_days",
       "unit": "days lost per injury",
       "label": "Mean severity",
-      "value": 42.9375,
+      "value": 40.81818181818182,
       "formula": "pooled days lost / pooled time-loss injuries",
-      "numerator": 687,
-      "denominator": 16
+      "numerator": 449,
+      "denominator": 11
     },
     {
       "key": "severity_median_days",
       "unit": "days lost per injury",
       "label": "Median severity",
-      "value": 37.5,
+      "value": 32,
       "formula": "median(days lost) across pooled time-loss injuries"
     },
     {
       "key": "burden_per_1000h",
       "unit": "days lost per 1,000 player-hours",
       "label": "Burden",
-      "value": 118.95060289082862,
+      "value": 73.88135159542857,
       "formula": "pooled days lost / pooled exposure hours * 1000",
-      "numerator": 687,
-      "denominator": 5775.506666666667
+      "numerator": 449,
+      "denominator": 6077.3116666666665
     }
   ],
   "limitations": [
-    "The registered season window, rather than team-specific exposure coverage, defines both numerator and denominator eligibility.",
+    "The immutable reporting window, rather than team-specific exposure coverage, defines numerator and denominator eligibility.",
+    "Historical exposure state is retained; V5 exposes effective eligibility without mutating curated rows.",
     "Season-attributed undated injuries are retained in counts and breakdowns but cannot be month-plotted.",
     "Unknown-setting injuries are included in overall metrics but have no match/training rate.",
     "Exact diagnoses are not inferred; accepted IA-02/ACL-01 reporting classification is applied separately.",
-    "Superseded database-side injury cleaning is retired; the reviewed master-plus-ledger lineage is the authoritative injury record."
+    "The reviewed master-plus-ledger lineage is the authoritative injury record."
   ],
   "generated_at": "2026-07-20T13:15:49+00:00",
   "injury_types": [
     {
       "key": "muscle_injury",
       "label": "Muscle injury",
-      "days_lost": 285,
-      "burden_per_1000h": 49.34631997654463,
-      "mean_severity_days": 47.5,
-      "time_loss_injuries": 6,
-      "incidence_per_1000h": 1.0388698942430448
-    },
-    {
-      "key": "fracture",
-      "label": "Fracture",
-      "days_lost": 141,
-      "burden_per_1000h": 24.41344251471155,
-      "mean_severity_days": 47,
-      "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
+      "days_lost": 177,
+      "burden_per_1000h": 29.124719893966272,
+      "mean_severity_days": 44.25,
+      "time_loss_injuries": 4,
+      "incidence_per_1000h": 0.658185760315622
     },
     {
       "key": "joint_sprain",
       "label": "Joint sprain",
       "days_lost": 162,
-      "burden_per_1000h": 28.04948714456221,
+      "burden_per_1000h": 26.65652329278269,
       "mean_severity_days": 81,
       "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "incidence_per_1000h": 0.329092880157811
     },
     {
-      "key": "tendinopathy",
-      "label": "Tendinopathy",
-      "days_lost": 54,
-      "burden_per_1000h": 9.349829048187402,
-      "mean_severity_days": 54,
+      "key": "fracture",
+      "label": "Fracture",
+      "days_lost": 65,
+      "burden_per_1000h": 10.695518605128857,
+      "mean_severity_days": 65,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "contusion_superficial",
       "label": "Contusion (superficial)",
       "days_lost": 16,
-      "burden_per_1000h": 2.7703197179814527,
+      "burden_per_1000h": 2.632743041262488,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "peripheral_nerve_injury",
       "label": "Peripheral nerve injury",
       "days_lost": 11,
-      "burden_per_1000h": 1.9045948061122489,
+      "burden_per_1000h": 1.8100108408679605,
       "mean_severity_days": 11,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "synovitis_capsulitis",
       "label": "Synovitis/capsulitis",
       "days_lost": 9,
-      "burden_per_1000h": 1.558304841364567,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "unknown",
       "label": "Unknown",
       "days_lost": 9,
-      "burden_per_1000h": 1.558304841364567,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     }
   ],
   "prior_season": {
@@ -279,12 +253,12 @@
     {
       "key": "training",
       "label": "Training",
-      "days_lost": 296,
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 54.65785903688913,
-      "mean_severity_days": 37,
-      "time_loss_injuries": 8,
-      "incidence_per_1000h": 1.4772394334294359
+      "days_lost": 58,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 10.14462799678287,
+      "mean_severity_days": 19.333333333333332,
+      "time_loss_injuries": 3,
+      "incidence_per_1000h": 0.5247221377646312
     }
   ],
   "body_locations": [
@@ -292,88 +266,88 @@
       "key": "elbow",
       "label": "Elbow",
       "days_lost": 72,
-      "burden_per_1000h": 12.466438730916536,
+      "burden_per_1000h": 11.847343685681196,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "foot",
       "label": "Foot",
       "days_lost": 9,
-      "burden_per_1000h": 1.558304841364567,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "hand",
       "label": "Hand",
-      "days_lost": 141,
-      "burden_per_1000h": 24.41344251471155,
-      "mean_severity_days": 47,
-      "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
+      "days_lost": 65,
+      "burden_per_1000h": 10.695518605128857,
+      "mean_severity_days": 65,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "head",
       "label": "Head",
       "days_lost": 11,
-      "burden_per_1000h": 1.9045948061122489,
+      "burden_per_1000h": 1.8100108408679605,
       "mean_severity_days": 11,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "hip_groin",
       "label": "Hip/Groin",
-      "days_lost": 33,
-      "burden_per_1000h": 5.713784418336746,
-      "mean_severity_days": 16.5,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "days_lost": 9,
+      "burden_per_1000h": 1.4809179607101495,
+      "mean_severity_days": 9,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "knee",
       "label": "Knee",
-      "days_lost": 144,
-      "burden_per_1000h": 24.932877461833073,
-      "mean_severity_days": 72,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "days_lost": 90,
+      "burden_per_1000h": 14.809179607101495,
+      "mean_severity_days": 90,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "lower_leg",
       "label": "Lower leg",
-      "days_lost": 116,
-      "burden_per_1000h": 20.084817955365533,
-      "mean_severity_days": 58,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "days_lost": 32,
+      "burden_per_1000h": 5.265486082524976,
+      "mean_severity_days": 32,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "shoulder",
       "label": "Shoulder",
       "days_lost": 16,
-      "burden_per_1000h": 2.7703197179814527,
+      "burden_per_1000h": 2.632743041262488,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "key": "thigh",
       "label": "Thigh",
       "days_lost": 145,
-      "burden_per_1000h": 25.106022444206914,
+      "burden_per_1000h": 23.8592338114413,
       "mean_severity_days": 48.333333333333336,
       "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
+      "incidence_per_1000h": 0.49363932023671653
     }
   ],
   "analysis_window": {
     "end": "2025-06-30",
-    "basis": "Registered season window; no team exposure-window restriction.",
-    "start": "2024-07-01"
+    "basis": "Immutable 2024-25 reporting window with effective row-level exposure eligibility.",
+    "start": "2024-09-01"
   },
   "injury_profiles": [
     {
@@ -382,59 +356,23 @@
       "setting": "all",
       "days_lost": 145,
       "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 25.106022444206914,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 23.8592338114413,
       "mean_severity_days": 48.333333333333336,
       "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
-    },
-    {
-      "code": "hand",
-      "label": "Hand",
-      "setting": "all",
-      "days_lost": 141,
-      "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 24.41344251471155,
-      "mean_severity_days": 47,
-      "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
+      "incidence_per_1000h": 0.49363932023671653
     },
     {
       "code": "knee",
       "label": "Knee",
       "setting": "all",
-      "days_lost": 144,
+      "days_lost": 90,
       "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 24.932877461833073,
-      "mean_severity_days": 72,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
-    },
-    {
-      "code": "lower_leg",
-      "label": "Lower leg",
-      "setting": "all",
-      "days_lost": 116,
-      "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 20.084817955365533,
-      "mean_severity_days": 58,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
-    },
-    {
-      "code": "hip_groin",
-      "label": "Hip/Groin",
-      "setting": "all",
-      "days_lost": 33,
-      "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 5.713784418336746,
-      "mean_severity_days": 16.5,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 14.809179607101495,
+      "mean_severity_days": 90,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "elbow",
@@ -442,11 +380,35 @@
       "setting": "all",
       "days_lost": 72,
       "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 12.466438730916536,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 11.847343685681196,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
+    },
+    {
+      "code": "hand",
+      "label": "Hand",
+      "setting": "all",
+      "days_lost": 65,
+      "dimension": "body_location",
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 10.695518605128857,
+      "mean_severity_days": 65,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
+    },
+    {
+      "code": "lower_leg",
+      "label": "Lower leg",
+      "setting": "all",
+      "days_lost": 32,
+      "dimension": "body_location",
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 5.265486082524976,
+      "mean_severity_days": 32,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "shoulder",
@@ -454,11 +416,11 @@
       "setting": "all",
       "days_lost": 16,
       "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 2.7703197179814527,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 2.632743041262488,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "head",
@@ -466,11 +428,11 @@
       "setting": "all",
       "days_lost": 11,
       "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.9045948061122489,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.8100108408679605,
       "mean_severity_days": 11,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "foot",
@@ -478,11 +440,23 @@
       "setting": "all",
       "days_lost": 9,
       "dimension": "body_location",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.558304841364567,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
+    },
+    {
+      "code": "hip_groin",
+      "label": "Hip/Groin",
+      "setting": "all",
+      "days_lost": 9,
+      "dimension": "body_location",
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
+      "mean_severity_days": 9,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "thigh",
@@ -572,49 +546,13 @@
       "code": "lower_leg",
       "label": "Lower leg",
       "setting": "training",
-      "days_lost": 116,
+      "days_lost": 32,
       "dimension": "body_location",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 21.419971784726823,
-      "mean_severity_days": 58,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.36930985835735897
-    },
-    {
-      "code": "hand",
-      "label": "Hand",
-      "setting": "training",
-      "days_lost": 76,
-      "dimension": "body_location",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 14.033774617579642,
-      "mean_severity_days": 38,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.36930985835735897
-    },
-    {
-      "code": "knee",
-      "label": "Knee",
-      "setting": "training",
-      "days_lost": 54,
-      "dimension": "body_location",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 9.971366175648694,
-      "mean_severity_days": 54,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 5.597036136156066,
+      "mean_severity_days": 32,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
-    },
-    {
-      "code": "hip_groin",
-      "label": "Hip/Groin",
-      "setting": "training",
-      "days_lost": 24,
-      "dimension": "body_location",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 4.431718300288308,
-      "mean_severity_days": 24,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "thigh",
@@ -622,11 +560,11 @@
       "setting": "training",
       "days_lost": 17,
       "dimension": "body_location",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 3.1391337960375516,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 2.97342544733291,
       "mean_severity_days": 17,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "foot",
@@ -634,11 +572,11 @@
       "setting": "training",
       "days_lost": 9,
       "dimension": "body_location",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 1.6618943626081155,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 1.5741664132938937,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "thigh__muscle_injury",
@@ -646,35 +584,11 @@
       "setting": "all",
       "days_lost": 145,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 25.106022444206914,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 23.8592338114413,
       "mean_severity_days": 48.333333333333336,
       "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
-    },
-    {
-      "code": "hand__fracture",
-      "label": "Hand \u00b7 Fracture",
-      "setting": "all",
-      "days_lost": 141,
-      "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 24.41344251471155,
-      "mean_severity_days": 47,
-      "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
-    },
-    {
-      "code": "lower_leg__muscle_injury",
-      "label": "Lower leg \u00b7 Muscle injury",
-      "setting": "all",
-      "days_lost": 116,
-      "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 20.084817955365533,
-      "mean_severity_days": 58,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "incidence_per_1000h": 0.49363932023671653
     },
     {
       "code": "knee__joint_sprain",
@@ -682,11 +596,11 @@
       "setting": "all",
       "days_lost": 90,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 15.583048413645672,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 14.809179607101495,
       "mean_severity_days": 90,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "elbow__joint_sprain",
@@ -694,35 +608,35 @@
       "setting": "all",
       "days_lost": 72,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 12.466438730916536,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 11.847343685681196,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
-      "code": "knee__tendinopathy",
-      "label": "Knee \u00b7 Tendinopathy",
+      "code": "hand__fracture",
+      "label": "Hand \u00b7 Fracture",
       "setting": "all",
-      "days_lost": 54,
+      "days_lost": 65,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 9.349829048187402,
-      "mean_severity_days": 54,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 10.695518605128857,
+      "mean_severity_days": 65,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
-      "code": "hip_groin__muscle_injury",
-      "label": "Hip/Groin \u00b7 Muscle injury",
+      "code": "lower_leg__muscle_injury",
+      "label": "Lower leg \u00b7 Muscle injury",
       "setting": "all",
-      "days_lost": 24,
+      "days_lost": 32,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 4.155479576972179,
-      "mean_severity_days": 24,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 5.265486082524976,
+      "mean_severity_days": 32,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "shoulder__contusion_superficial",
@@ -730,11 +644,11 @@
       "setting": "all",
       "days_lost": 16,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 2.7703197179814527,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 2.632743041262488,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "head__peripheral_nerve_injury",
@@ -742,11 +656,11 @@
       "setting": "all",
       "days_lost": 11,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.9045948061122489,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.8100108408679605,
       "mean_severity_days": 11,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "foot__synovitis_capsulitis",
@@ -754,11 +668,11 @@
       "setting": "all",
       "days_lost": 9,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.558304841364567,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "hip_groin__unknown",
@@ -766,11 +680,11 @@
       "setting": "all",
       "days_lost": 9,
       "dimension": "injury_profile",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.558304841364567,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "thigh__muscle_injury",
@@ -860,49 +774,13 @@
       "code": "lower_leg__muscle_injury",
       "label": "Lower leg \u00b7 Muscle injury",
       "setting": "training",
-      "days_lost": 116,
+      "days_lost": 32,
       "dimension": "injury_profile",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 21.419971784726823,
-      "mean_severity_days": 58,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.36930985835735897
-    },
-    {
-      "code": "hand__fracture",
-      "label": "Hand \u00b7 Fracture",
-      "setting": "training",
-      "days_lost": 76,
-      "dimension": "injury_profile",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 14.033774617579642,
-      "mean_severity_days": 38,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.36930985835735897
-    },
-    {
-      "code": "knee__tendinopathy",
-      "label": "Knee \u00b7 Tendinopathy",
-      "setting": "training",
-      "days_lost": 54,
-      "dimension": "injury_profile",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 9.971366175648694,
-      "mean_severity_days": 54,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 5.597036136156066,
+      "mean_severity_days": 32,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
-    },
-    {
-      "code": "hip_groin__muscle_injury",
-      "label": "Hip/Groin \u00b7 Muscle injury",
-      "setting": "training",
-      "days_lost": 24,
-      "dimension": "injury_profile",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 4.431718300288308,
-      "mean_severity_days": 24,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "thigh__muscle_injury",
@@ -910,11 +788,11 @@
       "setting": "training",
       "days_lost": 17,
       "dimension": "injury_profile",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 3.1391337960375516,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 2.97342544733291,
       "mean_severity_days": 17,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "foot__synovitis_capsulitis",
@@ -922,35 +800,23 @@
       "setting": "training",
       "days_lost": 9,
       "dimension": "injury_profile",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 1.6618943626081155,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 1.5741664132938937,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "muscle_injury",
       "label": "Muscle injury",
       "setting": "all",
-      "days_lost": 285,
+      "days_lost": 177,
       "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 49.34631997654463,
-      "mean_severity_days": 47.5,
-      "time_loss_injuries": 6,
-      "incidence_per_1000h": 1.0388698942430448
-    },
-    {
-      "code": "fracture",
-      "label": "Fracture",
-      "setting": "all",
-      "days_lost": 141,
-      "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 24.41344251471155,
-      "mean_severity_days": 47,
-      "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 29.124719893966272,
+      "mean_severity_days": 44.25,
+      "time_loss_injuries": 4,
+      "incidence_per_1000h": 0.658185760315622
     },
     {
       "code": "joint_sprain",
@@ -958,23 +824,23 @@
       "setting": "all",
       "days_lost": 162,
       "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 28.04948714456221,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 26.65652329278269,
       "mean_severity_days": 81,
       "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "incidence_per_1000h": 0.329092880157811
     },
     {
-      "code": "tendinopathy",
-      "label": "Tendinopathy",
+      "code": "fracture",
+      "label": "Fracture",
       "setting": "all",
-      "days_lost": 54,
+      "days_lost": 65,
       "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 9.349829048187402,
-      "mean_severity_days": 54,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 10.695518605128857,
+      "mean_severity_days": 65,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "contusion_superficial",
@@ -982,11 +848,11 @@
       "setting": "all",
       "days_lost": 16,
       "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 2.7703197179814527,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 2.632743041262488,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "peripheral_nerve_injury",
@@ -994,11 +860,11 @@
       "setting": "all",
       "days_lost": 11,
       "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.9045948061122489,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.8100108408679605,
       "mean_severity_days": 11,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "synovitis_capsulitis",
@@ -1006,11 +872,11 @@
       "setting": "all",
       "days_lost": 9,
       "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.558304841364567,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "unknown",
@@ -1018,11 +884,11 @@
       "setting": "all",
       "days_lost": 9,
       "dimension": "injury_type",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.558304841364567,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "joint_sprain",
@@ -1100,37 +966,13 @@
       "code": "muscle_injury",
       "label": "Muscle injury",
       "setting": "training",
-      "days_lost": 157,
+      "days_lost": 49,
       "dimension": "injury_type",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 28.99082388105268,
-      "mean_severity_days": 39.25,
-      "time_loss_injuries": 4,
-      "incidence_per_1000h": 0.7386197167147179
-    },
-    {
-      "code": "fracture",
-      "label": "Fracture",
-      "setting": "training",
-      "days_lost": 76,
-      "dimension": "injury_type",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 14.033774617579642,
-      "mean_severity_days": 38,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 8.570461583488976,
+      "mean_severity_days": 24.5,
       "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.36930985835735897
-    },
-    {
-      "code": "tendinopathy",
-      "label": "Tendinopathy",
-      "setting": "training",
-      "days_lost": 54,
-      "dimension": "injury_type",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 9.971366175648694,
-      "mean_severity_days": 54,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.34981475850975413
     },
     {
       "code": "synovitis_capsulitis",
@@ -1138,11 +980,11 @@
       "setting": "training",
       "days_lost": 9,
       "dimension": "injury_type",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 1.6618943626081155,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 1.5741664132938937,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "compound__thigh__muscle_injury",
@@ -1150,35 +992,11 @@
       "setting": "all",
       "days_lost": 145,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 25.106022444206914,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 23.8592338114413,
       "mean_severity_days": 48.333333333333336,
       "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
-    },
-    {
-      "code": "compound__hand__fracture",
-      "label": "Hand \u00b7 Fracture",
-      "setting": "all",
-      "days_lost": 141,
-      "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 24.41344251471155,
-      "mean_severity_days": 47,
-      "time_loss_injuries": 3,
-      "incidence_per_1000h": 0.5194349471215224
-    },
-    {
-      "code": "compound__lower_leg__muscle_injury",
-      "label": "Lower leg \u00b7 Muscle injury",
-      "setting": "all",
-      "days_lost": 116,
-      "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 20.084817955365533,
-      "mean_severity_days": 58,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.3462899647476816
+      "incidence_per_1000h": 0.49363932023671653
     },
     {
       "code": "compound__knee__joint_sprain",
@@ -1186,11 +1004,11 @@
       "setting": "all",
       "days_lost": 90,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 15.583048413645672,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 14.809179607101495,
       "mean_severity_days": 90,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "compound__elbow__joint_sprain",
@@ -1198,35 +1016,35 @@
       "setting": "all",
       "days_lost": 72,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 12.466438730916536,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 11.847343685681196,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
-      "code": "compound__knee__tendinopathy",
-      "label": "Knee \u00b7 Tendinopathy",
+      "code": "compound__hand__fracture",
+      "label": "Hand \u00b7 Fracture",
       "setting": "all",
-      "days_lost": 54,
+      "days_lost": 65,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 9.349829048187402,
-      "mean_severity_days": 54,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 10.695518605128857,
+      "mean_severity_days": 65,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
-      "code": "compound__hip_groin__muscle_injury",
-      "label": "Hip/Groin \u00b7 Muscle injury",
+      "code": "compound__lower_leg__muscle_injury",
+      "label": "Lower leg \u00b7 Muscle injury",
       "setting": "all",
-      "days_lost": 24,
+      "days_lost": 32,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 4.155479576972179,
-      "mean_severity_days": 24,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 5.265486082524976,
+      "mean_severity_days": 32,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "compound__shoulder__contusion_superficial",
@@ -1234,11 +1052,11 @@
       "setting": "all",
       "days_lost": 16,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 2.7703197179814527,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 2.632743041262488,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "concussion",
@@ -1246,11 +1064,11 @@
       "setting": "all",
       "days_lost": 11,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.9045948061122489,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.8100108408679605,
       "mean_severity_days": 11,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "compound__foot__synovitis_capsulitis",
@@ -1258,11 +1076,11 @@
       "setting": "all",
       "days_lost": 9,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.558304841364567,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "unknown",
@@ -1270,11 +1088,11 @@
       "setting": "all",
       "days_lost": 9,
       "dimension": "diagnosis",
-      "exposure_hours": 5775.506666666667,
-      "burden_per_1000h": 1.558304841364567,
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1731449823738408
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "compound__thigh__muscle_injury",
@@ -1364,49 +1182,13 @@
       "code": "compound__lower_leg__muscle_injury",
       "label": "Lower leg \u00b7 Muscle injury",
       "setting": "training",
-      "days_lost": 116,
+      "days_lost": 32,
       "dimension": "diagnosis",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 21.419971784726823,
-      "mean_severity_days": 58,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.36930985835735897
-    },
-    {
-      "code": "compound__hand__fracture",
-      "label": "Hand \u00b7 Fracture",
-      "setting": "training",
-      "days_lost": 76,
-      "dimension": "diagnosis",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 14.033774617579642,
-      "mean_severity_days": 38,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.36930985835735897
-    },
-    {
-      "code": "compound__knee__tendinopathy",
-      "label": "Knee \u00b7 Tendinopathy",
-      "setting": "training",
-      "days_lost": 54,
-      "dimension": "diagnosis",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 9.971366175648694,
-      "mean_severity_days": 54,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 5.597036136156066,
+      "mean_severity_days": 32,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
-    },
-    {
-      "code": "compound__hip_groin__muscle_injury",
-      "label": "Hip/Groin \u00b7 Muscle injury",
-      "setting": "training",
-      "days_lost": 24,
-      "dimension": "diagnosis",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 4.431718300288308,
-      "mean_severity_days": 24,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "compound__thigh__muscle_injury",
@@ -1414,11 +1196,11 @@
       "setting": "training",
       "days_lost": 17,
       "dimension": "diagnosis",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 3.1391337960375516,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 2.97342544733291,
       "mean_severity_days": 17,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     },
     {
       "code": "compound__foot__synovitis_capsulitis",
@@ -1426,11 +1208,11 @@
       "setting": "training",
       "days_lost": 9,
       "dimension": "diagnosis",
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 1.6618943626081155,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 1.5741664132938937,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1846549291786795
+      "incidence_per_1000h": 0.17490737925487707
     }
   ],
   "setting_metrics": [
@@ -1447,12 +1229,12 @@
     {
       "label": "Training",
       "setting": "training",
-      "days_lost": 296,
-      "exposure_hours": 5415.506666666667,
-      "burden_per_1000h": 54.65785903688913,
-      "mean_severity_days": 37,
-      "time_loss_injuries": 8,
-      "incidence_per_1000h": 1.4772394334294359
+      "days_lost": 58,
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 10.14462799678287,
+      "mean_severity_days": 19.333333333333332,
+      "time_loss_injuries": 3,
+      "incidence_per_1000h": 0.5247221377646312
     }
   ],
   "severity_distribution": [
@@ -1466,16 +1248,16 @@
     {
       "key": "eight_to_twenty_eight_days",
       "label": "8-28 days",
-      "days_lost": 111,
-      "recorded_injuries": 7,
-      "time_loss_injuries": 7
+      "days_lost": 62,
+      "recorded_injuries": 5,
+      "time_loss_injuries": 5
     },
     {
       "key": "greater_than_twenty_eight_days",
       "label": ">28 days",
-      "days_lost": 576,
-      "recorded_injuries": 9,
-      "time_loss_injuries": 9
+      "days_lost": 387,
+      "recorded_injuries": 6,
+      "time_loss_injuries": 6
     },
     {
       "key": "unknown_or_censored",
