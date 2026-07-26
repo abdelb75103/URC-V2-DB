@@ -4,7 +4,7 @@ Status: current operating map. This document explains the accepted route; `AGENT
 
 ## 2024-25 injury-lineage restructure (2026-07-24)
 
-The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, complete). The live dashboards now serve the accepted analysis-window v5 bundle `urc-2024-25-v5-45169a66a7da-a1`; the 24 July v4 bundle remains retained for rollback. The local route is four verbs under `tools/`:
+The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, complete). The live dashboards now serve the accepted V5 contact-distribution successor `urc-2024-25-v5-4ae722941285-a1`; the earlier analysis-window V5 and 24 July v4 bundles remain retained. The local route is four verbs under `tools/`:
 
 1. `render.py`: canonical master data table to the formatted master workbook (extract, render, compare, mark-excluded). Baseline hashes: `data/2024-25/master/baseline_record.json`.
 2. `replay.py`: v5 baseline plus `data/2024-25/decisions/ledger.json` to the inclusion CSV, its manifest, and generated `docs/METHODOLOGY.md`. Must reproduce the accepted CSV byte-for-byte; conflicts stop the line.
@@ -12,6 +12,31 @@ The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RE
 4. `checks.py`: standing season-keyed comparability suite; structural FAIL, observations FLAG.
 
 Routine change loop: author one decision record, run replay, read the diff summary and flags, stop for Abdel's review. That covers the data layer and stops there; reaching the website is the separate, separately approved release path (lineage load, `release-league` preflight, recorded yes, promotion, then `export-team-dashboards`). The table below remains the DB-side operating map; releases in this lineage now use the simplified path recorded in the 2026-07-24 changelog entry.
+
+## Dynamic row-correction path (additive, installation verification pending)
+
+`docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md` is the operator procedure for correcting one existing effective injury row without rebuilding unaffected releases. The commands are `capture-served-baseline`, `verify-served-baseline`, `correction-propose`, `correction-apply`, `correction-release`, and `correction-rollback`.
+
+The implementation is migration `20260726200000_dynamic_row_correction_pipeline.sql`. Its only authorised installation target is the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. Apply the additive migration with `pipeline/sql_exec.mjs`, then apply `tools/sql/register_dynamic_row_correction_pipeline_migration.sql` because the executor does not self-register migrations. Do not call this path operational until the changelog records the exact migration checksum, successful registration, live transactional verification, independent T4 review, and final V5 baseline parity.
+
+Frozen V2 bundle storage is not extended or bypassed. Dynamic promotion and rollback write only to `reporting.correction_release_context_v1` or `reporting.correction_rollback_context_v1`, `reporting.correction_league_payloads_v1`, and `reporting.correction_team_payloads_v1`. They never insert into `reporting.league_release_context_v2`, `reporting.league_release_payloads_v2`, or `reporting.team_dashboard_payloads_v2`.
+
+Three unified additive views expose either storage family without rewriting it: `reporting.dashboard_bundle_context_v1`, `reporting.dashboard_bundle_league_payloads_v1`, and `reporting.dashboard_bundle_team_payloads_v1`. The internal `reporting.latest_approved_dashboard_bundle_v4` selector chooses the newest complete approved V2, correction, or rollback bundle. `lib/reporting.ts` reads only the allowlisted `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` projections. Before any correction is approved, those V5 views project the current V5 V2 bundle exactly.
+
+The unified sources and internal V4 selector are private and ungranted to `web_reader`. The V5 reader views execute their joins under the owning definer, expose only the explicit dashboard allowlist, and are the only new surfaces granted to `web_reader`. This prevents direct reader access to bundle context, correction payload storage, release identifiers, build identifiers, correction evidence, or audit state.
+
+The operator sequence is deliberately gated:
+
+1. Capture and verify the currently served bundle read-only.
+2. Produce a Git-ignored read-only proposal. It resolves the exact row, checks its current typed value, binds row and correction-set fingerprints, and asks versioned SQL for the full team and pooled league preview. There is no reviewer field at proposal time.
+3. Abdel reviews the proposal. `correction-apply --reviewer 'Abdel Babiker'` replays every stale/concurrency check, appends the immutable approval and correction evidence, then stores one immutable payload-bearing draft.
+4. `correction-release --preflight` reads that stored draft and proves its predecessor and payload hashes. A metric-changing one-team correction must reuse the other 15 team payloads byte-for-byte, including their `contact_distribution`. The affected team and pooled league contact distribution are recomputed from the same effective injury cohort when eligibility changes. A no-impact correction must reuse all 16, but still requires an explicit release promotion so its reviewed decision enters the immutable release lineage.
+5. A separate reviewed `correction-release --preflight-file ...` promotion publishes the exact draft in the additive correction payload tables as an immutable successor. Its required rollback arguments allow a parity-export closeout failure to create an immediate append-only predecessor successor.
+6. `correction-rollback` never deletes or reapproves history. It creates another immutable additive release whose payloads exactly copy the retained predecessor of the correction release.
+
+The safety contract is binding: keep all private evidence, baseline, proposal and preflight files Git-ignored; calculate impact only in versioned SQL; preserve `ingestion.source_rows`, curated data, V5, frozen views, frozen V2 payload/context rows and predecessor bundles; allow only one pending correction set per season; and stop on any row, correction-set, candidate or payload hash mismatch. The active-correction guard blocks both approval of an ordinary V2 successor and retirement of the served predecessor while a correction is active. A later release must be correction-aware or explicitly roll the correction back.
+
+The mechanism is season-keyed for Year 2. Diagnosis and body-location corrections retain source evidence and map only through controlled IOC categories, otherwise remain `Unknown`. This is a distinct database correction route, not a replacement for the accepted 2024-25 master, ledger and inclusion replay loop.
 
 ## Completion contract
 
@@ -24,7 +49,7 @@ A team/season is reproducible only when all of the following are true:
 5. Manual decisions are immutable adjudications keyed to the exact source evidence; they are reapplied by the pipeline rather than hand-edited into outputs.
 6. Curated rows retain both `source_row_id` and `record_version_id` and belong to one active, non-stale, checksummed build.
 7. Published metrics come from versioned SQL analysis views and retain their numerator, denominator, view/cohort version, build, and release identity.
-8. The public payload is an immutable reviewed snapshot, and the website reads only the least-privilege reporting views.
+8. The public payload is an immutable reviewed snapshot, and the website reads only the least-privilege correction-aware `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` views.
 
 The formal boundary begins at the supplied pseudonymised, standardised intake. Upstream pseudonymisation or standardisation is claimed as reproducible only when its retained script, checksum bridge, locator evidence, and row reconciliation prove it.
 
@@ -45,7 +70,7 @@ The formal boundary begins at the supplied pseudonymised, standardised intake. U
 | 7. Verify | `reconcile-curated` and `verify-analysis-parity` against the exact candidate. | Count/metric reconciliation and candidate parity evidence. | Read-only against the database; no promotion. |
 | 8a. Team release | First: `release --preflight`, review, then `release --preflight-file ... --preflight-reviewer ...`. Re-release: use the exact approved predecessor snapshot and, for numeric drift, an approved restatement envelope. | `reporting.aggregate_releases`, `release_context`, `release_table_rows`, reviewer and candidate hashes, build/view/run identity. | Preflight is read-only. Promotion is a separately approved live write. |
 | 8b. League bundle | Run `release-league` with the accepted analysis/classification/cohort tuple, then promote the reviewed exact file. Classification-only successors use the incremental candidate views: they inherit the approved payload and replace only `body_locations`, `injury_types`, and `injury_profiles`. | One immutable 16-team bundle, member release/build identities, classification/cohort evidence hashes, canonical payload hash, and retained predecessor. | Preflight is read-only. Promotion is a separately approved live write. Never rebuild or overwrite unrelated metrics for a classification-only change. |
-| 9. Serve | `lib/reporting.ts` queries `reporting.latest_team_dashboard_v2` and `reporting.latest_league_dashboard_v2`. | Zod-validated, whitelisted aggregate payload only. | Website is read-only and fails closed. |
+| 9. Serve | `lib/reporting.ts` queries `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5`. The private V4 bundle selector chooses either frozen V2 or additive correction payloads; V5 exposes the complete dashboard allowlist, including `contact_distribution`. | Zod-validated, whitelisted aggregate payload only; no release, build, correction, or audit identifiers cross the boundary. Private unified views are ungranted to `web_reader`. | Website is read-only and fails closed. |
 
 The 2024-25 V3 league bundle is an additive successor cohort. It does not rewrite frozen V1 team releases or historical migrations. Broader diagnosis inference in `tools/sql/dashboard_v3_preview.sql` remains a local experiment and is not part of the accepted pipeline.
 

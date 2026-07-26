@@ -39,7 +39,7 @@ test('league dashboard uses the approved database consumer view and fails closed
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
   assert.doesNotMatch(page, /getExposureReviewPreview|exposurePreview/);
 
-  assert.match(reporting, /reporting\.latest_league_dashboard_v3/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v5/);
   assert.match(reporting, /where season = \$1/);
   assert.match(reporting, /expected one league dashboard row/);
   assert.doesNotMatch(reporting, /reduce\(|incidence.*\/.*hours|burden.*\/.*hours/i);
@@ -52,10 +52,12 @@ test('published league dashboard is unlocked on the homepage', async () => {
   assert.match(home, /href="\/urc"/);
 });
 
-test('team dashboard reads the v3 approved-build projection', async () => {
+test('team dashboard reads the correction-aware v4 approved-build projection', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
 
-  assert.match(reporting, /reporting\.latest_team_dashboard_v3/);
+  assert.match(reporting, /reporting\.latest_team_dashboard_v5/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v5/);
+  assert.doesNotMatch(reporting, /reporting\.latest_(?:team|league)_dashboard_v[23]/);
   assert.match(reporting, /setting_metrics/);
   assert.match(reporting, /injury_profiles/);
   assert.match(reporting, /injury_type_families/);
@@ -165,7 +167,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   try {
     const { getLeagueDashboard } = await loadReportingForFixtureTest();
     const dashboard = await getLeagueDashboard();
-    assert.match(queryText, /reporting\.latest_league_dashboard_v3/);
+    assert.match(queryText, /reporting\.latest_league_dashboard_v5/);
     assert.equal(dashboard.injury_type_families[0].burden_per_1000h, 50.8333333333);
     assert.equal(dashboard.injury_type_families[0].subtypes[0].code, 'muscle_injury');
   } finally {

@@ -5483,11 +5483,11 @@ def current_league_bundle_snapshot(season: str) -> tuple[dict[str, Any], dict[st
         f"""
         with current_bundle as (
           -- Selected through the same view the website reads
-          -- (reporting.latest_approved_dashboard_bundle_v2), not a looser
+          -- (reporting.latest_approved_dashboard_bundle_v4), not a looser
           -- "newest approved" rule, so an exported parity payload can never
           -- diverge from the served bundle by construction.
           select b.release_id, b.season, r.release_label, r.approved_at
-          from reporting.latest_approved_dashboard_bundle_v2 b
+          from reporting.latest_approved_dashboard_bundle_v4 b
           join reporting.aggregate_releases r on r.id = b.release_id
           where b.season = {params.text(season)}
         )
@@ -5497,8 +5497,10 @@ def current_league_bundle_snapshot(season: str) -> tuple[dict[str, Any], dict[st
             'team_key', team.team_key, 'dashboard', team.dashboard_payload
           ) order by team.team_key), '[]'::jsonb) as teams
         from current_bundle b
-        join reporting.league_release_payloads_v2 league on league.release_id = b.release_id
-        join reporting.team_dashboard_payloads_v2 team on team.bundle_release_id = b.release_id
+        join reporting.dashboard_bundle_league_payloads_v1 league
+          on league.release_id = b.release_id
+        join reporting.dashboard_bundle_team_payloads_v1 team
+          on team.bundle_release_id = b.release_id
         group by b.release_id, b.release_label, b.approved_at, league.dashboard_payload
         """,
         params.values,
@@ -5610,13 +5612,14 @@ def write_parity_export_set(
 
 def write_team_dashboard_parity_exports(
     season: str, *, expected_release_label: str | None = None,
+    expected_release_id: str | None = None,
     expected_bundle: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Refresh committed per-team parity exports from the approved bundle.
 
     release-league rewrites only content/reporting/urc_dashboard_<season>.json,
     so the 16 per-team files go stale after every league release while the
-    website keeps serving the bundle through reporting.latest_team_dashboard_v2.
+    website keeps serving the bundle through reporting.latest_team_dashboard_v5.
     Those files are a parity and emergency export, never an application input,
     so this rewrites each one from the same approved bundle the site serves and
     records the release identity it came from. Run it after every accepted
@@ -5644,6 +5647,12 @@ def write_team_dashboard_parity_exports(
             f"expected_release_label={expected_release_label!r}, "
             f"actual_release_label={metadata['release_label']!r}"
         )
+    if expected_release_id is not None and metadata["release_id"] != expected_release_id:
+        raise SystemExit(
+            "approved bundle changed before parity export: "
+            f"expected_release_id={expected_release_id!r}, "
+            f"actual_release_id={metadata['release_id']!r}"
+        )
     if expected_bundle is not None:
         bundle_diffs = diff_json_documents(expected_bundle, bundle)
         if bundle_diffs:
@@ -5669,6 +5678,10 @@ def write_team_dashboard_parity_exports(
                 public,
             )
         )
+    league_public = without_keys(bundle["league"], {"source_files", "pipeline_evidence"})
+    assert_public_payload_is_publishable(league_public, f"urc_dashboard_{season}")
+    league_path = Path("content") / "reporting" / f"urc_dashboard_{season}.json"
+    planned.append((league_path, league_public))
     expected_paths = {str(path) for path, _ in planned}
     stale = {
         str(path)
@@ -5686,7 +5699,8 @@ def write_team_dashboard_parity_exports(
     export_hashes = {str(path): sha256_file(path) for path, _ in planned}
     return {
         "status": "team_parity_exported", "season": season,
-        "team_count": len(written), "paths": written,
+        "team_count": len(bundle["teams"]), "paths": written,
+        "league_path": str(league_path),
         "export_set_sha256": sha256_json(export_hashes), **metadata,
     }
 
@@ -11953,6 +11967,15 @@ def self_check(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    from pipeline.corrections import (
+        capture_served_baseline,
+        correction_apply,
+        correction_propose,
+        correction_release,
+        correction_rollback,
+        verify_served_baseline,
+    )
+
     parser = argparse.ArgumentParser(prog="pipeline")
     subcommands = parser.add_subparsers(required=True)
 
@@ -12315,6 +12338,71 @@ def main() -> None:
     alias_parser = subcommands.add_parser("validate-alias-map")
     alias_parser.add_argument("--codebook", default=str(TEAM_ALIAS_CODEBOOK_PATH))
     alias_parser.set_defaults(func=validate_alias_map)
+
+    capture_correction_baseline_parser = subcommands.add_parser("capture-served-baseline")
+    capture_correction_baseline_parser.add_argument("--season", required=True)
+    capture_correction_baseline_parser.add_argument("--output", required=True)
+    capture_correction_baseline_parser.set_defaults(func=capture_served_baseline)
+
+    verify_correction_baseline_parser = subcommands.add_parser("verify-served-baseline")
+    verify_correction_baseline_parser.add_argument("--season", required=True)
+    verify_correction_baseline_parser.add_argument("--baseline-file", required=True)
+    verify_correction_baseline_parser.set_defaults(func=verify_served_baseline)
+
+    correction_proposal_parser = subcommands.add_parser("correction-propose")
+    correction_proposal_parser.add_argument("--season", required=True)
+    correction_proposal_parser.add_argument("--source-row-id", required=True)
+    correction_proposal_parser.add_argument(
+        "--field-name",
+        required=True,
+        choices=(
+            "eligibility",
+            "days_injured",
+            "body_location_code",
+            "injury_type_code",
+            "diagnosis_code",
+        ),
+    )
+    correction_proposal_parser.add_argument("--expected-value", required=True)
+    correction_proposal_parser.add_argument("--new-value", required=True)
+    correction_proposal_parser.add_argument("--reason", required=True)
+    correction_proposal_parser.add_argument("--evidence-file", required=True)
+    correction_proposal_parser.add_argument("--operator", required=True)
+    correction_proposal_parser.add_argument("--rule-version", required=True)
+    correction_proposal_parser.add_argument(
+        "--supersedes-correction-id", default=""
+    )
+    correction_proposal_parser.add_argument("--output", required=True)
+    correction_proposal_parser.set_defaults(func=correction_propose)
+
+    correction_apply_parser = subcommands.add_parser("correction-apply")
+    correction_apply_parser.add_argument("--proposal-file", required=True)
+    correction_apply_parser.add_argument("--evidence-file", default="")
+    correction_apply_parser.add_argument("--reviewer", required=True)
+    correction_apply_parser.set_defaults(func=correction_apply)
+
+    correction_release_parser = subcommands.add_parser("correction-release")
+    correction_release_parser.add_argument("--proposal-file", default="")
+    correction_release_parser.add_argument("--preflight", action="store_true")
+    correction_release_parser.add_argument("--output", default="")
+    correction_release_parser.add_argument("--preflight-file", default="")
+    correction_release_parser.add_argument("--reviewer", default="")
+    correction_release_parser.add_argument("--release-label", default="")
+    correction_release_parser.add_argument("--rollback-release-label", default="")
+    correction_release_parser.add_argument("--rollback-reviewer", default="")
+    correction_release_parser.add_argument("--rollback-reason", default="")
+    correction_release_parser.add_argument("--rollback-evidence-file", default="")
+    correction_release_parser.add_argument("--rollback-operator", default="")
+    correction_release_parser.set_defaults(func=correction_release)
+
+    correction_rollback_parser = subcommands.add_parser("correction-rollback")
+    correction_rollback_parser.add_argument("--release-label", required=True)
+    correction_rollback_parser.add_argument("--reviewer", required=True)
+    correction_rollback_parser.add_argument("--rollback-release-label", required=True)
+    correction_rollback_parser.add_argument("--reason", required=True)
+    correction_rollback_parser.add_argument("--evidence-file", required=True)
+    correction_rollback_parser.add_argument("--operator", required=True)
+    correction_rollback_parser.set_defaults(func=correction_rollback)
 
     args = parser.parse_args()
     args.func(args)

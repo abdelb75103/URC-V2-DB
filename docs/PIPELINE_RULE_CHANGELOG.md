@@ -11,6 +11,40 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-26: Dynamic row-correction workflow and additive implementation
+
+| Field | Value |
+|---|---|
+| Status | `implemented-locally, live-installation-pending`. The final checksum, live migration registration, transactional verification, independent T4 acceptance and final baseline parity have not yet been recorded. No live row correction is authorised by this status. |
+| Rule/tooling version | `dynamic_row_correction_2026-07-26_v1` |
+| Migration | `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`; final SHA-256 pending the final reviewed bytes and registration |
+| Installation target | The existing approved hosted Supabase/Postgres target reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it |
+| Carry-forward | `versioned-successor-pending-installation`: the mechanism is season-keyed and has no hard-coded 2024-25 row decisions. Year 2 uses its own season key, source-row binding, evidence and correction set. Row-level decisions never carry forward blindly. |
+| Decision provenance | Abdel Babiker, 26 July 2026, implementation handoff for an audited incremental correction capability |
+| Documentation | `docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md` |
+
+**Implemented workflow.** The commands `capture-served-baseline` and `verify-served-baseline` bind the correction-aware approved bundle, its canonical payloads through the unified bundle views, and the served V5 team and league projections. `correction-propose` is read-only and has no reviewer input. It resolves one allowlisted existing row and typed field, checks the expected current effective value, and binds immutable source-row evidence, old and new values, reason, evidence hash, operator, rule version, code and dependency provenance, current and proposed correction-set hashes, predecessor bundle, proposal hash, and the versioned-SQL downstream preview.
+
+After Abdel reviews that proposal, `correction-apply --reviewer 'Abdel Babiker'` replays the row, proposal, correction-set and candidate bindings under optimistic concurrency. It appends the immutable approval, correction set, row correction, run and processing evidence, and stores an immutable payload-bearing draft in one transaction. Approval and draft evidence are separately queryable; neither changes the reporting reader. A distinct `correction-release --preflight` reads that stored draft for review, and a separately reviewed `correction-release --preflight-file ...` promotes its exact payloads.
+
+**Additive storage and reader successor.** Frozen V2 payload and context tables remain untouched. Correction and rollback successors use append-only `reporting.correction_release_context_v1` or `reporting.correction_rollback_context_v1`, `reporting.correction_league_payloads_v1`, and `reporting.correction_team_payloads_v1`. The additive `reporting.dashboard_bundle_context_v1`, `reporting.dashboard_bundle_league_payloads_v1`, and `reporting.dashboard_bundle_team_payloads_v1` views unify those rows with frozen V2 storage. The private `reporting.latest_approved_dashboard_bundle_v4` selector chooses the complete current bundle, and the website reads `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5`. Until a correction or rollback is approved, the V5 path projects the currently served V5 V2 bundle exactly.
+
+**Contact distribution.** `contact_distribution` remains part of the published reader contract. Unaffected teams preserve it byte-for-byte with the rest of their predecessor payload. An eligibility correction recomputes the affected team's contact, non-contact and unknown counts from the effective injury cohort, then pools those recomputed values into the league distribution. Diagnosis, body-location, injury-type and days-lost corrections preserve predecessor contact counts because they do not change contact membership.
+
+**Reader privilege boundary.** The unified context/payload views and internal V4 selector are owner-executed private implementation surfaces with no grant to `web_reader`. Only the security-definer, security-barrier `latest_team_dashboard_v5` and `latest_league_dashboard_v5` allowlist views are granted. The website cannot directly query correction payload storage, bundle context, release/build identities, evidence, or audit fields.
+
+**Safety and analytical boundary.** Metric formulas remain in versioned SQL, never Python or dashboard JSON. `ingestion.source_rows`, curated data, the approved 2024-25 V5 lineage, frozen views, historical migrations, `reporting.league_release_context_v2`, `reporting.league_release_payloads_v2`, and `reporting.team_dashboard_payloads_v2` remain immutable. The design permits one pending correction set per season, exact old-value guards, row and set fingerprints, explicit supersession, and retained immutable predecessors. A one-team correction must reuse the other 15 approved team payloads byte-for-byte and recompute only the affected team candidate plus the pooled league candidate. Rollback re-promotes a retained predecessor as a new immutable event; a wrong decision is corrected through a compensating correction, never deletion.
+
+**No-impact and release-lineage behaviour.** A valid evidence correction can leave every dashboard metric unchanged. That state still appends approval and draft evidence, proves all 16 predecessor team payloads and the league bundle are unchanged, and requires explicit promotion. Promotion creates an audited immutable successor rather than leaving an approved correction outside the served correction lineage.
+
+**Rollback and active-correction guard.** `correction-rollback` creates a new immutable successor in the additive correction payload tables containing the correction release's exact retained predecessor payloads and records reviewer, rationale, evidence and execution provenance. It does not delete, mutate or reapprove the correction or either bundle. The served-correction view follows correction and rollback release lineage. While a correction remains active, the guard blocks both approval of an ordinary V2 release and retirement of the served predecessor; the successor must reconcile that correction or use the explicit append-only rollback.
+
+**Clinical boundary.** Diagnosis and body-location corrections use the same typed, evidence-bound overlay and may map only into the controlled IOC taxonomy. Weak or ambiguous evidence stays `Unknown`; source evidence and original values are retained.
+
+**V5 invariant and current limit.** Installation and transactional verification are data-neutral. `reporting.latest_approved_dashboard_bundle_v4` must continue selecting the same approved 2024-25 V5 V2 bundle, and the private unified payload views plus V5 team and league readers must reproduce all 16 team payloads, the pooled league payload, hashes, `contact_distribution`, and every served metric exactly. No verification correction, draft or release may persist. This entry does not claim the migration is live or the capability is operational. Record the final migration checksum, migration registration, focused and end-to-end evidence, required independent review, zero residual correction state, and exact final V5 parity here before changing the status to `applied-and-verified`.
+
+---
+
 ## 2026-07-26: Injury Impact quadrants, and the tab folded into Common Injuries
 
 | Field | Value |

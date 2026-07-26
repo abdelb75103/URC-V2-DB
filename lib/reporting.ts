@@ -225,9 +225,10 @@ function teamDisplayAliases(): Record<string, string> {
 
 /**
  * Reads the latest approved release for a team from
- * reporting.latest_team_dashboard_v3 and validates it into DashboardData.
- * The v3 consumer view keeps the V2 immutable snapshot projection and adds
- * only the versioned injury-type family roll-up.
+ * reporting.latest_team_dashboard_v5 and validates it into DashboardData.
+ * The V4 consumer view keeps the allowlisted immutable snapshot projection,
+ * adds the versioned injury-type family roll-up, and follows audited
+ * correction-aware bundle promotion.
  *
  * Fail-closed contract:
  * - No reader credential or no approved release -> undefined (the dynamic
@@ -247,7 +248,7 @@ export async function getTeamDashboard(
             headline, setting_split, setting_metrics, monthly, body_locations,
             injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
             limitations
-     from reporting.latest_team_dashboard_v3
+     from reporting.latest_team_dashboard_v5
      where team_key = $1 and season = $2`,
     [teamId, season]
   );
@@ -274,7 +275,7 @@ export async function getLeagueDashboard(
             headline, setting_split, setting_metrics, monthly, body_locations,
             injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
             limitations
-     from reporting.latest_league_dashboard_v3
+     from reporting.latest_league_dashboard_v5
      where season = $1`,
     [season]
   );
@@ -289,7 +290,7 @@ export async function getLeagueDashboard(
 /**
  * Reads the approved per-team projections needed for the league comparison and
  * exposure tabs. No rates are recomputed here: each row is copied from the same
- * immutable V2 team payload used by the team dashboard.
+ * correction-aware immutable team payload used by the team dashboard.
  */
 export async function getTeamComparisons(
   season = "2024-25"
@@ -299,7 +300,7 @@ export async function getTeamComparisons(
 
   const result = await pool.query(
     `select team_key, team, coverage, headline, setting_metrics
-     from reporting.latest_team_dashboard_v2
+     from reporting.latest_team_dashboard_v5
      where season = $1
      order by team_key`,
     [season]
@@ -404,20 +405,20 @@ export async function getTeamPageData(
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
                  limitations
-          from reporting.latest_team_dashboard_v3
+          from reporting.latest_team_dashboard_v5
           where team_key = $1 and season = $2
         ) team_row) as dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v2
+           from reporting.latest_team_dashboard_v5
            where season = $2
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
        (select to_jsonb(league_metrics_row) from (
           select coverage, headline, setting_metrics
-          from reporting.latest_league_dashboard_v3
+          from reporting.latest_league_dashboard_v5
           where season = $2
         ) league_metrics_row) as league_metrics`,
     [teamId, season]
@@ -464,14 +465,14 @@ export async function getLeaguePageData(
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, injury_type_families, severity_distribution, prior_season,
                  limitations
-          from reporting.latest_league_dashboard_v3
+          from reporting.latest_league_dashboard_v5
           where season = $1
         ) league_row) as dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v2
+           from reporting.latest_team_dashboard_v5
            where season = $1
          ) comparison_row
        ), '[]'::jsonb) as comparisons`,
@@ -529,7 +530,7 @@ export async function getLeagueSettingMetrics(
   if (!pool) return [];
   const result = await pool.query(
     `select setting_metrics
-     from reporting.latest_league_dashboard_v2
+     from reporting.latest_league_dashboard_v5
      where season = $1`,
     [season]
   );

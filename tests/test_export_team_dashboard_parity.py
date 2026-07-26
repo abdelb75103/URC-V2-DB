@@ -43,7 +43,10 @@ class ExportTeamDashboardParityTests(unittest.TestCase):
         # website does not serve, because the view additionally requires 16
         # members, full roster coverage, and matching exposure denominators.
         self.assertIn(
-            "reporting.latest_approved_dashboard_bundle_v2", self.snapshot_source
+            "reporting.latest_approved_dashboard_bundle_v4", self.snapshot_source
+        )
+        self.assertIn(
+            "reporting.dashboard_bundle_team_payloads_v1", self.snapshot_source
         )
 
     def test_writes_the_committed_per_team_paths(self) -> None:
