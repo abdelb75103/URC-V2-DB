@@ -156,6 +156,16 @@ think both are right:
 If quadrants are still wanted, the threshold belongs in a versioned view —
 Phase 2.
 
+> **Amended 2026-07-26 (Abdel Babiker).** Quadrants were subsequently accepted as
+> a display-only annotation, and the Injury Impact tab was folded into Common
+> Injuries. The statistical objection above is answered by taking the median over
+> **every plottable profile in the selected setting and grouping**, not over the
+> top-12-by-burden slice that is drawn. The governance point is not overturned:
+> the labels are comparative ("Longer absences · More frequent"), quadrant
+> membership is stored nowhere and carries no released status, and promoting any
+> quoted threshold to a versioned view remains Phase 2. Recorded in
+> `docs/PIPELINE_RULE_CHANGELOG.md`, 2026-07-26.
+
 ## 1.4 Injury Location — append depth
 
 Keep everything. **Append** a match vs training split per body region as a

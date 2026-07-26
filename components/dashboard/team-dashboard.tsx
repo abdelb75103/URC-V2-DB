@@ -27,7 +27,6 @@ import {
   ComparisonScatterChart,
   ExposureTrendChart,
   ImpactBubbleChart,
-  RankSlopeChart,
   RingBreakdown,
   SETTING_COLORS,
   SEVERITY_BAND_COLORS,
@@ -37,7 +36,6 @@ import {
   sortSeasonMonths,
   profileColor,
   type ComparisonScatterRow,
-  type RankSlopeSeries,
 } from '@/components/dashboard/charts';
 import type { TeamColorSet } from '@/lib/team-color';
 
@@ -55,7 +53,6 @@ const TABS = [
   ['common', 'Common Injuries'],
   ['location', 'Injury Location'],
   ['types', 'Injury Types'],
-  ['impact', 'Injury Impact'],
 ] as const;
 
 const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; longUnit: string }> = [
@@ -706,6 +703,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
   profiles: InjuryProfileRow[];
   supplement?: DashboardSupplement;
 }) {
+  const [impactDimension, setImpactDimension] = useState<'diagnosis' | 'location' | 'type'>('diagnosis');
   const source = reportingDiagnosisRows(profiles, supplement);
   const settings = availableSettings(source, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
@@ -718,9 +716,17 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
       : dashboard.setting_metrics.find((row) => row.setting === setting)?.time_loss_injuries)
     ?? 0;
   const settingTitle = setting === 'all' ? '' : `${setting[0].toUpperCase()}${setting.slice(1)} `;
-  // The tab's own setting control already filtered these rows, so the slope panel
+  // The tab's own setting control already filtered these rows, so the impact panel
   // honours the filter directly and needs no scope chip of its own.
-  const slopeSeries = rankSlopeSeries(source, setting, injuryColors);
+  const impactSource = impactDimension === 'diagnosis'
+    ? source
+    : profiles.filter((row) => row.dimension === (impactDimension === 'location' ? 'body_location' : 'injury_type'));
+  // The chart draws the highest-burden slice but splits its quadrants on the whole
+  // cohort, so both are passed rather than the slice alone.
+  const impactCohort = impactSource.filter((row) => row.setting === setting);
+  const impactRows = [...impactCohort]
+    .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0))
+    .slice(0, 12);
 
   return (
     <div>
@@ -733,16 +739,22 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
       {rows.length ? (
         <>
           <CommonInjuryRankings rows={rows} totalInjuries={totalInjuries} injuryColors={injuryColors} />
-          <section aria-labelledby="common-injuries-slope" className="mt-8">
-            <h3 id="common-injuries-slope" className="mb-4 text-lg font-semibold text-foreground">
-              How rankings shift across metrics
-            </h3>
-            <Panel contentClassName="p-4 sm:p-5">
-              <RankSlopeChart
-                series={slopeSeries}
-                metricLabels={METRICS.map((metric) => metric.label)}
-                maxRank={Math.max(...slopeSeries.flatMap((entry) => entry.points.map((point) => point.rank)), 1)}
+          <section aria-labelledby="common-injuries-impact" className="mt-8">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h3 id="common-injuries-impact" className="text-lg font-semibold text-foreground">Injury Impact</h3>
+              <Segmented
+                value={impactDimension}
+                options={[
+                  { value: 'diagnosis', label: 'Diagnosis' },
+                  { value: 'location', label: 'Location' },
+                  { value: 'type', label: 'Type' },
+                ]}
+                onChange={setImpactDimension}
+                label="Choose impact grouping"
               />
+            </div>
+            <Panel>
+              <ImpactBubbleChart rows={impactRows} cohort={impactCohort} />
             </Panel>
           </section>
         </>
@@ -750,45 +762,6 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
     </div>
   );
 }
-
-/**
- * Competition ranking on the rounded value each card displays, so the chart can
- * never imply a gap the label denies, and the card ranked first in a lane is
- * always rank 1 here. Ranking runs over every ranked row for the metric, not
- * just the plotted union, so a plotted line can legitimately sit below rank 5.
- */
-function rankIn(ranked: InjuryProfileRow[], row: InjuryProfileRow, metric: ProfileMetric) {
-  const value = rankedBarValue(metricValue(row, metric), metric);
-  return 1 + ranked.filter((other) => rankedBarValue(metricValue(other, metric), metric) > value).length;
-}
-
-/** Rows shown by the four lanes for this setting, as one line each. */
-function rankSlopeSeries(
-  source: InjuryProfileRow[],
-  setting: Setting,
-  injuryColors: Map<string, InjuryCardColor>,
-): RankSlopeSeries[] {
-  const scoped = source.filter((row) => row.setting === setting);
-  const rankedByMetric = METRICS.map((metric) => rankedForMetric(scoped, metric.key));
-  const codes = rankedLaneCodes(source, setting);
-  return [...codes]
-    .map((code) => scoped.find((row) => row.code === code))
-    .filter((row): row is InjuryProfileRow => Boolean(row))
-    .map((row) => ({
-      code: row.code,
-      label: row.label,
-      color: injuryColors.get(row.code)?.background ?? profileColor(row.code),
-      points: METRICS.map((metric, index) => ({
-        rank: rankIn(rankedByMetric[index], row, metric.key),
-        // Formatted like the cards above, so a whole number reads as 104 in both
-        // places rather than 104 on the card and 104.0 here. The rank still comes
-        // from the rounded value, so display and position cannot disagree.
-        value: fmt(metricValue(row, metric.key), RANKED_LIST_DIGITS[metric.key]),
-      })),
-    }))
-    .sort((a, b) => a.points[0].rank - b.points[0].rank || a.label.localeCompare(b.label));
-}
-
 
 /**
  * One ranked lane: the rows with a value for this metric, highest first. The
@@ -1747,43 +1720,6 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
   );
 }
 
-function ImpactTab({ profiles, supplement }: { profiles: InjuryProfileRow[]; supplement?: DashboardSupplement }) {
-  const [dimension, setDimension] = useState<'diagnosis' | 'location' | 'type'>('diagnosis');
-  const diagnosis = reportingDiagnosisRows(profiles, supplement);
-  const source = dimension === 'diagnosis'
-    ? diagnosis
-    : profiles.filter((row) => row.dimension === (dimension === 'location' ? 'body_location' : 'injury_type'));
-  const settings = availableSettings(source, ['all', 'match', 'training']);
-  const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
-  const effectiveSetting = settings.includes(setting) ? setting : settings[0] ?? 'all';
-  const rows = source
-    .filter((row) => row.setting === effectiveSetting)
-    .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0))
-    .slice(0, 12);
-
-  return (
-    <div>
-      <SectionHeading title="Injury Impact" />
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <Segmented
-          value={dimension}
-          options={[
-            { value: 'diagnosis', label: 'Diagnosis' },
-            { value: 'location', label: 'Location' },
-            { value: 'type', label: 'Type' },
-          ]}
-          onChange={setDimension}
-          label="Choose impact grouping"
-        />
-        <SettingControl value={effectiveSetting} settings={settings.length ? settings : ['all']} onChange={setSetting} />
-      </div>
-      <Panel>
-        <ImpactBubbleChart rows={rows} />
-      </Panel>
-    </div>
-  );
-}
-
 function availableSettings(rows: Array<{ setting: Setting }>, preference: Setting[]) {
   const available = new Set(rows.map((row) => row.setting));
   return preference.filter((setting) => available.has(setting));
@@ -1885,7 +1821,6 @@ export function TeamDashboard({
         <TabsContent value="common"><CommonInjuriesTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
         <TabsContent value="location"><LocationTab profiles={profiles} /></TabsContent>
         <TabsContent value="types"><InjuryTypesTab families={injuryTypeFamilies} /></TabsContent>
-        <TabsContent value="impact"><ImpactTab profiles={profiles} supplement={supplement} /></TabsContent>
       </Tabs>
     </div>
   );

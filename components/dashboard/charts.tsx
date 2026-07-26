@@ -14,6 +14,7 @@ import {
   Line,
   Pie,
   PieChart,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -1044,6 +1045,67 @@ const IMPACT_LABEL_BOX = { left: 86, right: 30, top: 30, minWidth: 564, height: 
 /** Matches the chart's ZAxis range, so a label clears its own bubble. */
 const IMPACT_BUBBLE_SIZE = [160, 1_100] as const;
 
+/** A profile the log-scaled bubble chart can place at all. */
+function isPlottableImpactRow(row: InjuryProfileRow) {
+  return row.incidence_per_1000h !== null
+    && Number.isFinite(row.incidence_per_1000h)
+    && row.burden_per_1000h !== null
+    && Number.isFinite(row.burden_per_1000h)
+    && isPlottableLogSeverity(row.mean_severity_days);
+}
+
+const QUADRANT_DIVIDER = 'hsl(0 0% 100% / 0.28)';
+/**
+ * Read as a traffic light on the two plotted axes: red where both are above the
+ * split, green where both are below, amber for the mixed corners. The labels are
+ * comparative ("more frequent", "shorter absences") because the split is a median
+ * of the plotted profiles, not an absolute threshold: a profile just below the
+ * line is not low, only lower than its peers. Fills stay faint enough that a
+ * bubble sitting on one is still the strongest thing in the cell.
+ */
+const IMPACT_QUADRANTS = [
+  {
+    key: 'high-low',
+    top: true,
+    right: false,
+    label: 'Longer absences · Less frequent',
+    fill: 'hsl(43 92% 58% / 0.16)',
+    swatch: 'hsl(43 92% 58% / 0.7)',
+    labelFill: 'hsl(43 90% 76%)',
+    labelPosition: 'insideTopLeft' as const,
+  },
+  {
+    key: 'high-high',
+    top: true,
+    right: true,
+    label: 'Longer absences · More frequent',
+    fill: 'hsl(0 74% 54% / 0.22)',
+    swatch: 'hsl(0 74% 54% / 0.75)',
+    labelFill: 'hsl(0 84% 80%)',
+    labelPosition: 'insideTopRight' as const,
+  },
+  {
+    key: 'low-low',
+    top: false,
+    right: false,
+    label: 'Shorter absences · Less frequent',
+    fill: 'hsl(150 62% 45% / 0.2)',
+    swatch: 'hsl(150 62% 48% / 0.75)',
+    labelFill: 'hsl(150 62% 74%)',
+    labelPosition: 'insideBottomLeft' as const,
+  },
+  {
+    key: 'low-high',
+    top: false,
+    right: true,
+    label: 'Shorter absences · More frequent',
+    fill: 'hsl(43 92% 58% / 0.16)',
+    swatch: 'hsl(43 92% 58% / 0.7)',
+    labelFill: 'hsl(43 90% 76%)',
+    labelPosition: 'insideBottomRight' as const,
+  },
+];
+
 type ImpactPointPosition = {
   row: ImpactChartRow;
   x: number;
@@ -1130,7 +1192,13 @@ function ImpactBubble({
   );
 }
 
-export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
+/**
+ * `rows` are the bubbles drawn; `cohort` is every profile in the same setting and
+ * grouping, before the caller truncates to its highest-burden slice. The quadrant
+ * split reads the cohort, so "more frequent" compares a profile with all of that
+ * club's profiles rather than with the truncated tail on screen.
+ */
+export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; cohort?: InjuryProfileRow[] }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const focusedImpactKeyRef = useRef<string | undefined>(undefined);
   const dismissedImpactKeyRef = useRef<string | undefined>(undefined);
@@ -1179,14 +1247,7 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
   );
   const data = useMemo(
     () => rows
-      .filter(
-        (row) =>
-          row.incidence_per_1000h !== null &&
-          Number.isFinite(row.incidence_per_1000h) &&
-          row.burden_per_1000h !== null &&
-          Number.isFinite(row.burden_per_1000h) &&
-          isPlottableLogSeverity(row.mean_severity_days)
-      )
+      .filter(isPlottableImpactRow)
       .map((row) => ({ ...row, bubble_burden: Math.max(row.burden_per_1000h ?? 0, 0.01), impactKey: `${row.setting}-${row.code}` })),
     [rows]
   );
@@ -1218,6 +1279,34 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
       document.removeEventListener('keydown', dismissOnEscape);
     };
   }, [dismissTooltip, pinned]);
+
+  /**
+   * The quadrant split is descriptive, not a released threshold: the median
+   * incidence and median severity of every profile in this setting and grouping,
+   * not of the highest-burden slice actually drawn. A median over the drawn slice
+   * would call a corner "less frequent" while every point in it is among the
+   * club's worst problems. Too few profiles and a median says nothing, so the
+   * shading stays off.
+   */
+  /**
+   * Below this the four corner labels collide across the split, so they move out
+   * to a legend under the plot rather than shrinking into an unreadable overlap.
+   */
+  const compactQuadrants = plotWidth < 420;
+
+  const quadrantSplit = useMemo(() => {
+    const cohortRows = (cohort ?? rows).filter(isPlottableImpactRow);
+    if (cohortRows.length < 4 || data.length < 4) return undefined;
+    const median = (values: number[]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      const middle = sorted.length / 2;
+      return sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
+    };
+    return {
+      incidence: median(cohortRows.map((row) => row.incidence_per_1000h ?? 0)),
+      severity: median(cohortRows.map((row) => row.mean_severity_days ?? 1)),
+    };
+  }, [cohort, data.length, rows]);
 
   const rowSliceKey = useMemo(
     () => data.map((row) => `${row.impactKey}-${row.incidence_per_1000h}-${row.mean_severity_days}-${row.burden_per_1000h}`).join('|'),
@@ -1375,7 +1464,7 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
   const tooltipLeft = visiblePointX > 430 ? visiblePointX - 296 : visiblePointX + 16;
 
   return (
-    <section aria-label={`Injury impact chart. Horizontal position is incidence, vertical position is logarithmic mean severity from 1 to ${number(severityDomain[1])} days, and bubble area is burden. Focus a bubble to preview its values, then press Enter or Space to pin it.`}>
+    <section aria-label={`Injury impact chart. Horizontal position is incidence, vertical position is logarithmic mean severity from 1 to ${number(severityDomain[1])} days, and bubble area is burden.${quadrantSplit ? ' The plot is split into four quadrants at the median incidence and median severity of every profile in this setting and grouping: red where absences are longer and more frequent than the median, amber for the two mixed corners, green where they are shorter and less frequent.' : ''} Focus a bubble to preview its values, then press Enter or Space to pin it.`}>
       <div className="relative">
         <div
           onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
@@ -1385,6 +1474,30 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart accessibilityLayer margin={{ top: 30, right: 30, bottom: 34, left: 24 }}>
                 <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
+                {quadrantSplit && IMPACT_QUADRANTS.map((quadrant) => (
+                  <ReferenceArea
+                    key={quadrant.key}
+                    x1={quadrant.right ? quadrantSplit.incidence : 0}
+                    x2={quadrant.right ? maxIncidence : quadrantSplit.incidence}
+                    y1={quadrant.top ? quadrantSplit.severity : severityDomain[0]}
+                    y2={quadrant.top ? severityDomain[1] : quadrantSplit.severity}
+                    fill={quadrant.fill}
+                    fillOpacity={1}
+                    stroke="none"
+                    label={compactQuadrants ? undefined : {
+                      value: quadrant.label,
+                      position: quadrant.labelPosition,
+                      fill: quadrant.labelFill,
+                      fontSize: 10,
+                    }}
+                  />
+                ))}
+                {quadrantSplit && (
+                  <ReferenceLine x={quadrantSplit.incidence} stroke={QUADRANT_DIVIDER} strokeDasharray="4 4" />
+                )}
+                {quadrantSplit && (
+                  <ReferenceLine y={quadrantSplit.severity} stroke={QUADRANT_DIVIDER} strokeDasharray="4 4" />
+                )}
                 <XAxis
                   type="number"
                   dataKey="incidence_per_1000h"
@@ -1434,6 +1547,16 @@ export function ImpactBubbleChart({ rows }: { rows: InjuryProfileRow[] }) {
           </div>
         )}
       </div>
+      {quadrantSplit && compactQuadrants && (
+        <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] leading-tight text-muted-foreground">
+          {IMPACT_QUADRANTS.map((quadrant) => (
+            <li key={quadrant.key} className="flex items-start gap-1.5">
+              <span className="mt-[3px] h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: quadrant.swatch }} />
+              <span>{quadrant.label}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {/* Not decoration: this is the only place the chart admits it is hiding rows. */}
       {nonPositiveSeverityRows.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">

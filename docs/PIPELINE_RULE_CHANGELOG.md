@@ -11,6 +11,26 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-26: Injury Impact quadrants, and the tab folded into Common Injuries
+
+| Field | Value |
+|---|---|
+| Status | `presentation-only`: a display annotation over released values. No pipeline run, view, cohort, denominator, or published figure changes. |
+| Rule version | None. Deliberately not a versioned rule; see carry-forward. |
+| Carry-forward | `presentation-only`. Nothing is stored, so a later season inherits the annotation only because the browser recomputes it from that season's released values. If quadrant membership is ever to be quoted as a finding, the threshold must first be promoted to a versioned `analysis.*_vN` view. |
+| Decision provenance | Abdel Babiker, 26 July 2026, in-session direction |
+| Code | `components/dashboard/charts.tsx` (`ImpactBubbleChart`, `IMPACT_QUADRANTS`), `components/dashboard/team-dashboard.tsx` (`CommonInjuriesTab`) |
+
+**What changes in the UI.** The standalone Injury Impact tab is removed and its bubble chart, with its Diagnosis / Location / Type grouping control, now sits inside the Common Injuries tab, replacing the "How rankings shift across metrics" slope panel. The chart gains a four-quadrant background: red where both axes are above the split, green where both are below, amber for the two mixed corners.
+
+**How the split is computed.** The dividing lines are the **median incidence** and the **median mean severity** of every plottable profile in the currently selected setting and grouping, taken from the released per-profile rows the dashboard already reads. They are **not** the median of the twelve highest-burden profiles the chart actually draws: a median over that truncated slice would label a corner "less frequent" while every point in it is among the club's worst problems. A profile is plottable when incidence and burden are finite and mean severity is positive, matching the chart's existing log-scale filter. Fewer than four plottable profiles in the cohort and the shading does not render, because a median over three points says nothing.
+
+**Why the labels are comparative.** The quadrants read "Longer absences · More frequent" rather than "High severity · High incidence". The split is a within-cohort median, not a clinical or released threshold, so a profile just below a line is lower than its peers, not low. Absolute wording would assert a category the pipeline has never defined.
+
+**Standing limit.** Quadrant membership is a reading aid on this chart and carries no released status. It must not be quoted as a classification of a diagnosis, body location, or injury type, and no export, view, or payload records it. This supersedes the "no quadrants in Phase 1" position in `docs/OVERVIEW_TABS_ADDITIVE_PLAN_2026-07-25.md` § 1.3 on the statistical objection only, by moving the median off the truncated slice; that section's governance point stands and is the reason for this limit.
+
+---
+
 ## 2026-07-25: Accepted 2024-25 analysis-window v5 rule
 
 | Field | Value |
