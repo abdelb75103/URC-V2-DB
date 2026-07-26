@@ -5808,7 +5808,17 @@ def release_league(args: argparse.Namespace) -> None:
                 semantic["monthly_exposure_hours"], semantic["exposure_hours"]
             )
         ):
-            raise SystemExit(semantic_mismatch_error)
+            raise SystemExit(
+                f"{semantic_mismatch_error}: "
+                f"headline_recorded={headline_by_key.get('recorded_injuries')!r}, "
+                f"cohort_recorded={semantic['recorded_injuries']!r}, "
+                f"headline_time_loss={headline_by_key.get('time_loss_injuries')!r}, "
+                f"cohort_time_loss={semantic['time_loss_injuries']!r}, "
+                f"monthly_time_loss={semantic['monthly_time_loss_injuries']!r}, "
+                f"dated_time_loss={semantic['dated_time_loss_injuries']!r}, "
+                f"monthly_exposure={semantic['monthly_exposure_hours']!r}, "
+                f"headline_exposure={semantic['exposure_hours']!r}"
+            )
     classification_adjudications: list[dict[str, Any]] = []
     if classification_view_version != "v2":
         rule_params = SqlParams()
