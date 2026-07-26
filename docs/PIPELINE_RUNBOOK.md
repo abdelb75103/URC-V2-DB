@@ -80,13 +80,18 @@ The performance-only successors are:
 
 - `supabase/migrations/20260726010000_analysis_window_v5_candidate_query_optimization.sql`,
   SHA-256 `eb4809f61912312375757eb545e5c237de12bbcd9fcab2892c59c9389e796ff4`.
+- `supabase/migrations/20260726015000_analysis_window_v5_shared_cohort_snapshots.sql`,
+  SHA-256 `622376306cda12840a684ad110b9ed21f52ec25448ef05d67f19f479a13799c0`.
 - `supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql`,
-  SHA-256 `756612f88b700531626b8cb3bd1765871f45df4e55882b7149e03b967044601b`.
+  SHA-256 `9deca17947a98d4667302793ad0b2326e1188964b113b1c975eff0ce20b357d5`.
 
 The first successor changes execution only and is statically proven equivalent
-to the base payload definitions. The second computes the exact reviewed team
-and league candidate payloads once, then routes v5 preflight and promotion to
-those build-pinned snapshots. It does not alter source, cohort or metric data.
+to the base payload definitions. The shared-cohort successor computes the
+accepted injury, classification and exposure rows once and statically preserves
+every downstream aggregate definition. The final successor computes the exact
+reviewed team and league payloads from those shared rows, then routes v5
+preflight and promotion to the build-pinned snapshots. None alters source,
+cohort or metric data.
 Do not alter any frozen migration or historical `v4` view.
 
 The required sequence is:
@@ -108,33 +113,44 @@ The required sequence is:
    match hours, 1,658 recorded injuries, 785 time-loss injuries, and 17,573
    days lost. The 815 semantic pre-URC exclusions must total 865.830 hours;
    the four weekly reporters move zero rows.
-4. Obtain Abdel's explicit approval for the named live Supabase/Postgres
-   target and each exact versioned migration. Apply them in version order with
-   the credential-safe wrapper:
+4. The base and query-optimisation migrations are already applied and tracked
+   on the approved live target. Verify those two tracking rows and hashes
+   read-only. Do not rerun them. Obtain Abdel's explicit approval for the
+   remaining shared-cohort and candidate-snapshot migrations and their exact
+   `supabase_migrations.schema_migrations` tracking-row inserts, then apply
+   only those exact files in order with the credential-safe wrapper:
 
    ```bash
    node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
-     supabase/migrations/20260725190000_analysis_window_reporting_v5.sql
+     supabase/migrations/20260726015000_analysis_window_v5_shared_cohort_snapshots.sql
    node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
-     supabase/migrations/20260726010000_analysis_window_v5_candidate_query_optimization.sql
+     tools/sql/register_analysis_window_v5_shared_cohort_snapshot_migration.sql
    node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
      supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql
+   node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs \
+     tools/sql/register_analysis_window_v5_snapshot_migration.sql
    ```
 
-   Register each successful version in
-   `supabase_migrations.schema_migrations`, then verify the tracked versions,
+   Each registration proves the expected objects and bindings before inserting
+   its one exact tracking row. Then verify all four tracked versions,
    view definitions, snapshot row counts and hashes read-only. The snapshot
    migration may take several minutes because it deliberately computes each
    payload family once. If it fails, the transaction rolls back and the
    existing v5 dynamic candidates remain intact. If a later source decision
-   changes v5, refresh both snapshots before a new preflight. A corrective
+   changes v5, obtain fresh explicit approval for the live refresh, then
+   refresh the three shared cohorts and both payload snapshots in one
+   repeatable-read transaction with
+   `node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs
+   tools/sql/refresh_analysis_window_v5_candidate_snapshots.sql` before a new
+   preflight. The refresh fails closed unless the 16 team identities, one
+   league row and approved tuple reconcile. A corrective
    versioned migration can repoint the v5 candidates to the dynamic views;
    v4 remains available throughout as the release rollback tuple.
 5. Perform read-only post-migration reconciliation. Stream the reviewed,
    build-pinned evidence result directly into the generator:
 
    ```bash
-   node pipeline/sql_query.mjs \
+   node pipeline/run_with_pooler.mjs node pipeline/sql_query.mjs \
      tools/sql/analysis_window_v5_exposure_evidence.sql |
      python3 tools/generate_analysis_window_v5_evidence.py \
        exposure-evidence --input-json -
@@ -152,7 +168,7 @@ The required sequence is:
    `passed` value to be `true`:
 
    ```bash
-   node pipeline/sql_query.mjs \
+   node pipeline/run_with_pooler.mjs node pipeline/sql_query.mjs \
      tests/analysis_window_v5_sql_reconciliation.sql |
      tee docs/evidence/analysis_window_2024-25_v5_sql_reconciliation.json |
      node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const r=JSON.parse(s);if(!r.length||r.some(x=>x.passed!==true))process.exit(1);console.log(`V5 SQL contracts passed: ${r.length}`)})'
@@ -161,8 +177,10 @@ The required sequence is:
    Then time the two direct candidate paths independently:
 
    ```bash
-   node pipeline/sql_query.mjs tests/analysis_window_v5_candidate_performance.sql
-   node pipeline/sql_query.mjs tests/analysis_window_v5_team_candidate_performance.sql
+   node pipeline/run_with_pooler.mjs node pipeline/sql_query.mjs \
+     tests/analysis_window_v5_candidate_performance.sql
+   node pipeline/run_with_pooler.mjs node pipeline/sql_query.mjs \
+     tests/analysis_window_v5_team_candidate_performance.sql
    ```
 
    Record both returned rows in
@@ -175,15 +193,19 @@ The required sequence is:
    intentional evidence checkpoint commit. The working tree must be clean
    before the following preflight. This commit binds the exact migration,
    injury audit, exposure evidence, SQL reconciliation, and direct candidate
-   performance result used for promotion. Record all five SHA-256 values in
+   performance result used for promotion. Record the SHA-256 values for all
+   four migrations, the injury audit, exposure evidence, SQL reconciliation
+   and candidate-performance evidence in
    `docs/ANALYSIS_WINDOW_2024-25_BEFORE_AFTER.md` before committing.
 8. Snapshot the v4 predecessor, then preflight the exact v5 tuple:
 
    ```bash
-   python3 -m pipeline release-league --season 2024-25 --snapshot-current \
+   node pipeline/run_with_pooler.mjs python3 -m pipeline \
+     release-league --season 2024-25 --snapshot-current \
      --output data/reporting/urc_dashboard_2024-25_v4_previous.json
 
-   python3 -m pipeline release-league --season 2024-25 \
+   node pipeline/run_with_pooler.mjs python3 -m pipeline \
+     release-league --season 2024-25 \
      --analysis-version v5 \
      --classification-view-version reporting_classification_2026-07-22_v2 \
      --cohort-view-version analysis_window_2024-25_2026-07-25_v1 \
@@ -198,7 +220,8 @@ The required sequence is:
    promotion, then promote the reviewed candidate:
 
    ```bash
-   python3 -m pipeline release-league --season 2024-25 \
+   node pipeline/run_with_pooler.mjs python3 -m pipeline \
+     release-league --season 2024-25 \
      --analysis-version v5 \
      --classification-view-version reporting_classification_2026-07-22_v2 \
      --cohort-view-version analysis_window_2024-25_2026-07-25_v1 \
@@ -206,7 +229,8 @@ The required sequence is:
      --preflight-file data/reporting/urc_dashboard_2024-25_v5_preflight.json \
      --preflight-reviewer "Abdel Babiker"
 
-   python3 -m pipeline export-team-dashboards --season 2024-25
+   node pipeline/run_with_pooler.mjs python3 -m pipeline \
+     export-team-dashboards --season 2024-25
    ```
 
    Reconcile all 16 parity exports with the approved bundle. Then record the

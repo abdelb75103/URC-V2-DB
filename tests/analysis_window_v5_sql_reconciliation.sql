@@ -9,11 +9,11 @@ with members as (
   where season = '2024-25'
 ), member_exposure as (
   select e.*
-  from analysis.analysis_window_effective_exposure_cohort_v5 e
+  from analysis.analysis_window_effective_exposure_cohort_v5_snapshot e
   join members using (curated_build_id, team_key, season)
 ), member_injuries as (
   select i.*
-  from analysis.analysis_window_injury_cohort_v5 i
+  from analysis.analysis_window_injury_cohort_v5_snapshot i
   join members using (curated_build_id, team_key, season)
 ), expected_rejections_by_team(team_key, expected_rows, expected_hours) as (
   values
@@ -102,6 +102,30 @@ with members as (
       from member_injuries i
       where i.date_injured is not null
     ) as dated_time_loss
+), classification_contract as (
+  select
+    (select count(*)::numeric from member_injuries) as injury_count,
+    (
+      select count(*)::numeric
+      from analysis.analysis_window_reporting_classification_v5_snapshot
+    ) as classification_count,
+    (
+      select count(*)::numeric
+      from (
+        select injury_id, curated_build_id, team_key, season
+        from analysis.analysis_window_reporting_classification_v5_snapshot
+        group by injury_id, curated_build_id, team_key, season
+        having count(*) <> 1
+      ) duplicate
+    ) as duplicate_identity_count,
+    (
+      select count(*)::numeric
+      from member_injuries injury
+      left join analysis.analysis_window_reporting_classification_v5_snapshot
+        classification
+        using (injury_id, curated_build_id, team_key, season)
+      where classification.injury_id is null
+    ) as missing_classification_count
 )
 select
   expected.contract_name,
@@ -146,4 +170,25 @@ where historical_eligibility_status = 'excluded_from_primary'
     'outside_official_analysis_window'
   )) > 0
   and effective_eligibility_status = 'included_pending_protocol'
+union all
+select
+  'classification_count_equals_injury_count',
+  injury_count,
+  classification_count,
+  injury_count = classification_count
+from classification_contract
+union all
+select
+  'classification_duplicate_identity_count',
+  0::numeric,
+  duplicate_identity_count,
+  duplicate_identity_count = 0
+from classification_contract
+union all
+select
+  'classification_missing_identity_count',
+  0::numeric,
+  missing_classification_count,
+  missing_classification_count = 0
+from classification_contract
 order by contract_name;

@@ -15,6 +15,13 @@ SNAPSHOT_MIGRATION = (
     ROOT
     / "supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql"
 )
+SHARED_COHORT_SNAPSHOT_MIGRATION = (
+    ROOT
+    / "supabase/migrations/20260726015000_analysis_window_v5_shared_cohort_snapshots.sql"
+)
+SNAPSHOT_REFRESH = (
+    ROOT / "tools/sql/refresh_analysis_window_v5_candidate_snapshots.sql"
+)
 V4_MIGRATION = ROOT / "supabase/migrations/20260724181000_lineage_restated_reporting_v4.sql"
 V4_FAST_PATH = ROOT / "supabase/migrations/20260724190000_lineage_v4_candidate_fast_path.sql"
 RECONCILIATION = ROOT / "tests/analysis_window_v5_sql_reconciliation.sql"
@@ -39,6 +46,10 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
         cls.sql = MIGRATION.read_text(encoding="utf-8")
         cls.optimization = OPTIMIZATION_MIGRATION.read_text(encoding="utf-8")
         cls.snapshot = SNAPSHOT_MIGRATION.read_text(encoding="utf-8")
+        cls.shared_snapshot = SHARED_COHORT_SNAPSHOT_MIGRATION.read_text(
+            encoding="utf-8"
+        )
+        cls.snapshot_refresh = SNAPSHOT_REFRESH.read_text(encoding="utf-8")
         cls.v4 = V4_MIGRATION.read_text(encoding="utf-8")
         cls.v4_fast_path = V4_FAST_PATH.read_text(encoding="utf-8")
         cls.reconciliation = RECONCILIATION.read_text(encoding="utf-8")
@@ -342,6 +353,94 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
             "from analysis.league_dashboard_payload_analysis_window_v5_snapshot",
             self.snapshot,
         )
+        self.assertIn(
+            "set transaction isolation level repeatable read",
+            self.snapshot,
+        )
+        self.assertIn(
+            "V5 team candidate snapshot must contain exactly 16 teams",
+            self.snapshot,
+        )
+        self.assertIn(
+            "V5 league candidate snapshot must contain exactly one row",
+            self.snapshot,
+        )
+        self.assertIn(
+            "full join analysis.league_member_releases_v2 member",
+            self.snapshot,
+        )
+        self.assertLess(
+            self.snapshot.index("raise exception 'V5 candidate snapshots"),
+            self.snapshot.index(
+                "create or replace view analysis.team_dashboard_release_candidates"
+            ),
+        )
+        for required in (
+            "set transaction isolation level repeatable read",
+            "refresh materialized view",
+            "V5 team candidate snapshot must contain exactly 16 teams",
+            "V5 league candidate snapshot must contain exactly one row",
+            "full join analysis.league_member_releases_v2 member",
+            "V5 candidate snapshots do not match the approved tuple",
+        ):
+            self.assertIn(required, self.snapshot_refresh)
+        refresh_order = [
+            self.snapshot_refresh.index(name)
+            for name in (
+                "analysis.analysis_window_injury_cohort_v5_snapshot",
+                "analysis.analysis_window_reporting_classification_v5_snapshot",
+                "analysis.analysis_window_effective_exposure_cohort_v5_snapshot",
+                "analysis.team_dashboard_payload_analysis_window_v5_snapshot",
+                "analysis.league_dashboard_payload_analysis_window_v5_snapshot",
+            )
+        ]
+        self.assertEqual(sorted(refresh_order), refresh_order)
+
+    def test_v5_shared_cohorts_are_snapshotted_once_without_metric_drift(self) -> None:
+        self.assertIn(
+            "set transaction isolation level repeatable read",
+            self.shared_snapshot,
+        )
+        self.assertEqual(3, self.shared_snapshot.count("with no data;"))
+        for view in (
+            "analysis.analysis_window_injury_cohort_v5_snapshot",
+            "analysis.analysis_window_reporting_classification_v5_snapshot",
+            "analysis.analysis_window_effective_exposure_cohort_v5_snapshot",
+        ):
+            self.assertIn(f"create materialized view {view}", self.shared_snapshot)
+
+        original = self.sql.split(
+            "create view analysis.exposure_hours_by_build_analysis_window_v5", 1
+        )[1].split(
+            "create view analysis.team_dashboard_payload_analysis_window_v5", 1
+        )[0]
+        successor = self.shared_snapshot.split(
+            "create or replace view analysis.exposure_hours_by_build_analysis_window_v5",
+            1,
+        )[1].split(
+            "comment on materialized view analysis.analysis_window_injury", 1
+        )[0]
+        successor = successor.replace(
+            "create or replace view analysis.", "create view analysis."
+        )
+        successor = successor.replace(
+            "analysis.analysis_window_injury_cohort_v5_snapshot",
+            "analysis.analysis_window_injury_cohort_v5",
+        ).replace(
+            "analysis.analysis_window_effective_exposure_cohort_v5_snapshot",
+            "analysis.analysis_window_effective_exposure_cohort_v5",
+        ).replace(
+            "analysis.analysis_window_reporting_classification_v5_snapshot",
+            "analysis.analysis_window_reporting_classification_v5",
+        )
+        self.assertEqual(original.strip(), successor.strip())
+        for required in (
+            "refresh materialized view\n  analysis.analysis_window_injury_cohort_v5_snapshot",
+            "refresh materialized view\n  analysis.analysis_window_reporting_classification_v5_snapshot",
+            "refresh materialized view\n  analysis.analysis_window_effective_exposure_cohort_v5_snapshot",
+            "V5 shared injury and classification snapshots do not reconcile",
+        ):
+            self.assertIn(required, self.snapshot)
 
     def test_release_constraints_accept_v5_only_with_its_recorded_date_and_cohort(self) -> None:
         self.assertIn("analysis_version in ('v2', 'v3', 'v4', 'v5')", self.sql)
