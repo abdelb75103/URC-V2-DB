@@ -5786,6 +5786,17 @@ def release_league(args: argparse.Namespace) -> None:
             """,
             semantic_params.values,
         )
+        if os.environ.get("PIPELINE_DEBUG_RELEASE_AGGREGATES") == "1":
+            print(
+                json.dumps(
+                    {
+                        "semantic_params": semantic_params.values,
+                        "semantic_rows": semantic_rows,
+                    },
+                    sort_keys=True,
+                ),
+                file=sys.stderr,
+            )
         if len(semantic_rows) != 1:
             raise SystemExit(semantic_missing_error)
         semantic = semantic_rows[0]
