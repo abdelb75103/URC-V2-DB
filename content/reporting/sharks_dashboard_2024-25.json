@@ -2100,6 +2100,92 @@
       "incidence_per_1000h": null
     }
   ],
+  "contact_distribution": [
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "all",
+      "recorded_injuries": 155,
+      "time_loss_injuries": 28
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "all",
+      "recorded_injuries": 52,
+      "time_loss_injuries": 14
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "all",
+      "recorded_injuries": 23,
+      "time_loss_injuries": 4
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "match",
+      "recorded_injuries": 117,
+      "time_loss_injuries": 18
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "match",
+      "recorded_injuries": 20,
+      "time_loss_injuries": 4
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "match",
+      "recorded_injuries": 4,
+      "time_loss_injuries": 1
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "training",
+      "recorded_injuries": 38,
+      "time_loss_injuries": 10
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "training",
+      "recorded_injuries": 32,
+      "time_loss_injuries": 10
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "training",
+      "recorded_injuries": 7,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "unknown",
+      "recorded_injuries": 12,
+      "time_loss_injuries": 3
+    }
+  ],
   "severity_distribution": [
     {
       "key": "zero_days_medical_attention_only",

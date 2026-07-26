@@ -2854,6 +2854,92 @@
       "incidence_per_1000h": 4.026166379243122
     }
   ],
+  "contact_distribution": [
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "all",
+      "recorded_injuries": 49,
+      "time_loss_injuries": 46
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "all",
+      "recorded_injuries": 15,
+      "time_loss_injuries": 15
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "all",
+      "recorded_injuries": 1,
+      "time_loss_injuries": 1
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "match",
+      "recorded_injuries": 31,
+      "time_loss_injuries": 29
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "match",
+      "recorded_injuries": 3,
+      "time_loss_injuries": 3
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "match",
+      "recorded_injuries": 1,
+      "time_loss_injuries": 1
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "training",
+      "recorded_injuries": 18,
+      "time_loss_injuries": 17
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "training",
+      "recorded_injuries": 12,
+      "time_loss_injuries": 12
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "training",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    }
+  ],
   "severity_distribution": [
     {
       "key": "one_day",

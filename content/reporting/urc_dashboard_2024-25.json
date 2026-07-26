@@ -9052,6 +9052,92 @@
       "incidence_per_1000h": null
     }
   ],
+  "contact_distribution": [
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "all",
+      "recorded_injuries": 943,
+      "time_loss_injuries": 443
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "all",
+      "recorded_injuries": 565,
+      "time_loss_injuries": 280
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "all",
+      "recorded_injuries": 150,
+      "time_loss_injuries": 62
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "match",
+      "recorded_injuries": 671,
+      "time_loss_injuries": 327
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "match",
+      "recorded_injuries": 153,
+      "time_loss_injuries": 85
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "match",
+      "recorded_injuries": 69,
+      "time_loss_injuries": 25
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "training",
+      "recorded_injuries": 270,
+      "time_loss_injuries": 114
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "training",
+      "recorded_injuries": 406,
+      "time_loss_injuries": 191
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "training",
+      "recorded_injuries": 66,
+      "time_loss_injuries": 33
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "unknown",
+      "recorded_injuries": 2,
+      "time_loss_injuries": 2
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "unknown",
+      "recorded_injuries": 6,
+      "time_loss_injuries": 4
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "unknown",
+      "recorded_injuries": 15,
+      "time_loss_injuries": 4
+    }
+  ],
   "severity_distribution": [
     {
       "key": "zero_days_medical_attention_only",

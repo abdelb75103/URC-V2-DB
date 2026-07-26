@@ -1189,6 +1189,92 @@
       "incidence_per_1000h": 2.1324943416552262
     }
   ],
+  "contact_distribution": [
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "all",
+      "recorded_injuries": 40,
+      "time_loss_injuries": 14
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "all",
+      "recorded_injuries": 33,
+      "time_loss_injuries": 13
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "all",
+      "recorded_injuries": 5,
+      "time_loss_injuries": 1
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "match",
+      "recorded_injuries": 34,
+      "time_loss_injuries": 13
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "match",
+      "recorded_injuries": 8,
+      "time_loss_injuries": 3
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "match",
+      "recorded_injuries": 3,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "training",
+      "recorded_injuries": 6,
+      "time_loss_injuries": 1
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "training",
+      "recorded_injuries": 25,
+      "time_loss_injuries": 10
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "training",
+      "recorded_injuries": 2,
+      "time_loss_injuries": 1
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    }
+  ],
   "severity_distribution": [
     {
       "key": "zero_days_medical_attention_only",
