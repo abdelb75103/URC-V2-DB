@@ -10,6 +10,14 @@ refresh materialized view
   analysis.team_dashboard_payload_analysis_window_v5_snapshot;
 refresh materialized view
   analysis.league_dashboard_payload_analysis_window_v5_snapshot;
+refresh materialized view
+  analysis.analysis_window_team_coverage_v5_snapshot;
+refresh materialized view
+  analysis.analysis_window_league_coverage_v5_snapshot;
+refresh materialized view
+  analysis.team_dashboard_payload_analysis_window_v5_coverage_snapshot;
+refresh materialized view
+  analysis.league_dashboard_payload_analysis_window_v5_coverage_snapshot;
 
 do $$
 begin
@@ -26,6 +34,25 @@ begin
     where season = '2024-25'
   ) <> 1 then
     raise exception 'V5 league candidate snapshot must contain exactly one row';
+  end if;
+  if (
+    select count(*)
+    from analysis.analysis_window_team_coverage_v5_snapshot
+    where season = '2024-25'
+  ) <> 16 or (
+    select count(*)
+    from analysis.team_dashboard_payload_analysis_window_v5_coverage_snapshot
+    where season = '2024-25'
+  ) <> 16 or (
+    select count(*)
+    from analysis.analysis_window_league_coverage_v5_snapshot
+    where season = '2024-25'
+  ) <> 1 or (
+    select count(*)
+    from analysis.league_dashboard_payload_analysis_window_v5_coverage_snapshot
+    where season = '2024-25'
+  ) <> 1 then
+    raise exception 'V5 corrected coverage snapshots are incomplete';
   end if;
   if (
     select count(*)
@@ -82,6 +109,87 @@ begin
       )
   ) then
     raise exception 'V5 candidate snapshots do not match the approved tuple';
+  end if;
+  if exists (
+    select 1
+    from analysis.team_dashboard_payload_analysis_window_v5_coverage_snapshot
+      corrected
+    join analysis.team_dashboard_payload_analysis_window_v5_snapshot original
+      using (team_key, season, team_release_id, curated_build_id)
+    where corrected.dashboard - 'coverage' <>
+      original.dashboard - 'coverage'
+  ) or exists (
+    select 1
+    from analysis.league_dashboard_payload_analysis_window_v5_coverage_snapshot
+      corrected
+    join analysis.league_dashboard_payload_analysis_window_v5_snapshot original
+      using (season)
+    where corrected.dashboard - 'coverage' <>
+      original.dashboard - 'coverage'
+  ) then
+    raise exception 'V5 coverage refresh changed a non-coverage payload section';
+  end if;
+  if (
+    select sum(exposure_rows)
+    from analysis.analysis_window_team_coverage_v5_snapshot
+    where season = '2024-25'
+  ) <> (
+    select count(*)
+    from analysis.analysis_window_effective_exposure_cohort_v5_snapshot exposure
+    join analysis.league_member_releases_v2 member
+      using (curated_build_id, team_key, season)
+    where exposure.season = '2024-25'
+      and exposure.effective_eligibility_status =
+        'included_pending_protocol'
+  ) then
+    raise exception 'V5 coverage refresh does not reconcile to the effective cohort';
+  end if;
+  if exists (
+    select 1
+    from analysis.analysis_window_team_coverage_v5_snapshot coverage
+    join analysis.team_dashboard_payload_analysis_window_v5_snapshot original
+      using (curated_build_id, team_key, season)
+    cross join lateral (
+      select
+        max((headline ->> 'denominator')::numeric)
+          filter (where headline ->> 'key' = 'incidence_per_1000h')
+          as incidence_denominator,
+        max((headline ->> 'denominator')::numeric)
+          filter (where headline ->> 'key' = 'burden_per_1000h')
+          as burden_denominator
+      from jsonb_array_elements(original.dashboard -> 'headline') headline
+    ) denominators
+    where coverage.season = '2024-25'
+      and (
+        coverage.exposure_hours <>
+          (original.dashboard -> 'coverage' ->> 'hours')::numeric
+        or coverage.exposure_hours <> denominators.incidence_denominator
+        or coverage.exposure_hours <> denominators.burden_denominator
+      )
+  ) or exists (
+    select 1
+    from analysis.analysis_window_league_coverage_v5_snapshot coverage
+    join analysis.league_dashboard_payload_analysis_window_v5_snapshot original
+      using (season)
+    cross join lateral (
+      select
+        max((headline ->> 'denominator')::numeric)
+          filter (where headline ->> 'key' = 'incidence_per_1000h')
+          as incidence_denominator,
+        max((headline ->> 'denominator')::numeric)
+          filter (where headline ->> 'key' = 'burden_per_1000h')
+          as burden_denominator
+      from jsonb_array_elements(original.dashboard -> 'headline') headline
+    ) denominators
+    where coverage.season = '2024-25'
+      and (
+        coverage.exposure_hours <>
+          (original.dashboard -> 'coverage' ->> 'hours')::numeric
+        or coverage.exposure_hours <> denominators.incidence_denominator
+        or coverage.exposure_hours <> denominators.burden_denominator
+      )
+  ) then
+    raise exception 'V5 coverage hours do not match the headline denominators';
   end if;
 end;
 $$;

@@ -3615,6 +3615,7 @@ ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION = "20260725190000"
 ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION = "20260726010000"
 ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION = "20260726015000"
 ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION = "20260726020000"
+ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION = "20260726120000"
 ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION = "analysis_window_2024-25_2026-07-25_v1"
 ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR = "docs/evidence/analysis_window_2024-25_v5.json"
 ANALYSIS_WINDOW_V5_EVIDENCE_SHA256 = "c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d"
@@ -5652,10 +5653,21 @@ def release_league(args: argparse.Namespace) -> None:
             ).hexdigest()
 
     provenance = run_provenance()
-    if provenance["code_version"].endswith("-dirty"):
+    dirty_release_override = (
+        os.environ.get("PIPELINE_ALLOW_DIRTY_RELEASE_LEAGUE", "").strip() == "1"
+    )
+    if provenance["code_version"].endswith("-dirty") and not dirty_release_override:
         raise SystemExit(
             "release-league refuses to run from an uncommitted working tree "
-            f"(code_version={provenance['code_version']})"
+            f"(code_version={provenance['code_version']}); set "
+            "PIPELINE_ALLOW_DIRTY_RELEASE_LEAGUE=1 only for an explicitly "
+            "authorised concurrent-work override"
+        )
+    if provenance["code_version"].endswith("-dirty"):
+        print(
+            "WARNING: release-league is using the explicitly authorised "
+            "concurrent-work dirty-tree override",
+            file=sys.stderr,
         )
 
     if analysis_version == "v5":
@@ -5669,6 +5681,7 @@ def release_league(args: argparse.Namespace) -> None:
             ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION,
             ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION,
             ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION,
+            ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION,
         ]
     elif analysis_version == "v4":
         required_migrations = [
@@ -6127,7 +6140,7 @@ def release_league(args: argparse.Namespace) -> None:
             INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
             if uses_osiics_successor
             else (
-                ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION
+                ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION
                 if analysis_version == "v5"
                 else (
                     LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION
@@ -6137,6 +6150,7 @@ def release_league(args: argparse.Namespace) -> None:
             )
         ),
         "analysis_window_v5_evidence_sha256s": v5_evidence_sha256s,
+        "dirty_worktree_override": dirty_release_override,
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
     }
     if predecessor is not None:

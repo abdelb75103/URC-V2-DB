@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -56,6 +57,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             pipeline.ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION,
             pipeline.ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION,
             pipeline.ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION,
+            pipeline.ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION,
         ]
 
         def query(sql: str, _values: list[object] | None = None) -> list[dict[str, str]]:
@@ -105,6 +107,31 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
         self.assertIn(
             pipeline.ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION,
             migration_query,
+        )
+        self.assertIn(
+            pipeline.ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION,
+            migration_query,
+        )
+
+    def test_dirty_tree_override_is_explicit_and_audited(self) -> None:
+        with (
+            patch.object(
+                pipeline,
+                "run_provenance",
+                return_value={"code_version": "test-dirty"},
+            ),
+            patch.dict(os.environ, {}, clear=False),
+        ):
+            os.environ.pop("PIPELINE_ALLOW_DIRTY_RELEASE_LEAGUE", None)
+            with self.assertRaisesRegex(
+                SystemExit,
+                "PIPELINE_ALLOW_DIRTY_RELEASE_LEAGUE=1",
+            ):
+                pipeline.release_league(release_args(V5_TUPLE))
+
+        self.assertIn(
+            '"dirty_worktree_override": dirty_release_override',
+            self.source,
         )
 
     def test_v4_rollback_tuple_still_reaches_its_lineage_candidate_view(self) -> None:
@@ -166,6 +193,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             "ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION",
             "ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION",
             "ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION",
+            "ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION",
             "ANALYSIS_WINDOW_V5_INJURY_AUDIT_LOCATOR",
             "ANALYSIS_WINDOW_V5_EXPOSURE_EVIDENCE_LOCATOR",
             "ANALYSIS_WINDOW_V5_SQL_RECONCILIATION_LOCATOR",
