@@ -1,7 +1,7 @@
 # 2024-25 analysis window: before and after
 
 Date: 25 July 2026  
-Status: accepted v5 rule, local implementation reviewed; live migration and promotion pending  
+Status: live v5 migrations applied and reconciled; promotion pending
 Scope: URC 2024-25 injury and exposure reporting
 
 ## Decision
@@ -101,15 +101,19 @@ The target is projected from read-only database queries and local source reconci
 | Target analysis version | `v5` |
 | Target classification version | `reporting_classification_2026-07-22_v2` |
 | Proposed cohort version | `analysis_window_2024-25_2026-07-25_v1` |
-| Planned migration | `supabase/migrations/20260725190000_analysis_window_reporting_v5.sql` |
-| Migration SHA-256 | `23970db6b4bc38aa91f2ca0ecf41203603c6361dc1c0fc4235a55a5f2dfcccde` |
+| Base migration | `supabase/migrations/20260725190000_analysis_window_reporting_v5.sql`, SHA-256 `23970db6b4bc38aa91f2ca0ecf41203603c6361dc1c0fc4235a55a5f2dfcccde` |
+| Query optimisation migration | `supabase/migrations/20260726010000_analysis_window_v5_candidate_query_optimization.sql`, SHA-256 `eb4809f61912312375757eb545e5c237de12bbcd9fcab2892c59c9389e796ff4` |
+| Shared-cohort snapshot migration | `supabase/migrations/20260726015000_analysis_window_v5_shared_cohort_snapshots.sql`, SHA-256 `622376306cda12840a684ad110b9ed21f52ec25448ef05d67f19f479a13799c0` |
+| Candidate snapshot migration | `supabase/migrations/20260726020000_analysis_window_v5_release_candidate_snapshots.sql`, SHA-256 `9deca17947a98d4667302793ad0b2326e1188964b113b1c975eff0ce20b357d5` |
 | Cohort adjudication reference | `ANALYSIS-WINDOW-01` |
 | Immutable evidence manifest | `docs/evidence/analysis_window_2024-25_v5.json`, SHA-256 `c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d` |
 | Injury cohort audit | `docs/evidence/analysis_window_2024-25_v5_injury_cohort_audit.csv`, SHA-256 `8e76205760df2666130abec5d942a4699fc301b9fb410cb1803850a4f4edd3e3`; 208 rows, 140 positive-day time-loss rows, 4,920 days lost |
-| Exposure cohort evidence | Pending generation from the reviewed post-migration row view. Contract: `docs/evidence/analysis_window_2024-25_v5_exposure_cohort_evidence.schema.json` |
+| Exposure cohort evidence | `docs/evidence/analysis_window_2024-25_v5_exposure_cohort_evidence.csv`, SHA-256 `4a09c4c9140ad54f95f5339113bd4dda735719cca4641329f09a10e1c14c2978`; 4,937 changed rows, including 815 rejected rows and 865.830 hours |
+| SQL reconciliation | `docs/evidence/analysis_window_2024-25_v5_sql_reconciliation.json`, SHA-256 `cbcf5c21d6dfc437a42cfd4eb975c03fff213baa24380344e91c71817c053efb`; 28 of 28 contracts passed |
+| Candidate performance | `docs/evidence/analysis_window_2024-25_v5_candidate_performance.json`, SHA-256 `0c531e9a98253d518a02d3cb05a92701d757e8cd588eb92c161338226fc6ee41`; league 9.231 ms, 16 teams 32.624 ms |
 | V5 bundle release ID | Pending |
 | V5 generated timestamp | Pending |
-| Final live reconciliation | Pending |
+| Final live reconciliation | Exact targets confirmed: 64,511 rows; 81,352.919497 hours; 6,040 match hours; 75,312.919497 training hours; 1,658 recorded injuries; 785 time-loss injuries; 17,573 days lost; 6 undated injuries; 0 weekly-row moves |
 | Deployed verification | Pending GitHub-triggered deployment and route verification |
 
 ## Post-release confirmation checklist

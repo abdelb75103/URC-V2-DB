@@ -55,8 +55,8 @@ Use the normal `release-league` command with the successor classification tuple.
 
 ### 2024-25 analysis-window v5 full release
 
-Status: base v5 and query optimisation applied; build-pinned candidate snapshot
-and promotion pending.
+Status: all four v5 migrations applied and tracked; live reconciliation passed;
+promotion pending.
 This is a full successor release because the reporting cohort, exposure denominator,
 monthly series, and headline figures change. It is not a classification-only
 incremental release.

@@ -1,0 +1,20 @@
+{
+  "measured_at": "2026-07-26",
+  "database_target": "approved live URC Supabase/Postgres pooler",
+  "analysis_version": "v5",
+  "classification_view_version": "reporting_classification_2026-07-22_v2",
+  "cohort_view_version": "analysis_window_2024-25_2026-07-25_v1",
+  "league_candidate": {
+    "candidate_count": 1,
+    "dashboard_bytes": 252192,
+    "elapsed_ms": 9.231,
+    "candidate_payload_passed": true
+  },
+  "team_candidates": {
+    "candidate_count": 16,
+    "dashboard_bytes": 978077,
+    "elapsed_ms": 32.624,
+    "candidate_payload_passed": true
+  },
+  "method": "Independent direct reads of the build-pinned V5 league and team candidate paths; preflight remains the definitive equality and hash validation."
+}
