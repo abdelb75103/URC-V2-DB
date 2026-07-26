@@ -66,7 +66,9 @@ join analysis.reporting_season_windows_v3 reporting_window
  and reporting_window.cohort_view_version =
    'analysis_window_2024-25_2026-07-25_v1'
 left join scope_counts scope
-  using (curated_build_id, team_key, season)
+  on scope.curated_build_id = exposure.curated_build_id
+ and scope.team_key = exposure.team_key
+ and scope.season = exposure.season
 group by exposure.curated_build_id, exposure.team_key, exposure.season,
   scope.scope_status_counts, reporting_window.season_start,
   reporting_window.season_end;
