@@ -52,10 +52,11 @@ test('published league dashboard is unlocked on the homepage', async () => {
   assert.match(home, /href="\/urc"/);
 });
 
-test('team dashboard reads the v3 approved-build projection', async () => {
+test('team dashboard reads the v4 approved-build projection', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
 
-  assert.match(reporting, /reporting\.latest_team_dashboard_v3/);
+  assert.match(reporting, /reporting\.latest_team_dashboard_v4/);
+  assert.match(reporting, /contact_distribution/);
   assert.match(reporting, /setting_metrics/);
   assert.match(reporting, /injury_profiles/);
   assert.match(reporting, /injury_type_families/);
@@ -155,6 +156,12 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
             }],
           }],
           severity_distribution: [],
+          contact_distribution: [
+            { key: 'contact', label: 'Contact', setting: 'all', recorded_injuries: 943, time_loss_injuries: 443 },
+            { key: 'non_contact', label: 'Non-contact', setting: 'all', recorded_injuries: 565, time_loss_injuries: 280 },
+            { key: 'unknown', label: 'Unknown', setting: 'all', recorded_injuries: 150, time_loss_injuries: 62 },
+            { key: 'contact', label: 'Contact', setting: 'unknown', recorded_injuries: 2, time_loss_injuries: 2 },
+          ],
           prior_season: { season: '2023-24', status: 'unavailable', note: '' },
           limitations: [],
         }],
@@ -165,9 +172,23 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   try {
     const { getLeagueDashboard } = await loadReportingForFixtureTest();
     const dashboard = await getLeagueDashboard();
-    assert.match(queryText, /reporting\.latest_league_dashboard_v3/);
+    assert.match(queryText, /reporting\.latest_league_dashboard_v4/);
     assert.equal(dashboard.injury_type_families[0].burden_per_1000h, 50.8333333333);
     assert.equal(dashboard.injury_type_families[0].subtypes[0].code, 'muscle_injury');
+
+    // The released contact section must survive the field-by-field rebuild,
+    // keep its Unknown mechanism row, and accept a genuinely unknown activity
+    // setting. Dropping any of these would empty or skew the ring.
+    assert.equal(dashboard.contact_distribution.length, 4);
+    assert.deepEqual(
+      dashboard.contact_distribution.map((row) => row.key),
+      ['contact', 'non_contact', 'unknown', 'contact'],
+    );
+    assert.equal(
+      dashboard.contact_distribution.find((row) => row.key === 'unknown').recorded_injuries,
+      150,
+    );
+    assert.ok(dashboard.contact_distribution.some((row) => row.setting === 'unknown'));
   } finally {
     globalThis.__urcWebReaderPool = undefined;
     if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;

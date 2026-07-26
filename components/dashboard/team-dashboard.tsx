@@ -379,7 +379,7 @@ function OverviewTab({
   // Unlike the other breakdowns this one keeps its Unknown slice, so the ring
   // reads as a share of all cases rather than of the classified ones only.
   const contactOrder = ['contact', 'non_contact', 'unknown'];
-  const contactRows = (supplement?.contact_distribution ?? [])
+  const contactRows = (dashboard.contact_distribution ?? supplement?.contact_distribution ?? [])
     .filter((row) => row.setting === effectiveSetting)
     .map((row) => ({
       key: row.key,

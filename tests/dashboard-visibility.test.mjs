@@ -35,14 +35,29 @@ test('informative classified and other categories remain visible', async () => {
   assert.deepEqual(withoutFrontFacingUnknown(rows), rows);
 });
 
-test('dashboard does not rebuild visible severity or contact unknown rows', async () => {
+test('dashboard does not rebuild visible severity rows, and keeps the contact Unknown slice', async () => {
   const dashboardSource = await readFile(
     new URL('../components/dashboard/team-dashboard.tsx', import.meta.url),
     'utf8',
   );
   assert.doesNotMatch(dashboardSource, /label:\s*['"]Unknown \/ censored/);
+
+  // Abdel, 26 July 2026: the contact ring keeps its Unknown slice, unlike every
+  // other breakdown. For a mechanism field the unknown share is a real coverage
+  // statement, and hiding it would silently inflate the contact and non-contact
+  // percentages. This assertion is the inverse of what it was before that
+  // decision: the contact rows must NOT be routed through the suppression.
   assert.match(
     dashboardSource,
-    /withoutFrontFacingUnknown\(supplement\?\.contact_distribution \?\? \[\]\)/,
+    /const contactRows = \(dashboard\.contact_distribution \?\? supplement\?\.contact_distribution \?\? \[\]\)/,
   );
+  // Check the contactRows statement itself rather than the whole file, so any
+  // wrapped form such as withoutFrontFacingUnknown((rows ?? []).filter(...))
+  // is caught, without matching unrelated uses elsewhere in the component.
+  const contactStatement = dashboardSource.slice(
+    dashboardSource.indexOf('const contactRows ='),
+    dashboardSource.indexOf('return (', dashboardSource.indexOf('const contactRows =')),
+  );
+  assert.ok(contactStatement.length > 0);
+  assert.doesNotMatch(contactStatement, /withoutFrontFacingUnknown/);
 });

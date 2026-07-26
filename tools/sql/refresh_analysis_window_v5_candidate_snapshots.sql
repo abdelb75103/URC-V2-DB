@@ -18,6 +18,13 @@ refresh materialized view
   analysis.team_dashboard_payload_analysis_window_v5_coverage_snapshot;
 refresh materialized view
   analysis.league_dashboard_payload_analysis_window_v5_coverage_snapshot;
+-- The candidate views read from the contact snapshots, so these must refresh
+-- after the coverage layer they inherit from. Omitting them would leave the
+-- published payload silently stale.
+refresh materialized view
+  analysis.team_dashboard_payload_analysis_window_v5_contact_snapshot;
+refresh materialized view
+  analysis.league_dashboard_payload_analysis_window_v5_contact_snapshot;
 
 do $$
 begin
@@ -129,6 +136,12 @@ begin
   ) then
     raise exception 'V5 coverage refresh changed a non-coverage payload section';
   end if;
+  -- The refreshed contact snapshots must satisfy the SAME suite the creating
+  -- migration proved, not a weaker subset: a refresh replaces their contents,
+  -- so a stale or shifted cohort could otherwise pass row counts while serving
+  -- different published numbers. One shared definition, so the two cannot
+  -- drift apart.
+  perform analysis.assert_contact_distribution_v5_integrity();
   if (
     select sum(exposure_rows)
     from analysis.analysis_window_team_coverage_v5_snapshot

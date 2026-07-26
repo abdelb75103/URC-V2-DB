@@ -11,6 +11,37 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-26: Contact mechanism distribution added to the 2024-25 dashboards
+
+| Field | Value |
+|---|---|
+| Status | `released`: additive payload section, two tracked live migrations, independent review, and an approved 16-team bundle promotion. No re-clean, no reprocessing, no new adjudication. |
+| Rule version | Analysis `v5`, classification `reporting_classification_2026-07-22_v2`, cohort `analysis_window_2024-25_2026-07-25_v1`. Candidate binding moves to `20260726160000`. |
+| Carry-forward | `carries-forward`. The distribution is a versioned rule-layer view over `curated.injuries.contact_context`, so a later season inherits it unchanged once that season's candidate chain is built on the same pattern. The pinned 2024-25 acceptance numbers inside the integrity function are season-specific. |
+| Decision provenance | Abdel Babiker, 26 July 2026. Unknown-slice retention decided the same day. Plan: `docs/CONTACT_RING_RELEASE_PLAN_2026-07-26.md` |
+| Reviewed migrations | `20260726160000_contact_distribution_v5.sql` (`aaa92ec6...`); `20260726161000_contact_distribution_reader_v4.sql` (`423bf1c0...`) |
+| Code | `tools/sql/refresh_analysis_window_v5_candidate_snapshots.sql` (`8ec0b99d...`), `tools/sql/register_contact_distribution_migrations.sql`, `pipeline/__main__.py`, `lib/reporting.ts`, `lib/reporting-types.ts`, `components/dashboard/team-dashboard.tsx` |
+
+**What changes.** The team and league dashboard payloads gain one additive top-level section, `contact_distribution`: recorded and time-loss injury counts by contact mechanism (`contact`, `non_contact`, `unknown`) for each activity setting (`all`, `match`, `training`, `unknown`). No existing published figure changes. `contact_context` was already populated on `curated.injuries` as a frozen pipeline derivation from the inclusion CSV's `Is Contact` column, so this exposes an existing derivation rather than creating a clinical fact.
+
+**Verified league counts, 26 July 2026.** All settings: 943 contact / 565 non-contact / 150 unknown recorded, and 443 / 280 / 62 time-loss. Match: 671 / 153 / 69 recorded. Training: 270 / 406 / 66 recorded. Unknown setting: 2 / 6 / 15 recorded. These are pinned inside `analysis.assert_contact_distribution_v5_integrity()` and the release fails rather than adjusts if they move.
+
+**The `all` row is not match plus training.** 23 league-wide cases carry a genuinely unknown activity setting. `all` is the sum across every setting, so the per-setting rows reconcile to `all` only when the `unknown` setting row is included. The payload therefore emits it and the web type union was widened to carry it, even though the ring's filter never selects it.
+
+**The Unknown mechanism slice is retained, by decision.** Every other front-facing breakdown hides unknown categories through `withoutFrontFacingUnknown`. The contact ring deliberately does not. For a mechanism field the unknown share (9% of recorded cases) is a real coverage statement, and suppressing it would silently inflate the contact and non-contact percentages. The ring's denominator is therefore all cases, not classified cases. `tests/dashboard-visibility.test.mjs` previously asserted the opposite policy and was inverted to match this decision.
+
+**Additive, not a rebuild.** New payload snapshots inherit the approved coverage-corrected V5 payload and merge exactly one key. The migration asserts `dashboard - 'contact_distribution'` is byte-identical to its predecessor for all 16 teams and the league, so no unrelated metric can move. The candidate views are repointed, never edited in place, and the frozen `analysis.*_v1`, v2 and v3 readers are untouched. League rows pool raw counts across the 16 released teams before any derivation.
+
+**Reader versioning.** `reporting.latest_{team,league}_dashboard_v2` enumerate payload keys as an explicit column allowlist, so a new key is invisible to `web_reader` until a new reader projects it. `reporting.latest_{team,league}_dashboard_v4` add the section over the v3 projection and re-join the payload relations to reach it, because v3 does not carry `dashboard_payload`. No release, bundle, or build identifier crosses the boundary.
+
+**Refresh integrity.** The full acceptance suite lives in `analysis.assert_contact_distribution_v5_integrity()` rather than an inline migration block, and both the migration and the candidate-snapshot refresh script call that one definition. A refresh replaces the materialised contents, so migration-time-only assertions would have guaranteed nothing about what is actually promoted. This was raised by independent review and is the reason for the shared function.
+
+**No diff-whitelist entry, deliberately.** The plan called for whitelisting `contact_distribution` in `classify_dashboard_json_diff()`. That premise proved wrong: `release-league` never calls that classifier, because its parity export writes from the promoted bundle and treats any bundle diff as fatal. The classifier is reached only by the per-team `release` command and `diff-dashboard-json`. Widening a frozen gate for paths that do not need it was rejected; if either path later meets the new section, blocking is the correct outcome and belongs in a recorded adjudication. `tests/test_contact_distribution_diff_whitelist.py` pins that absence.
+
+**Deliberately excluded.** Per-setting severity. `team-dashboard.tsx` falls back to summing every `severity_distribution` row to derive recorded cases, so adding match and training rows would multiply-count that figure. It needs a component-side `setting === 'all'` filter and a decision about whether the existing rows keep their implicit overall meaning. Separate plan.
+
+---
+
 ## 2026-07-26: Injury Impact quadrants, and the tab folded into Common Injuries
 
 | Field | Value |

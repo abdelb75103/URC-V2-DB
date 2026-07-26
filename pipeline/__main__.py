@@ -3756,6 +3756,8 @@ ANALYSIS_WINDOW_V5_CANDIDATE_OPTIMIZATION_MIGRATION_VERSION = "20260726010000"
 ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION = "20260726015000"
 ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION = "20260726020000"
 ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION = "20260726120000"
+CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION = "20260726160000"
+CONTACT_DISTRIBUTION_READER_V4_MIGRATION_VERSION = "20260726161000"
 ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION = "analysis_window_2024-25_2026-07-25_v1"
 ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR = "docs/evidence/analysis_window_2024-25_v5.json"
 ANALYSIS_WINDOW_V5_EVIDENCE_SHA256 = "c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d"
@@ -4241,6 +4243,13 @@ def classify_dashboard_json_diff(path: str, kind: str) -> str | None:
         audit.adjudications at release time, so a wrong number here would
         mean wrong audit evidence, which the release gates check
         separately.
+    Note: the contact mechanism ring (2026-07-26) deliberately did NOT add an
+    entry here. release-league never calls this classifier -- its parity export
+    writes from the promoted bundle and treats any bundle diff as fatal -- so
+    whitelisting contact_distribution would have widened a frozen gate that
+    only `release` and `diff-dashboard-json` use, for no benefit. If either of
+    those paths ever meets the new section, blocking is the correct outcome and
+    the diff belongs in a recorded adjudication.
     Anything else -- any numeric headline/monthly/body_locations/
     injury_types/severity_distribution/setting_split value, any label,
     team name, or analysis-window value -- is BLOCKED.
@@ -6111,6 +6120,13 @@ def release_league(args: argparse.Namespace) -> None:
             ANALYSIS_WINDOW_V5_SHARED_COHORT_SNAPSHOT_MIGRATION_VERSION,
             ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION,
             ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION,
+            # The candidate views now read from the contact snapshot layer, and
+            # the reader pair is what makes the new section visible to
+            # web_reader. Requiring both refuses a half-applied change that
+            # would either release without the section or fail every dashboard
+            # closed.
+            CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION,
+            CONTACT_DISTRIBUTION_READER_V4_MIGRATION_VERSION,
         ]
     elif analysis_version == "v4":
         required_migrations = [
@@ -6725,7 +6741,7 @@ def release_league(args: argparse.Namespace) -> None:
             INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
             if uses_osiics_successor
             else (
-                ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION
+                CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION
                 if analysis_version == "v5"
                 else (
                     LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION
