@@ -1,7 +1,7 @@
 # 2024-25 analysis window: before and after
 
 Date: 26 July 2026
-Status: released live, exported and reconciled; deployment verification pending
+Status: released live, exported and reconciled; external deployment trigger unresolved
 Scope: URC 2024-25 injury and exposure reporting
 
 ## Decision
@@ -116,7 +116,7 @@ build-pinned live candidates on 26 July 2026.
 | Payload generated timestamp | `2026-07-20T13:16:48+00:00` (retained build/member generation timestamp) |
 | Final live reconciliation | Exact targets confirmed: 64,511 rows; 81,352.919497 hours; 6,040 match hours; 75,312.919497 training hours; 1,658 recorded injuries; 785 time-loss injuries; 17,573 days lost; 6 undated injuries; 0 weekly-row moves |
 | Dashboard coverage detail | 1,110 exposed player identities within teams; 1,961 exposure periods; 251,884.371929 km. All 16 team exports were regenerated twice with identical aggregate file hash `a2d217073ae5beb2ca8a770c2f4512b520505305d4ce0b1b1adebc2603f27029`. |
-| Deployed verification | Pending final GitHub push-triggered deployment and route verification |
+| Deployment result | `origin/main` is exactly `2dcbae13f46e81d99db57b5d52d27d6bf10d1654`. The legacy production URL returned HTTP 200 on `/`, `/urc` and all 16 team routes, but its headers and payload identify the retained legacy deployment, not this V2 push. The repository-linked `urc-v2-db.vercel.app` returned HTTP 404 with `x-vercel-error: DEPLOYMENT_NOT_FOUND` after repeated polling. No Vercel CLI, API, connector or browser action was used. |
 
 The first v5 promotion, release
 `d5b010b0-eb83-4f5c-b619-a791239a2893`, correctly changed the scientific
@@ -134,5 +134,5 @@ bundle above is the only approved live release.
 - Cohort and exposure evidence hashes recorded.
 - Corrected release ID and candidate hashes recorded.
 - All 16 team payloads reconcile with the league bundle.
-- Confirm the website displays the v5 cohort and refreshed values.
+- Website verification is externally blocked because the repository-linked V2 project has no reachable deployment after the GitHub push.
 - The v4 candidate and immutable retired release remain available for rollback.
