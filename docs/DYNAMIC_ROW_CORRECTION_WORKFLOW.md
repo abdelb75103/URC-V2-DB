@@ -1,6 +1,6 @@
 # Dynamic Row Correction Workflow
 
-Status: the base capability is live-installed and data-neutral; its additive T4 hardening successor is locally verified and awaiting live rehearsal, application, registration and renewed independent acceptance. The successor must be confirmed as `applied-and-verified` in `docs/PIPELINE_RULE_CHANGELOG.md` before the first live correction.
+Status: the base capability and its additive T4 hardening successor are live-installed, checksum-registered, transactionally verified, data-neutral and independently accepted at T4. The capability is production-ready for the first separately reviewed live correction.
 
 ## Purpose and boundary
 
@@ -19,7 +19,7 @@ The unified bundle views and the internal `latest_approved_dashboard_bundle_v4` 
 
 Until a reviewed correction or rollback successor is approved, the V5 readers project the currently served V5 V2 bundle without changing its context, payloads, hashes, or metrics.
 
-The exact installation target is the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. The installed base is `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`. The required additive successor is `supabase/migrations/20260727010000_dynamic_row_correction_pipeline_hardening.sql`; `tools/sql/register_dynamic_row_correction_pipeline_hardening_migration.sql` records its exact final SHA only after application. Do not substitute a local Supabase target.
+The exact installation target is the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. The installed base is `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`. The installed additive successor is `supabase/migrations/20260727010000_dynamic_row_correction_pipeline_hardening.sql`, SHA-256 `29dd76bb42ac7bdc10f3a6691bf538a1af4786a15408acc467a4c9beab4cd57b`; `tools/sql/register_dynamic_row_correction_pipeline_hardening_migration.sql` records those exact bytes as migration `20260727010000` / `dynamic_row_correction_pipeline_hardening`. Do not substitute a local Supabase target.
 
 Baseline capture, baseline verification, proposal, and release preflight are read-only. Apply, promotion, and rollback are live writes. Proposal, preflight, baseline, and evidence files must stay Git-ignored and outside `content/reporting/`. They are private operator evidence, not website inputs.
 
