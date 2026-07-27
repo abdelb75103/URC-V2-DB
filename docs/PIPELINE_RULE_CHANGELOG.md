@@ -15,11 +15,11 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `implemented-locally, live-installation-pending`. The final checksum, live migration registration, transactional verification, independent T4 acceptance and final baseline parity have not yet been recorded. No live row correction is authorised by this status. |
+| Status | Base capability `live-installed-and-verified`; additive T4 hardening is locally verified and awaiting live rehearsal, application, checksum registration and renewed independent acceptance. No sample correction was retained or promoted. |
 | Rule/tooling version | `dynamic_row_correction_2026-07-26_v1` |
-| Migration | `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`; final SHA-256 pending the final reviewed bytes and registration |
+| Migration | Installed base: `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`; SHA-256 `07bbd951aedf19705ba8ea99cff30d445c6634ddfad90f84e3b9f2f38218aac5`; registered as `20260726200000` / `dynamic_row_correction_pipeline`. Pending additive hardening: `supabase/migrations/20260727010000_dynamic_row_correction_pipeline_hardening.sql`; SHA-256 `29dd76bb42ac7bdc10f3a6691bf538a1af4786a15408acc467a4c9beab4cd57b`. |
 | Installation target | The existing approved hosted Supabase/Postgres target reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it |
-| Carry-forward | `versioned-successor-pending-installation`: the mechanism is season-keyed and has no hard-coded 2024-25 row decisions. Year 2 uses its own season key, source-row binding, evidence and correction set. Row-level decisions never carry forward blindly. |
+| Carry-forward | `carries-forward`: the mechanism is season-keyed and has no hard-coded 2024-25 row decisions. Year 2 uses its own season key, source-row binding, evidence and correction set. Row-level decisions never carry forward blindly. |
 | Decision provenance | Abdel Babiker, 26 July 2026, implementation handoff for an audited incremental correction capability |
 | Documentation | `docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md` |
 
@@ -41,7 +41,9 @@ After Abdel reviews that proposal, `correction-apply --reviewer 'Abdel Babiker'`
 
 **Clinical boundary.** Diagnosis and body-location corrections use the same typed, evidence-bound overlay and may map only into the controlled IOC taxonomy. Weak or ambiguous evidence stays `Unknown`; source evidence and original values are retained.
 
-**V5 invariant and current limit.** Installation and transactional verification are data-neutral. `reporting.latest_approved_dashboard_bundle_v4` must continue selecting the same approved 2024-25 V5 V2 bundle, and the private unified payload views plus V5 team and league readers must reproduce all 16 team payloads, the pooled league payload, hashes, `contact_distribution`, and every served metric exactly. No verification correction, draft or release may persist. This entry does not claim the migration is live or the capability is operational. Record the final migration checksum, migration registration, focused and end-to-end evidence, required independent review, zero residual correction state, and exact final V5 parity here before changing the status to `applied-and-verified`.
+**Live installation and V5 invariant.** The additive migration and checksum-bound registration were applied on 27 July 2026. The installed-state transaction harness verified stale-proposal rejection, direct-approved-insert rejection, pending and served ordinary-release guards, append-only evidence, concurrent apply rejection, exact immutable drafts, one changed plus 15 reused team payloads, zero changed plus 16 reused payloads, sequential corrections, rollback preserving the earlier correction, correction after rollback, and compensating rollback. Every verification write ran under an outer rollback; correction sets, rows, drafts, correction releases, rollback releases and dynamic payload rows all returned to zero.
+
+The served bundle remains release `76ac684a-dc60-4b12-ab78-0a502d284555`, label `urc-2024-25-v5-4ae722941285-a1`, with 16 teams and league payload SHA-256 `2f4bb3cbe77e1ea1608cf8442419c2d6e11333473ce73d10559532061382fa53`. The V5 team projection SHA-256 remains `640f338e52e6f8fc10fdd622a904d09222111b1360353ccc24acd23fcbd8c337`; the V5 league projection SHA-256 remains `f348a9e60020fdd76ebcc8891ba6fd606169fec284d08671211351325752dca9`. A real `web_reader` connection returned 16 team rows and one league row, each team and league contact distribution retained 12 cells, and all four private unified relations rejected access. The live protected-alias scan returned zero hits. The successor closes the independent review's season-isolation, rollback-label collision, active clinical-origin and installed-SHA binding findings without altering V1 definitions. Its live rollback-only verification, checksum registration and renewed independent T4 acceptance remain open.
 ---
 
 ## 2026-07-26: Contact mechanism distribution added to the 2024-25 dashboards

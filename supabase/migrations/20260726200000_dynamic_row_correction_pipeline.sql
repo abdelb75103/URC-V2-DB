@@ -377,8 +377,17 @@ begin
     if not exists (
       select 1
       from reporting.aggregate_releases rolled_back
+      join reporting.correction_release_context_v1 correction
+        on correction.bundle_release_id = rolled_back.id
+       and correction.predecessor_bundle_id = new.restored_bundle_id
       where rolled_back.id = new.rolled_back_release_id
         and rolled_back.status = 'approved'
+        and exists (
+          select 1
+          from reporting.latest_approved_dashboard_bundle_v4 served
+          where served.release_id = rolled_back.id
+            and served.season = new.season
+        )
         and (
           exists (
             select 1
@@ -642,69 +651,140 @@ select distinct
   cohort_evidence_sha256
 from analysis.row_correction_member_releases_v1;
 
+create function analysis.row_correction_base_injury_cohort_for_bundle_v1(
+  target_bundle_release_id uuid,
+  target_cohort_view_version text
+)
+returns setof analysis.analysis_window_injury_cohort_v5_snapshot
+language plpgsql
+stable
+set search_path = pg_catalog, analysis, curated
+as $$
+begin
+  if target_cohort_view_version =
+      'analysis_window_2024-25_2026-07-25_v1' then
+    return query
+    select v5.*
+    from analysis.analysis_window_injury_cohort_v5_snapshot v5
+    join reporting.dashboard_bundle_team_payloads_v1 member
+      on member.bundle_release_id = target_bundle_release_id
+     and member.curated_build_id = v5.curated_build_id
+     and member.team_key = v5.team_key
+    where v5.cohort_view_version = target_cohort_view_version
+      and exists (
+        select 1
+        from reporting.dashboard_bundle_context_v1 context
+        where context.release_id = target_bundle_release_id
+          and context.season = v5.season
+      );
+  else
+    return query
+    select
+      later.injury_id,
+      later.curated_build_id,
+      later.team_key,
+      later.season,
+      injury.source_row_id,
+      null::integer as source_row,
+      later.date_injured,
+      later.days_lost::numeric,
+      later.is_time_loss,
+      later.setting_code,
+      later.body_location_code,
+      later.body_location_label,
+      later.injury_type_code,
+      later.injury_type_label,
+      later.severity_code,
+      later.severity_label,
+      later.is_undated,
+      target_cohort_view_version
+    from analysis.injury_cohort_by_build_season_bound_v3 later
+    join curated.injuries injury on injury.id = later.injury_id
+    join reporting.dashboard_bundle_team_payloads_v1 member
+      on member.bundle_release_id = target_bundle_release_id
+     and member.curated_build_id = later.curated_build_id
+     and member.team_key = later.team_key
+    join reporting.dashboard_bundle_context_v1 context
+      on context.release_id = target_bundle_release_id
+     and context.season = later.season;
+  end if;
+end;
+$$;
+
+create function analysis.row_correction_base_classification_for_bundle_v1(
+  target_bundle_release_id uuid,
+  target_cohort_view_version text
+)
+returns setof analysis.analysis_window_reporting_classification_v5_snapshot
+language plpgsql
+stable
+set search_path = pg_catalog, analysis
+as $$
+begin
+  if target_cohort_view_version =
+      'analysis_window_2024-25_2026-07-25_v1' then
+    return query
+    select v5.*
+    from analysis.analysis_window_reporting_classification_v5_snapshot v5
+    join reporting.dashboard_bundle_team_payloads_v1 member
+      on member.bundle_release_id = target_bundle_release_id
+     and member.curated_build_id = v5.curated_build_id
+     and member.team_key = v5.team_key
+    where exists (
+      select 1
+      from reporting.dashboard_bundle_context_v1 context
+      where context.release_id = target_bundle_release_id
+        and context.season = v5.season
+    );
+  else
+    return query
+    select later.*
+    from analysis.season_bound_reporting_classification_v4 later
+    join reporting.dashboard_bundle_team_payloads_v1 member
+      on member.bundle_release_id = target_bundle_release_id
+     and member.curated_build_id = later.curated_build_id
+     and member.team_key = later.team_key
+    join reporting.dashboard_bundle_context_v1 context
+      on context.release_id = target_bundle_release_id
+     and context.season = later.season;
+  end if;
+end;
+$$;
+
+revoke execute on function
+  analysis.row_correction_base_injury_cohort_for_bundle_v1(
+    uuid, text
+  )
+  from public, anon, authenticated, web_reader;
+revoke execute on function
+  analysis.row_correction_base_classification_for_bundle_v1(
+    uuid, text
+  )
+  from public, anon, authenticated, web_reader;
+
 create view analysis.row_correction_base_injury_cohort_v1
 with (security_invoker = true) as
 select cohort.*
-from analysis.row_correction_member_releases_v1 member
-cross join lateral (
-  select v5.*
-  from analysis.analysis_window_injury_cohort_v5_snapshot v5
-  where member.cohort_view_version =
-      'analysis_window_2024-25_2026-07-25_v1'
-    and v5.cohort_view_version = member.cohort_view_version
-    and v5.curated_build_id = member.curated_build_id
-    and v5.team_key = member.team_key
-    and v5.season = member.season
-  union all
-  select
-    later.injury_id,
-    later.curated_build_id,
-    later.team_key,
-    later.season,
-    injury.source_row_id,
-    null::integer as source_row,
-    later.date_injured,
-    later.days_lost::numeric,
-    later.is_time_loss,
-    later.setting_code,
-    later.body_location_code,
-    later.body_location_label,
-    later.injury_type_code,
-    later.injury_type_label,
-    later.severity_code,
-    later.severity_label,
-    later.is_undated,
-    member.cohort_view_version
-  from analysis.injury_cohort_by_build_season_bound_v3 later
-  join curated.injuries injury on injury.id = later.injury_id
-  where member.cohort_view_version <>
-      'analysis_window_2024-25_2026-07-25_v1'
-    and later.curated_build_id = member.curated_build_id
-    and later.team_key = member.team_key
-    and later.season = member.season
-) cohort;
+from reporting.latest_approved_dashboard_bundle_v4 bundle
+join reporting.dashboard_bundle_context_v1 context
+  on context.release_id = bundle.release_id
+cross join lateral
+  analysis.row_correction_base_injury_cohort_for_bundle_v1(
+    bundle.release_id,
+    context.cohort_view_version
+  ) cohort;
 
 create view analysis.row_correction_base_classification_v1
 with (security_invoker = true) as
 select classification.*
-from analysis.row_correction_member_releases_v1 member
-cross join lateral (
-  select v5.*
-  from analysis.analysis_window_reporting_classification_v5_snapshot v5
-  where member.cohort_view_version =
-      'analysis_window_2024-25_2026-07-25_v1'
-    and v5.curated_build_id = member.curated_build_id
-    and v5.team_key = member.team_key
-    and v5.season = member.season
-  union all
-  select later.*
-  from analysis.season_bound_reporting_classification_v4 later
-  where member.cohort_view_version <>
-      'analysis_window_2024-25_2026-07-25_v1'
-    and later.curated_build_id = member.curated_build_id
-    and later.team_key = member.team_key
-    and later.season = member.season
-) classification;
+from reporting.latest_approved_dashboard_bundle_v4 bundle
+join reporting.dashboard_bundle_context_v1 context
+  on context.release_id = bundle.release_id
+cross join lateral
+  analysis.row_correction_base_classification_for_bundle_v1(
+    bundle.release_id,
+    context.cohort_view_version
+  ) classification;
 
 create view analysis.row_correction_served_sets_v1
 with (security_invoker = true) as
@@ -2210,7 +2290,289 @@ from analysis.row_correction_target_keys_v1 target;
 
 create view analysis.row_correction_team_dashboard_payload_v1
 with (security_invoker = true) as
-with body as (
+with target_cohort as materialized (
+  select cohort.*
+  from analysis.row_correction_effective_injury_cohort_v1 cohort
+  join analysis.row_correction_target_teams_v1 target
+    using (team_key, season)
+), target_classification as materialized (
+  select classification.*
+  from analysis.row_correction_reporting_classification_v1 classification
+  join analysis.row_correction_target_teams_v1 target
+    using (team_key, season)
+), target_exposure as materialized (
+  select exposure.*
+  from analysis.row_correction_exposure_hours_v1 exposure
+  join analysis.row_correction_target_teams_v1 target
+    using (team_key, season)
+), target_summary as materialized (
+  select c.curated_build_id, c.team_key, c.season,
+    count(*) as recorded_injuries,
+    count(*) filter (where c.is_time_loss) as time_loss_injuries,
+    coalesce(sum(c.days_lost) filter (where c.is_time_loss), 0) as days_lost,
+    avg(c.days_lost) filter (where c.is_time_loss) as mean_severity_days,
+    percentile_cont(0.5) within group (order by c.days_lost)
+      filter (where c.is_time_loss) as median_severity_days
+  from target_cohort c
+  group by c.curated_build_id, c.team_key, c.season
+), target_setting_grouped as (
+  select c.curated_build_id, c.team_key, c.season, c.setting_code,
+    count(*) as time_loss_injuries, sum(c.days_lost) as days_lost
+  from target_cohort c
+  where c.is_time_loss
+  group by c.curated_build_id, c.team_key, c.season, c.setting_code
+), target_setting as materialized (
+  select grouped.*,
+    case grouped.setting_code
+      when 'match' then exposure.match_hours
+      when 'training' then exposure.training_hours
+      else null
+    end as exposure_hours,
+    analysis.rate_per_1000_v1(
+      grouped.time_loss_injuries,
+      case grouped.setting_code
+        when 'match' then exposure.match_hours
+        when 'training' then exposure.training_hours
+        else null
+      end
+    ) as incidence_per_1000h,
+    analysis.rate_per_1000_v1(
+      grouped.days_lost,
+      case grouped.setting_code
+        when 'match' then exposure.match_hours
+        when 'training' then exposure.training_hours
+        else null
+      end
+    ) as burden_per_1000h,
+    grouped.days_lost::numeric /
+      nullif(grouped.time_loss_injuries, 0) as mean_severity_days
+  from target_setting_grouped grouped
+  join target_exposure exposure
+    using (curated_build_id, team_key, season)
+), target_monthly_exposure as (
+  select e.curated_build_id, e.team_key, e.season,
+    date_trunc('month', e.effective_period_start)::date as month_start,
+    sum(e.minutes_clean) / 60 as exposure_hours,
+    sum(e.distance_m_clean) / 1000 as distance_km
+  from analysis.row_correction_effective_exposure_cohort_v1 e
+  join analysis.row_correction_target_teams_v1 target
+    using (team_key, season)
+  where e.effective_eligibility_status = 'included_pending_protocol'
+  group by e.curated_build_id, e.team_key, e.season,
+    date_trunc('month', e.effective_period_start)
+), target_monthly_injuries as (
+  select curated_build_id, team_key, season,
+    date_trunc('month', date_injured)::date as month_start,
+    count(*) filter (where is_time_loss) as time_loss_injuries,
+    coalesce(sum(days_lost) filter (where is_time_loss), 0) as days_lost
+  from target_cohort
+  where date_injured is not null
+  group by curated_build_id, team_key, season, date_trunc('month', date_injured)
+), target_months as (
+  select curated_build_id, team_key, season, month_start
+  from target_monthly_exposure
+  union
+  select curated_build_id, team_key, season, month_start
+  from target_monthly_injuries
+), target_monthly as materialized (
+  select months.curated_build_id, months.team_key, months.season,
+    months.month_start, to_char(months.month_start, 'Mon YYYY') as month_label,
+    coalesce(exposure.exposure_hours, 0) as exposure_hours,
+    coalesce(exposure.distance_km, 0) as distance_km,
+    coalesce(injuries.time_loss_injuries, 0) as time_loss_injuries,
+    coalesce(injuries.days_lost, 0) as days_lost,
+    analysis.rate_per_1000_v1(
+      coalesce(injuries.time_loss_injuries, 0),
+      coalesce(exposure.exposure_hours, 0)
+    ) as incidence_per_1000h,
+    analysis.rate_per_1000_v1(
+      coalesce(injuries.days_lost, 0),
+      coalesce(exposure.exposure_hours, 0)
+    ) as burden_per_1000h
+  from target_months months
+  left join target_monthly_exposure exposure
+    using (curated_build_id, team_key, season, month_start)
+  left join target_monthly_injuries injuries
+    using (curated_build_id, team_key, season, month_start)
+), target_severity as materialized (
+  select c.curated_build_id, c.team_key, c.season,
+    c.severity_code, c.severity_label,
+    count(*) as recorded_injuries,
+    count(*) filter (where c.is_time_loss) as time_loss_injuries,
+    coalesce(sum(c.days_lost) filter (where c.is_time_loss), 0) as days_lost,
+    case c.severity_code
+      when 'zero_days_medical_attention_only' then 0
+      when 'one_day' then 1
+      when 'two_to_three_days' then 2
+      when 'four_to_seven_days' then 3
+      when 'eight_to_twenty_eight_days' then 4
+      when 'greater_than_twenty_eight_days' then 5
+      else 6
+    end as band_order
+  from target_cohort c
+  group by c.curated_build_id, c.team_key, c.season,
+    c.severity_code, c.severity_label
+), target_contact_observed as (
+  select c.curated_build_id, c.team_key, c.season, c.setting_code,
+    injury.contact_context,
+    count(*) as recorded_injuries,
+    count(*) filter (where c.is_time_loss) as time_loss_injuries
+  from target_cohort c
+  join curated.injuries injury on injury.id = c.injury_id
+  group by c.curated_build_id, c.team_key, c.season,
+    c.setting_code, injury.contact_context
+  union all
+  select c.curated_build_id, c.team_key, c.season, 'all'::text,
+    injury.contact_context,
+    count(*),
+    count(*) filter (where c.is_time_loss)
+  from target_cohort c
+  join curated.injuries injury on injury.id = c.injury_id
+  group by c.curated_build_id, c.team_key, c.season,
+    injury.contact_context
+), target_contact as materialized (
+  select
+    member.curated_build_id, member.team_key, member.season,
+    setting.setting_code, contact.contact_context, contact.contact_label,
+    coalesce(observed.recorded_injuries, 0)::bigint as recorded_injuries,
+    coalesce(observed.time_loss_injuries, 0)::bigint as time_loss_injuries
+  from analysis.row_correction_member_releases_v1 member
+  join analysis.row_correction_target_teams_v1 target
+    using (team_key, season)
+  cross join (values ('all'), ('match'), ('training'), ('unknown'))
+    setting(setting_code)
+  cross join (values
+    ('contact', 'Contact'),
+    ('non_contact', 'Non-contact'),
+    ('unknown', 'Unknown')
+  ) contact(contact_context, contact_label)
+  left join target_contact_observed observed
+    on observed.curated_build_id = member.curated_build_id
+   and observed.team_key = member.team_key
+   and observed.season = member.season
+   and observed.setting_code = setting.setting_code
+   and observed.contact_context = contact.contact_context
+), target_profile_grouped as (
+  select c.curated_build_id, c.team_key, c.season,
+    dimension.dimension, dimension.code, dimension.label,
+    setting.setting_code,
+    count(*) as time_loss_injuries,
+    sum(c.days_lost) as days_lost
+  from target_classification c
+  left join curated.code_lists body
+    on body.list_name = 'body_location'
+   and body.code = c.effective_body_location_code
+  left join curated.code_lists injury_type
+    on injury_type.list_name = 'injury_type'
+   and injury_type.code = c.effective_injury_type_code
+  cross join lateral (values
+    (
+      'body_location'::text,
+      c.effective_body_location_code,
+      coalesce(body.label, initcap(replace(
+        c.effective_body_location_code, '_', ' '
+      )))
+    ),
+    (
+      'injury_type'::text,
+      c.effective_injury_type_code,
+      coalesce(injury_type.label, initcap(replace(
+        c.effective_injury_type_code, '_', ' '
+      )))
+    ),
+    (
+      'injury_profile'::text,
+      c.effective_body_location_code || '__' ||
+        c.effective_injury_type_code,
+      coalesce(body.label, initcap(replace(
+        c.effective_body_location_code, '_', ' '
+      ))) || ' · ' ||
+        coalesce(injury_type.label, initcap(replace(
+          c.effective_injury_type_code, '_', ' '
+        )))
+    )
+  ) dimension(dimension, code, label)
+  cross join lateral
+    (values ('all'::text), (c.setting_code)) setting(setting_code)
+  where c.is_time_loss
+  group by c.curated_build_id, c.team_key, c.season,
+    dimension.dimension, dimension.code, dimension.label,
+    setting.setting_code
+), target_profiles as materialized (
+  select grouped.*,
+    case grouped.setting_code
+      when 'all' then exposure.total_hours
+      when 'match' then exposure.match_hours
+      when 'training' then exposure.training_hours
+      else null
+    end as exposure_hours,
+    analysis.rate_per_1000_v1(
+      grouped.time_loss_injuries,
+      case grouped.setting_code
+        when 'all' then exposure.total_hours
+        when 'match' then exposure.match_hours
+        when 'training' then exposure.training_hours
+        else null
+      end
+    ) as incidence_per_1000h,
+    analysis.rate_per_1000_v1(
+      grouped.days_lost,
+      case grouped.setting_code
+        when 'all' then exposure.total_hours
+        when 'match' then exposure.match_hours
+        when 'training' then exposure.training_hours
+        else null
+      end
+    ) as burden_per_1000h,
+    grouped.days_lost::numeric /
+      nullif(grouped.time_loss_injuries, 0) as mean_severity_days
+  from target_profile_grouped grouped
+  join target_exposure exposure
+    using (curated_build_id, team_key, season)
+), target_diagnosis_grouped as (
+  select c.curated_build_id, c.team_key, c.season,
+    c.diagnosis_code as code, c.diagnosis_label as label,
+    setting.setting_code,
+    count(*) as time_loss_injuries,
+    sum(c.days_lost) as days_lost
+  from target_classification c
+  cross join lateral
+    (values ('all'::text), (c.setting_code)) setting(setting_code)
+  where c.is_time_loss
+  group by c.curated_build_id, c.team_key, c.season,
+    c.diagnosis_code, c.diagnosis_label, setting.setting_code
+), target_diagnosis as materialized (
+  select grouped.*,
+    case grouped.setting_code
+      when 'all' then exposure.total_hours
+      when 'match' then exposure.match_hours
+      when 'training' then exposure.training_hours
+      else null
+    end as exposure_hours,
+    analysis.rate_per_1000_v1(
+      grouped.time_loss_injuries,
+      case grouped.setting_code
+        when 'all' then exposure.total_hours
+        when 'match' then exposure.match_hours
+        when 'training' then exposure.training_hours
+        else null
+      end
+    ) as incidence_per_1000h,
+    analysis.rate_per_1000_v1(
+      grouped.days_lost,
+      case grouped.setting_code
+        when 'all' then exposure.total_hours
+        when 'match' then exposure.match_hours
+        when 'training' then exposure.training_hours
+        else null
+      end
+    ) as burden_per_1000h,
+    grouped.days_lost::numeric /
+      nullif(grouped.time_loss_injuries, 0) as mean_severity_days
+  from target_diagnosis_grouped grouped
+  join target_exposure exposure
+    using (curated_build_id, team_key, season)
+), body as (
   select p.curated_build_id, p.team_key, p.season,
     jsonb_agg(jsonb_build_object(
       'key', p.code, 'label', p.label,
@@ -2220,9 +2582,7 @@ with body as (
       'burden_per_1000h', p.burden_per_1000h,
       'mean_severity_days', p.mean_severity_days
     ) order by p.code) as docs
-  from analysis.row_correction_effective_injury_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target
-    using (team_key, season)
+  from target_profiles p
   where p.dimension = 'body_location' and p.setting_code = 'all'
   group by p.curated_build_id, p.team_key, p.season
 ), types as (
@@ -2235,9 +2595,7 @@ with body as (
       'burden_per_1000h', p.burden_per_1000h,
       'mean_severity_days', p.mean_severity_days
     ) order by p.time_loss_injuries desc, p.days_lost desc, p.code) as docs
-  from analysis.row_correction_effective_injury_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target
-    using (team_key, season)
+  from target_profiles p
   where p.dimension = 'injury_type' and p.setting_code = 'all'
   group by p.curated_build_id, p.team_key, p.season
 ), profile_rows as (
@@ -2245,17 +2603,13 @@ with body as (
     p.code, p.label, p.setting_code, p.time_loss_injuries, p.days_lost,
     p.exposure_hours, p.incidence_per_1000h, p.burden_per_1000h,
     p.mean_severity_days
-  from analysis.row_correction_effective_injury_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target
-    using (team_key, season)
+  from target_profiles p
   union all
   select p.curated_build_id, p.team_key, p.season, 'diagnosis',
     p.code, p.label, p.setting_code, p.time_loss_injuries, p.days_lost,
     p.exposure_hours, p.incidence_per_1000h, p.burden_per_1000h,
     p.mean_severity_days
-  from analysis.row_correction_diagnosis_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target
-    using (team_key, season)
+  from target_diagnosis p
 ), profiles as (
   select p.curated_build_id, p.team_key, p.season,
     jsonb_agg(jsonb_build_object(
@@ -2279,7 +2633,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
   cohort.cohort_view_version,
   cohort.cohort_evidence_sha256,
   predecessor.dashboard_payload || jsonb_build_object(
-    'generated_at', m.generated_at,
+    'generated_at', predecessor.dashboard_payload -> 'generated_at',
     'team', predecessor.dashboard_payload -> 'team',
     'season', m.season,
     'analysis_window', predecessor.dashboard_payload -> 'analysis_window',
@@ -2336,7 +2690,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
         'mean_severity_days', x.mean_severity_days
       ) order by case x.setting_code
         when 'match' then 1 when 'training' then 2 else 3 end)
-      from analysis.row_correction_setting_split_v1 x
+      from target_setting x
       where x.curated_build_id = m.curated_build_id
         and x.team_key = m.team_key and x.season = m.season
     ), '[]'::jsonb),
@@ -2350,7 +2704,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
         'mean_severity_days', x.mean_severity_days
       ) order by case x.setting_code
         when 'match' then 1 when 'training' then 2 else 3 end)
-      from analysis.row_correction_setting_split_v1 x
+      from target_setting x
       where x.curated_build_id = m.curated_build_id
         and x.team_key = m.team_key and x.season = m.season
     ), '[]'::jsonb),
@@ -2363,7 +2717,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
         'incidence_per_1000h', x.incidence_per_1000h,
         'burden_per_1000h', x.burden_per_1000h
       ) order by x.month_start)
-      from analysis.row_correction_monthly_v1 x
+      from target_monthly x
       where x.curated_build_id = m.curated_build_id
         and x.team_key = m.team_key and x.season = m.season
     ), '[]'::jsonb),
@@ -2377,7 +2731,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
         'time_loss_injuries', x.time_loss_injuries,
         'days_lost', x.days_lost
       ) order by x.band_order)
-      from analysis.row_correction_severity_distribution_v1 x
+      from target_severity x
       where x.curated_build_id = m.curated_build_id
         and x.team_key = m.team_key and x.season = m.season
     ), '[]'::jsonb),
@@ -2397,7 +2751,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
           array['contact', 'non_contact', 'unknown'],
           x.contact_context
         ))
-      from analysis.row_correction_contact_distribution_v1 x
+      from target_contact x
       where x.curated_build_id = m.curated_build_id
         and x.team_key = m.team_key and x.season = m.season
     ), '[]'::jsonb),
@@ -2416,11 +2770,11 @@ join analysis.row_correction_cohort_rules_v1 cohort
   on cohort.cohort_view_version = w.cohort_view_version
  and cohort.season = w.season
 cross join analysis.accepted_reporting_classification_rules_v4 rules
-join analysis.row_correction_team_summary_v1 s
+join target_summary s
   on s.curated_build_id = m.curated_build_id
  and s.team_key = m.team_key
  and s.season = m.season
-join analysis.row_correction_exposure_hours_v1 e
+join target_exposure e
   on e.curated_build_id = m.curated_build_id
  and e.team_key = m.team_key
  and e.season = m.season
@@ -2434,9 +2788,601 @@ left join profiles
   on profiles.curated_build_id = m.curated_build_id
  and profiles.team_key = m.team_key and profiles.season = m.season;
 
+create function analysis.row_correction_team_dashboard_payload_data_v1()
+returns table (
+  team_key text,
+  season text,
+  team_release_id uuid,
+  curated_build_id uuid,
+  classification_view_version text,
+  classification_evidence_sha256 text,
+  cohort_view_version text,
+  cohort_evidence_sha256 text,
+  dashboard jsonb
+)
+language plpgsql
+volatile
+security definer
+set search_path = pg_catalog, analysis, reporting, curated
+set jit = off
+as $$
+declare
+  member_row record;
+  summary_row record;
+  exposure_row record;
+  setting_docs jsonb;
+  setting_metric_docs jsonb;
+  monthly_docs jsonb;
+  body_docs jsonb;
+  type_docs jsonb;
+  profile_docs jsonb;
+  severity_docs jsonb;
+  contact_docs jsonb;
+  dashboard_payload jsonb;
+  cache_key text;
+  cache_doc jsonb;
+  cohort_rows jsonb;
+  classification_rows jsonb;
+begin
+  cache_key := analysis.row_correction_proposal_hash_v1(
+    analysis.row_correction_current_preview_v1()
+      - 'proposal_hash'
+      - 'source_row_sha256'
+      - 'row_fingerprint'
+      - 'correction_set_hash_before'
+      - 'correction_set_hash_after'
+      - 'predecessor_bundle'
+      - 'affected_team_before_sha256'
+      - 'affected_team_after_sha256'
+      - 'affected_league_before_sha256'
+      - 'affected_league_after_sha256'
+      - 'unchanged_team_hashes'
+  );
+  if cache_key is not null
+    and nullif(current_setting(
+      'urc.row_correction_team_payload_cache', true
+    ), '') is not null then
+    cache_doc := current_setting(
+      'urc.row_correction_team_payload_cache', true
+    )::jsonb;
+    if cache_doc ->> 'cache_key' = cache_key then
+      return query select
+        cache_doc ->> 'team_key',
+        cache_doc ->> 'season',
+        (cache_doc ->> 'team_release_id')::uuid,
+        (cache_doc ->> 'curated_build_id')::uuid,
+        cache_doc ->> 'classification_view_version',
+        cache_doc ->> 'classification_evidence_sha256',
+        cache_doc ->> 'cohort_view_version',
+        cache_doc ->> 'cohort_evidence_sha256',
+        cache_doc -> 'dashboard';
+      return;
+    end if;
+  end if;
+
+  select
+    member.*,
+    rules.classification_view_version as rule_classification_view_version,
+    rules.classification_evidence_sha256
+      as rule_classification_evidence_sha256,
+    cohort.cohort_view_version as rule_cohort_view_version,
+    cohort.cohort_evidence_sha256 as rule_cohort_evidence_sha256,
+    predecessor.dashboard_payload as predecessor_payload
+  into strict member_row
+  from analysis.row_correction_member_releases_v1 member
+  join analysis.row_correction_target_teams_v1 target
+    using (team_key, season)
+  join reporting.dashboard_bundle_team_payloads_v1 predecessor
+    on predecessor.bundle_release_id = member.predecessor_bundle_id
+   and predecessor.team_key = member.team_key
+  join analysis.reporting_season_windows_v3 season_window
+    on season_window.season = member.season
+  join analysis.row_correction_cohort_rules_v1 cohort
+    on cohort.cohort_view_version = season_window.cohort_view_version
+   and cohort.season = season_window.season
+  cross join analysis.accepted_reporting_classification_rules_v4 rules;
+
+  select coalesce(jsonb_agg(to_jsonb(cohort)), '[]'::jsonb)
+  into cohort_rows
+  from analysis.row_correction_effective_injury_cohort_v1 cohort
+  where cohort.curated_build_id = member_row.curated_build_id
+    and cohort.team_key = member_row.team_key
+    and cohort.season = member_row.season;
+
+  select coalesce(jsonb_agg(to_jsonb(classification)), '[]'::jsonb)
+  into classification_rows
+  from analysis.row_correction_reporting_classification_v1 classification
+  where classification.curated_build_id = member_row.curated_build_id
+    and classification.team_key = member_row.team_key
+    and classification.season = member_row.season;
+
+  select
+    count(*) as recorded_injuries,
+    count(*) filter (where item.is_time_loss) as time_loss_injuries,
+    coalesce(
+      sum(item.days_lost) filter (where item.is_time_loss), 0
+    ) as days_lost,
+    avg(item.days_lost) filter (where item.is_time_loss)
+      as mean_severity_days,
+    percentile_cont(0.5) within group (order by item.days_lost)
+      filter (where item.is_time_loss) as median_severity_days
+  into strict summary_row
+  from jsonb_to_recordset(cohort_rows) as item(
+    is_time_loss boolean,
+    days_lost numeric
+  );
+
+  select exposure.* into strict exposure_row
+  from analysis.row_correction_exposure_hours_v1 exposure
+  where exposure.curated_build_id = member_row.curated_build_id
+    and exposure.team_key = member_row.team_key
+    and exposure.season = member_row.season;
+
+  with grouped as (
+    select item.setting_code,
+      count(*) as time_loss_injuries,
+      sum(item.days_lost) as days_lost
+    from jsonb_to_recordset(cohort_rows) as item(
+      setting_code text,
+      is_time_loss boolean,
+      days_lost numeric
+    )
+    where item.is_time_loss
+    group by item.setting_code
+  ), enriched as (
+    select grouped.*,
+      case grouped.setting_code
+        when 'match' then exposure_row.match_hours
+        when 'training' then exposure_row.training_hours
+        else null
+      end as exposure_hours
+    from grouped
+  )
+  select
+    coalesce(jsonb_agg(jsonb_build_object(
+      'key', item.setting_code,
+      'label', initcap(item.setting_code),
+      'time_loss_injuries', item.time_loss_injuries,
+      'days_lost', item.days_lost,
+      'exposure_hours', item.exposure_hours,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        item.time_loss_injuries, item.exposure_hours
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        item.days_lost, item.exposure_hours
+      ),
+      'mean_severity_days', item.days_lost /
+        nullif(item.time_loss_injuries, 0)
+    ) order by case item.setting_code
+      when 'match' then 1 when 'training' then 2 else 3 end
+    ), '[]'::jsonb),
+    coalesce(jsonb_agg(jsonb_build_object(
+      'setting', item.setting_code,
+      'label', initcap(item.setting_code),
+      'time_loss_injuries', item.time_loss_injuries,
+      'days_lost', item.days_lost,
+      'exposure_hours', item.exposure_hours,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        item.time_loss_injuries, item.exposure_hours
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        item.days_lost, item.exposure_hours
+      ),
+      'mean_severity_days', item.days_lost /
+        nullif(item.time_loss_injuries, 0)
+    ) order by case item.setting_code
+      when 'match' then 1 when 'training' then 2 else 3 end
+    ), '[]'::jsonb)
+  into setting_docs, setting_metric_docs
+  from enriched item;
+
+  with monthly_exposure as (
+    select
+      date_trunc('month', exposure.effective_period_start)::date
+        as month_start,
+      sum(exposure.minutes_clean) / 60 as exposure_hours,
+      sum(exposure.distance_m_clean) / 1000 as distance_km
+    from analysis.row_correction_effective_exposure_cohort_v1 exposure
+    where exposure.curated_build_id = member_row.curated_build_id
+      and exposure.team_key = member_row.team_key
+      and exposure.season = member_row.season
+      and exposure.effective_eligibility_status =
+        'included_pending_protocol'
+    group by date_trunc('month', exposure.effective_period_start)
+  ), monthly_injuries as (
+    select date_trunc('month', item.date_injured)::date as month_start,
+      count(*) filter (where item.is_time_loss) as time_loss_injuries,
+      coalesce(
+        sum(item.days_lost) filter (where item.is_time_loss), 0
+      ) as days_lost
+    from jsonb_to_recordset(cohort_rows) as item(
+      date_injured date,
+      is_time_loss boolean,
+      days_lost numeric
+    )
+    where item.date_injured is not null
+    group by date_trunc('month', item.date_injured)
+  ), months as (
+    select month_start from monthly_exposure
+    union
+    select month_start from monthly_injuries
+  ), monthly as (
+    select months.month_start,
+      to_char(months.month_start, 'Mon YYYY') as month_label,
+      coalesce(exposure.exposure_hours, 0) as exposure_hours,
+      coalesce(exposure.distance_km, 0) as distance_km,
+      coalesce(injuries.time_loss_injuries, 0) as time_loss_injuries,
+      coalesce(injuries.days_lost, 0) as days_lost
+    from months
+    left join monthly_exposure exposure using (month_start)
+    left join monthly_injuries injuries using (month_start)
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'month', item.month_label,
+    'exposure_hours', item.exposure_hours,
+    'distance_km', item.distance_km,
+    'time_loss_injuries', item.time_loss_injuries,
+    'days_lost', item.days_lost,
+    'incidence_per_1000h', analysis.rate_per_1000_v1(
+      item.time_loss_injuries, item.exposure_hours
+    ),
+    'burden_per_1000h', analysis.rate_per_1000_v1(
+      item.days_lost, item.exposure_hours
+    )
+  ) order by item.month_start), '[]'::jsonb)
+  into monthly_docs
+  from monthly item;
+
+  with classification as (
+    select item.*
+    from jsonb_to_recordset(classification_rows) as item(
+      effective_body_location_code text,
+      effective_injury_type_code text,
+      diagnosis_code text,
+      diagnosis_label text,
+      setting_code text,
+      is_time_loss boolean,
+      days_lost numeric
+    )
+  ), labelled as (
+    select classification.*,
+      coalesce(body.label, initcap(replace(
+        classification.effective_body_location_code, '_', ' '
+      ))) as body_label,
+      coalesce(injury_type.label, initcap(replace(
+        classification.effective_injury_type_code, '_', ' '
+      ))) as type_label
+    from classification
+    left join curated.code_lists body
+      on body.list_name = 'body_location'
+     and body.code = classification.effective_body_location_code
+    left join curated.code_lists injury_type
+      on injury_type.list_name = 'injury_type'
+     and injury_type.code = classification.effective_injury_type_code
+  ), expanded as (
+    select dimension.dimension, dimension.code, dimension.label,
+      setting.setting_code, labelled.days_lost
+    from labelled
+    cross join lateral (values
+      (
+        'body_location'::text,
+        labelled.effective_body_location_code,
+        labelled.body_label
+      ),
+      (
+        'injury_type'::text,
+        labelled.effective_injury_type_code,
+        labelled.type_label
+      ),
+      (
+        'injury_profile'::text,
+        labelled.effective_body_location_code || '__' ||
+          labelled.effective_injury_type_code,
+        labelled.body_label || ' · ' || labelled.type_label
+      ),
+      (
+        'diagnosis'::text,
+        labelled.diagnosis_code,
+        labelled.diagnosis_label
+      )
+    ) dimension(dimension, code, label)
+    cross join lateral
+      (values ('all'::text), (labelled.setting_code))
+      setting(setting_code)
+    where labelled.is_time_loss
+  ), grouped as (
+    select expanded.dimension, expanded.code, expanded.label,
+      expanded.setting_code,
+      count(*) as time_loss_injuries,
+      sum(expanded.days_lost) as days_lost
+    from expanded
+    group by expanded.dimension, expanded.code, expanded.label,
+      expanded.setting_code
+  ), profile_rows as (
+    select grouped.*,
+      case grouped.setting_code
+        when 'all' then exposure_row.total_hours
+        when 'match' then exposure_row.match_hours
+        when 'training' then exposure_row.training_hours
+        else null
+      end as exposure_hours,
+      analysis.rate_per_1000_v1(
+        grouped.time_loss_injuries,
+        case grouped.setting_code
+          when 'all' then exposure_row.total_hours
+          when 'match' then exposure_row.match_hours
+          when 'training' then exposure_row.training_hours
+          else null
+        end
+      ) as incidence_per_1000h,
+      analysis.rate_per_1000_v1(
+        grouped.days_lost,
+        case grouped.setting_code
+          when 'all' then exposure_row.total_hours
+          when 'match' then exposure_row.match_hours
+          when 'training' then exposure_row.training_hours
+          else null
+        end
+      ) as burden_per_1000h,
+      grouped.days_lost::numeric /
+        nullif(grouped.time_loss_injuries, 0) as mean_severity_days
+    from grouped
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'dimension', item.dimension,
+    'code', item.code,
+    'label', item.label,
+    'setting', item.setting_code,
+    'time_loss_injuries', item.time_loss_injuries,
+    'days_lost', item.days_lost,
+    'exposure_hours', item.exposure_hours,
+    'incidence_per_1000h', item.incidence_per_1000h,
+    'burden_per_1000h', item.burden_per_1000h,
+    'mean_severity_days', item.mean_severity_days
+  ) order by
+    case when item.dimension = 'diagnosis' then 1 else 0 end,
+    item.dimension, item.setting_code, item.time_loss_injuries desc,
+    item.days_lost desc, item.code
+  ), '[]'::jsonb)
+  into profile_docs
+  from profile_rows item;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'key', item -> 'code',
+    'label', item -> 'label',
+    'time_loss_injuries', item -> 'time_loss_injuries',
+    'days_lost', item -> 'days_lost',
+    'incidence_per_1000h', item -> 'incidence_per_1000h',
+    'burden_per_1000h', item -> 'burden_per_1000h',
+    'mean_severity_days', item -> 'mean_severity_days'
+  ) order by item ->> 'code'), '[]'::jsonb)
+  into body_docs
+  from jsonb_array_elements(profile_docs) item
+  where item ->> 'dimension' = 'body_location'
+    and item ->> 'setting' = 'all';
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'key', item -> 'code',
+    'label', item -> 'label',
+    'time_loss_injuries', item -> 'time_loss_injuries',
+    'days_lost', item -> 'days_lost',
+    'incidence_per_1000h', item -> 'incidence_per_1000h',
+    'burden_per_1000h', item -> 'burden_per_1000h',
+    'mean_severity_days', item -> 'mean_severity_days'
+  ) order by (item ->> 'time_loss_injuries')::numeric desc,
+    (item ->> 'days_lost')::numeric desc, item ->> 'code'
+  ), '[]'::jsonb)
+  into type_docs
+  from jsonb_array_elements(profile_docs) item
+  where item ->> 'dimension' = 'injury_type'
+    and item ->> 'setting' = 'all';
+
+  with grouped as (
+    select item.severity_code, item.severity_label,
+      count(*) as recorded_injuries,
+      count(*) filter (where item.is_time_loss) as time_loss_injuries,
+      coalesce(
+        sum(item.days_lost) filter (where item.is_time_loss), 0
+      ) as days_lost,
+      case item.severity_code
+        when 'zero_days_medical_attention_only' then 0
+        when 'one_day' then 1
+        when 'two_to_three_days' then 2
+        when 'four_to_seven_days' then 3
+        when 'eight_to_twenty_eight_days' then 4
+        when 'greater_than_twenty_eight_days' then 5
+        else 6
+      end as band_order
+    from jsonb_to_recordset(cohort_rows) as item(
+      severity_code text,
+      severity_label text,
+      is_time_loss boolean,
+      days_lost numeric
+    )
+    group by item.severity_code, item.severity_label
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'key', item.severity_code,
+    'label', item.severity_label,
+    'recorded_injuries', item.recorded_injuries,
+    'time_loss_injuries', item.time_loss_injuries,
+    'days_lost', item.days_lost
+  ) order by item.band_order), '[]'::jsonb)
+  into severity_docs
+  from grouped item;
+
+  with observed_by_setting as (
+    select item.setting_code, injury.contact_context,
+      count(*) as recorded_injuries,
+      count(*) filter (where item.is_time_loss) as time_loss_injuries
+    from jsonb_to_recordset(cohort_rows) as item(
+      injury_id uuid,
+      setting_code text,
+      is_time_loss boolean
+    )
+    join curated.injuries injury on injury.id = item.injury_id
+    group by item.setting_code, injury.contact_context
+  ), observed as (
+    select * from observed_by_setting
+    union all
+    select 'all', item.contact_context,
+      sum(item.recorded_injuries),
+      sum(item.time_loss_injuries)
+    from observed_by_setting item
+    group by item.contact_context
+  ), domain as (
+    select setting.setting_code, contact.contact_context,
+      contact.contact_label
+    from (values ('all'), ('match'), ('training'), ('unknown'))
+      setting(setting_code)
+    cross join (values
+      ('contact', 'Contact'),
+      ('non_contact', 'Non-contact'),
+      ('unknown', 'Unknown')
+    ) contact(contact_context, contact_label)
+  ), contact_rows as (
+    select domain.*,
+      coalesce(observed.recorded_injuries, 0)::bigint as recorded_injuries,
+      coalesce(observed.time_loss_injuries, 0)::bigint
+        as time_loss_injuries
+    from domain
+    left join observed
+      using (setting_code, contact_context)
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'key', item.contact_context,
+    'label', item.contact_label,
+    'setting', item.setting_code,
+    'recorded_injuries', item.recorded_injuries,
+    'time_loss_injuries', item.time_loss_injuries
+  ) order by
+    array_position(
+      array['all', 'match', 'training', 'unknown'], item.setting_code
+    ),
+    array_position(
+      array['contact', 'non_contact', 'unknown'], item.contact_context
+    )
+  ), '[]'::jsonb)
+  into contact_docs
+  from contact_rows item;
+
+  dashboard_payload := member_row.predecessor_payload || jsonb_build_object(
+    'generated_at', member_row.predecessor_payload -> 'generated_at',
+    'team', member_row.predecessor_payload -> 'team',
+    'season', member_row.season,
+    'analysis_window', member_row.predecessor_payload -> 'analysis_window',
+    'method', member_row.predecessor_payload -> 'method',
+    'coverage', coalesce(
+      member_row.predecessor_payload -> 'coverage', '{}'::jsonb
+    ),
+    'headline', jsonb_build_array(
+      jsonb_build_object(
+        'key', 'recorded_injuries', 'label', 'Recorded injuries',
+        'value', summary_row.recorded_injuries, 'unit', 'injuries',
+        'formula', 'count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)'
+      ),
+      jsonb_build_object(
+        'key', 'time_loss_injuries', 'label', 'Time-loss injuries',
+        'value', summary_row.time_loss_injuries, 'unit', 'injuries',
+        'formula', 'count(eligible injury rows where days lost > 0)'
+      ),
+      jsonb_build_object(
+        'key', 'incidence_per_1000h', 'label', 'Incidence',
+        'value', analysis.rate_per_1000_v1(
+          summary_row.time_loss_injuries, exposure_row.total_hours
+        ),
+        'unit', 'per 1,000 player-hours',
+        'numerator', summary_row.time_loss_injuries,
+        'denominator', exposure_row.total_hours,
+        'formula', 'pooled time-loss injuries / pooled exposure hours * 1000'
+      ),
+      jsonb_build_object(
+        'key', 'severity_mean_days', 'label', 'Mean severity',
+        'value', summary_row.mean_severity_days,
+        'unit', 'days lost per injury',
+        'numerator', summary_row.days_lost,
+        'denominator', summary_row.time_loss_injuries,
+        'formula', 'pooled days lost / pooled time-loss injuries'
+      ),
+      jsonb_build_object(
+        'key', 'severity_median_days', 'label', 'Median severity',
+        'value', summary_row.median_severity_days,
+        'unit', 'days lost per injury',
+        'formula', 'median(days lost) across pooled time-loss injuries'
+      ),
+      jsonb_build_object(
+        'key', 'burden_per_1000h', 'label', 'Burden',
+        'value', analysis.rate_per_1000_v1(
+          summary_row.days_lost, exposure_row.total_hours
+        ),
+        'unit', 'days lost per 1,000 player-hours',
+        'numerator', summary_row.days_lost,
+        'denominator', exposure_row.total_hours,
+        'formula', 'pooled days lost / pooled exposure hours * 1000'
+      )
+    ),
+    'setting_split', setting_docs,
+    'setting_metrics', setting_metric_docs,
+    'monthly', monthly_docs,
+    'body_locations', body_docs,
+    'injury_types', type_docs,
+    'injury_profiles', profile_docs,
+    'severity_distribution', severity_docs,
+    'contact_distribution', contact_docs,
+    'prior_season', member_row.predecessor_payload -> 'prior_season',
+    'limitations', member_row.predecessor_payload -> 'limitations'
+  );
+
+  if cache_key is not null then
+    perform set_config(
+      'urc.row_correction_team_payload_cache',
+      jsonb_build_object(
+        'cache_key', cache_key,
+        'team_key', member_row.team_key,
+        'season', member_row.season,
+        'team_release_id', member_row.team_release_id,
+        'curated_build_id', member_row.curated_build_id,
+        'classification_view_version',
+          member_row.rule_classification_view_version,
+        'classification_evidence_sha256',
+          member_row.rule_classification_evidence_sha256,
+        'cohort_view_version', member_row.rule_cohort_view_version,
+        'cohort_evidence_sha256',
+          member_row.rule_cohort_evidence_sha256,
+        'dashboard', dashboard_payload
+      )::text,
+      true
+    );
+  end if;
+
+  return query select
+    member_row.team_key::text,
+    member_row.season::text,
+    member_row.team_release_id::uuid,
+    member_row.curated_build_id::uuid,
+    member_row.rule_classification_view_version::text,
+    member_row.rule_classification_evidence_sha256::text,
+    member_row.rule_cohort_view_version::text,
+    member_row.rule_cohort_evidence_sha256::text,
+    dashboard_payload;
+end;
+$$;
+
+revoke execute on function
+  analysis.row_correction_team_dashboard_payload_data_v1()
+  from public, anon, authenticated, web_reader;
+
 create view analysis.row_correction_league_dashboard_payload_v1
 with (security_invoker = true) as
-with body as (
+with league_profiles as materialized (
+  select p.*
+  from analysis.row_correction_league_effective_injury_profiles_v1 p
+  join analysis.row_correction_target_teams_v1 target using (season)
+), league_diagnosis as materialized (
+  select p.*
+  from analysis.row_correction_league_diagnosis_profiles_v1 p
+  join analysis.row_correction_target_teams_v1 target using (season)
+), body as (
   select p.season,
     jsonb_agg(jsonb_build_object(
       'key', p.code, 'label', p.label,
@@ -2446,8 +3392,7 @@ with body as (
       'burden_per_1000h', p.burden_per_1000h,
       'mean_severity_days', p.mean_severity_days
     ) order by p.code) as docs
-  from analysis.row_correction_league_effective_injury_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target using (season)
+  from league_profiles p
   where p.dimension = 'body_location' and p.setting_code = 'all'
   group by p.season
 ), types as (
@@ -2460,22 +3405,19 @@ with body as (
       'burden_per_1000h', p.burden_per_1000h,
       'mean_severity_days', p.mean_severity_days
     ) order by p.time_loss_injuries desc, p.days_lost desc, p.code) as docs
-  from analysis.row_correction_league_effective_injury_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target using (season)
+  from league_profiles p
   where p.dimension = 'injury_type' and p.setting_code = 'all'
   group by p.season
 ), profile_rows as (
   select p.season, p.dimension, p.code, p.label, p.setting_code,
     p.time_loss_injuries, p.days_lost, p.exposure_hours,
     p.incidence_per_1000h, p.burden_per_1000h, p.mean_severity_days
-  from analysis.row_correction_league_effective_injury_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target using (season)
+  from league_profiles p
   union all
   select p.season, 'diagnosis', p.code, p.label, p.setting_code,
     p.time_loss_injuries, p.days_lost, p.exposure_hours,
     p.incidence_per_1000h, p.burden_per_1000h, p.mean_severity_days
-  from analysis.row_correction_league_diagnosis_profiles_v1 p
-  join analysis.row_correction_target_teams_v1 target using (season)
+  from league_diagnosis p
 ), profiles as (
   select p.season,
     jsonb_agg(jsonb_build_object(
@@ -2640,6 +3582,430 @@ left join body on body.season = h.season
 left join types on types.season = h.season
 left join profiles on profiles.season = h.season;
 
+create view analysis.row_correction_incremental_context_v1
+with (security_invoker = true) as
+select
+  target.season,
+  target.team_key as affected_team_key,
+  bundle.release_id as predecessor_bundle_id,
+  context.classification_view_version,
+  context.classification_evidence_sha256,
+  context.cohort_view_version,
+  context.cohort_evidence_sha256
+from analysis.row_correction_target_teams_v1 target
+join reporting.latest_approved_dashboard_bundle_v4 bundle
+  using (season)
+join reporting.dashboard_bundle_context_v1 context
+  on context.release_id = bundle.release_id;
+
+create view analysis.row_correction_team_payload_candidates_incremental_v1
+with (security_invoker = true) as
+select
+  predecessor.team_key,
+  context.season,
+  predecessor.team_release_id,
+  predecessor.curated_build_id,
+  case
+    when predecessor.team_key = context.affected_team_key
+      then corrected.dashboard
+    else predecessor.dashboard_payload
+  end as dashboard
+from analysis.row_correction_incremental_context_v1 context
+join reporting.dashboard_bundle_team_payloads_v1 predecessor
+  on predecessor.bundle_release_id = context.predecessor_bundle_id
+left join analysis.row_correction_team_dashboard_payload_data_v1() corrected
+  on corrected.season = context.season
+ and corrected.team_key = context.affected_team_key
+ and corrected.team_release_id = predecessor.team_release_id
+ and corrected.curated_build_id = predecessor.curated_build_id
+ and predecessor.team_key = context.affected_team_key
+where predecessor.team_key <> context.affected_team_key
+   or corrected.team_key is not null;
+
+create view analysis.row_correction_league_dashboard_payload_incremental_v1
+with (security_invoker = true) as
+with candidate_teams as materialized (
+  select candidate.*
+  from analysis.row_correction_team_payload_candidates_incremental_v1 candidate
+), cohort_summary as materialized (
+  select cohort.season,
+    count(*) as recorded_injuries,
+    count(*) filter (where cohort.is_time_loss) as time_loss_injuries,
+    coalesce(
+      sum(cohort.days_lost) filter (where cohort.is_time_loss), 0
+    ) as days_lost,
+    avg(cohort.days_lost) filter (where cohort.is_time_loss)
+      as mean_severity_days,
+    percentile_cont(0.5) within group (order by cohort.days_lost)
+      filter (where cohort.is_time_loss) as median_severity_days
+  from analysis.row_correction_effective_injury_cohort_v1 cohort
+  join analysis.row_correction_incremental_context_v1 context
+    using (season)
+  group by cohort.season
+), exposure as materialized (
+  select exposure.season,
+    sum(exposure.total_hours) as exposure_hours,
+    sum(exposure.match_hours) as match_exposure_hours,
+    sum(exposure.training_hours) as training_exposure_hours
+  from analysis.row_correction_exposure_hours_v1 exposure
+  join analysis.row_correction_incremental_context_v1 context
+    using (season)
+  group by exposure.season
+), setting_grouped as (
+  select candidate.season,
+    item ->> 'key' as setting_code,
+    max(item ->> 'label') as label,
+    sum((item ->> 'time_loss_injuries')::numeric) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost,
+    sum((item ->> 'exposure_hours')::numeric)
+      filter (where jsonb_typeof(item -> 'exposure_hours') = 'number')
+      as exposure_hours
+  from candidate_teams candidate
+  cross join lateral jsonb_array_elements(
+    candidate.dashboard -> 'setting_split'
+  ) item
+  group by candidate.season, item ->> 'key'
+), setting_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'key', grouped.setting_code,
+      'label', grouped.label,
+      'time_loss_injuries', grouped.time_loss_injuries,
+      'days_lost', grouped.days_lost,
+      'exposure_hours', grouped.exposure_hours,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        grouped.time_loss_injuries, grouped.exposure_hours
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        grouped.days_lost, grouped.exposure_hours
+      ),
+      'mean_severity_days', grouped.days_lost /
+        nullif(grouped.time_loss_injuries, 0)
+    ) order by case grouped.setting_code
+      when 'match' then 1 when 'training' then 2 else 3 end
+    ) as docs
+  from setting_grouped grouped
+  group by grouped.season
+), setting_metric_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'setting', grouped.setting_code,
+      'label', grouped.label,
+      'time_loss_injuries', grouped.time_loss_injuries,
+      'days_lost', grouped.days_lost,
+      'exposure_hours', grouped.exposure_hours,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        grouped.time_loss_injuries, grouped.exposure_hours
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        grouped.days_lost, grouped.exposure_hours
+      ),
+      'mean_severity_days', grouped.days_lost /
+        nullif(grouped.time_loss_injuries, 0)
+    ) order by case grouped.setting_code
+      when 'match' then 1 when 'training' then 2 else 3 end
+    ) as docs
+  from setting_grouped grouped
+  group by grouped.season
+), monthly_grouped as (
+  select candidate.season,
+    item ->> 'month' as month_label,
+    to_date('01 ' || (item ->> 'month'), 'DD Mon YYYY') as month_start,
+    sum((item ->> 'exposure_hours')::numeric) as exposure_hours,
+    sum((item ->> 'distance_km')::numeric) as distance_km,
+    sum((item ->> 'time_loss_injuries')::numeric) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost
+  from candidate_teams candidate
+  cross join lateral jsonb_array_elements(candidate.dashboard -> 'monthly') item
+  group by candidate.season, item ->> 'month'
+), monthly_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'month', grouped.month_label,
+      'exposure_hours', grouped.exposure_hours,
+      'distance_km', grouped.distance_km,
+      'time_loss_injuries', grouped.time_loss_injuries,
+      'days_lost', grouped.days_lost,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        grouped.time_loss_injuries, grouped.exposure_hours
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        grouped.days_lost, grouped.exposure_hours
+      )
+    ) order by grouped.month_start) as docs
+  from monthly_grouped grouped
+  group by grouped.season
+), body_grouped as (
+  select candidate.season,
+    item ->> 'key' as code,
+    max(item ->> 'label') as label,
+    sum((item ->> 'time_loss_injuries')::numeric) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost
+  from candidate_teams candidate
+  cross join lateral jsonb_array_elements(
+    candidate.dashboard -> 'body_locations'
+  ) item
+  group by candidate.season, item ->> 'key'
+), body_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'key', grouped.code,
+      'label', grouped.label,
+      'time_loss_injuries', grouped.time_loss_injuries,
+      'days_lost', grouped.days_lost,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        grouped.time_loss_injuries, exposure.exposure_hours
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        grouped.days_lost, exposure.exposure_hours
+      ),
+      'mean_severity_days', grouped.days_lost /
+        nullif(grouped.time_loss_injuries, 0)
+    ) order by grouped.code) as docs
+  from body_grouped grouped
+  join exposure using (season)
+  group by grouped.season
+), type_grouped as (
+  select candidate.season,
+    item ->> 'key' as code,
+    max(item ->> 'label') as label,
+    sum((item ->> 'time_loss_injuries')::numeric) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost
+  from candidate_teams candidate
+  cross join lateral jsonb_array_elements(
+    candidate.dashboard -> 'injury_types'
+  ) item
+  group by candidate.season, item ->> 'key'
+), type_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'key', grouped.code,
+      'label', grouped.label,
+      'time_loss_injuries', grouped.time_loss_injuries,
+      'days_lost', grouped.days_lost,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        grouped.time_loss_injuries, exposure.exposure_hours
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        grouped.days_lost, exposure.exposure_hours
+      ),
+      'mean_severity_days', grouped.days_lost /
+        nullif(grouped.time_loss_injuries, 0)
+    ) order by grouped.time_loss_injuries desc,
+      grouped.days_lost desc, grouped.code) as docs
+  from type_grouped grouped
+  join exposure using (season)
+  group by grouped.season
+), profile_grouped as (
+  select candidate.season,
+    item ->> 'dimension' as dimension,
+    item ->> 'code' as code,
+    max(item ->> 'label') as label,
+    item ->> 'setting' as setting_code,
+    sum((item ->> 'time_loss_injuries')::numeric) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost
+  from candidate_teams candidate
+  cross join lateral jsonb_array_elements(
+    candidate.dashboard -> 'injury_profiles'
+  ) item
+  group by candidate.season, item ->> 'dimension',
+    item ->> 'code', item ->> 'setting'
+), profile_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'dimension', grouped.dimension,
+      'code', grouped.code,
+      'label', grouped.label,
+      'setting', grouped.setting_code,
+      'time_loss_injuries', grouped.time_loss_injuries,
+      'days_lost', grouped.days_lost,
+      'exposure_hours', case grouped.setting_code
+        when 'all' then exposure.exposure_hours
+        when 'match' then exposure.match_exposure_hours
+        when 'training' then exposure.training_exposure_hours
+        else null
+      end,
+      'incidence_per_1000h', analysis.rate_per_1000_v1(
+        grouped.time_loss_injuries,
+        case grouped.setting_code
+          when 'all' then exposure.exposure_hours
+          when 'match' then exposure.match_exposure_hours
+          when 'training' then exposure.training_exposure_hours
+          else null
+        end
+      ),
+      'burden_per_1000h', analysis.rate_per_1000_v1(
+        grouped.days_lost,
+        case grouped.setting_code
+          when 'all' then exposure.exposure_hours
+          when 'match' then exposure.match_exposure_hours
+          when 'training' then exposure.training_exposure_hours
+          else null
+        end
+      ),
+      'mean_severity_days', grouped.days_lost /
+        nullif(grouped.time_loss_injuries, 0)
+    ) order by
+      case when grouped.dimension = 'diagnosis' then 1 else 0 end,
+      grouped.dimension, grouped.setting_code,
+      grouped.time_loss_injuries desc, grouped.days_lost desc, grouped.code
+    ) as docs
+  from profile_grouped grouped
+  join exposure using (season)
+  group by grouped.season
+), severity_grouped as (
+  select candidate.season,
+    item ->> 'key' as severity_code,
+    max(item ->> 'label') as severity_label,
+    sum((item ->> 'recorded_injuries')::numeric) as recorded_injuries,
+    sum((item ->> 'time_loss_injuries')::numeric) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost,
+    case item ->> 'key'
+      when 'zero_days_medical_attention_only' then 0
+      when 'one_day' then 1
+      when 'two_to_three_days' then 2
+      when 'four_to_seven_days' then 3
+      when 'eight_to_twenty_eight_days' then 4
+      when 'greater_than_twenty_eight_days' then 5
+      else 6
+    end as band_order
+  from candidate_teams candidate
+  cross join lateral jsonb_array_elements(
+    candidate.dashboard -> 'severity_distribution'
+  ) item
+  group by candidate.season, item ->> 'key'
+), severity_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'key', grouped.severity_code,
+      'label', grouped.severity_label,
+      'recorded_injuries', grouped.recorded_injuries,
+      'time_loss_injuries', grouped.time_loss_injuries,
+      'days_lost', grouped.days_lost
+    ) order by grouped.band_order) as docs
+  from severity_grouped grouped
+  group by grouped.season
+), contact_grouped as (
+  select candidate.season,
+    item ->> 'key' as contact_context,
+    max(item ->> 'label') as contact_label,
+    item ->> 'setting' as setting_code,
+    sum((item ->> 'recorded_injuries')::numeric) as recorded_injuries,
+    sum((item ->> 'time_loss_injuries')::numeric) as time_loss_injuries
+  from candidate_teams candidate
+  cross join lateral jsonb_array_elements(
+    candidate.dashboard -> 'contact_distribution'
+  ) item
+  group by candidate.season, item ->> 'key', item ->> 'setting'
+), contact_docs as (
+  select grouped.season,
+    jsonb_agg(jsonb_build_object(
+      'key', grouped.contact_context,
+      'label', grouped.contact_label,
+      'setting', grouped.setting_code,
+      'recorded_injuries', grouped.recorded_injuries,
+      'time_loss_injuries', grouped.time_loss_injuries
+    ) order by
+      array_position(
+        array['all', 'match', 'training', 'unknown'],
+        grouped.setting_code
+      ),
+      array_position(
+        array['contact', 'non_contact', 'unknown'],
+        grouped.contact_context
+      )
+    ) as docs
+  from contact_grouped grouped
+  group by grouped.season
+)
+select context.season,
+  context.classification_view_version,
+  context.classification_evidence_sha256,
+  context.cohort_view_version,
+  context.cohort_evidence_sha256,
+  predecessor.dashboard_payload || jsonb_build_object(
+    'generated_at', (
+      select max(member.generated_at)
+      from analysis.row_correction_member_releases_v1 member
+      where member.season = context.season
+    ),
+    'team', predecessor.dashboard_payload -> 'team',
+    'season', context.season,
+    'analysis_window', predecessor.dashboard_payload -> 'analysis_window',
+    'method', predecessor.dashboard_payload -> 'method',
+    'coverage', coalesce(
+      predecessor.dashboard_payload -> 'coverage', '{}'::jsonb
+    ),
+    'headline', jsonb_build_array(
+      jsonb_build_object(
+        'key', 'recorded_injuries', 'label', 'Recorded injuries',
+        'value', summary.recorded_injuries, 'unit', 'injuries',
+        'formula', 'count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)'
+      ),
+      jsonb_build_object(
+        'key', 'time_loss_injuries', 'label', 'Time-loss injuries',
+        'value', summary.time_loss_injuries, 'unit', 'injuries',
+        'formula', 'count(eligible injury rows where days lost > 0)'
+      ),
+      jsonb_build_object(
+        'key', 'incidence_per_1000h', 'label', 'Incidence',
+        'value', analysis.rate_per_1000_v1(
+          summary.time_loss_injuries, exposure.exposure_hours
+        ),
+        'unit', 'per 1,000 player-hours',
+        'numerator', summary.time_loss_injuries,
+        'denominator', exposure.exposure_hours,
+        'formula', 'pooled time-loss injuries / pooled exposure hours * 1000'
+      ),
+      jsonb_build_object(
+        'key', 'severity_mean_days', 'label', 'Mean severity',
+        'value', summary.mean_severity_days, 'unit', 'days lost per injury',
+        'numerator', summary.days_lost,
+        'denominator', summary.time_loss_injuries,
+        'formula', 'pooled days lost / pooled time-loss injuries'
+      ),
+      jsonb_build_object(
+        'key', 'severity_median_days', 'label', 'Median severity',
+        'value', summary.median_severity_days,
+        'unit', 'days lost per injury',
+        'formula', 'median(days lost) across pooled time-loss injuries'
+      ),
+      jsonb_build_object(
+        'key', 'burden_per_1000h', 'label', 'Burden',
+        'value', analysis.rate_per_1000_v1(
+          summary.days_lost, exposure.exposure_hours
+        ),
+        'unit', 'days lost per 1,000 player-hours',
+        'numerator', summary.days_lost,
+        'denominator', exposure.exposure_hours,
+        'formula', 'pooled days lost / pooled exposure hours * 1000'
+      )
+    ),
+    'setting_split', coalesce(setting.docs, '[]'::jsonb),
+    'setting_metrics', coalesce(setting_metrics.docs, '[]'::jsonb),
+    'monthly', coalesce(monthly.docs, '[]'::jsonb),
+    'body_locations', coalesce(body.docs, '[]'::jsonb),
+    'injury_types', coalesce(types.docs, '[]'::jsonb),
+    'injury_profiles', coalesce(profiles.docs, '[]'::jsonb),
+    'severity_distribution', coalesce(severity.docs, '[]'::jsonb),
+    'contact_distribution', coalesce(contact.docs, '[]'::jsonb),
+    'prior_season', predecessor.dashboard_payload -> 'prior_season',
+    'limitations', predecessor.dashboard_payload -> 'limitations'
+  ) as dashboard
+from analysis.row_correction_incremental_context_v1 context
+join reporting.dashboard_bundle_league_payloads_v1 predecessor
+  on predecessor.release_id = context.predecessor_bundle_id
+join cohort_summary summary using (season)
+join exposure using (season)
+left join setting_docs setting using (season)
+left join setting_metric_docs setting_metrics using (season)
+left join monthly_docs monthly using (season)
+left join body_docs body using (season)
+left join type_docs types using (season)
+left join profile_docs profiles using (season)
+left join severity_docs severity using (season)
+left join contact_docs contact using (season);
+
 do $$
 begin
   if exists (select 1 from audit.correction_sets_v1)
@@ -2749,31 +4115,19 @@ order by
 create view analysis.team_dashboard_release_candidates_correction_v1
 with (security_invoker = true) as
 select
-  predecessor.team_key,
-  context.season,
-  predecessor.team_release_id,
-  predecessor.curated_build_id,
+  candidate.team_key,
+  candidate.season,
+  candidate.team_release_id,
+  candidate.curated_build_id,
   'correction_v1'::text as analysis_version,
   context.classification_view_version,
   context.classification_evidence_sha256,
   context.cohort_view_version,
   context.cohort_evidence_sha256,
-  case
-    when predecessor.team_key = context.affected_team_key
-      then corrected.dashboard
-    else predecessor.dashboard_payload
-  end as dashboard
+  candidate.dashboard
 from analysis.row_correction_pending_context_v1 context
-join reporting.dashboard_bundle_team_payloads_v1 predecessor
-  on predecessor.bundle_release_id = context.predecessor_bundle_id
-left join analysis.row_correction_team_dashboard_payload_v1 corrected
-  on corrected.season = context.season
- and corrected.team_key = context.affected_team_key
- and corrected.team_release_id = predecessor.team_release_id
- and corrected.curated_build_id = predecessor.curated_build_id
- and predecessor.team_key = context.affected_team_key
-where predecessor.team_key <> context.affected_team_key
-   or corrected.team_key is not null;
+join analysis.row_correction_team_payload_candidates_incremental_v1 candidate
+  using (season);
 
 create view analysis.league_dashboard_release_candidates_correction_v1
 with (security_invoker = true) as
@@ -2786,7 +4140,7 @@ select
   context.cohort_evidence_sha256,
   corrected.dashboard
 from analysis.row_correction_pending_context_v1 context
-join analysis.row_correction_league_dashboard_payload_v1 corrected
+join analysis.row_correction_league_dashboard_payload_incremental_v1 corrected
   on corrected.season = context.season;
 
 create function analysis.row_correction_pending_candidate_data_v1()
@@ -3184,7 +4538,10 @@ begin
   end if;
 
   perform pg_advisory_xact_lock(
-    hashtextextended('row-correction:' || proposal ->> 'season', 0)
+    hashtextextended(
+      'row-correction:' || (proposal ->> 'season'),
+      0
+    )
   );
 
   if exists (
@@ -3759,6 +5116,14 @@ as $$
 declare
   target_season text;
 begin
+  if tg_op = 'INSERT' then
+    if new.status = 'approved' then
+      raise exception
+        'aggregate releases must be inserted as draft before approval';
+    end if;
+    return new;
+  end if;
+
   if old.status = 'draft' and new.status = 'approved'
     and not exists (
       select 1
@@ -3831,7 +5196,7 @@ $$;
 revoke execute on function reporting.guard_active_row_corrections_v1()
   from public, anon, authenticated;
 create trigger guard_active_row_corrections_v1
-before update of status on reporting.aggregate_releases
+before insert or update of status on reporting.aggregate_releases
 for each row execute function reporting.guard_active_row_corrections_v1();
 
 create function reporting.promote_row_correction_v1(

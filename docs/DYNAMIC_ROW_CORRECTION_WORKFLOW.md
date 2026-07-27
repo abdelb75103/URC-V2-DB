@@ -1,6 +1,6 @@
 # Dynamic Row Correction Workflow
 
-Status: implemented locally and under production-readiness verification, recorded 26 July 2026. The additive migration and its registration must be confirmed as `applied-and-verified` in `docs/PIPELINE_RULE_CHANGELOG.md` before the first live correction.
+Status: the base capability is live-installed and data-neutral; its additive T4 hardening successor is locally verified and awaiting live rehearsal, application, registration and renewed independent acceptance. The successor must be confirmed as `applied-and-verified` in `docs/PIPELINE_RULE_CHANGELOG.md` before the first live correction.
 
 ## Purpose and boundary
 
@@ -19,7 +19,7 @@ The unified bundle views and the internal `latest_approved_dashboard_bundle_v4` 
 
 Until a reviewed correction or rollback successor is approved, the V5 readers project the currently served V5 V2 bundle without changing its context, payloads, hashes, or metrics.
 
-The exact installation target is the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. The additive migration is `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`; `tools/sql/register_dynamic_row_correction_pipeline_migration.sql` records that exact migration after application. Do not substitute a local Supabase target.
+The exact installation target is the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. The installed base is `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`. The required additive successor is `supabase/migrations/20260727010000_dynamic_row_correction_pipeline_hardening.sql`; `tools/sql/register_dynamic_row_correction_pipeline_hardening_migration.sql` records its exact final SHA only after application. Do not substitute a local Supabase target.
 
 Baseline capture, baseline verification, proposal, and release preflight are read-only. Apply, promotion, and rollback are live writes. Proposal, preflight, baseline, and evidence files must stay Git-ignored and outside `content/reporting/`. They are private operator evidence, not website inputs.
 
@@ -100,7 +100,7 @@ python3 -m pipeline correction-release \
 
 Promotion is a separate live write. It creates a new immutable 16-team correction bundle in `reporting.correction_league_payloads_v1` and `reporting.correction_team_payloads_v1`, copies the 15 unaffected team payloads byte-for-byte through the unified predecessor views, inserts the affected team and pooled league candidates, and retires rather than deletes the predecessor. It does not write to frozen V2 context or payload tables. A no-impact release creates the required audited successor while reusing all 16 team payloads.
 
-The command verifies the promoted release identity and exact reviewed bundle through `reporting.latest_approved_dashboard_bundle_v4` while refreshing the 16 parity exports. The V5 team and league readers then select the additive correction payloads, including the preserved or recomputed `contact_distribution`. If that closeout fails after database promotion, it invokes the supplied append-only rollback immediately and re-raises the failure.
+The command verifies the promoted release identity and exact reviewed bundle through `reporting.latest_approved_dashboard_bundle_v4` while refreshing the 16 parity exports. The V5 team and league readers then select the additive correction payloads, including the preserved or recomputed `contact_distribution`. If that closeout fails after database promotion, it invokes the supplied append-only rollback immediately and re-raises the failure. A rollback-label collision cannot strand the failed correction: automatic recovery records the requested label, allocates a UUID-suffixed effective label, restores the exact predecessor and records the mapping. Explicit operator rollback retains exact-label semantics and still rejects a duplicate label.
 
 ### 6. Verify the result
 

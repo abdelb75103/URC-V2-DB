@@ -27,7 +27,7 @@ import { Client } from "pg";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATION_PATH = path.join(
   ROOT,
-  "supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql",
+  "supabase/migrations/20260727010000_dynamic_row_correction_pipeline_hardening.sql",
 );
 const EVIDENCE = "Transactional dynamic-correction verification approval";
 const EVIDENCE_SHA256 = crypto
@@ -60,7 +60,7 @@ function mark(stage) {
 async function procedureExists(client) {
   const result = await client.query(`
     select to_regprocedure(
-      'audit.apply_row_correction_v1(jsonb,text,text)'
+      'audit.apply_row_correction_v2(jsonb,text,text)'
     ) is not null as present
   `);
   return result.rows[0].present;
@@ -78,6 +78,9 @@ async function correctionCounts(client) {
       ),
       'rollbacks', (
         select count(*) from reporting.correction_rollback_context_v1
+      ),
+      'recovery_labels', (
+        select count(*) from audit.correction_recovery_labels_v1
       ),
       'correction_league_payloads', (
         select count(*) from reporting.correction_league_payloads_v1
@@ -298,7 +301,57 @@ async function assertCurrentContactDistribution(client, label) {
 
 async function assertWebReaderSurface(client, label) {
   const internal = await assertCurrentContactDistribution(client, label);
-  await client.query("set local role web_reader");
+  let assumedRole = false;
+  await client.query("savepoint web_reader_role_check");
+  try {
+    await client.query("set local role web_reader");
+    assumedRole = true;
+    await client.query("release savepoint web_reader_role_check");
+  } catch (error) {
+    await client.query("rollback to savepoint web_reader_role_check");
+    await client.query("release savepoint web_reader_role_check");
+    if (error?.code !== "42501") throw error;
+    const privilegeResult = await client.query(`
+      select
+        has_table_privilege(
+          'web_reader', 'reporting.latest_team_dashboard_v5', 'SELECT'
+        ) as team_reader,
+        has_table_privilege(
+          'web_reader', 'reporting.latest_league_dashboard_v5', 'SELECT'
+        ) as league_reader,
+        has_table_privilege(
+          'web_reader', 'reporting.dashboard_bundle_context_v1', 'SELECT'
+        ) as private_context,
+        has_table_privilege(
+          'web_reader',
+          'reporting.dashboard_bundle_league_payloads_v1',
+          'SELECT'
+        ) as private_league,
+        has_table_privilege(
+          'web_reader',
+          'reporting.dashboard_bundle_team_payloads_v1',
+          'SELECT'
+        ) as private_teams,
+        has_table_privilege(
+          'web_reader',
+          'reporting.latest_approved_dashboard_bundle_v4',
+          'SELECT'
+        ) as private_selector
+    `);
+    assert.deepEqual(
+      privilegeResult.rows[0],
+      {
+        team_reader: true,
+        league_reader: true,
+        private_context: false,
+        private_league: false,
+        private_teams: false,
+        private_selector: false,
+      },
+      `${label} web_reader catalogue privileges must expose only V5`,
+    );
+  }
+
   try {
     const teamResult = await client.query(`
       select team_key, contact_distribution
@@ -345,21 +398,23 @@ async function assertWebReaderSurface(client, label) {
       `${label} V5 league reader must preserve the stored contact section`,
     );
 
-    for (const relation of [
-      "reporting.dashboard_bundle_context_v1",
-      "reporting.dashboard_bundle_league_payloads_v1",
-      "reporting.dashboard_bundle_team_payloads_v1",
-      "reporting.latest_approved_dashboard_bundle_v4",
-    ]) {
-      await expectedFailure(
-        client,
-        `select * from ${relation} limit 1`,
-        [],
-        /permission denied/i,
-      );
+    if (assumedRole) {
+      for (const relation of [
+        "reporting.dashboard_bundle_context_v1",
+        "reporting.dashboard_bundle_league_payloads_v1",
+        "reporting.dashboard_bundle_team_payloads_v1",
+        "reporting.latest_approved_dashboard_bundle_v4",
+      ]) {
+        await expectedFailure(
+          client,
+          `select * from ${relation} limit 1`,
+          [],
+          /permission denied/i,
+        );
+      }
     }
   } finally {
-    await client.query("reset role");
+    if (assumedRole) await client.query("reset role");
   }
 }
 
@@ -410,6 +465,18 @@ async function assertOrdinaryV2ApprovalRejected(client, label) {
     await client.query("rollback to savepoint synthetic_ordinary_release");
     await client.query("release savepoint synthetic_ordinary_release");
   }
+}
+
+async function assertDirectApprovedInsertRejected(client) {
+  await expectedFailure(
+    client,
+    `
+      insert into reporting.aggregate_releases (release_label, status)
+      values ('transactional-direct-approved-insert', 'approved')
+    `,
+    [],
+    /aggregate releases must be inserted as draft before approval/i,
+  );
 }
 
 async function expectedFailure(client, sql, values, pattern) {
@@ -486,7 +553,7 @@ async function buildProposal(client, kind, excludedSourceRowIds = []) {
   const previewResult = await client.query(
     `
       select to_jsonb(preview) as preview
-      from analysis.row_correction_preview_v1($1::jsonb) preview
+      from analysis.row_correction_preview_v2($1::jsonb) preview
     `,
     [provisional],
   );
@@ -515,7 +582,7 @@ async function buildProposal(client, kind, excludedSourceRowIds = []) {
   const reboundResult = await client.query(
     `
       select to_jsonb(preview) as preview
-      from analysis.row_correction_preview_v1($1::jsonb) preview
+      from analysis.row_correction_preview_v2($1::jsonb) preview
     `,
     [proposal],
   );
@@ -839,6 +906,106 @@ async function assertImmutableRollback(
   return rollback;
 }
 
+async function assertCollisionSafeRecovery(
+  client,
+  promotion,
+  predecessor,
+  releaseLabel,
+  reviewer,
+) {
+  const occupiedLabel = `${releaseLabel}-occupied-recovery`;
+  await client.query(
+    `
+      insert into reporting.aggregate_releases (release_label, status)
+      values ($1, 'draft')
+    `,
+    [occupiedLabel],
+  );
+  const recoveryResult = await client.query(
+    `
+      select reporting.rollback_row_correction_bundle_recovery_v2(
+        $1,$2,$3,$4,$5,$6,$7,$8
+      ) as value
+    `,
+    [
+      releaseLabel,
+      occupiedLabel,
+      reviewer,
+      "Transactional collision-safe recovery verification",
+      EVIDENCE_SHA256,
+      OPERATOR,
+      CODE_VERSION,
+      DEPENDENCY_LOCK_HASH,
+    ],
+  );
+  const recovery = recoveryResult.rows[0].value;
+  assert.equal(recovery.rollback_label_fallback_used, true);
+  assert.equal(
+    recovery.requested_rollback_release_label,
+    occupiedLabel,
+  );
+  assert.notEqual(
+    recovery.effective_rollback_release_label,
+    occupiedLabel,
+  );
+  assert.match(
+    recovery.effective_rollback_release_label,
+    new RegExp(`^${occupiedLabel}-recovery-`),
+  );
+  assert.equal(
+    recovery.restored_predecessor_release_id,
+    promotion.predecessor_bundle_id,
+  );
+
+  const restored = await releasePayloadState(
+    client,
+    recovery.rollback_release_id,
+  );
+  assert.deepEqual(
+    restored,
+    predecessor,
+    "collision-safe recovery must restore the exact retained predecessor",
+  );
+  const auditResult = await client.query(
+    `
+      select requested_rollback_release_label,
+        effective_rollback_release_label, fallback_used
+      from audit.correction_recovery_labels_v1
+      where rollback_release_id = $1
+    `,
+    [recovery.rollback_release_id],
+  );
+  assert.equal(auditResult.rowCount, 1);
+  assert.equal(
+    auditResult.rows[0].requested_rollback_release_label,
+    occupiedLabel,
+  );
+  assert.equal(
+    auditResult.rows[0].effective_rollback_release_label,
+    recovery.effective_rollback_release_label,
+  );
+  assert.equal(auditResult.rows[0].fallback_used, true);
+
+  const servedResult = await client.query(`
+    select release_id
+    from reporting.latest_approved_dashboard_bundle_v4
+    where season = '2024-25'
+  `);
+  assert.equal(servedResult.rowCount, 1);
+  assert.equal(servedResult.rows[0].release_id, recovery.rollback_release_id);
+  await expectedFailure(
+    client,
+    `
+      update audit.correction_recovery_labels_v1
+      set fallback_used = fallback_used
+      where rollback_release_id = $1
+    `,
+    [recovery.rollback_release_id],
+    /append-only/i,
+  );
+  return recovery;
+}
+
 async function rollbackQuietly(client) {
   if (!client) return;
   try {
@@ -893,6 +1060,19 @@ try {
   );
   if (!installedBefore) {
     await owner.query(fs.readFileSync(MIGRATION_PATH, "utf8"));
+    await owner.query(
+      `
+        insert into supabase_migrations.schema_migrations (
+          version, name, statements
+        ) values (
+          '20260727010000',
+          'dynamic_row_correction_pipeline_hardening',
+          array[$1::text]
+        )
+        on conflict (version) do nothing
+      `,
+      [`migration_sha256=${MIGRATION_SHA256}`],
+    );
     mark("transactional migration rehearsal completed");
   }
   assert.deepEqual(
@@ -902,8 +1082,106 @@ try {
   );
   await assertWebReaderSurface(owner, "baseline");
   mark("baseline V5 reader permissions and pooled contact data verified");
+  await assertDirectApprovedInsertRejected(owner);
+  mark("direct approved aggregate-release insertion rejected");
 
   const impact = await buildProposal(owner, "impact");
+  await owner.query("savepoint cross_season_isolation");
+  try {
+    const syntheticProposalHash = crypto.randomBytes(32).toString("hex");
+    await owner.query(
+      `
+        insert into audit.correction_sets_v1 (
+          season, proposal_hash, source_row_id, team_key,
+          base_bundle_id, base_bundle_sha256,
+          correction_set_hash_before, correction_set_hash_after,
+          source_row_sha256, row_fingerprint,
+          field_name, old_value, new_value,
+          reason, evidence_sha256, operator, reviewer, rule_version,
+          code_version, dependency_lock_hash, migration_sha256,
+          apply_pipeline_run_id
+        ) values (
+          '2099-00', $1, $2, $3,
+          $4, $5,
+          $6, $7,
+          $8, $9,
+          'eligibility', 'true'::jsonb, 'false'::jsonb,
+          'Transactional cross-season isolation sentinel',
+          $10, $11, $12, 'row_correction_transactional_test_v2',
+          $13, $14, $15,
+          (
+            select release.pipeline_run_id
+            from reporting.aggregate_releases release
+            where release.id = $4
+          )
+        )
+      `,
+      [
+        syntheticProposalHash,
+        impact.proposal.source_row_id,
+        impact.preview.subject.team_key,
+        impact.preview.predecessor_bundle.release_id,
+        impact.preview.predecessor_bundle.bundle_sha256,
+        "2".repeat(64),
+        "3".repeat(64),
+        impact.proposal.source_row_sha256,
+        impact.proposal.row_fingerprint,
+        EVIDENCE_SHA256,
+        OPERATOR,
+        reviewer,
+        CODE_VERSION,
+        DEPENDENCY_LOCK_HASH,
+        MIGRATION_SHA256,
+      ],
+    );
+    const globalTargets = await owner.query(`
+      select count(distinct season)::integer as seasons
+      from analysis.row_correction_target_teams_v1
+    `);
+    assert.ok(
+      globalTargets.rows[0].seasons >= 2,
+      "cross-season fixture must expose the V1 global-target defect",
+    );
+    await owner.query(
+      "select set_config('urc.row_correction_target_season', '2024-25', true)",
+    );
+    const isolatedTargets = await owner.query(`
+      select count(*)::integer as rows,
+        count(distinct season)::integer as seasons,
+        min(season) as season,
+        min(team_key) as team_key
+      from analysis.row_correction_target_teams_v2
+    `);
+    assert.equal(isolatedTargets.rows[0].rows, 1);
+    assert.equal(isolatedTargets.rows[0].seasons, 1);
+    assert.equal(isolatedTargets.rows[0].season, "2024-25");
+    assert.equal(
+      isolatedTargets.rows[0].team_key,
+      impact.preview.subject.team_key,
+      "V2 target graph must isolate the requested season and affected team",
+    );
+    const isolatedPreview = await owner.query(
+      `
+        select to_jsonb(preview) as preview
+        from analysis.row_correction_preview_v2($1::jsonb) preview
+      `,
+      [impact.proposal],
+    );
+    assert.equal(
+      isolatedPreview.rowCount,
+      1,
+      "V2 preview must remain unique with another season pending",
+    );
+    assert.deepEqual(
+      isolatedPreview.rows[0].preview,
+      impact.preview,
+      "another season's pending correction must not change this candidate",
+    );
+  } finally {
+    await owner.query("rollback to savepoint cross_season_isolation");
+    await owner.query("release savepoint cross_season_isolation");
+  }
+  mark("cross-season pending candidate isolation verified");
   const stale = {
     ...impact.proposal,
     row_fingerprint: "f".repeat(64),
@@ -915,14 +1193,32 @@ try {
   stale.proposal_hash = staleHashResult.rows[0].hash;
   await expectedFailure(
     owner,
-    "select audit.apply_row_correction_v1($1::jsonb, $2, $3)",
+    "select audit.apply_row_correction_v2($1::jsonb, $2, $3)",
     [stale, EVIDENCE, reviewer],
     /fingerprint changed/i,
   );
   mark("stale proposal rejection verified");
 
+  const unregisteredImplementation = {
+    ...impact.proposal,
+    migration_sha256: "f".repeat(64),
+  };
+  const unregisteredHashResult = await owner.query(
+    "select analysis.row_correction_proposal_hash_v1($1::jsonb) as hash",
+    [unregisteredImplementation],
+  );
+  unregisteredImplementation.proposal_hash =
+    unregisteredHashResult.rows[0].hash;
+  await expectedFailure(
+    owner,
+    "select audit.apply_row_correction_v2($1::jsonb, $2, $3)",
+    [unregisteredImplementation, EVIDENCE, reviewer],
+    /does not match the installed correction implementation/i,
+  );
+  mark("unregistered migration provenance rejection verified");
+
   const impactApplyResult = await owner.query(
-    "select audit.apply_row_correction_v1($1::jsonb, $2, $3) as value",
+    "select audit.apply_row_correction_v2($1::jsonb, $2, $3) as value",
     [impact.proposal, EVIDENCE, reviewer],
   );
   const impactApply = impactApplyResult.rows[0].value;
@@ -937,7 +1233,7 @@ try {
 
   await expectedFailure(
     owner,
-    "select * from analysis.row_correction_preview_v1($1::jsonb)",
+    "select * from analysis.row_correction_preview_v2($1::jsonb)",
     [impact.proposal],
     /already applied but unpromoted/i,
   );
@@ -973,7 +1269,7 @@ try {
     await contender.query("set local lock_timeout = '500ms'");
     await expectedFailure(
       contender,
-      "select audit.apply_row_correction_v1($1::jsonb, $2, $3)",
+      "select audit.apply_row_correction_v2($1::jsonb, $2, $3)",
       [impact.proposal, EVIDENCE, reviewer],
       /(lock timeout|canceling statement)/i,
     );
@@ -983,7 +1279,7 @@ try {
 
   const impactReleaseLabel = `txn-impact-${Date.now()}`;
   const impactPromotionResult = await owner.query(
-    "select reporting.promote_row_correction_v1($1, $2, $3) as value",
+    "select reporting.promote_row_correction_v2($1, $2, $3) as value",
     [impactApply.proposal_hash, reviewer, impactReleaseLabel],
   );
   const impactPromotion = impactPromotionResult.rows[0].value;
@@ -1011,7 +1307,7 @@ try {
 
   const noImpact = await buildProposal(owner, "no-impact");
   const noImpactApplyResult = await owner.query(
-    "select audit.apply_row_correction_v1($1::jsonb, $2, $3) as value",
+    "select audit.apply_row_correction_v2($1::jsonb, $2, $3) as value",
     [noImpact.proposal, EVIDENCE, reviewer],
   );
   const noImpactApply = noImpactApplyResult.rows[0].value;
@@ -1022,11 +1318,31 @@ try {
     noImpact.preview,
     false,
   );
+  const correctedOrigin = await owner.query(
+    `
+      select classification.diagnosis_origin
+      from analysis.row_correction_reporting_classification_v2 classification
+      join curated.injuries injury
+        on injury.id = classification.injury_id
+       and injury.curated_build_id = classification.curated_build_id
+       and injury.team_key = classification.team_key
+       and injury.season = classification.season
+      where injury.source_row_id = $1
+        and classification.season = '2024-25'
+    `,
+    [noImpact.proposal.source_row_id],
+  );
+  assert.equal(correctedOrigin.rowCount, 1);
+  assert.equal(
+    correctedOrigin.rows[0].diagnosis_origin,
+    "row_correction",
+    "active clinical correction origin must remain explicit",
+  );
   mark("no-impact apply and exact immutable draft verified");
 
   const noImpactReleaseLabel = `txn-no-impact-${Date.now()}`;
   const noImpactPromotionResult = await owner.query(
-    "select reporting.promote_row_correction_v1($1, $2, $3) as value",
+    "select reporting.promote_row_correction_v2($1, $2, $3) as value",
     [noImpactApply.proposal_hash, reviewer, noImpactReleaseLabel],
   );
   const noImpactPromotion = noImpactPromotionResult.rows[0].value;
@@ -1069,7 +1385,7 @@ try {
     [impact.proposal.source_row_id],
   );
   const postRollbackApplyResult = await owner.query(
-    "select audit.apply_row_correction_v1($1::jsonb, $2, $3) as value",
+    "select audit.apply_row_correction_v2($1::jsonb, $2, $3) as value",
     [postRollbackImpact.proposal, EVIDENCE, reviewer],
   );
   const postRollbackApply = postRollbackApplyResult.rows[0].value;
@@ -1082,7 +1398,7 @@ try {
   );
   const postRollbackReleaseLabel = `txn-after-rollback-${Date.now()}`;
   const postRollbackPromotionResult = await owner.query(
-    "select reporting.promote_row_correction_v1($1, $2, $3) as value",
+    "select reporting.promote_row_correction_v2($1, $2, $3) as value",
     [postRollbackApply.proposal_hash, reviewer, postRollbackReleaseLabel],
   );
   const postRollbackPromotion = postRollbackPromotionResult.rows[0].value;
@@ -1093,13 +1409,16 @@ try {
     1,
   );
   await assertWebReaderSurface(owner, "correction after rollback");
-  await assertImmutableRollback(
+  const collisionSafeRecovery = await assertCollisionSafeRecovery(
     owner,
     postRollbackPromotion,
     postRollbackPredecessor,
     postRollbackReleaseLabel,
     reviewer,
-    1,
+  );
+  assert.equal(
+    collisionSafeRecovery.active_correction_state_restored_from_predecessor,
+    true,
   );
   await assertWebReaderSurface(owner, "final rollback");
   assert.deepEqual(
@@ -1107,7 +1426,7 @@ try {
     beforeFrozenV2,
     "post-rollback correction must not change frozen V2 rows or hashes",
   );
-  mark("new correction after rollback and compensating rollback verified");
+  mark("new correction and collision-safe compensating rollback verified");
 } catch (error) {
   failure = error;
 } finally {
@@ -1169,6 +1488,8 @@ process.stdout.write(
   JSON.stringify({
     installed_before: installedBefore,
     stale_rejection: true,
+    registered_migration_sha_rejection: true,
+    cross_season_candidate_isolation: true,
     pending_rejection: true,
     append_only_guards: true,
     concurrency_rejection: installedBefore,
@@ -1178,6 +1499,8 @@ process.stdout.write(
     sequential_corrections: "c1_c2_rollback_c2_preserved_c1",
     correction_after_rollback: true,
     immutable_rollbacks: true,
+    collision_safe_recovery: "uuid_suffix_and_audited_mapping",
+    clinical_correction_origin: "row_correction",
     ordinary_v2_release_guard: "pending_and_served",
     v5_reader_role_states: "baseline_correction_rollback",
     contact_distribution: "12_cells_and_16_team_pool",

@@ -119,22 +119,44 @@ begin
 
   select count(*) into required_trigger_count
   from pg_catalog.pg_trigger trigger_row
+  join pg_catalog.pg_class relation
+    on relation.oid = trigger_row.tgrelid
+  join pg_catalog.pg_namespace namespace
+    on namespace.oid = relation.relnamespace
   where not trigger_row.tgisinternal
-    and trigger_row.tgname in (
-      'correction_sets_v1_append_only',
-      'row_corrections_v1_append_only',
-      'correction_versions_v1_append_only',
-      'correction_drafts_v1_append_only',
-      'correction_release_context_v1_append_only',
-      'correction_rollback_context_v1_append_only',
-      'correction_league_payloads_v1_append_only',
-      'correction_team_payloads_v1_append_only',
-      'correction_release_context_v1_insert_guard',
-      'correction_rollback_context_v1_insert_guard',
-      'validate_dynamic_league_payload_v1',
-      'validate_dynamic_team_payloads_v1',
-      'validate_dynamic_bundle_context_v1',
-      'guard_active_row_corrections_v1'
+    and (
+      namespace.nspname,
+      relation.relname,
+      trigger_row.tgname
+    ) in (
+      ('audit', 'correction_sets_v1',
+        'correction_sets_v1_append_only'),
+      ('audit', 'row_corrections_v1',
+        'row_corrections_v1_append_only'),
+      ('processing', 'correction_versions_v1',
+        'correction_versions_v1_append_only'),
+      ('processing', 'correction_drafts_v1',
+        'correction_drafts_v1_append_only'),
+      ('reporting', 'correction_release_context_v1',
+        'correction_release_context_v1_append_only'),
+      ('reporting', 'correction_rollback_context_v1',
+        'correction_rollback_context_v1_append_only'),
+      ('reporting', 'correction_league_payloads_v1',
+        'correction_league_payloads_v1_append_only'),
+      ('reporting', 'correction_team_payloads_v1',
+        'correction_team_payloads_v1_append_only'),
+      ('reporting', 'correction_release_context_v1',
+        'correction_release_context_v1_insert_guard'),
+      ('reporting', 'correction_rollback_context_v1',
+        'correction_rollback_context_v1_insert_guard'),
+      ('reporting', 'correction_league_payloads_v1',
+        'validate_dynamic_league_payload_v1'),
+      ('reporting', 'correction_team_payloads_v1',
+        'validate_dynamic_team_payloads_v1'),
+      ('reporting', 'aggregate_releases',
+        'validate_dynamic_bundle_context_v1'),
+      ('reporting', 'aggregate_releases',
+        'guard_active_row_corrections_v1')
     );
 
   select count(*) into rls_table_count
@@ -201,7 +223,7 @@ insert into supabase_migrations.schema_migrations (version, name, statements)
 values (
   '20260726200000',
   'dynamic_row_correction_pipeline',
-  array['migration_sha256=FINAL_SHA256_PENDING']
+  array['migration_sha256=07bbd951aedf19705ba8ea99cff30d445c6634ddfad90f84e3b9f2f38218aac5']
 )
 on conflict (version) do nothing;
 
@@ -213,7 +235,7 @@ begin
     where version = '20260726200000'
       and name = 'dynamic_row_correction_pipeline'
       and statements =
-        array['migration_sha256=FINAL_SHA256_PENDING']
+        array['migration_sha256=07bbd951aedf19705ba8ea99cff30d445c6634ddfad90f84e3b9f2f38218aac5']
   ) then
     raise exception 'dynamic row-correction migration tracking is invalid';
   end if;

@@ -36,8 +36,10 @@ _DYNAMIC_MIGRATION = (
     _ROOT
     / "supabase"
     / "migrations"
-    / "20260726200000_dynamic_row_correction_pipeline.sql"
+    / "20260727010000_dynamic_row_correction_pipeline_hardening.sql"
 )
+_DYNAMIC_MIGRATION_VERSION = "20260727010000"
+_DYNAMIC_MIGRATION_NAME = "dynamic_row_correction_pipeline_hardening"
 _ALLOWED_FIELDS = {
     "eligibility",
     "days_injured",
@@ -75,12 +77,26 @@ def _audit_provenance(operator: str) -> dict[str, str]:
         or not _DYNAMIC_MIGRATION.is_file()
     ):
         _error("Git, dependency-lock, or migration provenance is unavailable")
+    migration_sha256 = hashlib.sha256(_DYNAMIC_MIGRATION.read_bytes()).hexdigest()
+    registered = query_sql(
+        "select statements "
+        "from supabase_migrations.schema_migrations "
+        f"where version = '{_DYNAMIC_MIGRATION_VERSION}' "
+        f"and name = '{_DYNAMIC_MIGRATION_NAME}'"
+    )
+    expected_statement = f"migration_sha256={migration_sha256}"
+    if (
+        len(registered) != 1
+        or registered[0].get("statements") != [expected_statement]
+    ):
+        _error(
+            "local correction migration SHA does not match the registered "
+            "live implementation"
+        )
     return {
         "code_version": code_version,
         "dependency_lock_hash": dependency_lock_hash,
-        "migration_sha256": hashlib.sha256(
-            _DYNAMIC_MIGRATION.read_bytes()
-        ).hexdigest(),
+        "migration_sha256": migration_sha256,
         "operator": operator,
     }
 
@@ -299,7 +315,7 @@ def _preview(proposal: dict[str, Any]) -> dict[str, Any]:
     params = SqlParams()
     return _one_json_row(
         "select to_jsonb(preview) as preview "
-        f"from analysis.row_correction_preview_v1({params.jsonb(proposal)}) preview",
+        f"from analysis.row_correction_preview_v2({params.jsonb(proposal)}) preview",
         params.values,
         "preview",
     )
@@ -679,7 +695,8 @@ def _pending_candidate(proposal_hash: str, season: str) -> dict[str, Any]:
     params = SqlParams()
     rows = query_sql(
         "select to_jsonb(candidate) as candidate "
-        "from analysis.row_correction_pending_candidate_v1 candidate "
+        "from analysis.row_correction_pending_candidate_data_v2("
+        f"{params.text(season)}) candidate "
         f"where candidate.season = {params.text(season)} "
         f"and candidate.proposal_hash = {params.text(proposal_hash)}",
         params.values,
@@ -724,9 +741,11 @@ def _rollback_details(
     args: argparse.Namespace, *, target_release_label: str, prefix: str = ""
 ) -> dict[str, str]:
     def field(name: str) -> str:
-        return f"{prefix}{name}" if prefix else name
+        if prefix:
+            return f"{prefix}{name}"
+        return "rollback_release_label" if name == "release_label" else name
 
-    rollback_release_label = _required_text(args, field("rollback_release_label"))
+    rollback_release_label = _required_text(args, field("release_label"))
     if rollback_release_label == target_release_label:
         _error("rollback release label must differ from the target release label")
     _, evidence_sha256 = _verified_evidence(args, field("evidence_file"))
@@ -744,10 +763,17 @@ def _rollback_details(
     }
 
 
-def _run_correction_rollback(details: dict[str, str]) -> None:
+def _run_correction_rollback(
+    details: dict[str, str], *, automatic_recovery: bool = False
+) -> None:
     params = SqlParams()
+    rollback_function = (
+        "reporting.rollback_row_correction_bundle_recovery_v2"
+        if automatic_recovery
+        else "reporting.rollback_row_correction_bundle_v1"
+    )
     run_sql(
-        "select reporting.rollback_row_correction_bundle_v1("
+        f"select {rollback_function}("
         f"{params.text(details['target_release_label'])}, "
         f"{params.text(details['rollback_release_label'])}, "
         f"{params.text(details['reviewer'])}, "
@@ -758,6 +784,19 @@ def _run_correction_rollback(details: dict[str, str]) -> None:
         f"{params.text(details['dependency_lock_hash'])})",
         params.values,
     )
+
+
+def _assert_release_label_available(release_label: str, purpose: str) -> None:
+    params = SqlParams()
+    rows = query_sql(
+        "select exists ("
+        "select 1 from reporting.aggregate_releases release "
+        f"where release.release_label = {params.text(release_label)}"
+        ") as occupied",
+        params.values,
+    )
+    if len(rows) != 1 or rows[0].get("occupied") is not False:
+        _error(f"{purpose} release label is already in use")
 
 
 def _promoted_release_identity(
@@ -850,7 +889,7 @@ def correction_apply(args: argparse.Namespace) -> None:
     reviewer = _required_text(args, "reviewer")
     params = SqlParams()
     run_sql(
-        "select audit.apply_row_correction_v1("
+        "select audit.apply_row_correction_v2("
         f"{params.jsonb(proposal)}, {params.text(evidence_text)}, "
         f"{params.text(reviewer)})",
         params.values,
@@ -942,9 +981,13 @@ def correction_release(args: argparse.Namespace) -> None:
     rollback = _rollback_details(
         args, target_release_label=release_label, prefix="rollback_"
     )
+    _assert_release_label_available(release_label, "correction promotion")
+    _assert_release_label_available(
+        rollback["rollback_release_label"], "automatic rollback"
+    )
     params = SqlParams()
     run_sql(
-        "select reporting.promote_row_correction_v1("
+        "select reporting.promote_row_correction_v2("
         f"{params.text(proposal_hash)}, {params.text(reviewer)}, {params.text(release_label)})",
         params.values,
     )
@@ -954,9 +997,10 @@ def correction_release(args: argparse.Namespace) -> None:
         )
     except BaseException:
         try:
-            # reporting.rollback_row_correction_bundle_v1 is deliberately
-            # called only after the successful promotion and failed closeout.
-            _run_correction_rollback(rollback)
+            # The recovery-only successor allocates a UUID-suffixed label if a
+            # concurrent release claimed the reviewed rollback label after
+            # preflight. Explicit rollback retains exact-label V1 semantics.
+            _run_correction_rollback(rollback, automatic_recovery=True)
         except BaseException as rollback_exc:
             raise RuntimeError(
                 "correction promotion succeeded but parity closeout failed and "

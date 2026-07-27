@@ -109,14 +109,14 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
 
     def test_preview_is_sql_derived_and_never_uses_the_write_runner(self) -> None:
         proposal = self.function_source("correction_propose").lower()
-        self.assertIn("analysis.row_correction_preview_v1", self.source)
+        self.assertIn("analysis.row_correction_preview_v2", self.source)
         self.assertIn("query_sql", self.function_source("_one_json_row").lower())
         self.assertNotIn("run_sql", proposal)
         self.assertNotIn("sql_exec.mjs", proposal)
 
     def test_apply_is_the_only_command_path_with_the_row_correction_write_primitive(self) -> None:
         apply = self.function_source("correction_apply").lower()
-        self.assertIn("audit.apply_row_correction_v1", self.source)
+        self.assertIn("audit.apply_row_correction_v2", self.source)
         self.assertIn("run_sql", apply)
         self.assertRegex(apply, r"\b(stale|concurrent|correction_set|proposal)\b")
         self.assertIn('_required_text(args, "reviewer")', apply)
@@ -146,23 +146,145 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
     def test_release_and_rollback_call_only_their_named_reporting_hooks(self) -> None:
         release = self.function_source("correction_release").lower()
         rollback = self.function_source("correction_rollback").lower()
-        self.assertIn("reporting.promote_row_correction_v1", release)
+        rollback_helper = self.function_source("_run_correction_rollback").lower()
+        self.assertIn("reporting.promote_row_correction_v2", release)
         self.assertIn("run_sql", release)
-        self.assertIn("reporting.rollback_row_correction_bundle_v1", rollback)
+        self.assertIn("automatic_recovery=true", release)
+        self.assertIn("reporting.rollback_row_correction_bundle_v1", rollback_helper)
+        self.assertIn(
+            "reporting.rollback_row_correction_bundle_recovery_v2",
+            rollback_helper,
+        )
         self.assertIn("run_sql", rollback)
         self.assertNotIn("delete from", rollback)
 
     def test_promotion_export_failure_runs_the_compensating_database_rollback(self) -> None:
         release = self.function_source("correction_release").lower()
-        self.assertIn("reporting.promote_row_correction_v1", release)
+        rollback_details = self.function_source("_rollback_details").lower()
+        self.assertIn("reporting.promote_row_correction_v2", release)
         self.assertIn("export", release)
         self.assertIn("try:", release)
         self.assertIn("except", release)
-        self.assertIn("reporting.rollback_row_correction_bundle_v1", release)
+        self.assertIn("_run_correction_rollback", release)
+        self.assertIn("automatic_recovery=true", release)
         self.assertLess(
-            release.index("reporting.promote_row_correction_v1"),
-            release.index("reporting.rollback_row_correction_bundle_v1"),
+            release.index("reporting.promote_row_correction_v2"),
+            release.index("_run_correction_rollback"),
         )
+        self.assertNotIn("rollback_rollback_release_label", rollback_details)
+        self.assertIn('field("release_label")', rollback_details)
+        self.assertIn("--rollback-release-label", self.main_source)
+
+    def test_release_rollback_arguments_match_the_registered_cli_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            evidence = Path(temporary) / "rollback-evidence.txt"
+            evidence.write_text("reviewed rollback evidence\n", encoding="utf-8")
+            args = argparse.Namespace(
+                rollback_release_label="release-recovery",
+                rollback_reviewer="Abdel Babiker",
+                rollback_reason="Parity closeout failed",
+                rollback_evidence_file=str(evidence),
+                rollback_operator="Codex",
+            )
+            with patch.object(
+                self.corrections,
+                "_audit_provenance",
+                return_value={
+                    "code_version": "test",
+                    "dependency_lock_hash": "a" * 64,
+                    "migration_sha256": "b" * 64,
+                    "operator": "Codex",
+                },
+            ):
+                details = self.corrections._rollback_details(
+                    args,
+                    target_release_label="release-target",
+                    prefix="rollback_",
+                )
+        self.assertEqual(
+            details["rollback_release_label"],
+            "release-recovery",
+        )
+        self.assertEqual(details["reviewer"], "Abdel Babiker")
+        self.assertEqual(details["reason"], "Parity closeout failed")
+
+    def test_runtime_export_failure_routes_only_to_collision_safe_recovery(self) -> None:
+        proposal_hash = "c" * 64
+        candidate = {
+            "season": "2024-25",
+            "proposal_hash": proposal_hash,
+            "predecessor_bundle": {"bundle_sha256": "0" * 64},
+            "draft_bundle_sha256": "f" * 64,
+            "unchanged_team_hashes": [
+                {
+                    "team_key": f"team-{index}",
+                    "payload_sha256": "1" * 64,
+                }
+                for index in range(15)
+            ],
+        }
+        rollback = {
+            "target_release_label": "correction-release",
+            "rollback_release_label": "correction-recovery",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            preflight = Path(temporary) / "preflight.json"
+            preflight.write_text(
+                json.dumps(
+                    {
+                        "schema_version":
+                            "urc_row_correction_release_preflight_v1",
+                        "proposal_hash": proposal_hash,
+                        "season": "2024-25",
+                        "candidate": candidate,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                patch.object(
+                    self.corrections,
+                    "_pending_candidate",
+                    return_value=candidate,
+                ),
+                patch.object(
+                    self.corrections,
+                    "_rollback_details",
+                    return_value=rollback,
+                ),
+                patch.object(
+                    self.corrections,
+                    "_assert_release_label_available",
+                ),
+                patch.object(self.corrections, "run_sql") as promotion,
+                patch.object(
+                    self.corrections,
+                    "_refresh_promoted_exports",
+                    side_effect=RuntimeError("simulated export failure"),
+                ),
+                patch.object(
+                    self.corrections,
+                    "_run_correction_rollback",
+                ) as recovery,
+                patch.object(
+                    self.corrections,
+                    "_refresh_current_exports_after_rollback",
+                ) as refresh,
+            ):
+                with self.assertRaisesRegex(
+                    RuntimeError, "simulated export failure"
+                ):
+                    self.corrections.correction_release(
+                        argparse.Namespace(
+                            preflight=False,
+                            preflight_file=str(preflight),
+                            reviewer="Abdel Babiker",
+                            release_label="correction-release",
+                        )
+                    )
+        promotion.assert_called_once()
+        recovery.assert_called_once_with(rollback, automatic_recovery=True)
+        refresh.assert_called_once_with("2024-25")
 
     def test_capture_baseline_uses_mocked_read_only_queries_and_never_write_runner(self) -> None:
         output = Path(tempfile.mkdtemp()) / "baseline.json"
@@ -247,7 +369,18 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
             patch.object(
                 self.corrections,
                 "query_sql",
-                side_effect=[[{"preview": preview}], [{"proposal_hash": proposal_hash}]],
+                side_effect=[
+                    [{
+                        "statements": [
+                            "migration_sha256="
+                            + self.corrections.hashlib.sha256(
+                                self.corrections._DYNAMIC_MIGRATION.read_bytes()
+                            ).hexdigest()
+                        ]
+                    }],
+                    [{"preview": preview}],
+                    [{"proposal_hash": proposal_hash}],
+                ],
             ) as query,
             patch.object(
                 self.corrections,
@@ -270,9 +403,10 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
                 output=str(output),
             ))
 
-        self.assertEqual(query.call_count, 2)
+        self.assertEqual(query.call_count, 3)
         query_sql = "\n".join(call.args[0] for call in query.call_args_list)
-        self.assertIn("analysis.row_correction_preview_v1", query_sql)
+        self.assertIn("supabase_migrations.schema_migrations", query_sql)
+        self.assertIn("analysis.row_correction_preview_v2", query_sql)
         self.assertIn("analysis.row_correction_proposal_hash_v1", query_sql)
         write.assert_not_called()
         stored = json.loads(output.read_text(encoding="utf-8"))
@@ -375,7 +509,7 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
                 ))
 
         write.assert_called_once()
-        self.assertIn("audit.apply_row_correction_v1", write.call_args.args[0])
+        self.assertIn("audit.apply_row_correction_v2", write.call_args.args[0])
         self.assertNotIn("update curated", write.call_args.args[0].lower())
 
     def test_apply_rejects_a_stale_row_fingerprint_before_the_write(self) -> None:

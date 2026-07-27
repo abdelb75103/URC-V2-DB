@@ -279,6 +279,16 @@ class DynamicCorrectionMigrationContractTests(unittest.TestCase):
         self.assertIn("correction_rollback_context_v1", guard)
         self.assertIn("audit.correction_sets_v1", guard)
         self.assertRegex(guard, r"correction is (?:pending|applied but unpromoted)")
+        self.assertIn("tg_op = 'insert'", guard)
+        self.assertIn("new.status = 'approved'", guard)
+        self.assertIn(
+            "aggregate releases must be inserted as draft before approval",
+            guard,
+        )
+        self.assertSqlContains(
+            "before insert or update of status on reporting.aggregate_releases",
+            "execute function reporting.guard_active_row_corrections_v1()",
+        )
 
     def test_dynamic_bundle_is_validated_before_approval(self) -> None:
         validator = self.function_body(
@@ -289,7 +299,7 @@ class DynamicCorrectionMigrationContractTests(unittest.TestCase):
         self.assertIn("correction_league_payloads_v1", validator)
         self.assertIn("row_correction_bundle_hash_v1(new.id)", validator)
         self.assertSqlContains(
-            "before update of status on reporting.aggregate_releases",
+            "before insert or update of status on reporting.aggregate_releases",
             "execute function reporting.validate_dynamic_bundle_context_v1()",
         )
 
