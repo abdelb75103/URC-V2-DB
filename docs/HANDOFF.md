@@ -1,7 +1,8 @@
 # Handoff: what this project is and where truth lives
 
-Written 2026-07-24. Audience: a cold reader who needs to be productive in ten
-minutes. `AGENTS.md` is the binding contract; this is the orientation map.
+Written 2026-07-24; operational reader and correction status updated
+2026-07-27. Audience: a cold reader who needs to be productive in ten minutes.
+`AGENTS.md` is the binding contract; this is the orientation map.
 
 ## What this is
 
@@ -77,16 +78,19 @@ rule change with carry-forward status. Open items ride in the ledger's
 
 ## The database and website
 
-Supabase Postgres serves the approved 2024-25 releases through
-`reporting.latest_team_dashboard_v2` / `latest_league_dashboard_v2`; the
-website is read-only and fails closed. The restatement from the v5 baseline
-plus ledger landed on 2026-07-24 as bundle release
-`urc-2024-25-v4-6f04bd64d2a6-a2`, so the served dashboards are the lineage
-numbers; the V3 predecessor is retired, not deleted. The Phase 5 deletion
-cleanup is done too, so
+Supabase Postgres serves the approved 2024-25 release through
+`reporting.latest_team_dashboard_v5` / `latest_league_dashboard_v5`; the
+website is read-only and fails closed. The current bundle is
+`urc-2024-25-v5-4ae722941285-a1`. Frozen V2 payload storage remains intact;
+the V5 readers can select either that approved predecessor or an append-only
+correction/rollback successor through the unified bundle seam. The dynamic
+row-correction operator path is `docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md`.
+No real correction is active, and its first use remains gated by a recorded
+reconciliation rule for the master, decision ledger and inclusion CSV.
+The Phase 5 deletion cleanup is done too, so
 `docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md` is complete and is now the plan
 of record rather than a task list. Released figures and the reasons behind
-the V4 release path are in `docs/PIPELINE_RULE_CHANGELOG.md`. After any
+the release path are in `docs/PIPELINE_RULE_CHANGELOG.md`. After any
 accepted `release-league` promotion, run
 `python3 -m pipeline export-team-dashboards --season <season>` or the 16
 committed per-team parity exports under `content/reporting/` go stale. Every

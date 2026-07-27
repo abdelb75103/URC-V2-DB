@@ -1,6 +1,6 @@
 # Dynamic Row Correction Workflow
 
-Status: the base capability and its additive T4 hardening successor are live-installed, checksum-registered, transactionally verified, data-neutral and independently accepted at T4. The capability is production-ready for the first separately reviewed live correction.
+Status: the base capability and its additive T4 hardening successor are live-installed, checksum-registered, transactionally verified, data-neutral and independently accepted at T4. The application change is merged to `main` at `8646367`, and the production build passes. The first separately reviewed live correction remains gated by the lineage-reconciliation decision below.
 
 ## Purpose and boundary
 
@@ -15,7 +15,7 @@ The correction-aware seam is also additive:
 - `reporting.latest_approved_dashboard_bundle_v4` selects the current complete approved bundle from either storage family.
 - The website reads the allowlisted `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` projections.
 
-The unified bundle views and the internal `latest_approved_dashboard_bundle_v4` selector are private implementation surfaces. They are ungranted to `web_reader` and are reached under owner execution only through the security-definer V5 allowlist. `web_reader` receives `SELECT` only on `latest_team_dashboard_v5` and `latest_league_dashboard_v5`, so release, correction, build, and audit fields cannot leak through direct access to the unified sources.
+The unified bundle views and the internal `latest_approved_dashboard_bundle_v4` selector are private implementation surfaces. They are ungranted to `web_reader` and are reached under owner execution only through the security-definer V5 allowlist. The application queries only `latest_team_dashboard_v5` and `latest_league_dashboard_v5`. Historical V2, V3 and V4 aggregate-reader grants remain temporarily available for deployment rollback, but none exposes correction, release, build or audit fields. Retire those older grants only through an additive migration after the V5 deployment and rollback window are verified; do not drop their depended-on views.
 
 Until a reviewed correction or rollback successor is approved, the V5 readers project the currently served V5 V2 bundle without changing its context, payloads, hashes, or metrics.
 
@@ -131,6 +131,10 @@ If the decision itself was wrong, create a compensating proposal using `--supers
 An absent source row is not a correction. Add it through a separately checksummed intake amendment.
 
 The mechanism is season-keyed and supports later seasons without hard-coded 2024-25 row assumptions. Shared versioned rules may carry forward, but each correction remains bound to that season's source row, evidence, current correction-set hash and approved rule version.
+
+The current correction release and rollback contract is deliberately fixed to a 16-team bundle. A replacement club is supported when the approved season bundle still contains 16 members. Before a 17-team or larger season can use correction promotion, add a versioned successor that derives expected membership from the approved predecessor bundle.
+
+The correction database audit and the file-backed 2024-25 master, decision ledger and inclusion CSV are distinct retained evidence layers. The correction commands do not silently rewrite those files. Before the first real correction, record whether the accepted decision is first entered into the ledger and replayed, or how an explicitly temporary database-only overlay will later be reconciled. Do not permit an unexplained difference between the served bundle and the source-to-final lineage.
 
 ## Non-negotiable safety checks
 

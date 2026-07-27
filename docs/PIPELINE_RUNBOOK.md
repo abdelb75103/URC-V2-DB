@@ -23,7 +23,11 @@ Frozen V2 bundle storage is not extended or bypassed. Dynamic promotion and roll
 
 Three unified additive views expose either storage family without rewriting it: `reporting.dashboard_bundle_context_v1`, `reporting.dashboard_bundle_league_payloads_v1`, and `reporting.dashboard_bundle_team_payloads_v1`. The internal `reporting.latest_approved_dashboard_bundle_v4` selector chooses the newest complete approved V2, correction, or rollback bundle. `lib/reporting.ts` reads only the allowlisted `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` projections. Before any correction is approved, those V5 views project the current V5 V2 bundle exactly.
 
-The unified sources and internal V4 selector are private and ungranted to `web_reader`. The V5 reader views execute their joins under the owning definer, expose only the explicit dashboard allowlist, and are the only new surfaces granted to `web_reader`. This prevents direct reader access to bundle context, correction payload storage, release identifiers, build identifiers, correction evidence, or audit state.
+The unified sources and internal V4 selector are private and ungranted to `web_reader`. The V5 reader views execute their joins under the owning definer, expose only the explicit dashboard allowlist, and are the only new surfaces introduced for `web_reader`. Historical V2, V3 and V4 aggregate-reader grants remain temporarily available for deployment rollback; the application no longer queries them. Retire those older grants only through an additive migration after the V5 deployment and rollback window are verified. This prevents direct reader access to bundle context, correction payload storage, release identifiers, build identifiers, correction evidence, or audit state.
+
+The correction release tables and CLI currently enforce a complete 16-team bundle. A new or replacement club follows the normal profile, intake, processing and release path. If a season expands beyond 16 members, introduce an additive correction-contract successor before using correction promotion for that season.
+
+Before the first real correction, record the reconciliation rule between the database correction audit and the file-backed master, decision ledger and inclusion CSV. The correction tooling never rewrites those lineage artifacts silently.
 
 The operator sequence is deliberately gated:
 
