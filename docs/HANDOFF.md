@@ -1,7 +1,7 @@
 # Handoff: what this project is and where truth lives
 
 Written 2026-07-24; operational reader and correction status updated
-2026-07-27. Audience: a cold reader who needs to be productive in ten minutes.
+2026-07-29. Audience: a cold reader who needs to be productive in ten minutes.
 `AGENTS.md` is the binding contract; this is the orientation map.
 
 ## What this is
@@ -25,11 +25,11 @@ MASTER  every source row, append-only    data/2024-25/master/
         is a generated render            (hashes: baseline_record.json)
         |
 DECISION LEDGER, ordered and replayable  data/2024-25/decisions/ledger.json
-        10 steps, every row-level edit,  (4 inclusion-stage row removals live
-        inference, and adjudication      here, giving 759 excluded overall)
+        12 steps, every row-level edit,  (8 master exclusions restored and
+        inference, and adjudication      4 inclusion removals: 751 excluded)
         |
 INCLUSION  what analysis consumes        data/2024-25/inclusion/
-        2,301 rows x 28 columns          urc_injury_included_dataset_2024-25.csv
+        2,309 rows x 28 columns          urc_injury_included_dataset_2024-25.csv
 ```
 
 Files are the intake, the database is the truth, rendered artifacts are
@@ -43,7 +43,7 @@ labelled, both recorded in the ledger.
   data table to formatted workbook and back; cell-for-cell compare.
 - `python3 tools/replay.py [--write-methodology]`: baseline plus ledger to
   the inclusion CSV. Must reproduce SHA-256
-  `e8da3caf4934f62a521ccecd61abbbf4fa03a837621c4103862b0e87ac31fedb`
+  `7203b83954becb1c2232ff7e7efa73eac1da41d7533afce865fa325041d74d71`
   byte-for-byte; any conflict stops the line for review.
 - `python3 tools/intake.py --team <key> --season <s> --file <csv>`: new
   season intake, append-only; `--validate-against-baseline` reconciles a
@@ -81,12 +81,15 @@ rule change with carry-forward status. Open items ride in the ledger's
 Supabase Postgres serves the approved 2024-25 release through
 `reporting.latest_team_dashboard_v5` / `latest_league_dashboard_v5`; the
 website is read-only and fails closed. The current bundle is
-`urc-2024-25-v5-4ae722941285-a1`. Frozen V2 payload storage remains intact;
+`urc-2024-25-correction-r1122-20260729-a1`, bundle SHA-256
+`34fc4dbafb87c2ec0047c6e955ae448b20f0430ded1b0eecaf9187e76d175067`.
+Frozen V2 payload storage remains intact;
 the V5 readers can select either that approved predecessor or an append-only
 correction/rollback successor through the unified bundle seam. The dynamic
 row-correction operator path is `docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md`.
-No real correction is active, and its first use remains gated by a recorded
-reconciliation rule for the master, decision ledger and inclusion CSV.
+Its first real use is complete: the 29 July fixture and illness decisions are
+recorded in the file-backed ledger, and the eight resulting eligibility
+restorations are active in the live correction chain.
 The Phase 5 deletion cleanup is done too, so
 `docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md` is complete and is now the plan
 of record rather than a task list. Released figures and the reasons behind

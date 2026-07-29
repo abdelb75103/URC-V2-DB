@@ -11,6 +11,24 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-07-29: Edinburgh and Glasgow fixture adjudications and illness restorations
+
+| Field | Value |
+|---|---|
+| Status | `live`: replayed, independently reviewed, applied through eight append-only row corrections, and promoted through the correction-aware V5 readers |
+| Rule version | `edinburgh_glasgow_fixture_and_exclusion_adjudication_2026-07-29_v1`; clarity successor `urc_match_type_fixture_clarity_2026-07-29_v1` |
+| Carry-forward | `season-specific`. The eight restored rows and fifteen label/reason decisions do not carry into another season. Nearest-fixture matching remains prohibited without a row-specific adjudication. |
+| Decision provenance | Abdel Babiker, 29 July 2026 |
+| Result | 2,309 rows × 28 columns; CSV SHA-256 `7203b83954becb1c2232ff7e7efa73eac1da41d7533afce865fa325041d74d71`; retained-row mapping SHA-256 `5409e641ad5d9b0159a94fc141899b1345149e5d3220cb734ca7a8da2c6ae470` |
+
+**Accepted decisions.** Rows 602, 607, 672 and 673 are restored as illnesses because fixture eligibility does not apply to illness setting. Rows 603 and 1120–1122 are restored through explicit, season-specific +1-day fixture adjudications; their recorded dates are preserved and this does not create an automatic date-tolerance rule. Row 1971 retains only the other-team exclusion through Abdel's explicit adjudication. Rows 583 and 740–743 are recorded as friendlies, while rows 1182–1183 and 1191 restore the source-reported professional A-team match type and retain their other-team exclusions. Rows 605, 651, 685, 709 and 1161 remain excluded as off-fixture matches, but their misleading exact `URC` Match Type is replaced by `Other`; their explicit Match occasion is preserved. Row 1110 remains included as Training and its inconsistent Match Type is corrected from `URC` to `training`. After replay, the only exact `URC` Match Type values are the four approved +1-day rows 603 and 1120–1122.
+
+**Scope.** The wider set of 84 potentially misleading blue labels is deliberately untouched. The append-only master remains unchanged. `tools/replay.py` now applies guarded `Exclusion Reason` decisions before inclusion selection so an accepted ledger decision can restore a master-excluded row without editing the master or generated CSV by hand. The accepted replay adds exactly source rows 602, 603, 607, 672, 673 and 1120–1122, removes none, and reports zero conflicts.
+
+**Live reconciliation.** The eight restored eligibility decisions were applied sequentially through the installed dynamic correction workflow and each was promoted as an immutable successor. The correction chain ends at release `urc-2024-25-correction-r1122-20260729-a1`, bundle SHA-256 `34fc4dbafb87c2ec0047c6e955ae448b20f0430ded1b0eecaf9187e76d175067`. A final live query verified all eight source rows have active `eligibility = true`, with no missing or mismatched row. The four illness restorations do not change dashboard metrics; the four match restorations update only their affected team and the pooled league result. Match Type clarity changes remain file-backed because Match Type is not a published dashboard input or an allowlisted dynamic-correction field.
+
+---
+
 ## 2026-07-26: Dynamic row-correction workflow and additive implementation
 
 | Field | Value |

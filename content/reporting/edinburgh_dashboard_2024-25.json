@@ -116,7 +116,7 @@
       "key": "recorded_injuries",
       "unit": "injuries",
       "label": "Recorded injuries",
-      "value": 119,
+      "value": 120,
       "formula": "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"
     },
     {
@@ -3303,7 +3303,7 @@
       "key": "unknown",
       "label": "Unknown",
       "setting": "all",
-      "recorded_injuries": 43,
+      "recorded_injuries": 44,
       "time_loss_injuries": 17
     },
     {
@@ -3324,7 +3324,7 @@
       "key": "unknown",
       "label": "Unknown",
       "setting": "match",
-      "recorded_injuries": 25,
+      "recorded_injuries": 26,
       "time_loss_injuries": 8
     },
     {
@@ -3375,7 +3375,7 @@
       "key": "zero_days_medical_attention_only",
       "label": "Medical attention",
       "days_lost": 0,
-      "recorded_injuries": 39,
+      "recorded_injuries": 40,
       "time_loss_injuries": 0
     },
     {

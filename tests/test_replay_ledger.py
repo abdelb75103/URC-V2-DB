@@ -125,6 +125,96 @@ def ledger(entries: list[dict[str, object]]) -> dict[str, object]:
 
 
 class ReplayLedgerTests(unittest.TestCase):
+    def test_exclusion_reason_edit_restores_master_row_before_replay(self) -> None:
+        headers, rows = REPLAY.load_master_table(
+            master([row("A", "P1", days="", exclusion="Duplicate")])
+        )
+        changes = [
+            entry(2, "P1", "Exclusion Reason", "Duplicate", ""),
+            entry(2, "P1", "Days Injured", "", "2"),
+        ]
+        (
+            replay_master_rows,
+            preselected_entries,
+            preselection_counts,
+            preselection_conflicts,
+        ) = REPLAY.apply_exclusion_reason_preselection(headers, rows, ledger(changes))
+        selected, source_rows = REPLAY.select_inclusion(headers, replay_master_rows)
+        replayed, retained, summaries, conflicts = REPLAY.apply_ledger(
+            headers,
+            selected,
+            source_rows,
+            ledger(changes),
+            replay_master_rows,
+            preselected_entries,
+            preselection_counts,
+        )
+
+        self.assertEqual(preselection_conflicts, [])
+        self.assertEqual(retained, [2])
+        self.assertEqual(
+            replayed[0][HEADERS.index("Exclusion Reason")],
+            "",
+        )
+        self.assertEqual(rows[2][HEADERS.index("Exclusion Reason")], "Duplicate")
+        self.assertEqual(replayed[0][HEADERS.index("Days Injured")], "2")
+        self.assertEqual(summaries[0]["applied"], 2)
+        self.assertEqual(conflicts, [])
+
+    def test_preselection_preserves_exclusion_reason_removals(self) -> None:
+        headers, rows = REPLAY.load_master_table(master([row("A", "P1")]))
+        removal = entry(
+            2,
+            "P1",
+            "Exclusion Reason",
+            "",
+            "Duplicate",
+            "removed_from_inclusion_csv",
+        )
+        (
+            replay_master_rows,
+            preselected_entries,
+            preselection_counts,
+            preselection_conflicts,
+        ) = REPLAY.apply_exclusion_reason_preselection(headers, rows, ledger([removal]))
+        selected, source_rows = REPLAY.select_inclusion(headers, replay_master_rows)
+        replayed, retained, summaries, conflicts = REPLAY.apply_ledger(
+            headers,
+            selected,
+            source_rows,
+            ledger([removal]),
+            replay_master_rows,
+            preselected_entries,
+            preselection_counts,
+        )
+
+        self.assertEqual(preselected_entries, set())
+        self.assertEqual(preselection_conflicts, [])
+        self.assertEqual(replayed, [])
+        self.assertEqual(retained, [])
+        self.assertEqual(summaries[0]["applied"], 1)
+        self.assertEqual(conflicts, [])
+
+    def test_exclusion_reason_preselection_enforces_old_value_and_identity_guards(
+        self,
+    ) -> None:
+        headers, rows = REPLAY.load_master_table(
+            master([row("A", "P1", exclusion="Different")])
+        )
+        stale = entry(2, "P1", "Exclusion Reason", "Duplicate", "")
+        wrong_identity = entry(2, "P2", "Exclusion Reason", "Different", "")
+
+        for change, reason in (
+            (stale, "old_value_guard_failed"),
+            (wrong_identity, "row_identity_mismatch"),
+        ):
+            with self.subTest(reason=reason):
+                _, _, _, conflicts = REPLAY.apply_exclusion_reason_preselection(
+                    headers, rows, ledger([change])
+                )
+                self.assertEqual(len(conflicts), 1)
+                self.assertEqual(conflicts[0]["reason"], reason)
+
     def test_export_selection_and_mapping_stability(self) -> None:
         headers, rows = REPLAY.load_master_table(
             master(

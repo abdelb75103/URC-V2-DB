@@ -40,10 +40,10 @@ REFERENCE_OUTPUT = (
     "urc_injury_included_dataset_2024-25.csv"
 )
 EXPECTED_OUTPUT_SHA256 = (
-    "e8da3caf4934f62a521ccecd61abbbf4fa03a837621c4103862b0e87ac31fedb"
+    "7203b83954becb1c2232ff7e7efa73eac1da41d7533afce865fa325041d74d71"
 )
 EXPECTED_MAPPING_SHA256 = (
-    "9910b585af28cc304e5beaf4806113bb770c0ef239d852ae1270c4ec1a4faf4f"
+    "5409e641ad5d9b0159a94fc141899b1345149e5d3220cb734ca7a8da2c6ae470"
 )
 SEASON_START = date(2024, 7, 1)
 SEASON_END = date(2025, 6, 30)
@@ -135,6 +135,104 @@ def select_inclusion(
             selected[source_row] = list(row)
             source_rows.append(source_row)
     return selected, source_rows
+
+
+def apply_exclusion_reason_preselection(
+    headers: list[str],
+    master_rows: dict[int, list[Any]],
+    ledger: dict[str, Any],
+) -> tuple[
+    dict[int, list[Any]],
+    set[tuple[int, int]],
+    dict[int, Counter[str]],
+    list[dict[str, Any]],
+]:
+    """Apply ordinary Exclusion Reason edits before inclusion selection.
+
+    Inclusion-stage removals remain ledger-only. This narrow pass lets a
+    guarded ledger edit clear an exclusion already recorded in the master,
+    so the restored row is available to the normal ordered replay.
+    """
+    rows = {source_row: list(row) for source_row, row in master_rows.items()}
+    header_indexes = {header: index for index, header in enumerate(headers)}
+    preselected_entries: set[tuple[int, int]] = set()
+    counts_by_step: dict[int, Counter[str]] = {}
+    conflicts: list[dict[str, Any]] = []
+
+    for step_index, step in enumerate(ledger.get("steps", [])):
+        counts: Counter[str] = Counter()
+        for entry_index, entry in enumerate(step.get("entries", [])):
+            if (
+                entry.get("field") != EXPORT.EXCLUSION_HEADER
+                or _is_removal(entry)
+            ):
+                continue
+            preselected_entries.add((step_index, entry_index))
+            source_row = int(entry["source_workbook_row"])
+            if source_row not in rows:
+                conflicts.append(
+                    {
+                        "rule_version": step["rule_version"],
+                        "source_workbook_row": source_row,
+                        "field": entry.get("field"),
+                        "reason": "source_row_missing_from_master",
+                    }
+                )
+                counts["conflict"] += 1
+                continue
+
+            row = rows[source_row]
+            team = comparison_value(row[header_indexes["Team"]])
+            player_id = comparison_value(row[header_indexes["PlayerID"]])
+            if team != comparison_value(entry.get("team")) or player_id != comparison_value(
+                entry.get("player_id")
+            ):
+                conflicts.append(
+                    {
+                        "rule_version": step["rule_version"],
+                        "source_workbook_row": source_row,
+                        "field": EXPORT.EXCLUSION_HEADER,
+                        "old_value": entry.get("old_value"),
+                        "new_value": entry.get("new_value"),
+                        "current_value": comparison_value(
+                            row[header_indexes[EXPORT.EXCLUSION_HEADER]]
+                        ),
+                        "reason": "row_identity_mismatch",
+                        "expected_team": entry.get("team"),
+                        "current_team": team,
+                        "expected_player_id": entry.get("player_id"),
+                        "current_player_id": player_id,
+                    }
+                )
+                counts["conflict"] += 1
+                continue
+
+            exclusion_index = header_indexes[EXPORT.EXCLUSION_HEADER]
+            current = comparison_value(row[exclusion_index])
+            old_value = comparison_value(entry.get("old_value"))
+            new_value = comparison_value(entry.get("new_value"))
+            if current == old_value:
+                row[exclusion_index] = new_value
+                counts["applied"] += 1
+            elif current == new_value:
+                counts["materialized_in_master"] += 1
+            else:
+                conflicts.append(
+                    {
+                        "rule_version": step["rule_version"],
+                        "source_workbook_row": source_row,
+                        "field": EXPORT.EXCLUSION_HEADER,
+                        "old_value": old_value,
+                        "new_value": new_value,
+                        "current_value": current,
+                        "reason": "old_value_guard_failed",
+                    }
+                )
+                counts["conflict"] += 1
+        if counts:
+            counts_by_step[step_index] = counts
+
+    return rows, preselected_entries, counts_by_step, conflicts
 
 
 def load_deleted_evidence(manifest_path: Path) -> set[tuple[str, str]]:
@@ -245,6 +343,8 @@ def apply_ledger(
     ordered_source_rows: list[int],
     ledger: dict[str, Any],
     master_rows: dict[int, list[Any]] | None = None,
+    preselected_entries: set[tuple[int, int]] | None = None,
+    preselection_counts: dict[int, Counter[str]] | None = None,
 ) -> tuple[list[list[Any]], list[int], list[dict[str, Any]], list[dict[str, Any]]]:
     rows = {source_row: list(row) for source_row, row in selected_rows.items()}
     header_indexes = {header: index for index, header in enumerate(headers)}
@@ -259,9 +359,13 @@ def apply_ledger(
     if orders != sorted(orders) or len(orders) != len(set(orders)):
         raise ReplayError("Ledger step order must be unique and ascending")
 
-    for step in steps:
-        counts: Counter[str] = Counter()
-        for entry in step.get("entries", []):
+    for step_index, step in enumerate(steps):
+        counts: Counter[str] = Counter(
+            (preselection_counts or {}).get(step_index, {})
+        )
+        for entry_index, entry in enumerate(step.get("entries", [])):
+            if (step_index, entry_index) in (preselected_entries or set()):
+                continue
             source_row = int(entry["source_workbook_row"])
             if _is_removal(entry):
                 if source_row in rows:
@@ -590,7 +694,7 @@ def _reporting_cohort_v5_section() -> list[str]:
         "## Reporting cohort boundary: v5",
         "",
         "The accepted 2024-25 inclusion lineage remains unchanged: the 3,060-row",
-        "master, ordered decision ledger, and accepted 2,301-row inclusion CSV are",
+        "master, ordered decision ledger, and accepted 2,309-row inclusion CSV are",
         "not rebuilt, re-cleaned, or regenerated for this reporting-cohort rule.",
         "The v5 analysis layer instead applies an immutable effective eligibility",
         "view for the inclusive reporting window 1 September 2024 to 30 June 2025.",
@@ -701,10 +805,25 @@ def replay(
             )
     else:
         raise ReplayError(f"Baseline record does not exist: {record_path}")
-    selected, ordered_source_rows = select_inclusion(headers, master_rows)
-    rows, source_rows, summaries, conflicts = apply_ledger(
-        headers, selected, ordered_source_rows, ledger, master_rows
+    (
+        replay_master_rows,
+        preselected_entries,
+        preselection_counts,
+        preselection_conflicts,
+    ) = (
+        apply_exclusion_reason_preselection(headers, master_rows, ledger)
     )
+    selected, ordered_source_rows = select_inclusion(headers, replay_master_rows)
+    rows, source_rows, summaries, ledger_conflicts = apply_ledger(
+        headers,
+        selected,
+        ordered_source_rows,
+        ledger,
+        replay_master_rows,
+        preselected_entries,
+        preselection_counts,
+    )
+    conflicts = [*preselection_conflicts, *ledger_conflicts]
     # Write a candidate first; the canonical output is promoted only after
     # the conflict check passes, so a failing replay never clobbers the
     # previous accepted CSV.
@@ -842,7 +961,7 @@ def main() -> int:
     print_summary(payload, args.output)
     valid = (
         not payload["conflicts"]
-        and payload["output"]["data_rows"] == 2301
+        and payload["output"]["data_rows"] == 2309
         and payload["output"]["columns"] == 28
         and payload["output"]["csv_sha256"] == EXPECTED_OUTPUT_SHA256
         and payload["selection"]["included_source_rows_sha256"]

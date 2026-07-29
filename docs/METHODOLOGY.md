@@ -11,7 +11,7 @@
 ## Reporting cohort boundary: v5
 
 The accepted 2024-25 inclusion lineage remains unchanged: the 3,060-row
-master, ordered decision ledger, and accepted 2,301-row inclusion CSV are
+master, ordered decision ledger, and accepted 2,309-row inclusion CSV are
 not rebuilt, re-cleaned, or regenerated for this reporting-cohort rule.
 The v5 analysis layer instead applies an immutable effective eligibility
 view for the inclusive reporting window 1 September 2024 to 30 June 2025.
@@ -211,6 +211,31 @@ Apply eleven season-specific human adjudications from Unknown to Time Loss after
 ### Entry counts by field
 
 - TimeLoss vs Medical Attention: 11
+
+## 11. edinburgh_glasgow_fixture_and_exclusion_adjudication_2026-07-29_v1
+
+- Applied at: 2026-07-29T13:09:01Z
+- Carry-forward: season-specific
+- Entries: 17
+
+Apply seventeen season-specific fixture, match-type, and exclusion-reason adjudications. Rows 605, 651, 685, 709, and 1161 remain excluded and unchanged; the wider blue-label set is outside this step.
+
+### Entry counts by field
+
+- Exclusion Reason: 9
+- Match Type: 8
+
+## 12. urc_match_type_fixture_clarity_2026-07-29_v1
+
+- Applied at: 2026-07-29T14:30:00Z
+- Carry-forward: season-specific
+- Entries: 6
+
+Remove the misleading exact URC Match Type label from five off-fixture matches and one training record. Preserve Match occasion for the off-fixture games; retain URC only for the four explicitly adjudicated +1-day fixture rows.
+
+### Entry counts by field
+
+- Match Type: 6
 
 ## Open items
 
