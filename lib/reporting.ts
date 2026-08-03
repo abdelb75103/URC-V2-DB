@@ -16,6 +16,20 @@ import type {
 
 export type { DashboardData, TeamDashboardData } from "@/lib/reporting-types";
 
+const DASHBOARD_PAYLOAD_CACHE_MILLISECONDS = 300_000;
+
+type DashboardPayloadCacheEntry = {
+  releaseToken: string;
+  expiresAt: number;
+  value: Promise<unknown>;
+};
+
+// A strict, process-local cache avoids stale-while-revalidate semantics. Every
+// request first reads the current approved release token from PostgreSQL. A
+// promotion or rollback changes that token immediately, while a token-query
+// failure throws and preserves the application's fail-closed behaviour.
+const dashboardPayloadCache = new Map<string, DashboardPayloadCacheEntry>();
+
 // The view emits jsonb_build_object rows, so optional numeric fields can be
 // explicit JSON nulls; nullish() accepts both shapes and stripNulls()
 // normalizes them back to absent keys (the committed-JSON convention the
@@ -203,6 +217,53 @@ function webReaderPool(): Pool | undefined {
     });
   }
   return globalThis.__urcWebReaderPool;
+}
+
+async function approvedDashboardReleaseToken(
+  pool: Pool,
+  season: string
+): Promise<string | null> {
+  const result = await pool.query(
+    `select cache_token
+     from reporting.latest_dashboard_cache_token_v1
+     where season = $1`,
+    [season]
+  );
+  if (result.rows.length === 0) return null;
+  if (result.rows.length !== 1 || typeof result.rows[0]?.cache_token !== "string") {
+    throw new Error("expected one approved dashboard cache token");
+  }
+  return result.rows[0].cache_token;
+}
+
+async function loadStrictlyCachedDashboardPayload<T>(
+  key: string,
+  releaseToken: string,
+  loader: () => Promise<T>
+): Promise<T> {
+  const now = Date.now();
+  const cached = dashboardPayloadCache.get(key);
+  if (
+    cached &&
+    cached.releaseToken === releaseToken &&
+    cached.expiresAt > now
+  ) {
+    return cached.value as Promise<T>;
+  }
+
+  const value = loader();
+  dashboardPayloadCache.set(key, {
+    releaseToken,
+    expiresAt: now + DASHBOARD_PAYLOAD_CACHE_MILLISECONDS,
+    value,
+  });
+  try {
+    return await value;
+  } catch (error) {
+    const current = dashboardPayloadCache.get(key);
+    if (current?.value === value) dashboardPayloadCache.delete(key);
+    throw error;
+  }
 }
 
 function teamDisplayAliases(): Record<string, string> {
@@ -405,7 +466,7 @@ export type TeamPageData = {
  * statement. PostgreSQL gives a statement one MVCC snapshot, so a request
  * cannot mix an old dashboard bundle with comparisons from its successor.
  */
-export async function getTeamPageData(
+async function loadTeamPageData(
   teamId: string,
   season = "2024-25"
 ): Promise<TeamPageData> {
@@ -462,6 +523,21 @@ export async function getTeamPageData(
   };
 }
 
+export async function getTeamPageData(
+  teamId: string,
+  season = "2024-25"
+): Promise<TeamPageData> {
+  const pool = webReaderPool();
+  if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
+  const releaseToken = await approvedDashboardReleaseToken(pool, season);
+  if (!releaseToken) return { dashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
+  return loadStrictlyCachedDashboardPayload(
+    `team:${season}:${teamId}`,
+    releaseToken,
+    () => loadTeamPageData(teamId, season)
+  );
+}
+
 export type LeaguePageData = {
   dashboard: DashboardData | undefined;
   comparisons: TeamComparisonRow[];
@@ -469,7 +545,7 @@ export type LeaguePageData = {
 };
 
 /** Same single-statement snapshot guarantee as getTeamPageData(). */
-export async function getLeaguePageData(
+async function loadLeaguePageData(
   season = "2024-25"
 ): Promise<LeaguePageData> {
   const pool = webReaderPool();
@@ -512,6 +588,20 @@ export async function getLeaguePageData(
       ? normalizeLeagueMetrics(snapshot.dashboard)
       : [],
   };
+}
+
+export async function getLeaguePageData(
+  season = "2024-25"
+): Promise<LeaguePageData> {
+  const pool = webReaderPool();
+  if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [] };
+  const releaseToken = await approvedDashboardReleaseToken(pool, season);
+  if (!releaseToken) return { dashboard: undefined, comparisons: [], leagueMetrics: [] };
+  return loadStrictlyCachedDashboardPayload(
+    `league:${season}`,
+    releaseToken,
+    () => loadLeaguePageData(season)
+  );
 }
 
 function overallSettingMetric(

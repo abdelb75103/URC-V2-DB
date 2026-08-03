@@ -11,6 +11,26 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-03: No-cost Disk IO demand reduction and batch correction workflow
+
+| Field | Value |
+|---|---|
+| Status | `live-installed-and-verified`: all six additive batch migrations are checksum-registered on project `eukkvswaxweenovqqgzr`; the application cache and batch operator are implemented; a rollback-only live functional harness passed and retained no test rows |
+| Rule/tooling version | `dynamic_row_correction_batch_2026-08-03_v8`; `dashboard_release_token_cache_2026-08-03_v1` |
+| Carry-forward | `carries-forward` for operational tooling. No analytical formula, cohort, classification, denominator or published figure changed. Each future row decision remains season-specific and evidence-bound. |
+| Decision provenance | Abdel Babiker, 3 August 2026, approved no-cost implementation and live closeout |
+| Evidence | `docs/evidence/DISK_IO_OPTIMISATION_2026-08-03.md`; `tools/sql/diagnose_disk_io_budget.sql`; `tools/sql/verify_dynamic_row_correction_batch_v8.sql` |
+
+**No-cost demand reduction.** Approved V5 dashboard payloads now use a strict five-minute warm-process cache. Every request first reads a hashed release token from the least-privilege `reporting.latest_dashboard_cache_token_v1` view. A promotion or rollback changes that token and invalidates the cached payload immediately. Database failures continue to fail closed, routes remain dynamic, and access control remains outside the cache.
+
+**Batch correction boundary.** Future corrections for one team and season are proposed, reviewed, applied and released as one append-only batch, including one-item batches. Each item retains its own evidence, source fingerprint, old and new value, rationale and rule version. The affected team and pooled league payload are derived once, while the other 15 team payloads are reused byte-for-byte. The legacy V2 single-row commands now fail closed.
+
+**Installed migration chain.** The registered migrations and SHA-256 values are: `20260803153728` (`c4e4bdde...`), `20260803161707` (`32a0cbe4...`), `20260803162112` (`35e0a365...`), `20260803162702` (`300bf887...`), `20260803163038` (`5fdfa3f8...`) and `20260803163430` (`859e1844...`). The operator uses `analysis.row_correction_preview_v5`, `audit.apply_row_correction_batch_v8` and `reporting.promote_row_correction_batch_v8`. The complete checksums are recorded in the workflow and verification SQL.
+
+**Live verification.** A two-item same-team batch was previewed, applied and promoted inside a live outer transaction. Verification confirmed exactly one affected team and 15 byte-identical reused teams. The append-only rollback restored the predecessor exactly, the outer transaction was rolled back, and zero verification corrections, drafts, releases or batch rows were retained. Existing source, curated, audit and release history was not deleted or rewritten. No speculative index was added to an existing large relation.
+
+---
+
 ## 2026-07-29: Edinburgh and Glasgow fixture adjudications and illness restorations
 
 | Field | Value |

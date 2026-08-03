@@ -1,6 +1,6 @@
 # Dynamic Row Correction Workflow
 
-Status: the base capability and its additive T4 hardening successor are live-installed, checksum-registered, transactionally verified, data-neutral and independently accepted at T4. The application change is merged to `main` at `8646367`, and the production build passes. The first separately reviewed live correction remains gated by the lineage-reconciliation decision below.
+Status: the single-row base capability and its additive T4 hardening successor are live-installed. The additive same-team batch successor and its five runtime-hardening successors are also live-installed, checksum-registered and transactionally verified. New corrections must use the batch commands, including one-item corrections. The legacy single-row commands now fail closed.
 
 ## Purpose and boundary
 
@@ -19,7 +19,20 @@ The unified bundle views and the internal `latest_approved_dashboard_bundle_v4` 
 
 Until a reviewed correction or rollback successor is approved, the V5 readers project the currently served V5 V2 bundle without changing its context, payloads, hashes, or metrics.
 
-The exact installation target is the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. The installed base is `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`. The installed additive successor is `supabase/migrations/20260727010000_dynamic_row_correction_pipeline_hardening.sql`, SHA-256 `29dd76bb42ac7bdc10f3a6691bf538a1af4786a15408acc467a4c9beab4cd57b`; `tools/sql/register_dynamic_row_correction_pipeline_hardening_migration.sql` records those exact bytes as migration `20260727010000` / `dynamic_row_correction_pipeline_hardening`. Do not substitute a local Supabase target.
+The exact installation target is the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. The installed single-row base is `supabase/migrations/20260726200000_dynamic_row_correction_pipeline.sql`. Its installed additive successor is `supabase/migrations/20260727010000_dynamic_row_correction_pipeline_hardening.sql`, SHA-256 `29dd76bb42ac7bdc10f3a6691bf538a1af4786a15408acc467a4c9beab4cd57b`.
+
+The installed batch chain is additive and checksum-registered in this exact order:
+
+| Migration | SHA-256 |
+|---|---|
+| `20260803153728_dynamic_row_correction_batch_v3.sql` | `c4e4bdde1ca767b42f445279f07d0ab698c47536d5a7ef4a4e2bdd585880f953` |
+| `20260803161707_dynamic_row_correction_batch_v3_hardening.sql` | `32a0cbe49cc93e06edc0dc5149d16a0728266bba94da9a6c141dd3caf816b5f6` |
+| `20260803162112_dynamic_row_correction_batch_v4_hardening.sql` | `35e0a3654eae797dfa372f513f3f052af0407e0ccf2d32d229e5703d84642d48` |
+| `20260803162702_dynamic_row_correction_batch_v5_hardening.sql` | `300bf8879b3577e2179a18f2294cd88a777b49ee68c9d6430a3f4eedf8d82e37` |
+| `20260803163038_dynamic_row_correction_batch_v6_hardening.sql` | `5fdfa3f824765f8fd7ff7203212c9e4a6103f705cdec25845569cdae5dcba0a9` |
+| `20260803163430_dynamic_row_correction_batch_v7_hardening.sql` | `859e18440317494eb3936fd80c136a8b8fb2e7b2604141bcf58048aeaf604365` |
+
+The operator uses `analysis.row_correction_preview_v5`, `audit.apply_row_correction_batch_v8` and `reporting.promote_row_correction_batch_v8`. A rollback-only live harness on 3 August 2026 previewed, applied and promoted two corrections for one team, confirmed one affected and 15 byte-identical reused team payloads, restored the exact predecessor through the append-only rollback function, then rolled back the outer verification transaction. No test correction, draft, release or audit row was retained. Do not substitute a local Supabase target.
 
 Baseline capture, baseline verification, proposal, and release preflight are read-only. Apply, promotion, and rollback are live writes. Proposal, preflight, baseline, and evidence files must stay Git-ignored and outside `content/reporting/`. They are private operator evidence, not website inputs.
 
@@ -30,6 +43,63 @@ Metric formulas remain SQL-only. Python resolves inputs, verifies evidence and h
 ## Short operator workflow
 
 The human sequence is: request the exact row change, inspect the read-only proposal and impact preview, approve the apply, then separately approve the incremental release. The commands below preserve those two review gates.
+
+### Preferred no-cost batch path
+
+For future work, group all reviewed corrections for one team into one batch. The batch may contain multiple source rows and fields, but it must contain exactly one season and one team. It appends independent evidence, source fingerprints, old and new values, reasons and rule versions for every item, then recomputes the affected team and pooled league once. The other 15 team payloads remain byte-identical to the predecessor. Use a one-item batch when only one correction is needed so all future corrections follow the V3 active-overlay lineage.
+
+The Git-ignored manifest is:
+
+```json
+{
+  "items": [
+    {
+      "source_row_id": "<uuid>",
+      "field_name": "eligibility",
+      "expected_value": false,
+      "new_value": true,
+      "reason": "<evidence-backed rationale>",
+      "rule_version": "<version>",
+      "evidence_file": "<private UTF-8 evidence file>"
+    }
+  ]
+}
+```
+
+Add `supersedes_correction_id` to an item only for an explicit compensating decision. Create and review the read-only proposal:
+
+```bash
+python3 -m pipeline correction-batch-propose \
+  --season <season> --manifest <git-ignored-manifest.json> \
+  --operator <operator> --output <git-ignored-batch-proposal.json>
+```
+
+After Abdel approves every item and the combined team and league impact, append the batch and its immutable draft:
+
+```bash
+python3 -m pipeline correction-batch-apply \
+  --proposal-file <git-ignored-batch-proposal.json> \
+  --reviewer 'Abdel Babiker'
+```
+
+Separately inspect the stored draft, then promote it through the existing append-only release and recovery boundary:
+
+```bash
+python3 -m pipeline correction-batch-release \
+  --proposal-file <git-ignored-batch-proposal.json> --preflight \
+  --output <git-ignored-batch-preflight.json>
+
+python3 -m pipeline correction-batch-release \
+  --preflight-file <git-ignored-batch-preflight.json> \
+  --reviewer 'Abdel Babiker' --release-label <unique-label> \
+  --rollback-release-label <unique-recovery-label> \
+  --rollback-reviewer 'Abdel Babiker' \
+  --rollback-reason '<closeout failure rationale>' \
+  --rollback-evidence-file <private-evidence-file> \
+  --rollback-operator <operator>
+```
+
+The original `correction-propose`, `correction-apply` and `correction-release` commands are retained only as historical implementation records. They are unavailable after batch V3 installation and fail closed. Use the batch commands for every new correction, including a one-item batch.
 
 ### 1. Capture and verify the served predecessor
 

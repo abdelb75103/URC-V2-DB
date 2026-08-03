@@ -11986,6 +11986,9 @@ def main() -> None:
     from pipeline.corrections import (
         capture_served_baseline,
         correction_apply,
+        correction_batch_apply,
+        correction_batch_propose,
+        correction_batch_release,
         correction_propose,
         correction_release,
         correction_rollback,
@@ -12410,6 +12413,38 @@ def main() -> None:
     correction_release_parser.add_argument("--rollback-evidence-file", default="")
     correction_release_parser.add_argument("--rollback-operator", default="")
     correction_release_parser.set_defaults(func=correction_release)
+
+    correction_batch_proposal_parser = subcommands.add_parser(
+        "correction-batch-propose"
+    )
+    correction_batch_proposal_parser.add_argument("--season", required=True)
+    correction_batch_proposal_parser.add_argument("--manifest", required=True)
+    correction_batch_proposal_parser.add_argument("--operator", required=True)
+    correction_batch_proposal_parser.add_argument("--output", required=True)
+    correction_batch_proposal_parser.set_defaults(func=correction_batch_propose)
+
+    correction_batch_apply_parser = subcommands.add_parser(
+        "correction-batch-apply"
+    )
+    correction_batch_apply_parser.add_argument("--proposal-file", required=True)
+    correction_batch_apply_parser.add_argument("--reviewer", required=True)
+    correction_batch_apply_parser.set_defaults(func=correction_batch_apply)
+
+    correction_batch_release_parser = subcommands.add_parser(
+        "correction-batch-release"
+    )
+    correction_batch_release_parser.add_argument("--proposal-file", default="")
+    correction_batch_release_parser.add_argument("--preflight", action="store_true")
+    correction_batch_release_parser.add_argument("--output", default="")
+    correction_batch_release_parser.add_argument("--preflight-file", default="")
+    correction_batch_release_parser.add_argument("--reviewer", default="")
+    correction_batch_release_parser.add_argument("--release-label", default="")
+    correction_batch_release_parser.add_argument("--rollback-release-label", default="")
+    correction_batch_release_parser.add_argument("--rollback-reviewer", default="")
+    correction_batch_release_parser.add_argument("--rollback-reason", default="")
+    correction_batch_release_parser.add_argument("--rollback-evidence-file", default="")
+    correction_batch_release_parser.add_argument("--rollback-operator", default="")
+    correction_batch_release_parser.set_defaults(func=correction_batch_release)
 
     correction_rollback_parser = subcommands.add_parser("correction-rollback")
     correction_rollback_parser.add_argument("--release-label", required=True)

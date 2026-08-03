@@ -242,6 +242,7 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with (
+                patch.object(self.corrections, "_assert_legacy_v2_is_available"),
                 patch.object(
                     self.corrections,
                     "_pending_candidate",
@@ -293,6 +294,7 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
             for index in range(16)
         ]
         with (
+            patch.object(self.corrections, "_assert_legacy_v2_is_available"),
             patch.object(self.corrections, "_require_private_output", return_value=output),
             patch.object(
                 self.corrections,
@@ -365,6 +367,7 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
             },
         }
         with (
+            patch.object(self.corrections, "_assert_legacy_v2_is_available"),
             patch.object(self.corrections, "_require_private_output", return_value=output),
             patch.object(
                 self.corrections,
@@ -470,6 +473,7 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
                 },
             }), encoding="utf-8")
             with (
+                patch.object(self.corrections, "_assert_legacy_v2_is_available"),
                 patch.object(
                     self.corrections,
                     "query_sql",
@@ -563,6 +567,7 @@ class DynamicCorrectionCommandContractTests(unittest.TestCase):
                 },
             }), encoding="utf-8")
             with (
+                patch.object(self.corrections, "_assert_legacy_v2_is_available"),
                 patch.object(
                     self.corrections,
                     "query_sql",

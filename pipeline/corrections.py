@@ -40,6 +40,14 @@ _DYNAMIC_MIGRATION = (
 )
 _DYNAMIC_MIGRATION_VERSION = "20260727010000"
 _DYNAMIC_MIGRATION_NAME = "dynamic_row_correction_pipeline_hardening"
+_BATCH_MIGRATION = (
+    _ROOT
+    / "supabase"
+    / "migrations"
+    / "20260803163430_dynamic_row_correction_batch_v7_hardening.sql"
+)
+_BATCH_MIGRATION_VERSION = "20260803163430"
+_BATCH_MIGRATION_NAME = "dynamic_row_correction_batch_v7_hardening"
 _ALLOWED_FIELDS = {
     "eligibility",
     "days_injured",
@@ -91,6 +99,38 @@ def _audit_provenance(operator: str) -> dict[str, str]:
     ):
         _error(
             "local correction migration SHA does not match the registered "
+            "live implementation"
+        )
+    return {
+        "code_version": code_version,
+        "dependency_lock_hash": dependency_lock_hash,
+        "migration_sha256": migration_sha256,
+        "operator": operator,
+    }
+
+
+def _batch_audit_provenance(operator: str) -> dict[str, str]:
+    provenance = run_provenance()
+    code_version = clean_text(provenance.get("code_version"))
+    dependency_lock_hash = clean_text(provenance.get("dependency_lock_hash"))
+    if (
+        not code_version
+        or not _SHA256.fullmatch(dependency_lock_hash)
+        or not _BATCH_MIGRATION.is_file()
+    ):
+        _error("Git, dependency-lock, or batch migration provenance is unavailable")
+    migration_sha256 = hashlib.sha256(_BATCH_MIGRATION.read_bytes()).hexdigest()
+    registered = query_sql(
+        "select statements from supabase_migrations.schema_migrations "
+        f"where version = '{_BATCH_MIGRATION_VERSION}' "
+        f"and name = '{_BATCH_MIGRATION_NAME}'"
+    )
+    if (
+        len(registered) != 1
+        or registered[0].get("statements") != [f"migration_sha256={migration_sha256}"]
+    ):
+        _error(
+            "local correction batch migration SHA does not match the registered "
             "live implementation"
         )
     return {
@@ -319,6 +359,21 @@ def _preview(proposal: dict[str, Any]) -> dict[str, Any]:
         params.values,
         "preview",
     )
+
+
+def _assert_legacy_v2_is_available() -> None:
+    rows = query_sql(
+        "select to_regprocedure("
+        "'analysis.assert_legacy_row_correction_v2_available()'"
+        ") is not null as batch_v3_installed"
+    )
+    if len(rows) != 1 or not isinstance(rows[0].get("batch_v3_installed"), bool):
+        _error("could not verify the installed correction workflow version")
+    if rows[0]["batch_v3_installed"]:
+        _error(
+            "single-row correction V2 is disabled after batch V3 installation; "
+            "use correction-batch-propose with a one-item manifest"
+        )
 
 
 def _preview_value(preview: dict[str, Any], *names: str) -> object:
@@ -661,6 +716,7 @@ def correction_propose(args: argparse.Namespace) -> None:
     Approval is intentionally absent. The named reviewer is supplied only to
     correction_apply after the proposal and its downstream impact are read.
     """
+    _assert_legacy_v2_is_available()
     output = _require_private_output(getattr(args, "output", ""), "output")
     proposal = _proposal_from_args(args)
     preview = _preview(proposal)
@@ -688,6 +744,271 @@ def correction_propose(args: argparse.Namespace) -> None:
         "proposal_hash": proposal_hash,
         "output_path": str(output),
         "changed_paths": public_preview["changed_paths"],
+    }, indent=2))
+
+
+def _batch_preview(proposal: dict[str, Any]) -> dict[str, Any]:
+    params = SqlParams()
+    return _one_json_row(
+        "select to_jsonb(preview) as preview "
+        f"from analysis.row_correction_preview_v5({params.jsonb(proposal)}) preview",
+        params.values,
+        "preview",
+    )
+
+
+def _batch_items_from_manifest(
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    manifest_path = Path(_required_text(args, "manifest"))
+    manifest = _read_json_file(manifest_path, "batch manifest")
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("items"), list):
+        _error("batch manifest must contain an items array")
+    if not manifest["items"]:
+        _error("batch manifest must contain at least one item")
+    items: list[dict[str, Any]] = []
+    evidence_files: dict[str, str] = {}
+    seen: set[tuple[str, str]] = set()
+    for index, raw in enumerate(manifest["items"]):
+        if not isinstance(raw, dict):
+            _error(f"batch manifest item {index + 1} must be an object")
+        source_row_id = clean_text(str(raw.get("source_row_id") or ""))
+        field_name = clean_text(str(raw.get("field_name") or ""))
+        try:
+            uuid.UUID(source_row_id)
+        except ValueError as exc:
+            _error(f"batch manifest item {index + 1} has an invalid source row UUID")
+            raise AssertionError("unreachable") from exc
+        if field_name not in _ALLOWED_FIELDS:
+            _error(f"batch manifest item {index + 1} has an unsupported field")
+        if (source_row_id, field_name) in seen:
+            _error("batch manifest repeats a source-row field")
+        seen.add((source_row_id, field_name))
+        if "expected_value" not in raw or "new_value" not in raw:
+            _error(f"batch manifest item {index + 1} needs expected_value and new_value")
+        evidence_path = Path(clean_text(str(raw.get("evidence_file") or "")))
+        if not evidence_path.is_file():
+            _error(f"batch manifest item {index + 1} evidence file not found")
+        evidence_sha256 = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        reason = clean_text(str(raw.get("reason") or ""))
+        rule_version = clean_text(str(raw.get("rule_version") or ""))
+        if not reason or not rule_version:
+            _error(f"batch manifest item {index + 1} needs reason and rule_version")
+        item: dict[str, Any] = {
+            "source_row_id": source_row_id,
+            "field_name": field_name,
+            "expected_value": raw["expected_value"],
+            "new_value": raw["new_value"],
+            "reason": reason,
+            "rule_version": rule_version,
+            "evidence_sha256": evidence_sha256,
+        }
+        supersedes = clean_text(str(raw.get("supersedes_correction_id") or ""))
+        if supersedes:
+            try:
+                uuid.UUID(supersedes)
+            except ValueError as exc:
+                _error(
+                    f"batch manifest item {index + 1} has an invalid superseded correction UUID"
+                )
+                raise AssertionError("unreachable") from exc
+            item["supersedes_correction_id"] = supersedes
+        items.append(item)
+        evidence_files[f"{source_row_id}:{field_name}"] = str(evidence_path.resolve())
+    return items, evidence_files
+
+
+def _batch_subject_bindings(
+    preview: dict[str, Any], items: list[dict[str, Any]]
+) -> tuple[str, list[dict[str, str]]]:
+    subjects = preview.get("subjects")
+    if not isinstance(subjects, list) or len(subjects) != len(items):
+        _error("database batch preview did not return every source-row subject")
+    by_key = {
+        (clean_text(str(subject.get("source_row_id") or "")), clean_text(str(subject.get("field_name") or ""))): subject
+        for subject in subjects
+        if isinstance(subject, dict)
+    }
+    bindings: list[dict[str, str]] = []
+    teams: set[str] = set()
+    for item in items:
+        key = (item["source_row_id"], item["field_name"])
+        subject = by_key.get(key)
+        if not isinstance(subject, dict):
+            _error("database batch preview subject does not bind a requested item")
+        source_sha = clean_text(str(subject.get("source_row_sha256") or ""))
+        fingerprint = clean_text(str(subject.get("row_fingerprint") or ""))
+        team_key = clean_text(str(subject.get("team_key") or ""))
+        if not _SHA256.fullmatch(source_sha) or not _SHA256.fullmatch(fingerprint) or not team_key:
+            _error("database batch preview subject evidence is incomplete")
+        teams.add(team_key)
+        item["source_row_sha256"] = source_sha
+        item["row_fingerprint"] = fingerprint
+        bindings.append({
+            "source_row_id": item["source_row_id"],
+            "field_name": item["field_name"],
+            "source_row_sha256": source_sha,
+            "row_fingerprint": fingerprint,
+        })
+    if len(teams) != 1:
+        _error("correction batch must contain rows from exactly one team")
+    return teams.pop(), bindings
+
+
+def _batch_downstream_binding(preview: dict[str, Any]) -> dict[str, Any]:
+    binding: dict[str, Any] = {}
+    for name in (
+        "correction_set_hash_before",
+        "correction_set_hash_after",
+        "affected_team_before_sha256",
+        "affected_team_after_sha256",
+        "affected_league_before_sha256",
+        "affected_league_after_sha256",
+    ):
+        value = clean_text(str(preview.get(name) or ""))
+        if not _SHA256.fullmatch(value):
+            _error(f"database batch preview has invalid {name.replace('_', ' ')}")
+        binding[name] = value
+    predecessor = preview.get("predecessor_bundle")
+    if not isinstance(predecessor, dict) or not _SHA256.fullmatch(
+        clean_text(str(predecessor.get("bundle_sha256") or ""))
+    ):
+        _error("database batch preview has incomplete predecessor evidence")
+    binding["predecessor_bundle"] = predecessor
+    binding["unchanged_team_hashes"] = _unchanged_team_hashes(
+        preview.get("unchanged_team_hashes")
+    )
+    return binding
+
+
+def correction_batch_propose(args: argparse.Namespace) -> None:
+    output = _require_private_output(getattr(args, "output", ""), "output")
+    operator = _required_text(args, "operator")
+    items, evidence_files = _batch_items_from_manifest(args)
+    proposal: dict[str, Any] = {
+        "season": _required_text(args, "season"),
+        "items": items,
+        **_batch_audit_provenance(operator),
+    }
+    preview = _batch_preview(proposal)
+    team_key, subject_bindings = _batch_subject_bindings(preview, items)
+    proposal["team_key"] = team_key
+    proposal.update(_batch_downstream_binding(preview))
+    proposal_hash = _proposal_hash(proposal)
+    proposal["proposal_hash"] = proposal_hash
+    public_subjects = [
+        {
+            key: subject.get(key)
+            for key in ("team_key", "season", "field_name", "current_effective_value")
+            if key in subject
+        }
+        for subject in preview["subjects"]
+    ]
+    public_preview = {
+        "schema_version": "urc_row_correction_batch_preview_v3",
+        "proposal_hash": proposal_hash,
+        "subjects": public_subjects,
+        "affected_team_before_sha256": preview["affected_team_before_sha256"],
+        "affected_team_after_sha256": preview["affected_team_after_sha256"],
+        "affected_league_before_sha256": preview["affected_league_before_sha256"],
+        "affected_league_after_sha256": preview["affected_league_after_sha256"],
+        "unchanged_team_hashes": proposal["unchanged_team_hashes"],
+        "changed_paths": _safe_changed_paths(preview),
+    }
+    write_json_atomic(output, {
+        "schema_version": "urc_row_correction_batch_proposal_v3",
+        "proposal": proposal,
+        "proposal_hash": proposal_hash,
+        "subject_bindings": subject_bindings,
+        "evidence_files": evidence_files,
+        "preview": public_preview,
+    })
+    print(json.dumps({
+        "status": "correction_batch_proposal_created",
+        "season": proposal["season"],
+        "team_key": team_key,
+        "item_count": len(items),
+        "proposal_hash": proposal_hash,
+        "output_path": str(output),
+        "changed_paths": public_preview["changed_paths"],
+    }, indent=2))
+
+
+def _read_batch_proposal(path_value: object) -> tuple[dict[str, Any], dict[str, Any], Path]:
+    path = Path(clean_text(str(path_value or "")))
+    raw = _read_json_file(path, "batch proposal file")
+    if not isinstance(raw, dict) or raw.get("schema_version") != "urc_row_correction_batch_proposal_v3":
+        _error("batch proposal file has an invalid schema")
+    proposal = raw.get("proposal")
+    proposal_hash = clean_text(str(raw.get("proposal_hash") or ""))
+    if not isinstance(proposal, dict) or not isinstance(proposal.get("items"), list):
+        _error("batch proposal file has no proposal items")
+    if proposal.get("proposal_hash") != proposal_hash or not _SHA256.fullmatch(proposal_hash):
+        _error("batch proposal file has inconsistent proposal hashes")
+    return proposal, raw, path
+
+
+def _pending_batch_candidate(proposal_hash: str, season: str) -> dict[str, Any]:
+    params = SqlParams()
+    rows = query_sql(
+        "select to_jsonb(candidate) as candidate "
+        "from analysis.row_correction_pending_candidate_data_v3("
+        f"{params.text(season)}) candidate "
+        f"where candidate.proposal_hash = {params.text(proposal_hash)}",
+        params.values,
+    )
+    if len(rows) != 1 or not isinstance(rows[0].get("candidate"), dict):
+        _error("database has no unique pending candidate for this batch")
+    return rows[0]["candidate"]
+
+
+def correction_batch_apply(args: argparse.Namespace) -> None:
+    proposal, envelope, _ = _read_batch_proposal(getattr(args, "proposal_file", ""))
+    proposal_hash = clean_text(str(proposal["proposal_hash"]))
+    if _proposal_hash(proposal) != proposal_hash:
+        _error("batch proposal hash does not match its canonical database hash")
+    evidence_files = envelope.get("evidence_files")
+    if not isinstance(evidence_files, dict):
+        _error("batch proposal has no evidence-file map")
+    evidence_by_item: dict[str, str] = {}
+    for item in proposal["items"]:
+        key = f"{item['source_row_id']}:{item['field_name']}"
+        path = Path(clean_text(str(evidence_files.get(key) or "")))
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != item["evidence_sha256"]:
+            _error("batch evidence file is missing or changed")
+        try:
+            evidence_by_item[key] = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            _error("batch evidence files must be UTF-8 text")
+            raise AssertionError("unreachable") from exc
+    current_preview = _batch_preview(proposal)
+    current_items = [dict(item) for item in proposal["items"]]
+    team_key, bindings = _batch_subject_bindings(current_preview, current_items)
+    if team_key != proposal.get("team_key") or bindings != envelope.get("subject_bindings"):
+        _error("batch source-row binding changed after review")
+    expected_downstream = {
+        key: proposal[key] for key in _batch_downstream_binding(current_preview)
+    }
+    if expected_downstream != _batch_downstream_binding(current_preview):
+        _error("batch correction-set or downstream preview binding changed")
+    reviewer = _required_text(args, "reviewer")
+    params = SqlParams()
+    run_sql(
+        "select audit.apply_row_correction_batch_v8("
+        f"{params.jsonb(proposal)}, {params.jsonb(evidence_by_item)}, "
+        f"{params.text(reviewer)})",
+        params.values,
+    )
+    candidate = _pending_batch_candidate(proposal_hash, clean_text(str(proposal["season"])))
+    unchanged_count, no_dashboard_impact = _validate_pending_candidate_hashes(candidate)
+    print(json.dumps({
+        "status": "correction_batch_applied_no_dashboard_impact" if no_dashboard_impact else "correction_batch_applied",
+        "season": proposal["season"],
+        "item_count": len(proposal["items"]),
+        "proposal_hash": proposal_hash,
+        "draft_bundle_sha256": candidate.get("draft_bundle_sha256"),
+        "unchanged_team_count": unchanged_count,
+        "promotion_required": True,
     }, indent=2))
 
 
@@ -854,6 +1175,7 @@ def _refresh_current_exports_after_rollback(season: str) -> None:
 
 
 def correction_apply(args: argparse.Namespace) -> None:
+    _assert_legacy_v2_is_available()
     proposal, stored_hash, _, envelope = _read_proposal(getattr(args, "proposal_file", ""))
     canonical_hash = _proposal_hash(proposal)
     if canonical_hash != stored_hash:
@@ -920,6 +1242,7 @@ def correction_apply(args: argparse.Namespace) -> None:
 
 def correction_release(args: argparse.Namespace) -> None:
     """Promote, then recover if the exact release-bound parity closeout fails."""
+    _assert_legacy_v2_is_available()
     preflight = bool(getattr(args, "preflight", False))
     preflight_file = clean_text(str(getattr(args, "preflight_file", "") or ""))
     reviewer = clean_text(str(getattr(args, "reviewer", "") or ""))
@@ -1016,6 +1339,97 @@ def correction_release(args: argparse.Namespace) -> None:
         raise
     print(json.dumps({
         "status": "correction_released",
+        "proposal_hash": proposal_hash,
+        "release_label": release_label,
+    }, indent=2))
+
+
+def correction_batch_release(args: argparse.Namespace) -> None:
+    """Preflight or promote one immutable same-team correction batch."""
+    preflight = bool(getattr(args, "preflight", False))
+    preflight_file = clean_text(str(getattr(args, "preflight_file", "") or ""))
+    if preflight and preflight_file:
+        _error("--preflight cannot be combined with --preflight-file")
+    if preflight:
+        output = _require_private_output(getattr(args, "output", ""), "output")
+        proposal, _, _ = _read_batch_proposal(getattr(args, "proposal_file", ""))
+        proposal_hash = clean_text(str(proposal["proposal_hash"]))
+        if _proposal_hash(proposal) != proposal_hash:
+            _error("batch proposal hash does not match its canonical database hash")
+        candidate = _pending_batch_candidate(
+            proposal_hash, clean_text(str(proposal["season"]))
+        )
+        unchanged_count, no_dashboard_impact = _validate_pending_candidate_hashes(candidate)
+        write_json_atomic(output, {
+            "schema_version": "urc_row_correction_batch_release_preflight_v3",
+            "proposal_hash": proposal_hash,
+            "season": proposal["season"],
+            "item_count": len(proposal["items"]),
+            "candidate": candidate,
+        })
+        print(json.dumps({
+            "status": "correction_batch_release_preflight",
+            "season": proposal["season"],
+            "item_count": len(proposal["items"]),
+            "proposal_hash": proposal_hash,
+            "output_path": str(output),
+            "draft_bundle_sha256": candidate.get("draft_bundle_sha256"),
+            "metric_change_detected": not no_dashboard_impact,
+            "unchanged_team_count": unchanged_count,
+        }, indent=2))
+        return
+
+    reviewer = _required_text(args, "reviewer")
+    release_label = _required_text(args, "release_label")
+    reviewed = _read_json_file(Path(preflight_file), "batch release preflight file")
+    if not isinstance(reviewed, dict) or reviewed.get("schema_version") != "urc_row_correction_batch_release_preflight_v3":
+        _error("batch release preflight file has an invalid schema")
+    proposal_hash = clean_text(str(reviewed.get("proposal_hash") or ""))
+    season = clean_text(str(reviewed.get("season") or ""))
+    candidate = reviewed.get("candidate")
+    if not _SHA256.fullmatch(proposal_hash) or not season or not isinstance(candidate, dict):
+        _error("batch release preflight is incomplete")
+    _validate_pending_candidate_hashes(candidate)
+    current_candidate = _pending_batch_candidate(proposal_hash, season)
+    _validate_pending_candidate_hashes(current_candidate)
+    if diff_json_documents(candidate, current_candidate):
+        _error("pending correction batch changed after preflight")
+    rollback = _rollback_details(
+        args, target_release_label=release_label, prefix="rollback_"
+    )
+    _assert_release_label_available(release_label, "correction batch promotion")
+    _assert_release_label_available(
+        rollback["rollback_release_label"], "automatic rollback"
+    )
+    params = SqlParams()
+    run_sql(
+        "select reporting.promote_row_correction_batch_v8("
+        f"{params.text(proposal_hash)}, {params.text(reviewer)}, "
+        f"{params.text(release_label)})",
+        params.values,
+    )
+    try:
+        _refresh_promoted_exports(
+            season=season, release_label=release_label, candidate=current_candidate
+        )
+    except BaseException:
+        try:
+            _run_correction_rollback(rollback, automatic_recovery=True)
+        except BaseException as rollback_exc:
+            raise RuntimeError(
+                "correction batch promotion succeeded but parity closeout failed "
+                "and predecessor rollback also failed"
+            ) from rollback_exc
+        try:
+            _refresh_current_exports_after_rollback(season)
+        except BaseException as refresh_exc:
+            raise RuntimeError(
+                "correction batch promotion was rolled back, but restored parity "
+                "exports could not be refreshed"
+            ) from refresh_exc
+        raise
+    print(json.dumps({
+        "status": "correction_batch_released",
         "proposal_hash": proposal_hash,
         "release_label": release_label,
     }, indent=2))

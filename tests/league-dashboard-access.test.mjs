@@ -66,6 +66,10 @@ test('team dashboard reads the correction-aware v5 approved-build projection', a
   assert.match(reporting, /getTeamPageData/);
   assert.match(reporting, /getLeaguePageData/);
   assert.match(reporting, /one MVCC snapshot/);
+  assert.match(reporting, /latest_dashboard_cache_token_v1/);
+  assert.match(reporting, /DASHBOARD_PAYLOAD_CACHE_MILLISECONDS = 300_000/);
+  assert.match(reporting, /loadStrictlyCachedDashboardPayload/);
+  assert.match(reporting, /token-query[\s\S]*fail-closed behaviour/);
 });
 
 test('injury type families remain database-defined while the interface stays at family level', async () => {
@@ -317,29 +321,51 @@ test('league and team page metrics include the released overall benchmark', asyn
     prior_season: { season: '2023-24', status: 'unavailable', note: '' },
     limitations: [],
   };
+  let tokenQueryCount = 0;
+  let payloadQueryCount = 0;
+  let releaseToken = 'release-a';
   globalThis.__urcWebReaderPool = {
-    query: async () => ({
+    query: async (sql) => {
+      if (sql.includes('latest_dashboard_cache_token_v1')) {
+        tokenQueryCount += 1;
+        return { rows: [{ cache_token: releaseToken }] };
+      }
+      payloadQueryCount += 1;
+      return ({
       rows: [{
         dashboard,
         comparisons: [],
       }],
-    }),
+      });
+    },
   };
 
   try {
     const { getLeaguePageData, getTeamPageData } = await loadReportingForFixtureTest();
     const pageData = await getLeaguePageData();
+    const cachedPageData = await getLeaguePageData();
+    assert.deepEqual(cachedPageData, pageData);
+    assert.equal(tokenQueryCount, 2, 'every request must verify the approved release token');
+    assert.equal(payloadQueryCount, 1, 'identical release payloads should reuse the cache');
+    releaseToken = 'release-b';
+    await getLeaguePageData();
+    assert.equal(payloadQueryCount, 2, 'promotion or rollback must invalidate immediately');
     assert.deepEqual(pageData.leagueMetrics.map((row) => row.setting), ['all', 'match']);
     assert.equal(pageData.leagueMetrics[0].incidence_per_1000h, 7.5);
     assert.equal(pageData.leagueMetrics[0].burden_per_1000h, 93.75);
 
-    globalThis.__urcWebReaderPool.query = async () => ({
-      rows: [{
-        dashboard: { ...dashboard, team: 'Fixture Team' },
-        comparisons: [],
-        league_metrics: { coverage, headline, setting_metrics: settingMetrics },
-      }],
-    });
+    globalThis.__urcWebReaderPool.query = async (sql) => {
+      if (sql.includes('latest_dashboard_cache_token_v1')) {
+        return { rows: [{ cache_token: 'release-a' }] };
+      }
+      return {
+        rows: [{
+          dashboard: { ...dashboard, team: 'Fixture Team' },
+          comparisons: [],
+          league_metrics: { coverage, headline, setting_metrics: settingMetrics },
+        }],
+      };
+    };
     const teamPageData = await getTeamPageData('fixture-team');
     assert.deepEqual(teamPageData.leagueMetrics.map((row) => row.setting), ['all', 'match']);
     assert.equal(teamPageData.leagueMetrics[0].incidence_per_1000h, 7.5);

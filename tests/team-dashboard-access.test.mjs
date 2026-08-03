@@ -9,6 +9,9 @@ test('live team dashboards do not depend on password or session routes', async (
   assert.match(page, /getTeamPageData\(team\.id\)/);
   assert.doesNotMatch(page, /cookie|session|password|\/unlock/i);
   assert.doesNotMatch(reporting, /team-auth|isTeamSessionAuthorized|sessionToken/);
+  assert.match(reporting, /latest_dashboard_cache_token_v1/);
+  assert.match(reporting, /loadStrictlyCachedDashboardPayload/);
+  assert.doesNotMatch(reporting, /unstable_cache/);
   await assert.rejects(access(new URL('../app/unlock/page.tsx', import.meta.url)));
   await assert.rejects(access(new URL('../app/api/team-session/unlock/route.ts', import.meta.url)));
 });
