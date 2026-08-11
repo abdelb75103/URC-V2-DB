@@ -2,6 +2,8 @@
 
 We're using this as an internal tool. You're probably used to writing enterprise code - code that tries to handle every possible edge case and has fallbacks for everything. That's not how we do things around here: our number one rule is to keep things simple. We handle ONLY the most important cases.
 
+Maintain season parity: render each season in its own tab through shared components, with the same tables, metrics, and visuals; global UI changes apply to every season.
+
 ## Reading
 
 - For pipeline, intake, release, or rule work, read `docs/PIPELINE_RUNBOOK.md`, `docs/TEAM_INTAKE_PROFILING_GATE.md`, and `docs/PIPELINE_RULE_CHANGELOG.md`.
