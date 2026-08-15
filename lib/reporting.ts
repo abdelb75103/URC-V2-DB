@@ -17,6 +17,35 @@ import type {
 export type { DashboardData, TeamDashboardData } from "@/lib/reporting-types";
 
 const DASHBOARD_PAYLOAD_CACHE_MILLISECONDS = 300_000;
+const APPROVED_URC_PROJECT_REF = "eukkvswaxweenovqqgzr";
+
+/** Credential-free server-side proof of the configured URC project. */
+export function assertApprovedWebReaderConnectionString(connectionString: string): {
+  projectRef: string;
+  hostname: string;
+  database: "postgres";
+} {
+  let url: URL;
+  try {
+    url = new URL(connectionString);
+  } catch {
+    throw new Error("web reader database URL is invalid; approved URC project proof failed");
+  }
+  if (!new Set(["postgres:", "postgresql:"]).has(url.protocol)) {
+    throw new Error("web reader database URL is not PostgreSQL; approved URC project proof failed");
+  }
+  if (url.pathname.replace(/^\//, "") !== "postgres") {
+    throw new Error("web reader database name is not postgres; approved URC project proof failed");
+  }
+  const directMatch = url.hostname.match(/^db\.([a-z0-9]{20})\.supabase\.co$/);
+  const poolerMatch = url.username.match(/^postgres\.([a-z0-9]{20})$/);
+  const projectRef = directMatch?.[1] ?? poolerMatch?.[1];
+  const approvedHost = directMatch !== null || url.hostname.endsWith(".pooler.supabase.com");
+  if (!approvedHost || projectRef !== APPROVED_URC_PROJECT_REF) {
+    throw new Error("web reader database URL does not resolve to the approved URC project");
+  }
+  return { projectRef, hostname: url.hostname, database: "postgres" };
+}
 
 type DashboardPayloadCacheEntry = {
   releaseToken: string;
@@ -208,6 +237,7 @@ declare global {
 function webReaderPool(): Pool | undefined {
   const url = process.env.WEB_READER_DB_URL;
   if (!url) return undefined;
+  assertApprovedWebReaderConnectionString(url);
   if (!globalThis.__urcWebReaderPool) {
     globalThis.__urcWebReaderPool = new Pool({
       connectionString: url,
@@ -219,11 +249,43 @@ function webReaderPool(): Pool | undefined {
   return globalThis.__urcWebReaderPool;
 }
 
+function assertApprovedWebReaderConfiguration(): void {
+  const url = process.env.WEB_READER_DB_URL;
+  if (!url) throw new Error("WEB_READER_DB_URL is required for an approved dashboard query");
+  assertApprovedWebReaderConnectionString(url);
+}
+
+/**
+ * Bind every server-side dashboard read to both the configured project
+ * reference and a database-side frozen-release attestation. The attestation
+ * view exposes one boolean only, so web_reader retains no access to release,
+ * migration, fixture, or source tables.
+ */
+async function approvedWebReaderQuery(
+  pool: Pool,
+  sql: string,
+  values: any[] = [],
+) {
+  assertApprovedWebReaderConfiguration();
+  const attestation = await pool.query(
+    `select target_attested
+     from reporting.approved_dashboard_reader_target_v1`,
+  );
+  if (
+    attestation.rows.length !== 1
+    || attestation.rows[0]?.target_attested !== true
+  ) {
+    throw new Error("web reader database identity does not match the approved URC project");
+  }
+  assertApprovedWebReaderConfiguration();
+  return pool.query<any, any[]>(sql, values);
+}
+
 async function approvedDashboardReleaseToken(
   pool: Pool,
   season: string
 ): Promise<string | null> {
-  const result = await pool.query(
+  const result = await approvedWebReaderQuery(pool,
     `select cache_token
      from reporting.latest_dashboard_cache_token_v1
      where season = $1`,
@@ -316,7 +378,7 @@ export async function getTeamDashboard(
   const pool = webReaderPool();
   if (!pool) return undefined;
 
-  const result = await pool.query(
+  const result = await approvedWebReaderQuery(pool,
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
             injury_types, injury_profiles, injury_type_families, severity_distribution,
@@ -344,7 +406,7 @@ export async function getLeagueDashboard(
   const pool = webReaderPool();
   if (!pool) return undefined;
 
-  const result = await pool.query(
+  const result = await approvedWebReaderQuery(pool,
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
             injury_types, injury_profiles, injury_type_families, severity_distribution,
@@ -373,7 +435,7 @@ export async function getTeamComparisons(
   const pool = webReaderPool();
   if (!pool) return [];
 
-  const result = await pool.query(
+  const result = await approvedWebReaderQuery(pool,
     `select team_key, team, coverage, headline, setting_metrics
      from reporting.latest_team_dashboard_v5
      where season = $1
@@ -473,7 +535,7 @@ async function loadTeamPageData(
   const pool = webReaderPool();
   if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
 
-  const result = await pool.query(
+  const result = await approvedWebReaderQuery(pool,
     `select
        (select to_jsonb(team_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
@@ -551,7 +613,7 @@ async function loadLeaguePageData(
   const pool = webReaderPool();
   if (!pool) return { dashboard: undefined, comparisons: [], leagueMetrics: [] };
 
-  const result = await pool.query(
+  const result = await approvedWebReaderQuery(pool,
     `select
        (select to_jsonb(league_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
@@ -636,7 +698,7 @@ export async function getLeagueSettingMetrics(
 ): Promise<SettingMetricRow[]> {
   const pool = webReaderPool();
   if (!pool) return [];
-  const result = await pool.query(
+  const result = await approvedWebReaderQuery(pool,
     `select setting_metrics
      from reporting.latest_league_dashboard_v5
      where season = $1`,

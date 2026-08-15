@@ -116,10 +116,13 @@ test('injury type dossier links ranked selection to exact subtype evidence', asy
 
 test('reader preserves versioned family totals and exact subtype evidence', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
-  process.env.WEB_READER_DB_URL = 'postgres://fixture';
+  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   let queryText = '';
   globalThis.__urcWebReaderPool = {
     query: async (sql) => {
+      if (sql.includes('approved_dashboard_reader_target_v1')) {
+        return { rows: [{ target_attested: true }] };
+      }
       queryText = sql;
       return {
         rows: [{
@@ -233,11 +236,13 @@ test('team comparisons cross the client boundary with display aliases only', asy
 test('team comparison overall setting is a validated projection of released headline fields', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
   const priorAliases = process.env.TEAM_DISPLAY_ALIAS_JSON;
-  process.env.WEB_READER_DB_URL = 'postgres://fixture';
+  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
   globalThis.__urcWebReaderPool = {
-    query: async () => ({
-      rows: [{
+    query: async (sql) => ({
+      ...(sql.includes('approved_dashboard_reader_target_v1')
+        ? { rows: [{ target_attested: true }] }
+        : { rows: [{
         team_key: 'fixture-team',
         team: 'Fixture Team',
         coverage: { exposure_rows: 1, exposed_players: 1, weeks: 1, hours: 999, distance_km: 321.4, included_exposure_status: 'included' },
@@ -248,7 +253,7 @@ test('team comparison overall setting is a validated projection of released head
           { key: 'burden_per_1000h', label: 'Burden', value: 93.75, unit: 'days /1,000 h', numerator: 75, formula: '' },
         ],
         setting_metrics: [{ setting: 'match', label: 'Match', time_loss_injuries: 1, days_lost: 2, exposure_hours: 3, incidence_per_1000h: 4, burden_per_1000h: 5, mean_severity_days: 6 }],
-      }],
+      }] }),
     }),
   };
 
@@ -283,7 +288,7 @@ test('team comparison overall setting is a validated projection of released head
 
 test('league and team page metrics include the released overall benchmark', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
-  process.env.WEB_READER_DB_URL = 'postgres://fixture';
+  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   const coverage = {
     exposure_rows: 1,
     exposed_players: 1,
@@ -326,6 +331,9 @@ test('league and team page metrics include the released overall benchmark', asyn
   let releaseToken = 'release-a';
   globalThis.__urcWebReaderPool = {
     query: async (sql) => {
+      if (sql.includes('approved_dashboard_reader_target_v1')) {
+        return { rows: [{ target_attested: true }] };
+      }
       if (sql.includes('latest_dashboard_cache_token_v1')) {
         tokenQueryCount += 1;
         return { rows: [{ cache_token: releaseToken }] };
@@ -355,6 +363,9 @@ test('league and team page metrics include the released overall benchmark', asyn
     assert.equal(pageData.leagueMetrics[0].burden_per_1000h, 93.75);
 
     globalThis.__urcWebReaderPool.query = async (sql) => {
+      if (sql.includes('approved_dashboard_reader_target_v1')) {
+        return { rows: [{ target_attested: true }] };
+      }
       if (sql.includes('latest_dashboard_cache_token_v1')) {
         return { rows: [{ cache_token: 'release-a' }] };
       }

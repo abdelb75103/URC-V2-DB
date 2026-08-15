@@ -1,0 +1,43 @@
+{
+  "evidence_version": "urc_2025_26_reporting_contract_v1",
+  "decision_ref": "ANALYSIS-WINDOW-2025-26-01",
+  "season": "2025-26",
+  "analysis_tuple": {
+    "analysis_version": "v6",
+    "classification_view_version": "reporting_classification_2026-07-22_v2",
+    "cohort_view_version": "analysis_window_2025-26_2026-08-15_v1"
+  },
+  "reporting_window": {
+    "start": "2025-09-01",
+    "end": "2026-06-30",
+    "inclusive": true,
+    "retained_outside_window": ["2025-07", "2025-08"]
+  },
+  "fixture_contract": {
+    "official_source_required": true,
+    "fixture_count": 151,
+    "regular_season_matches_per_team": 18,
+    "team_count": 16,
+    "row_provenance_required": [
+      "upstream_match_id",
+      "source_locator",
+      "source_request_sha256",
+      "source_response_sha256",
+      "retrieved_at"
+    ]
+  },
+  "release_guard": {
+    "candidate_objects_required": [
+      "analysis.team_dashboard_release_candidates_analysis_window_v6",
+      "analysis.league_dashboard_release_candidates_analysis_window_v6"
+    ],
+    "status": "blocked_pending_evidence_backed_v6_computational_successor",
+    "year1_mutation": "prohibited"
+  },
+  "metric_contract": {
+    "incidence": "pooled time-loss injuries / pooled exposure hours * 1000",
+    "burden": "pooled days lost / pooled exposure hours * 1000",
+    "mean_severity": "pooled days lost / pooled time-loss injuries",
+    "match_exposure": "registered fixtures in the reporting window * 20 player-hours per team participation"
+  }
+}
