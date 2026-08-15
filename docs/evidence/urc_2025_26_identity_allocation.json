@@ -1,0 +1,48 @@
+{
+  "schema_version": "urc_2025_26_identity_allocation_evidence_v1",
+  "season": "2025-26",
+  "privacy": {
+    "direct_identifiers_in_git": false,
+    "reidentification_values_in_git": false,
+    "protected_bridge_retained_outside_git": true
+  },
+  "source_codebook": {
+    "sha256": "aaa12b1a69b0a2e4779cc20194b05c9a77c5b06f21e9a8eed21327f659e62180",
+    "rows": 1341,
+    "checksum_verified_backup_retained": true
+  },
+  "promoted_codebook": {
+    "sha256": "395ffb182e228fdd114112a1d0106a2a42a7b7a5c7f21c086a5e62150ebe98ae",
+    "rows": 1827,
+    "prefix_bytes_preserved": true,
+    "pseudonyms_unique": true,
+    "appended_ids_sequential": true,
+    "allocation_start": 1350,
+    "allocation_end": 1835
+  },
+  "allocation": {
+    "request_files": 16,
+    "normalised_request_groups": 492,
+    "existing_matches": 6,
+    "new_identities": 486,
+    "resolved_identities": 492,
+    "unresolved_identities": 0
+  },
+  "wales_italy_identity_gate": {
+    "accepted_candidate_groups": 98,
+    "per_team_groups": {
+      "benetton": 61,
+      "cardiff": 5,
+      "dragons": 3,
+      "ospreys": 0,
+      "scarlets": 18,
+      "zebre": 11
+    },
+    "binding_rejected_role_rows_unknown": 42388,
+    "blank_source_rows_unknown": 412,
+    "recovered_snapshot_sha256": "a9f8e05346bf205fc6e2447798335683c649577ee1c21597ed634ea3a201db0f",
+    "post_allocation_refresh_audit_sha256": "c46b462c13b5f0b31f1c26b6d9bbd6c49e64835c02fd99eca5b9669d2e71edd2"
+  },
+  "protected_promotion_audit_sha256": "f71bddb7ba015c97ce2f51625070d58ba81f1fe1372abd4520ebcebb87064f64",
+  "remaining_ingest_gate": "blocked_by_team_profiles_and_source_completeness_not_identity_allocation"
+}
