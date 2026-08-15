@@ -442,7 +442,14 @@ test('injury impact uses a fixed log severity scale without changing burden bubb
   assert.match(impact, /const IMPACT_BUBBLE_SIZE = \[160, 1_100\] as const/);
   assert.match(impact, /<ZAxis type="number" dataKey="bubble_burden" range=\{\[IMPACT_BUBBLE_SIZE\[0\], IMPACT_BUBBLE_SIZE\[1\]\]\} name="Burden" \/>/);
   assert.doesNotMatch(impact, /time_loss_injuries\s*[<>]/);
-  assert.doesNotMatch(impact, /ReferenceArea|ReferenceLine|median\(/);
+  // The shared chart keeps its established peer-relative quadrant overlay for
+  // both seasons. The split is derived from the full cohort, not just the
+  // highest-burden rows currently drawn.
+  assert.match(impact, /incidence: median\(cohortRows\.map/);
+  assert.match(impact, /severity: median\(cohortRows\.map/);
+  assert.match(impact, /<ReferenceArea/);
+  assert.match(impact, /<ReferenceLine x=\{quadrantSplit\.incidence\}/);
+  assert.match(impact, /<ReferenceLine y=\{quadrantSplit\.severity\}/);
   assert.doesNotMatch(impact, /aboveLogDomainRows|pending chart-domain review/);
   assert.doesNotMatch(dashboard, /View injury impact data|function AccessibleDataTable/);
 });
