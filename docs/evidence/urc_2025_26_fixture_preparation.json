@@ -1,0 +1,34 @@
+{
+  "schema_version": "urc_2025_26_fixture_preparation_v1",
+  "season": "2025-26",
+  "source": {
+    "kind": "official_urc_matchstats_response",
+    "immutable_local_storage": "outside_git",
+    "sha256": "411d683d87619bd35f1e6ce62951c0c1ad4aa1ccd57e042ac77651def0e017f6"
+  },
+  "prepared_fixture_csv": {
+    "storage": "protected_local_output_outside_git",
+    "sha256": "cf4add60a896ed2bb30be7b1af55234291ad7e63f081fe535d9f60964469a63f",
+    "row_count": 151,
+    "season_value": "2025-26",
+    "source_locator_format": "data.matchstats[index]"
+  },
+  "validation": {
+    "teams": 16,
+    "regular_season_fixtures": 144,
+    "regular_season_matches_per_team": 18,
+    "knockout_fixtures": 7,
+    "rounds": {
+      "1_to_18": 144,
+      "19_quarter_final": 4,
+      "20_semi_final": 2,
+      "21_final": 1
+    },
+    "required_row_invariants": [
+      "unique_non_null_match_id",
+      "non_null_match_date",
+      "non_null_opponents",
+      "no_self_match"
+    ]
+  }
+}
