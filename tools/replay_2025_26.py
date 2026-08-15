@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,7 @@ def write_methodology(ledger: dict[str, Any], path: Path) -> None:
         "",
         "The initial reporting cohort is inclusive from 1 September 2025 through 30 June 2026.",
         "July and August 2025 source evidence is retained in the append-only master but excluded from this initial reporting cohort.",
+        "Undated season-attributed injuries remain in applicable totals and non-monthly breakdowns, but cannot enter monthly series.",
         "",
         "## Decision ledger",
         "",
@@ -71,6 +73,46 @@ def write_methodology(ledger: dict[str, Any], path: Path) -> None:
         lines.extend([f"## {step['order']}. {step['rule_version']}", "", step.get("description", ""), ""])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def apply_reporting_window(
+    headers: list[str], rows: list[list[Any]], source_rows: list[int],
+) -> tuple[list[list[Any]], list[int], dict[str, int]]:
+    date_index = headers.index("Date Injured")
+    window_start = date.fromisoformat(WINDOW["start"])
+    window_end = date.fromisoformat(WINDOW["end"])
+    retained_rows: list[list[Any]] = []
+    retained_source_rows: list[int] = []
+    counts = {
+        "dated_in_window": 0,
+        "dated_outside_window": 0,
+        "undated_retained": 0,
+    }
+    for row, source_row in zip(rows, source_rows, strict=True):
+        value = FROZEN.comparison_value(row[date_index]).strip()
+        if not value:
+            counts["undated_retained"] += 1
+            retained_rows.append(row)
+            retained_source_rows.append(source_row)
+            continue
+        parsed = None
+        for pattern in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y"):
+            try:
+                parsed = datetime.strptime(value, pattern).date()
+                break
+            except ValueError:
+                pass
+        if parsed is None:
+            raise Year2ReplayError(
+                f"unparseable Date Injured at master row {source_row}"
+            )
+        if window_start <= parsed <= window_end:
+            counts["dated_in_window"] += 1
+            retained_rows.append(row)
+            retained_source_rows.append(source_row)
+        else:
+            counts["dated_outside_window"] += 1
+    return retained_rows, retained_source_rows, counts
 
 
 def replay(master_path: Path, ledger_path: Path, output_path: Path, manifest_path: Path, methodology_path: Path) -> dict[str, Any]:
@@ -84,14 +126,19 @@ def replay(master_path: Path, ledger_path: Path, output_path: Path, manifest_pat
     conflicts = [*pre_conflicts, *conflicts]
     if conflicts:
         raise Year2ReplayError("Year 2 replay produced conflicts; canonical output was not written")
+    rows, included_rows, reporting_window_filter = apply_reporting_window(
+        headers, rows, included_rows
+    )
     FROZEN.EXPORT.write_csv_atomic(output_path, headers, rows)
     payload = {
         "artifact_type": "replayed_included_injury_dataset",
         "season": SEASON,
         "reporting_window": WINDOW,
         "master_sha256": master_sha256,
+        "master_rows": len(master_rows),
         "ledger_sha256": sha256(ledger_path),
         "included_rows": len(rows),
+        "reporting_window_filter": reporting_window_filter,
         "included_source_rows_sha256": FROZEN.mapping_sha256(included_rows),
         "output_sha256": sha256(output_path),
         "columns": len(headers),
