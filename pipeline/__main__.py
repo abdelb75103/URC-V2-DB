@@ -24,6 +24,14 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from pipeline.season_contracts import (
+    YEAR2_2025_26_RELEASE_TUPLE,
+    fixture_contract_for,
+    fixture_provenance_rows,
+    release_contract_for,
+    validate_fixture_rows,
+)
+
 
 LOCATOR_FIELDS = [
     "source_archive_path",
@@ -5952,6 +5960,17 @@ def release_league(args: argparse.Namespace) -> None:
     cohort_view_version = clean_text(
         getattr(args, "cohort_view_version", "v2") or "v2"
     )
+    release_tuple = (
+        analysis_version,
+        classification_view_version,
+        cohort_view_version,
+    )
+    year2_release_contract = None
+    if season == "2025-26":
+        try:
+            year2_release_contract = release_contract_for(season, release_tuple)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
     supported_release_variants = {
         ("v2", "v2", "v2"),
         ("v2", "reporting_classification_2026-07-20_v1", "v2"),
@@ -5960,7 +5979,9 @@ def release_league(args: argparse.Namespace) -> None:
         ("v4", "reporting_classification_2026-07-22_v2", "lineage_2024-25_2026-07-24_v1"),
         ("v5", "reporting_classification_2026-07-22_v2", ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION),
     }
-    if (analysis_version, classification_view_version, cohort_view_version) not in supported_release_variants:
+    if season == "2025-26":
+        supported_release_variants.add(YEAR2_2025_26_RELEASE_TUPLE)
+    if release_tuple not in supported_release_variants:
         raise SystemExit(
             "unsupported analysis/classification/cohort version combination; "
             "V3 requires an accepted reporting classification and the season-bound cohort; "
@@ -6000,8 +6021,11 @@ def release_league(args: argparse.Namespace) -> None:
     # candidate views added by 20260724190000 contain exactly the rows v6
     # contributes for 'v4'; see that migration's header for the equivalence.
     league_candidate_view = (
-        "analysis.league_dashboard_release_candidates_analysis_window_v5"
-        if analysis_version == "v5"
+        year2_release_contract.league_candidate_view
+        if analysis_version == "v6" and year2_release_contract is not None
+        else (
+            "analysis.league_dashboard_release_candidates_analysis_window_v5"
+            if analysis_version == "v5"
         else (
             "analysis.league_dashboard_release_candidates_lineage_v4"
             if analysis_version == "v4"
@@ -6010,10 +6034,14 @@ def release_league(args: argparse.Namespace) -> None:
                 if uses_osiics_successor else "analysis.league_dashboard_release_candidates_v4"
             )
         )
+        )
     )
     team_candidate_view = (
-        "analysis.team_dashboard_release_candidates_analysis_window_v5"
-        if analysis_version == "v5"
+        year2_release_contract.team_candidate_view
+        if analysis_version == "v6" and year2_release_contract is not None
+        else (
+            "analysis.team_dashboard_release_candidates_analysis_window_v5"
+            if analysis_version == "v5"
         else (
             "analysis.team_dashboard_release_candidates_lineage_v4"
             if analysis_version == "v4"
@@ -6022,10 +6050,14 @@ def release_league(args: argparse.Namespace) -> None:
                 if uses_osiics_successor else "analysis.team_dashboard_release_candidates_v4"
             )
         )
+        )
     )
     release_rule_version = (
-        ANALYSIS_WINDOW_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
-        if analysis_version == "v5"
+        year2_release_contract.release_rule_version
+        if analysis_version == "v6" and year2_release_contract is not None
+        else (
+            ANALYSIS_WINDOW_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
+            if analysis_version == "v5"
         else (
             LINEAGE_LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
             if analysis_version == "v4"
@@ -6035,10 +6067,14 @@ def release_league(args: argparse.Namespace) -> None:
                 else LEAGUE_DASHBOARD_RELEASE_RULE_VERSION
             )
         )
+        )
     )
     release_reason_code = (
-        "league_dashboard_release_v5"
-        if analysis_version == "v5"
+        year2_release_contract.release_reason_code
+        if analysis_version == "v6" and year2_release_contract is not None
+        else (
+            "league_dashboard_release_v5"
+            if analysis_version == "v5"
         else (
             "league_dashboard_release_v4"
             if analysis_version == "v4"
@@ -6048,14 +6084,19 @@ def release_league(args: argparse.Namespace) -> None:
                 else "league_dashboard_release_v2"
             )
         )
+        )
     )
     decision_recorded_at = (
-        "2026-07-25"
-        if analysis_version == "v5"
+        year2_release_contract.decision_recorded_at
+        if analysis_version == "v6" and year2_release_contract is not None
+        else (
+            "2026-07-25"
+            if analysis_version == "v5"
         else (
             "2026-07-24"
             if analysis_version == "v4"
             else "2026-07-19" if analysis_version == "v3" else "2026-07-14"
+        )
         )
     )
     if preflight and preflight_file_arg:
@@ -6122,7 +6163,9 @@ def release_league(args: argparse.Namespace) -> None:
             file=sys.stderr,
         )
 
-    if analysis_version == "v5":
+    if analysis_version == "v6" and year2_release_contract is not None:
+        required_migrations = list(year2_release_contract.required_migrations)
+    elif analysis_version == "v5":
         required_migrations = [
             INJURY_MASTER_LINEAGE_MIGRATION_VERSION,
             LINEAGE_RESTATED_REPORTING_MIGRATION_VERSION,
@@ -6175,6 +6218,22 @@ def release_league(args: argparse.Namespace) -> None:
             "release-league requires tracked migrations "
             + ", ".join(required_migrations)
         )
+    if analysis_version == "v6" and year2_release_contract is not None:
+        availability_params = SqlParams()
+        availability_rows = query_sql(
+            f"select analysis.release_contract_candidates_available_v1("
+            f"{availability_params.text(season)}::text, "
+            f"{availability_params.text(analysis_version)}::text, "
+            f"{availability_params.text(classification_view_version)}::text, "
+            f"{availability_params.text(cohort_view_version)}::text"
+            f") as is_available",
+            availability_params.values,
+        )
+        if len(availability_rows) != 1 or availability_rows[0].get("is_available") is not True:
+            raise SystemExit(
+                "V6 release contract is unavailable: the exact tuple and all "
+                "registered candidate and semantic relations must exist"
+            )
 
     workflow_started = time.perf_counter()
     candidate_started = time.perf_counter()
@@ -6203,8 +6262,18 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit("accepted reporting classification evidence is missing")
     if cohort_view_version != "v2" and not cohort_evidence_sha256:
         raise SystemExit("accepted cohort evidence is missing")
-    if analysis_version in {"v3", "v4", "v5"}:
-        if analysis_version == "v5":
+    if analysis_version in {"v3", "v4", "v5", "v6"}:
+        if analysis_version == "v6" and year2_release_contract is not None:
+            semantic_cohort_view = year2_release_contract.injury_cohort_view
+            semantic_monthly_view = year2_release_contract.league_monthly_view
+            semantic_summary_view = year2_release_contract.league_summary_view
+            if not all((semantic_cohort_view, semantic_monthly_view, semantic_summary_view)):
+                raise SystemExit("V6 release contract lacks required semantic relations")
+            semantic_missing_error = "V6 semantic reconciliation returned no row"
+            semantic_mismatch_error = (
+                "V6 cohort, headline, or monthly reconciliation failed"
+            )
+        elif analysis_version == "v5":
             semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
             semantic_monthly_view = "analysis.analysis_window_league_monthly_v5"
             semantic_summary_view = "analysis.analysis_window_league_summary_v5"
@@ -6306,7 +6375,22 @@ def release_league(args: argparse.Namespace) -> None:
     cohort_adjudications: list[dict[str, Any]] = []
     if cohort_view_version != "v2":
         cohort_params = SqlParams()
-        if analysis_version == "v5":
+        if analysis_version == "v6" and year2_release_contract is not None:
+            if not all((
+                year2_release_contract.cohort_adjudication_ref,
+                year2_release_contract.cohort_evidence_locator,
+                year2_release_contract.cohort_evidence_sha256,
+                year2_release_contract.required_migrations,
+            )):
+                raise SystemExit("V6 release contract lacks immutable cohort evidence")
+            cohort_adjudication_filter = f"""
+              and adjudication_ref = {cohort_params.text(year2_release_contract.cohort_adjudication_ref)}
+              and evidence_sha256 = {cohort_params.text(year2_release_contract.cohort_evidence_sha256)}
+              and evidence_locator = {cohort_params.text(year2_release_contract.cohort_evidence_locator)}
+              and reviewer = 'Abdel Babiker'
+              and migration_version = {cohort_params.text(year2_release_contract.required_migrations[0])}
+            """
+        elif analysis_version == "v5":
             cohort_adjudication_filter = f"""
               and adjudication_ref = 'ANALYSIS-WINDOW-01'
               and evidence_sha256 = {cohort_params.text(ANALYSIS_WINDOW_V5_EVIDENCE_SHA256)}
@@ -6348,7 +6432,7 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit(
             f"release-league requires 16 complete team dashboard payloads, found {len(team_payloads)}"
         )
-    if analysis_version in {"v3", "v4", "v5"} and any(
+    if analysis_version in {"v3", "v4", "v5", "v6"} and any(
         "injury_cohort_filters" in row["dashboard"].get("coverage", {})
         for row in team_payloads
     ):
@@ -8612,6 +8696,7 @@ ANALYSIS_VIEW_VERSION_SUFFIX = "v1"
 PLAYER_HOURS_PER_TEAM_MATCH = 20.0
 URC_FIXTURES_2024_25_CORRECTED_PATH = "data/intake/2024-25/fixtures/urc_fixtures_2024_25.corrected.csv"
 URC_FIXTURES_2024_25_CORRECTED_SHA256 = "9608ff7e932cf76743eeb6de7d3bce6f5746ab1dfa4cec80a01f001ec2e9c39c"
+YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION = "20260815010000"
 
 
 def resolve_team_key(team: str) -> str:
@@ -8995,6 +9080,17 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
     if missing_columns:
         raise SystemExit(f"fixture file missing column(s): {', '.join(missing_columns)}")
 
+    # New-season fixture files must prove their complete official schedule
+    # structure before a checksum lookup or any database read. The frozen
+    # 2024-25 correction file deliberately stays on its existing path.
+    fixture_provenance: list[dict[str, object]] = []
+    if fixture_contract_for(season) is not None:
+        try:
+            validate_fixture_rows(season, rows)
+            fixture_provenance = fixture_provenance_rows(season, rows)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+
     file_hash = sha256_file(path)
     if str(path) == URC_FIXTURES_2024_25_CORRECTED_PATH and file_hash != URC_FIXTURES_2024_25_CORRECTED_SHA256:
         raise SystemExit(
@@ -9070,6 +9166,33 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         )"""
         for r in fixture_rows
     )
+    provenance_values_sql = ",".join(
+        f"""(
+          {params.text(season)}, {item['source_row_number']},
+          {params.text(item['upstream_match_id'])}, {params.text(item['source_locator'])},
+          {params.text(item['source_request_sha256'])}, {params.text(item['source_response_sha256'])},
+          {params.text(item['retrieved_at'])}::timestamptz, (select id from current_run)
+        )"""
+        for item in fixture_provenance
+    )
+    fixture_provenance_insert_sql = (
+        f"""
+      insert into curated.fixture_provenance_v1 (
+        season, source_row_number, upstream_match_id, source_locator,
+        source_request_sha256, source_response_sha256, retrieved_at, registered_by_run_id
+      ) values {provenance_values_sql}
+      on conflict (season, source_row_number) do nothing;
+        """
+        if fixture_provenance else ""
+    )
+    year2_fixture_migration_guard = (
+        f"""
+        if not exists (select 1 from supabase_migrations.schema_migrations where version = '{YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION}') then
+          raise exception 'load-curated-fixtures requires migration {YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION}_urc_2025_26_reporting_contract for Year 2 provenance';
+        end if;
+        """
+        if fixture_provenance else ""
+    )
     sql = f"""
       do $$
       begin
@@ -9079,6 +9202,7 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         if not exists (select 1 from audit.reason_codes where code = 'curated_fixture_load') then
           raise exception 'load-curated-fixtures requires reason code curated_fixture_load to be seeded by migration first';
         end if;
+        {year2_fixture_migration_guard}
       end $$;
 
       create temp table current_run on commit drop as
@@ -9106,6 +9230,7 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
       insert into curated.fixtures (season, stage, round, match_date, date_status, home_team_key, away_team_key, source_row_number, source_file_sha256, loaded_by_run_id)
       values {values_sql}
       on conflict (season, source_row_number) do nothing;
+      {fixture_provenance_insert_sql}
     """
     run_sql(sql, params.values)
     print(json.dumps({"status": "loaded", "season": season, "rows": len(fixture_rows), "file": str(path), "file_sha256": file_hash}, indent=2))

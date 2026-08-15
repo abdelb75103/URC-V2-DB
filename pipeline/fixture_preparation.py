@@ -11,10 +11,16 @@ import argparse
 import csv
 import hashlib
 import json
+import re
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+try:  # Supports both ``python -m pipeline.fixture_preparation`` and direct use.
+    from pipeline.season_contracts import validate_fixture_rows
+except ModuleNotFoundError:  # pragma: no cover - exercised by the direct CLI
+    from season_contracts import validate_fixture_rows
 
 
 SEASON = "2025-26"
@@ -32,6 +38,9 @@ OUTPUT_FIELDS = (
     "source_file_sha256",
     "source_row_number",
     "source_locator",
+    "source_request_sha256",
+    "source_response_sha256",
+    "retrieved_at",
 )
 STAGES = {
     **{round_value: "Regular season" for round_value in range(1, 19)},
@@ -68,8 +77,11 @@ def _date(value: object, locator: str) -> str:
         raise ValueError(f"unparseable match datetime at {locator}: {text!r}") from error
 
 
-def _row(match: dict[str, Any], index: int, source_sha256: str) -> dict[str, str]:
-    locator = f"data.matchstats[{index}]"
+def _row(
+    match: dict[str, Any], index: int, source_sha256: str, *, source_url: str,
+    source_request_sha256: str, retrieved_at: str,
+) -> dict[str, str]:
+    locator = f"{source_url}#data.matchstats[{index}]"
     stats = match.get("stats_data")
     if not isinstance(stats, dict):
         raise ValueError(f"missing stats_data at {locator}")
@@ -105,39 +117,48 @@ def _row(match: dict[str, Any], index: int, source_sha256: str) -> dict[str, str
         "source_file_sha256": source_sha256,
         "source_row_number": str(index + 2),
         "source_locator": locator,
+        "source_request_sha256": source_request_sha256,
+        "source_response_sha256": source_sha256,
+        "retrieved_at": retrieved_at,
     }
 
 
 def _validate(rows: list[dict[str, str]]) -> None:
-    if len(rows) != 151:
-        raise ValueError(f"expected 151 fixtures, got {len(rows)}")
-    match_ids = [row["match_id"] for row in rows]
-    if len(match_ids) != len(set(match_ids)):
-        raise ValueError("fixture match IDs must be unique")
-    stage_counts = Counter(row["stage"] for row in rows)
-    if dict(stage_counts) != EXPECTED_STAGE_COUNTS:
-        raise ValueError(f"unexpected fixture stages: {dict(stage_counts)}")
-    teams = {row[side] for row in rows for side in ("home_team", "away_team")}
-    if len(teams) != 16:
-        raise ValueError(f"expected 16 teams, got {len(teams)}")
-    regular_matches = Counter(
-        team
-        for row in rows
-        if row["stage"] == "Regular season"
-        for team in (row["home_team"], row["away_team"])
-    )
-    invalid = {team: count for team, count in regular_matches.items() if count != 18}
-    if invalid or len(regular_matches) != 16:
-        raise ValueError(f"each team must have exactly 18 regular-season matches: {invalid}")
+    validate_fixture_rows(SEASON, rows)
+
+
+def _validate_provenance(
+    *, source_url: str, source_request_sha256: str, retrieved_at: str,
+) -> tuple[str, str, str]:
+    source_url = _text(source_url)
+    source_request_sha256 = _text(source_request_sha256).lower()
+    retrieved_at = _text(retrieved_at)
+    if not source_url.startswith("https://"):
+        raise ValueError("fixture source URL must use https")
+    if not re.fullmatch(r"[0-9a-f]{64}", source_request_sha256):
+        raise ValueError("fixture source request checksum must be a SHA-256 hex digest")
+    try:
+        parsed = datetime.fromisoformat(retrieved_at.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError("fixture retrieval timestamp must be ISO-8601") from error
+    if parsed.tzinfo is None:
+        raise ValueError("fixture retrieval timestamp must include a timezone")
+    return source_url.rstrip("/"), source_request_sha256, retrieved_at
 
 
 def prepare_urc_2025_26_fixtures(
-    source: Path, output: Path, *, expected_source_sha256: str | None = None
+    source: Path, output: Path, *, expected_source_sha256: str | None = None,
+    source_url: str, source_request_sha256: str, retrieved_at: str,
 ) -> dict[str, object]:
     """Validate an official response and write its public loader-contract CSV."""
     resolved_output = output.resolve()
     if resolved_output.is_relative_to(REPOSITORY_ROOT):
         raise ValueError("prepared fixture output must remain outside the repository")
+    source_url, source_request_sha256, retrieved_at = _validate_provenance(
+        source_url=source_url,
+        source_request_sha256=source_request_sha256,
+        retrieved_at=retrieved_at,
+    )
     source_sha256 = sha256_file(source)
     if expected_source_sha256 and source_sha256 != expected_source_sha256:
         raise ValueError(
@@ -150,7 +171,18 @@ def prepare_urc_2025_26_fixtures(
         raise ValueError(f"invalid official fixture response: {source}") from error
     if not isinstance(matches, list):
         raise ValueError("official fixture response matchstats must be an array")
-    rows = [_row(match, index, source_sha256) for index, match in enumerate(matches) if isinstance(match, dict)]
+    rows = [
+        _row(
+            match,
+            index,
+            source_sha256,
+            source_url=source_url,
+            source_request_sha256=source_request_sha256,
+            retrieved_at=retrieved_at,
+        )
+        for index, match in enumerate(matches)
+        if isinstance(match, dict)
+    ]
     if len(rows) != len(matches):
         raise ValueError("official fixture response contains a non-object fixture")
     _validate(rows)
@@ -175,9 +207,17 @@ def main() -> None:
     parser.add_argument("--source", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--expected-source-sha256", default=OFFICIAL_URC_2025_26_RESPONSE_SHA256)
+    parser.add_argument("--source-url", default="https://www.unitedrugby.com/graphql")
+    parser.add_argument("--source-request-sha256", required=True)
+    parser.add_argument("--retrieved-at", required=True)
     args = parser.parse_args()
     print(json.dumps(prepare_urc_2025_26_fixtures(
-        args.source, args.output, expected_source_sha256=args.expected_source_sha256
+        args.source,
+        args.output,
+        expected_source_sha256=args.expected_source_sha256,
+        source_url=args.source_url,
+        source_request_sha256=args.source_request_sha256,
+        retrieved_at=args.retrieved_at,
     ), indent=2, sort_keys=True))
 
 

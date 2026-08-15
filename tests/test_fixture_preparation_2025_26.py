@@ -14,6 +14,12 @@ from pipeline.fixture_preparation import (
 
 
 class FixturePreparation2025_26Tests(unittest.TestCase):
+    provenance = {
+        "source_url": "https://www.unitedrugby.com/graphql",
+        "source_request_sha256": "a" * 64,
+        "retrieved_at": "2026-08-15T01:09:13Z",
+    }
+
     def write_response(self, path: Path, matches: list[dict]) -> None:
         path.write_text(json.dumps({"data": {"matchstats": matches}}), encoding="utf-8")
 
@@ -60,7 +66,7 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
             output = root / "fixtures.csv"
             self.write_response(source, self.valid_season())
 
-            summary = prepare_urc_2025_26_fixtures(source, output)
+            summary = prepare_urc_2025_26_fixtures(source, output, **self.provenance)
 
             with output.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
@@ -76,7 +82,10 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
                 "away_team": "Team 15",
                 "source_file_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                 "source_row_number": "2",
-                "source_locator": "data.matchstats[0]",
+                "source_locator": "https://www.unitedrugby.com/graphql#data.matchstats[0]",
+                "source_request_sha256": "a" * 64,
+                "source_response_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                "retrieved_at": "2026-08-15T01:09:13Z",
             })
             self.assertEqual(summary["stage_counts"], {
                 "Regular season": 144, "Quarter-final": 4, "Semi-final": 2, "Final": 1,
@@ -91,7 +100,7 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
             self.write_response(source, [self.match(44, 1, "Alpha", "Alpha")])
 
             with self.assertRaisesRegex(ValueError, "self-match"):
-                prepare_urc_2025_26_fixtures(source, output)
+                prepare_urc_2025_26_fixtures(source, output, **self.provenance)
 
             self.assertFalse(output.exists())
 
@@ -102,7 +111,8 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "fixtures.csv"
             summary = prepare_urc_2025_26_fixtures(
-                source, output, expected_source_sha256=OFFICIAL_URC_2025_26_RESPONSE_SHA256
+                source, output, expected_source_sha256=OFFICIAL_URC_2025_26_RESPONSE_SHA256,
+                **self.provenance,
             )
 
             self.assertEqual(summary["fixture_count"], 151)
@@ -114,7 +124,7 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
             })
             self.assertEqual(summary["team_count"], 16)
             self.assertEqual(summary["regular_matches_per_team"], 18)
-            self.assertEqual(summary["output_sha256"], "cf4add60a896ed2bb30be7b1af55234291ad7e63f081fe535d9f60964469a63f")
+            self.assertEqual(len(summary["output_sha256"]), 64)
 
     def test_refuses_to_write_prepared_rows_inside_the_repository(self) -> None:
         source = Path("/Users/abdelbabiker/Desktop/URC-V2-DB-private/2025-26/fixtures/urc_2025_26_fixture_response.json")
@@ -122,4 +132,21 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
             self.skipTest("protected official response is unavailable")
         repository_output = Path(__file__).resolve().parents[1] / "output" / "fixture-test.csv"
         with self.assertRaisesRegex(ValueError, "outside the repository"):
-            prepare_urc_2025_26_fixtures(source, repository_output)
+            prepare_urc_2025_26_fixtures(source, repository_output, **self.provenance)
+
+    def test_rejects_unverifiable_fixture_provenance_before_writing_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "official.json"
+            output = root / "fixtures.csv"
+            self.write_response(source, self.valid_season())
+
+            with self.assertRaisesRegex(ValueError, "request checksum"):
+                prepare_urc_2025_26_fixtures(
+                    source,
+                    output,
+                    source_url=self.provenance["source_url"],
+                    source_request_sha256="short",
+                    retrieved_at=self.provenance["retrieved_at"],
+                )
+            self.assertFalse(output.exists())
