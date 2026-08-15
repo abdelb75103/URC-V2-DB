@@ -43,6 +43,26 @@ class FixtureContract:
     regular_matches_per_team: int
     stage_counts: Mapping[str, int]
     required_columns: frozenset[str]
+    source_locator_prefix: str
+    source_request_sha256: str
+    upstream_response_sha256: str
+    prepared_file_sha256: str
+    retrieved_at: str
+    evidence_locator: str
+    evidence_sha256: str
+
+
+@dataclass(frozen=True)
+class MigrationContract:
+    """Exact migration identity expected by a release route."""
+
+    version: str
+    name: str
+    sha256: str
+
+    @property
+    def statement(self) -> str:
+        return f"migration_sha256={self.sha256}"
 
 
 @dataclass(frozen=True)
@@ -53,17 +73,21 @@ class ReleaseContract:
     cohort_view_version: str
     league_candidate_view: str | None = None
     team_candidate_view: str | None = None
+    league_team_candidate_view: str | None = None
     member_view: str | None = None
     injury_cohort_view: str | None = None
     league_monthly_view: str | None = None
     league_summary_view: str | None = None
     required_migrations: tuple[str, ...] = ()
+    required_migration_contracts: tuple[MigrationContract, ...] = ()
     release_rule_version: str | None = None
     release_reason_code: str | None = None
     decision_recorded_at: str | None = None
     cohort_adjudication_ref: str | None = None
     cohort_evidence_locator: str | None = None
     cohort_evidence_sha256: str | None = None
+    classification_rule_evidence_locator: str | None = None
+    classification_rule_evidence_sha256: str | None = None
 
     @property
     def release_tuple(self) -> ReleaseTuple:
@@ -104,6 +128,13 @@ YEAR2_2025_26_FIXTURE_CONTRACT = FixtureContract(
             "retrieved_at",
         }
     ),
+    source_locator_prefix="https://www.unitedrugby.com/graphql#data.matchstats[",
+    source_request_sha256="57f968c98a21c0fc3f8350c03beffdc5ccfa89e7221e3ba13200bae16ff6b1af",
+    upstream_response_sha256="411d683d87619bd35f1e6ce62951c0c1ad4aa1ccd57e042ac77651def0e017f6",
+    prepared_file_sha256="071520f3f3c3dbe1979c8a42936d42bed9bc9b61ecf82131cc8151417d035d1b",
+    retrieved_at="2026-08-15T01:09:13Z",
+    evidence_locator="docs/evidence/urc_2025_26_fixture_preparation.json",
+    evidence_sha256="7b9a79ae5aeb3d8895d31e2c8d48ac0a555b40d772739b7949acac57f3a6d7ff",
 )
 
 YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
@@ -113,17 +144,37 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     cohort_view_version=YEAR2_2025_26_RELEASE_TUPLE[2],
     league_candidate_view="analysis.league_dashboard_release_candidates_analysis_window_v6",
     team_candidate_view="analysis.team_dashboard_release_candidates_analysis_window_v6",
+    league_team_candidate_view="analysis.league_team_dashboard_release_candidates_analysis_window_v6",
     member_view="analysis.league_member_releases_v6",
     injury_cohort_view="analysis.analysis_window_injury_cohort_v6",
     league_monthly_view="analysis.analysis_window_league_monthly_v6",
     league_summary_view="analysis.analysis_window_league_summary_v6",
     required_migrations=("20260815010000", "20260815020000", "20260815030000"),
+    required_migration_contracts=(
+        MigrationContract(
+            version="20260815010000",
+            name="urc_2025_26_reporting_contract",
+            sha256="d150177f144d08346a0ffc5b63821a840a411be5ded07d21a9d4b3f954165cac",
+        ),
+        MigrationContract(
+            version="20260815020000",
+            name="urc_2025_26_reporting_v6",
+            sha256="9953d18287e8481fc770c7bb401ee6d2a4046dccd8781f62381385e1869cceb1",
+        ),
+        MigrationContract(
+            version="20260815030000",
+            name="urc_2025_26_team_release_v6",
+            sha256="6a66b67e514be5cdba25f78438caad5b7ce8fc7bfb7dc83ee114a37efe9f990f",
+        ),
+    ),
     release_rule_version="league_dashboard_release_2026-08-15_v6",
     release_reason_code="league_dashboard_release_v6",
     decision_recorded_at="2026-08-15",
     cohort_adjudication_ref="ANALYSIS-WINDOW-2025-26-01",
     cohort_evidence_locator="docs/evidence/urc_2025_26_reporting_contract.json",
-    cohort_evidence_sha256="a9c5ebc40a063564d70a2cc2e1f45fddb7069a900d398bea5b32208b65eaf3fe",
+    cohort_evidence_sha256="e8d82b7d5b89c32576b806bb33778601030538ba8fb56fc1a68febc5f56d3fd2",
+    classification_rule_evidence_locator="docs/evidence/urc_2025_26_classification_rule.json",
+    classification_rule_evidence_sha256="e898320fc5fa8cdfbf4fde4382d1ade62c87fe2dbef820ecf72b557bfb07cd5f",
 )
 
 _FIXTURE_CONTRACTS = {YEAR2_2025_26_FIXTURE_CONTRACT.season: YEAR2_2025_26_FIXTURE_CONTRACT}
@@ -201,12 +252,13 @@ def validate_fixture_rows(
             source_response_sha256 = str(row.get("source_response_sha256", "")).strip()
             source_file_sha256 = str(row.get("source_file_sha256", "")).strip()
             retrieved_at = str(row.get("retrieved_at", "")).strip()
-            if not source_locator.startswith("https://"):
-                raise ValueError(f"fixture provenance locator must be public https at source row {index}")
-            if not re.fullmatch(r"[0-9a-f]{64}", source_request_sha256):
-                raise ValueError(f"fixture request checksum must be SHA-256 at source row {index}")
-            if not re.fullmatch(r"[0-9a-f]{64}", source_response_sha256):
-                raise ValueError(f"fixture response checksum must be SHA-256 at source row {index}")
+            source_locator_pattern = re.escape(contract.source_locator_prefix) + r"[0-9]+\]"
+            if not re.fullmatch(source_locator_pattern, source_locator):
+                raise ValueError(f"fixture provenance locator does not match committed evidence at source row {index}")
+            if source_request_sha256 != contract.source_request_sha256:
+                raise ValueError(f"fixture request checksum does not match committed evidence at source row {index}")
+            if source_response_sha256 != contract.upstream_response_sha256:
+                raise ValueError(f"fixture response checksum does not match committed evidence at source row {index}")
             if source_file_sha256 != source_response_sha256:
                 raise ValueError(f"fixture response checksum mismatch at source row {index}")
             try:
@@ -215,6 +267,8 @@ def validate_fixture_rows(
                 raise ValueError(f"fixture retrieval timestamp is invalid at source row {index}") from error
             if parsed_retrieved_at.tzinfo is None:
                 raise ValueError(f"fixture retrieval timestamp lacks timezone at source row {index}")
+            if retrieved_at != contract.retrieved_at:
+                raise ValueError(f"fixture retrieval timestamp does not match committed evidence at source row {index}")
         match_ids.append(match_id)
         teams.update((home, away))
         stage = str(row.get("stage", "")).strip()
@@ -248,18 +302,92 @@ def validate_fixture_rows(
 
 
 def fixture_provenance_rows(
-    season: str, rows: Sequence[Mapping[str, str]],
+    season: str, rows: Sequence[Mapping[str, str]], *, prepared_file_sha256: str,
 ) -> list[dict[str, object]]:
-    """Return insert-ready public fixture provenance after complete validation."""
+    """Return provenance binding prepared CSV bytes to official response bytes."""
     validate_fixture_rows(season, rows)
+    contract = fixture_contract_for(season)
+    if contract is None:  # validate_fixture_rows above already guards this.
+        raise ValueError(f"no explicit fixture contract for season {season!r}")
+    if prepared_file_sha256 != contract.prepared_file_sha256:
+        raise ValueError("prepared fixture file checksum does not match committed evidence")
     return [
         {
             "source_row_number": int(str(row["source_row_number"])),
             "upstream_match_id": str(row["match_id"]).strip(),
             "source_locator": str(row["source_locator"]).strip(),
+            "prepared_file_sha256": prepared_file_sha256,
             "source_request_sha256": str(row["source_request_sha256"]).strip(),
-            "source_response_sha256": str(row["source_response_sha256"]).strip(),
+            "upstream_response_sha256": str(row["source_response_sha256"]).strip(),
             "retrieved_at": str(row["retrieved_at"]).strip(),
         }
         for row in rows
     ]
+
+
+def validate_fixture_provenance_binding(
+    season: str,
+    fixture_rows: Sequence[Mapping[str, str]],
+    provenance_rows: Sequence[Mapping[str, object]],
+) -> None:
+    """Fail closed unless the complete prepared fixture set has exact source proof.
+
+    This is the pure counterpart to ``analysis.accepted_urc_fixtures_v6``.  It
+    deliberately compares a prepared CSV checksum only with the provenance's
+    prepared checksum, while preserving the distinct upstream JSON response
+    checksum as source evidence.
+    """
+    contract = fixture_contract_for(season)
+    if contract is None:
+        return
+    summary = validate_fixture_rows(season, fixture_rows)
+    expected_count = int(summary["fixture_count"])
+    if len(provenance_rows) != expected_count:
+        raise ValueError(
+            "fixture provenance is incomplete: "
+            f"expected {expected_count} rows, found {len(provenance_rows)}"
+        )
+
+    source_by_row: dict[int, Mapping[str, str]] = {}
+    for row in fixture_rows:
+        source_row_number = int(str(row["source_row_number"]))
+        if source_row_number in source_by_row:
+            raise ValueError("fixture source rows must be unique")
+        source_by_row[source_row_number] = row
+
+    provenance_by_row: dict[int, Mapping[str, object]] = {}
+    prepared_hashes: set[str] = set()
+    upstream_response_hashes: set[str] = set()
+    for provenance in provenance_rows:
+        source_row_number = int(str(provenance.get("source_row_number", "")))
+        if source_row_number in provenance_by_row:
+            raise ValueError("fixture provenance source rows must be unique")
+        provenance_by_row[source_row_number] = provenance
+        prepared_file_sha256 = str(provenance.get("prepared_file_sha256", "")).strip()
+        upstream_response_sha256 = str(provenance.get("upstream_response_sha256", "")).strip()
+        if not re.fullmatch(r"[0-9a-f]{64}", prepared_file_sha256):
+            raise ValueError("fixture provenance prepared checksum must be SHA-256")
+        if not re.fullmatch(r"[0-9a-f]{64}", upstream_response_sha256):
+            raise ValueError("fixture provenance upstream response checksum must be SHA-256")
+        prepared_hashes.add(prepared_file_sha256)
+        upstream_response_hashes.add(upstream_response_sha256)
+
+    if set(source_by_row) != set(provenance_by_row):
+        raise ValueError("fixture provenance is incomplete for the prepared fixture source rows")
+    if len(prepared_hashes) != 1:
+        raise ValueError("fixture provenance is not bound to one set of prepared fixture bytes")
+    if len(upstream_response_hashes) != 1:
+        raise ValueError("fixture provenance must name exactly one upstream response")
+
+    for source_row_number, source in source_by_row.items():
+        provenance = provenance_by_row[source_row_number]
+        if (
+            str(provenance.get("upstream_match_id", "")).strip() != str(source["match_id"]).strip()
+            or str(provenance.get("source_locator", "")).strip() != str(source["source_locator"]).strip()
+            or str(provenance.get("source_request_sha256", "")).strip()
+            != str(source["source_request_sha256"]).strip()
+            or str(provenance.get("upstream_response_sha256", "")).strip()
+            != str(source["source_response_sha256"]).strip()
+            or str(provenance.get("retrieved_at", "")).strip() != str(source["retrieved_at"]).strip()
+        ):
+            raise ValueError("fixture provenance does not match the official source response")

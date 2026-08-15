@@ -47,6 +47,9 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = inspect.getsource(pipeline.release_league)
+        cls.release_manifest_source = inspect.getsource(
+            pipeline.league_release_manifest_document
+        )
 
     def test_v5_exact_tuple_reaches_its_direct_league_candidate_view(self) -> None:
         queries: list[str] = []
@@ -355,7 +358,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
     def test_preflight_and_promotion_write_workflow_manifests(self) -> None:
         self.assertIn("urc_league_release_preflight_manifest_v1", self.source)
         self.assertIn("reviewed_preflight_manifest_sha256", self.source)
-        self.assertIn("urc_league_release_manifest_v1", self.source)
+        self.assertIn("urc_league_release_manifest_v1", self.release_manifest_source)
         self.assertIn("write_team_dashboard_parity_exports(", self.source)
         self.assertIn("league preflight manifest is required", self.source)
         for bound_field in (

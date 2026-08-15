@@ -1,0 +1,45 @@
+{
+  "schema_version": "urc_2025_26_classification_rule_v1",
+  "season": "2025-26",
+  "classification_view_version": "reporting_classification_2026-07-22_v2",
+  "application_scope": "catalogue_and_conservative_inference_only",
+  "projection_algorithm": "SHA-256 of UTF-8 JSON array; source order retained; object keys sorted; separators comma/colon; ensure_ascii=false",
+  "mapping_catalogue_projection": {
+    "fields": [
+      "source_code",
+      "mapped_body_location_code",
+      "mapped_injury_type_code"
+    ],
+    "row_count": 52,
+    "sha256": "79767a9fc4212309c8fa01749ddf47541a251e467897268a9c8edeb4265553ff"
+  },
+  "multi_type_catalogue_projection": {
+    "fields": [
+      "source_code",
+      "mapped_body_location_code",
+      "diagnosis_code",
+      "diagnosis_label",
+      "candidate_injury_types",
+      "analysis_primary_type"
+    ],
+    "row_count": 1,
+    "sha256": "d7aa844af7a4e6a53072f90e129da5357dfd4523aef415ecf84fd447702db55a"
+  },
+  "conservative_rules": [
+    "A non-Unknown curated controlled body or injury-type value always wins.",
+    "Positive concussion evidence is accepted only from an exact concussion code or explicit positive text after the documented negation checks.",
+    "An exact catalogue mapping applies only where the corresponding controlled value remains Unknown.",
+    "A strict OSIICS body prefix or explicit body text applies only when it yields one unique body candidate.",
+    "An exact mapped injury type applies only when its mapped body matches the effective body.",
+    "Explicit injury-type text applies only when it yields one unique type candidate and the body evidence is absent or consistent.",
+    "The one declared multi-type catalogue row is counted once through its nonspecific primary type while retaining its candidate types.",
+    "Ambiguous, conflicting, weak, or unrecognised evidence remains Unknown."
+  ],
+  "excluded_from_identity": [
+    "2024-25 source rows",
+    "2024-25 row adjudications",
+    "2024-25 expected live case counts",
+    "2024-25 candidate and Unknown outcome counts",
+    "2024-25 release views and payloads"
+  ]
+}

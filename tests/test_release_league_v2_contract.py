@@ -65,7 +65,14 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertEqual(write_sql.count("join {league_candidate_view} candidate"), 1)
         self.assertEqual(write_sql.count("join {team_candidate_view} candidate"), 1)
         self.assertIn("join reviewed_league_members expected", write_sql)
-        self.assertNotIn("params.jsonb(dashboard)", write_sql)
+        # Ordinary releases still re-read bound database candidates. The one
+        # reviewed JSON insertion is confined to the V6-only retained-bundle
+        # rollback branch, which the frozen V2 route cannot enter.
+        self.assertEqual(write_sql.count("params.jsonb(dashboard)"), 1)
+        self.assertLess(
+            write_sql.index("if rollback_of_release_id:"),
+            write_sql.index("params.jsonb(dashboard)"),
+        )
 
     def test_promotion_rehashes_the_stored_jsonb_bundle(self) -> None:
         self.assertIn("stored_bundle_hash", self.source)

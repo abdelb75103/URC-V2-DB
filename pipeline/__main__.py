@@ -30,6 +30,7 @@ from pipeline.season_contracts import (
     fixture_provenance_rows,
     release_contract_for,
     validate_fixture_rows,
+    validate_fixture_provenance_binding,
 )
 
 
@@ -4697,6 +4698,180 @@ def release_failure_cleanup_statement(
     return sql, params.values
 
 
+def assert_checksum_bound_migrations(
+    contracts: tuple[Any, ...], operation: str,
+    *, local_evidence_records: list[dict[str, str]] | None = None,
+) -> None:
+    """Fail closed unless exact local migration bytes equal registered rows."""
+    if not contracts or len({item.version for item in contracts}) != len(contracts):
+        raise SystemExit(f"{operation} lacks unique checksum-bound migration contracts")
+    root = Path(__file__).resolve().parents[1]
+    for item in contracts:
+        migration_path = root / "supabase" / "migrations" / f"{item.version}_{item.name}.sql"
+        if not migration_path.is_file() or sha256_file(migration_path) != item.sha256:
+            raise SystemExit(
+                f"{operation} local migration bytes do not match the approved contract: {item.version}"
+            )
+    if local_evidence_records is not None:
+        assert_local_evidence_bytes(local_evidence_records, operation)
+    migration_params = SqlParams()
+    registered = query_sql(
+        f"select version, name, statements from supabase_migrations.schema_migrations "
+        f"where version = any(array[{', '.join(migration_params.text(item.version) for item in contracts)}])",
+        migration_params.values,
+    )
+    expected = {
+        item.version: (item.name, [item.statement])
+        for item in contracts
+    }
+    actual = {
+        clean_text(row.get("version")): (clean_text(row.get("name")), row.get("statements"))
+        for row in registered
+    }
+    if actual != expected:
+        raise SystemExit(
+            f"{operation} requires exact registered migration checksums for "
+            + ", ".join(item.version for item in contracts)
+        )
+
+
+def assert_checksum_bound_release_migrations(contract: Any, operation: str) -> None:
+    """Fail closed unless local V6 migration bytes equal the registered rows."""
+    contracts = tuple(contract.required_migration_contracts)
+    versions = tuple(contract.required_migrations)
+    if not contracts or {item.version for item in contracts} != set(versions):
+        raise SystemExit(f"{operation} lacks complete checksum-bound migration contracts")
+    assert_checksum_bound_migrations(
+        contracts,
+        operation,
+        local_evidence_records=year2_release_local_evidence_records(contract),
+    )
+
+
+def year2_release_local_evidence_records(contract: Any) -> list[dict[str, str]]:
+    fixture_contract = fixture_contract_for("2025-26")
+    if fixture_contract is None:
+        raise SystemExit("V6 release contract lacks the Year 2 fixture evidence identity")
+    records = [
+        {
+            "role": "fixture_preparation",
+            "locator": fixture_contract.evidence_locator,
+            "sha256": fixture_contract.evidence_sha256,
+        },
+        {
+            "role": "cohort_rule",
+            "locator": clean_text(contract.cohort_evidence_locator),
+            "sha256": clean_text(contract.cohort_evidence_sha256),
+        },
+        {
+            "role": "classification_rule",
+            "locator": clean_text(contract.classification_rule_evidence_locator),
+            "sha256": clean_text(contract.classification_rule_evidence_sha256),
+        },
+    ]
+    if any(not item["locator"] or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) for item in records):
+        raise SystemExit("V6 release contract lacks exact local evidence identities")
+    return records
+
+
+def assert_local_evidence_bytes(records: list[dict[str, str]], operation: str) -> None:
+    """Bind claimed safe evidence identities to the repository bytes in use."""
+    root = Path(__file__).resolve().parents[1]
+    for item in records:
+        locator = clean_text(item.get("locator"))
+        expected_sha256 = clean_text(item.get("sha256"))
+        path = (root / locator).resolve()
+        if root not in path.parents or not path.is_file() or sha256_file(path) != expected_sha256:
+            raise SystemExit(
+                f"{operation} local evidence bytes do not match the approved contract: {item.get('role')}"
+            )
+
+
+def v6_team_preflight_manifest(
+    *, team_key: str, contract: Any, candidate: dict[str, Any],
+    predecessor: dict[str, Any] | None, preflight_file_sha256: str,
+) -> dict[str, object]:
+    """Build the exact, checksum-bound local review record for one V6 team."""
+    provenance = run_provenance()
+    return {
+        "schema_version": "urc_team_release_v6_preflight_v1",
+        "season": "2025-26",
+        "team_key": team_key,
+        "release_tuple": {
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "cohort_view_version": contract.cohort_view_version,
+        },
+        "candidate_view": contract.team_candidate_view,
+        "curated_build_id": candidate["curated_build_id"],
+        "payload_sha256": candidate["payload_sha256"],
+        "classification_evidence_sha256": candidate["classification_evidence_sha256"],
+        "cohort_evidence_sha256": candidate["cohort_evidence_sha256"],
+        "local_evidence_files": year2_release_local_evidence_records(contract),
+        "required_migrations": [
+            {
+                "version": item.version,
+                "name": item.name,
+                "sha256": item.sha256,
+            }
+            for item in contract.required_migration_contracts
+        ],
+        "provenance": {
+            "code_version": provenance["code_version"],
+            "dependency_lock_hash": provenance["dependency_lock_hash"],
+        },
+        "predecessor_release_id": predecessor["release_id"] if predecessor else None,
+        "preflight_file_sha256": preflight_file_sha256,
+    }
+
+
+def read_v6_team_reviewed_preflight(
+    *, reviewed_path: Path, team_key: str, contract: Any,
+    candidate: dict[str, Any], predecessor: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Read only a full, exact manifest bound to the reviewed payload bytes."""
+    manifest_path = Path(f"{reviewed_path}.manifest.json")
+    if not reviewed_path.is_file() or not manifest_path.is_file():
+        raise SystemExit("reviewed V6 preflight and its manifest are required")
+    try:
+        reviewed = json.loads(reviewed_path.read_bytes())
+        manifest = json.loads(manifest_path.read_bytes())
+    except json.JSONDecodeError as error:
+        raise SystemExit("reviewed V6 preflight artefacts must be valid JSON") from error
+    if not isinstance(reviewed, dict) or not isinstance(manifest, dict):
+        raise SystemExit("reviewed V6 preflight manifest and payload must be JSON objects")
+    expected_manifest = v6_team_preflight_manifest(
+        team_key=team_key,
+        contract=contract,
+        candidate=candidate,
+        predecessor=predecessor,
+        preflight_file_sha256=sha256_file(reviewed_path),
+    )
+    if manifest != expected_manifest:
+        raise SystemExit("reviewed V6 preflight manifest does not bind the exact active candidate")
+    return reviewed
+
+
+def v6_team_release_label(
+    *, team_key: str, curated_build_id: str, payload_sha256: str,
+    attempt_id: str | None = None,
+) -> str:
+    """Return an append-only V6 identity, independent of public payload bytes."""
+    try:
+        build_token = str(uuid.UUID(curated_build_id))
+    except ValueError as error:
+        raise SystemExit("V6 team candidate has an invalid curated build ID") from error
+    if not re.fullmatch(r"[0-9a-f]{64}", payload_sha256):
+        raise SystemExit("V6 team candidate lacks its canonical database payload hash")
+    release_attempt = clean_text(attempt_id or uuid.uuid4().hex)
+    if not re.fullmatch(r"[0-9a-f]{12,32}", release_attempt):
+        raise SystemExit("V6 team release attempt ID is invalid")
+    return (
+        f"urc-2025-26-v6-{team_key}-{build_token}-"
+        f"{payload_sha256[:12]}-{release_attempt}"
+    )
+
+
 def release_team_v6(args: argparse.Namespace) -> None:
     """Promote one reviewed Year 2 team payload without legacy release tables.
 
@@ -4715,11 +4890,13 @@ def release_team_v6(args: argparse.Namespace) -> None:
     if preflight and preflight_file:
         raise SystemExit("--preflight cannot be combined with --preflight-file")
     if bool(getattr(args, "previous_dashboard_file", "") or getattr(args, "restatement_file", "")):
-        raise SystemExit("V6 re-releases require an additive successor protocol; this command permits first releases only")
+        raise SystemExit("V6 team successors are selected from the immutable prior release automatically; dashboard-restatement files are not accepted here")
     if preflight_file and not reviewer:
         raise SystemExit("--preflight-reviewer is required with --preflight-file")
     if reviewer and not preflight_file:
         raise SystemExit("--preflight-reviewer requires --preflight-file")
+    if preflight_file and reviewer != "Abdel Babiker":
+        raise SystemExit("V6 team promotion requires --preflight-reviewer 'Abdel Babiker'")
     if not preflight and not preflight_file:
         raise SystemExit("V6 team release requires --preflight or a reviewed --preflight-file")
 
@@ -4727,22 +4904,15 @@ def release_team_v6(args: argparse.Namespace) -> None:
     contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
     if not contract.team_candidate_view:
         raise SystemExit("V6 release contract lacks a team candidate view")
-    migration_list = ", ".join(repr(version) for version in contract.required_migrations)
-    applied = {
-        row["version"] for row in query_sql(
-            f"select version from supabase_migrations.schema_migrations where version in ({migration_list})"
-        )
-    }
-    missing = sorted(set(contract.required_migrations) - applied)
-    if missing:
-        raise SystemExit(f"V6 team release requires migrations {', '.join(missing)}")
+    assert_checksum_bound_release_migrations(contract, "V6 team release")
 
     candidate_params = SqlParams()
     rows = query_sql(
         f"""
         select team_key, season, curated_build_id::text, analysis_version,
           classification_view_version, classification_evidence_sha256,
-          cohort_view_version, cohort_evidence_sha256, dashboard
+          cohort_view_version, cohort_evidence_sha256, dashboard,
+          reporting.canonical_jsonb_sha256_v1(dashboard) as payload_sha256
         from {contract.team_candidate_view}
         where team_key = {candidate_params.text(team_key)}
           and season = '2025-26' and analysis_version = 'v6'
@@ -4761,58 +4931,56 @@ def release_team_v6(args: argparse.Namespace) -> None:
     ):
         raise SystemExit("V6 team candidate lacks exact classification or cohort evidence")
     dashboard = candidate["dashboard"]
-    assert_public_payload_is_publishable(dashboard, "V6 team dashboard")
-    payload_sha256 = sha256_json(dashboard)
-    label = f"urc-2025-26-v6-{team_key}-{payload_sha256[:16]}"
+    assert_v6_public_dashboard_contract(dashboard, "team dashboard")
+    payload_sha256 = clean_text(candidate.get("payload_sha256"))
+    if not re.fullmatch(r"[0-9a-f]{64}", payload_sha256):
+        raise SystemExit("V6 team candidate lacks its canonical database payload hash")
+    label = v6_team_release_label(
+        team_key=team_key,
+        curated_build_id=clean_text(candidate.get("curated_build_id")),
+        payload_sha256=payload_sha256,
+    )
 
-    history_params = SqlParams()
-    history = query_sql(
+    predecessor_params = SqlParams()
+    predecessors = query_sql(
         f"""
-        select count(*)::int as n
+        select payload.release_id::text, release.release_label, payload.payload_sha256
         from reporting.team_release_payloads_v6 payload
         join reporting.aggregate_releases release on release.id = payload.release_id
-        where payload.team_key = {history_params.text(team_key)} and payload.season = '2025-26'
-          and release.status in ('approved', 'retired')
-        """, history_params.values,
+        where payload.team_key = {predecessor_params.text(team_key)} and payload.season = '2025-26'
+          and release.status = 'approved'
+        order by release.approved_at desc nulls last, release.created_at desc, payload.release_id desc
+        """, predecessor_params.values,
     )
-    if history and int(history[0]["n"]) != 0:
-        raise SystemExit("V6 team re-release is blocked until its versioned successor is installed")
+    if len(predecessors) > 1:
+        raise SystemExit("V6 team successor requires at most one approved predecessor")
+    predecessor = predecessors[0] if predecessors else None
 
     canonical = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
     if preflight:
+        build_path_token = clean_text(candidate["curated_build_id"]).replace("-", "")
         output = Path(clean_text(getattr(args, "output", "") or "") or (
-            f"data/reporting/urc_2025_26_{team_key}_{payload_sha256[:16]}_preflight.json"
+            f"data/reporting/urc_2025_26_{team_key}_{build_path_token}_{payload_sha256[:16]}_preflight.json"
         ))
         if Path("content/reporting").resolve() in output.resolve().parents:
             raise SystemExit("V6 team preflight output must stay outside content/reporting")
         write_text_atomic(output, canonical)
-        manifest = {
-            "schema_version": "urc_team_release_v6_preflight_v1",
-            "season": "2025-26", "team_key": team_key,
-            "release_tuple": {"analysis_version": "v6", "classification_view_version": contract.classification_view_version, "cohort_view_version": contract.cohort_view_version},
-            "candidate_view": contract.team_candidate_view,
-            "curated_build_id": candidate["curated_build_id"],
-            "payload_sha256": payload_sha256,
-            "preflight_file_sha256": sha256_file(output),
-        }
+        manifest = v6_team_preflight_manifest(
+            team_key=team_key, contract=contract, candidate=candidate,
+            predecessor=predecessor, preflight_file_sha256=sha256_file(output),
+        )
         write_text_atomic(Path(f"{output}.manifest.json"), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         print(json.dumps({"status": "preflight", "output_path": str(output), "payload_sha256": payload_sha256}, indent=2))
         return
 
     reviewed_path = Path(preflight_file)
-    manifest_path = Path(f"{reviewed_path}.manifest.json")
-    if not reviewed_path.is_file() or not manifest_path.is_file():
-        raise SystemExit("reviewed V6 preflight and its manifest are required")
-    try:
-        reviewed = json.loads(reviewed_path.read_bytes())
-        manifest = json.loads(manifest_path.read_bytes())
-    except json.JSONDecodeError as error:
-        raise SystemExit("reviewed V6 preflight artefacts must be valid JSON") from error
-    if (reviewed != dashboard or not isinstance(manifest, dict)
-            or manifest.get("payload_sha256") != payload_sha256
-            or manifest.get("curated_build_id") != candidate["curated_build_id"]
-            or manifest.get("team_key") != team_key):
+    reviewed = read_v6_team_reviewed_preflight(
+        reviewed_path=reviewed_path, team_key=team_key, contract=contract,
+        candidate=candidate, predecessor=predecessor,
+    )
+    if reviewed != dashboard:
         raise SystemExit("reviewed V6 preflight does not match the exact active-build candidate")
+    reviewed_manifest_sha256 = sha256_file(Path(f"{reviewed_path}.manifest.json"))
 
     provenance = run_provenance()
     if provenance["code_version"].endswith("-dirty"):
@@ -4820,6 +4988,20 @@ def release_team_v6(args: argparse.Namespace) -> None:
     params = SqlParams()
     sql = f"""
       do $$ begin
+        perform 1 from reporting.teams
+        where team_key = {params.text(team_key)}
+        for update;
+        if not found then
+          raise exception 'V6 team is no longer in the reporting roster';
+        end if;
+        perform 1 from curated.builds
+        where id = {params.text(candidate['curated_build_id'])}::uuid
+          and team_key = {params.text(team_key)} and season = '2025-26'
+          and status = 'active'
+        for update;
+        if not found then
+          raise exception 'active V6 build changed after review';
+        end if;
         if exists (select 1 from reporting.aggregate_releases where release_label = {params.text(label)}) then
           raise exception 'immutable V6 team release already exists';
         end if;
@@ -4828,13 +5010,40 @@ def release_team_v6(args: argparse.Namespace) -> None:
           where team_key = {params.text(team_key)} and season = '2025-26'
             and curated_build_id = {params.text(candidate['curated_build_id'])}::uuid
             and analysis_version = 'v6'
+            and classification_view_version = 'reporting_classification_2026-07-22_v2'
+            and classification_evidence_sha256 = {params.text(candidate['classification_evidence_sha256'])}
+            and cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+            and cohort_evidence_sha256 = {params.text(candidate['cohort_evidence_sha256'])}
+            and dashboard = {params.jsonb(dashboard)}
+            and reporting.canonical_jsonb_sha256_v1(dashboard) = {params.text(payload_sha256)}
         ) then raise exception 'active V6 candidate changed after review'; end if;
+        if (
+          select count(*)
+          from reporting.team_release_payloads_v6 payload
+          join reporting.aggregate_releases release on release.id = payload.release_id
+          where payload.team_key = {params.text(team_key)} and payload.season = '2025-26'
+            and release.status = 'approved'
+        ) <> case
+          when {params.text(predecessor['release_id'] if predecessor else None)} is null then 0
+          else 1
+        end
+        or (
+          {params.text(predecessor['release_id'] if predecessor else None)} is not null
+          and not exists (
+            select 1 from reporting.team_release_payloads_v6 payload
+            join reporting.aggregate_releases release on release.id = payload.release_id
+            where payload.release_id = {params.text(predecessor['release_id'] if predecessor else None)}::uuid
+              and payload.team_key = {params.text(team_key)} and payload.season = '2025-26'
+              and release.status = 'approved'
+          )
+        )
+        then raise exception 'approved V6 team predecessor set changed after review'; end if;
       end $$;
       create temp table current_v6_team_release on commit drop as
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values ('release_team_v6', {params.text(team)}, '2025-26', 'started', {params.text(candidate['curated_build_id'])}, {params.text(payload_sha256)},
-          {params.jsonb({'team_key': team_key, 'release_tuple': contract.release_tuple, 'reviewer': reviewer, 'preflight_sha256': sha256_file(reviewed_path)})}, null,
+          {params.jsonb({'team_key': team_key, 'release_tuple': contract.release_tuple, 'reviewer': reviewer, 'preflight_sha256': sha256_file(reviewed_path), 'reviewed_preflight_manifest_sha256': reviewed_manifest_sha256, 'predecessor_release_id': predecessor['release_id'] if predecessor else None, 'payload_hash_algorithm': 'postgres_jsonb_text_sha256'})}, null,
           {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}) returning id
       ), step as (
         insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team)
@@ -4846,10 +5055,17 @@ def release_team_v6(args: argparse.Namespace) -> None:
         select {params.text(label)}, 'draft', id from run returning id
       ) select id from release;
       insert into reporting.team_release_payloads_v6
-        (release_id, team_key, season, curated_build_id, analysis_version, classification_view_version, cohort_view_version, dashboard_payload, payload_sha256)
+        (release_id, team_key, season, curated_build_id, analysis_version,
+         classification_view_version, classification_evidence_sha256,
+         cohort_view_version, cohort_evidence_sha256, dashboard_payload, payload_sha256)
       select current.id, {params.text(team_key)}, '2025-26', {params.text(candidate['curated_build_id'])}::uuid, 'v6',
-        'reporting_classification_2026-07-22_v2', 'analysis_window_2025-26_2026-08-15_v1', {params.jsonb(dashboard)}, {params.text(payload_sha256)}
+        'reporting_classification_2026-07-22_v2', {params.text(candidate['classification_evidence_sha256'])},
+        'analysis_window_2025-26_2026-08-15_v1', {params.text(candidate['cohort_evidence_sha256'])},
+        {params.jsonb(dashboard)}, {params.text(payload_sha256)}
       from current_v6_team_release current;
+      update reporting.aggregate_releases release set status = 'retired'
+      where release.id = {params.text(predecessor['release_id'] if predecessor else None)}::uuid
+        and release.status = 'approved';
       update reporting.aggregate_releases release set status = 'approved', approved_at = now()
       from current_v6_team_release current where release.id = current.id and release.status = 'draft';
       update audit.pipeline_runs run set status = 'succeeded', ended_at = now()
@@ -4858,6 +5074,14 @@ def release_team_v6(args: argparse.Namespace) -> None:
       update audit.step_runs step set ended_at = now()
       from current_v6_team_release current join reporting.aggregate_releases release on release.id = current.id
       where step.pipeline_run_id = release.pipeline_run_id and step.step_name = 'release_team_v6';
+      do $$ begin
+        if not exists (
+          select 1 from reporting.team_release_payloads_v6 payload
+          join current_v6_team_release current on current.id = payload.release_id
+          where payload.payload_sha256 = {params.text(payload_sha256)}
+            and payload.payload_sha256 = reporting.canonical_jsonb_sha256_v1(payload.dashboard_payload)
+        ) then raise exception 'stored V6 team payload hash differs from canonical reviewed bytes'; end if;
+      end $$;
     """
     run_sql(sql, params.values)
     print(json.dumps({"status": "approved", "release_label": label, "payload_sha256": payload_sha256}, indent=2))
@@ -5664,16 +5888,24 @@ def release(args: argparse.Namespace) -> None:
 
 def current_league_bundle_snapshot(season: str) -> tuple[dict[str, Any], dict[str, Any]]:
     """Read the exact latest approved immutable bundle using one SQL statement."""
+    if season == "2025-26":
+        bundle_view = "reporting.latest_approved_league_bundle_v6"
+        league_payload_view = "reporting.league_release_payloads_v6"
+        team_payload_view = "reporting.team_dashboard_payloads_v2"
+        team_release_column = "bundle_release_id"
+    else:
+        bundle_view = "reporting.latest_approved_dashboard_bundle_v4"
+        league_payload_view = "reporting.dashboard_bundle_league_payloads_v1"
+        team_payload_view = "reporting.dashboard_bundle_team_payloads_v1"
+        team_release_column = "bundle_release_id"
     params = SqlParams()
     rows = query_sql(
         f"""
         with current_bundle as (
-          -- Selected through the same view the website reads
-          -- (reporting.latest_approved_dashboard_bundle_v4), not a looser
-          -- "newest approved" rule, so an exported parity payload can never
-          -- diverge from the served bundle by construction.
+          -- The fixed season-specific reader is the same completeness boundary
+          -- the website uses, never a looser "newest approved" rule.
           select b.release_id, b.season, r.release_label, r.approved_at
-          from reporting.latest_approved_dashboard_bundle_v4 b
+          from {bundle_view} b
           join reporting.aggregate_releases r on r.id = b.release_id
           where b.season = {params.text(season)}
         )
@@ -5683,10 +5915,10 @@ def current_league_bundle_snapshot(season: str) -> tuple[dict[str, Any], dict[st
             'team_key', team.team_key, 'dashboard', team.dashboard_payload
           ) order by team.team_key), '[]'::jsonb) as teams
         from current_bundle b
-        join reporting.dashboard_bundle_league_payloads_v1 league
+        join {league_payload_view} league
           on league.release_id = b.release_id
-        join reporting.dashboard_bundle_team_payloads_v1 team
-          on team.bundle_release_id = b.release_id
+        join {team_payload_view} team
+          on team.{team_release_column} = b.release_id
         group by b.release_id, b.release_label, b.approved_at, league.dashboard_payload
         """,
         params.values,
@@ -5743,6 +5975,213 @@ def assert_public_payload_is_publishable(payload: object, label: str) -> None:
         raise SystemExit(
             f"refusing to export {label}: payload carries a player pseudonym"
         )
+
+
+V6_PUBLIC_DASHBOARD_KEYS = frozenset({
+    "generated_at", "team", "season", "analysis_window", "method", "coverage",
+    "headline", "monthly", "body_locations", "injury_types", "injury_profiles",
+    "injury_type_families", "severity_distribution", "setting_split",
+    "setting_metrics", "contact_distribution", "prior_season", "limitations",
+})
+V6_HEADLINE_KEYS = (
+    "recorded_injuries", "time_loss_injuries", "incidence_per_1000h",
+    "severity_mean_days", "severity_median_days", "burden_per_1000h",
+)
+V6_CONTACT_GRID = tuple(
+    (setting, key, label)
+    for setting in ("all", "match", "training", "unknown")
+    for key, label in (
+        ("contact", "Contact"),
+        ("non_contact", "Non-contact"),
+        ("unknown", "Unknown"),
+    )
+)
+V6_SETTING_GRID = (
+    ("all", "All"),
+    ("match", "Match"),
+    ("training", "Training"),
+    ("unknown", "Unknown"),
+)
+
+
+def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
+    """Fail closed unless a Year 2 payload is exactly safe for the reader.
+
+    This is deliberately a narrow release-boundary validator rather than a
+    best-effort normaliser.  It prevents an added SQL field, a partial contact
+    grid, or a malformed injury-type-family payload from reaching a reviewed
+    preflight or immutable release snapshot.
+    """
+    if not isinstance(payload, dict):
+        raise SystemExit(f"V6 {label} must be a dashboard object")
+    actual_keys = set(payload)
+    if actual_keys != V6_PUBLIC_DASHBOARD_KEYS:
+        unexpected = sorted(actual_keys - V6_PUBLIC_DASHBOARD_KEYS)
+        missing = sorted(V6_PUBLIC_DASHBOARD_KEYS - actual_keys)
+        raise SystemExit(
+            f"V6 {label} has unexpected top-level payload fields={unexpected} "
+            f"or missing fields={missing}"
+        )
+    if payload.get("season") != "2025-26":
+        raise SystemExit(f"V6 {label} must be bound to season 2025-26")
+    for field in ("generated_at", "team"):
+        if not isinstance(payload.get(field), str) or not payload[field]:
+            raise SystemExit(f"V6 {label} has invalid {field}")
+    analysis_window = payload.get("analysis_window")
+    if not isinstance(analysis_window, dict) or set(analysis_window) != {"start", "end", "basis"}:
+        raise SystemExit(f"V6 {label} has invalid analysis_window")
+    if analysis_window.get("start") != "2025-09-01" or analysis_window.get("end") != "2026-06-30":
+        raise SystemExit(f"V6 {label} has an unapproved analysis window")
+    coverage = payload.get("coverage")
+    coverage_required = {
+        "hours", "match_hours", "training_hours", "distance_km", "exposure_rows",
+        "exposed_players", "weeks", "included_exposure_status",
+        "analysis_window_start", "analysis_window_end",
+    }
+    coverage_optional = {"exposure_grain", "teams_included"}
+    if (
+        not isinstance(coverage, dict)
+        or not coverage_required <= set(coverage)
+        or not set(coverage) <= coverage_required | coverage_optional
+    ):
+        raise SystemExit(f"V6 {label} has incomplete coverage")
+    expected_coverage_keys = coverage_required | (
+        {"teams_included"} if payload["team"] == "URC Overall" else {"exposure_grain"}
+    )
+    if set(coverage) != expected_coverage_keys:
+        raise SystemExit(f"V6 {label} has an invalid coverage shape")
+    if coverage.get("analysis_window_start") != "2025-09-01" or coverage.get("analysis_window_end") != "2026-06-30":
+        raise SystemExit(f"V6 {label} coverage window differs from the release contract")
+    headline = payload.get("headline")
+    if not isinstance(headline, list) or tuple(
+        item.get("key") if isinstance(item, dict) else None for item in headline
+    ) != V6_HEADLINE_KEYS:
+        raise SystemExit(f"V6 {label} has an invalid headline metric sequence")
+    headline_contract = {
+        "recorded_injuries": (
+            {"key", "label", "value", "unit", "formula"},
+            "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)",
+        ),
+        "time_loss_injuries": (
+            {"key", "label", "value", "unit", "formula"},
+            "count(eligible injury rows where days lost > 0)",
+        ),
+        "incidence_per_1000h": (
+            {"key", "label", "value", "unit", "numerator", "denominator", "formula"},
+            "pooled time-loss injuries / pooled exposure hours * 1000",
+        ),
+        "severity_mean_days": (
+            {"key", "label", "value", "unit", "numerator", "denominator", "formula"},
+            "pooled days lost / pooled time-loss injuries",
+        ),
+        "severity_median_days": (
+            {"key", "label", "value", "unit", "formula"},
+            "median(days lost) across pooled time-loss injuries",
+        ),
+        "burden_per_1000h": (
+            {"key", "label", "value", "unit", "numerator", "denominator", "formula"},
+            "pooled days lost / pooled exposure hours * 1000",
+        ),
+    }
+    for item in headline:
+        if not isinstance(item, dict):
+            raise SystemExit(f"V6 {label} headline metrics require formulas")
+        expected_keys, expected_formula = headline_contract[item["key"]]
+        if set(item) != expected_keys or item.get("formula") != expected_formula:
+            raise SystemExit(f"V6 {label} headline metrics have an invalid formula contract")
+    contact = payload.get("contact_distribution")
+    if not isinstance(contact, list) or len(contact) != len(V6_CONTACT_GRID):
+        raise SystemExit(f"V6 {label} requires the complete 12-cell contact grid")
+    for item, expected in zip(contact, V6_CONTACT_GRID, strict=True):
+        setting, key, contact_label = expected
+        if not isinstance(item, dict) or set(item) != {
+            "key", "label", "setting", "recorded_injuries", "time_loss_injuries",
+        } or (item.get("setting"), item.get("key"), item.get("label")) != expected:
+            raise SystemExit(f"V6 {label} contact grid is not ordered and labelled exactly")
+
+    section_contracts = {
+        "monthly": {
+            "month", "exposure_hours", "distance_km", "time_loss_injuries",
+            "days_lost", "incidence_per_1000h", "burden_per_1000h",
+        },
+        "body_locations": {
+            "key", "label", "time_loss_injuries", "days_lost", "exposure_hours",
+            "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
+        },
+        "injury_types": {
+            "key", "label", "time_loss_injuries", "days_lost", "exposure_hours",
+            "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
+        },
+        "severity_distribution": {
+            "key", "label", "recorded_injuries", "time_loss_injuries", "days_lost",
+        },
+        "setting_split": {
+            "key", "label", "time_loss_injuries", "days_lost", "exposure_hours",
+        },
+        "setting_metrics": {
+            "setting", "label", "time_loss_injuries", "days_lost", "exposure_hours",
+            "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
+        },
+    }
+    for section, expected_keys in section_contracts.items():
+        rows = payload.get(section)
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict) or set(row) != expected_keys
+            for row in rows
+        ):
+            raise SystemExit(f"V6 {label} {section} has an invalid public shape")
+    for section, key_field in (("setting_split", "key"), ("setting_metrics", "setting")):
+        rows = payload[section]
+        actual_grid = tuple((row.get(key_field), row.get("label")) for row in rows)
+        if actual_grid != V6_SETTING_GRID:
+            raise SystemExit(
+                f"V6 {label} {section} must be the ordered all/match/training/unknown grid"
+            )
+    profiles = payload.get("injury_profiles")
+    if not isinstance(profiles, list):
+        raise SystemExit(f"V6 {label} injury_profiles must be an array")
+    profile_keys = {
+        "dimension", "code", "label", "setting", "time_loss_injuries", "days_lost",
+        "exposure_hours", "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
+    }
+    for profile in profiles:
+        if not isinstance(profile, dict) or set(profile) != profile_keys:
+            raise SystemExit(f"V6 {label} injury_profiles have an invalid public shape")
+        if profile.get("setting") not in {"all", "match", "training", "unknown"}:
+            raise SystemExit(f"V6 {label} injury_profiles contain an invalid setting")
+    if profiles and not any(profile.get("dimension") == "diagnosis" for profile in profiles):
+        raise SystemExit(f"V6 {label} injury_profiles omit the accepted diagnosis dimension")
+    families = payload.get("injury_type_families")
+    if not isinstance(families, list):
+        raise SystemExit(f"V6 {label} injury_type_families must be an array")
+    family_keys = profile_keys | {"mapping_version", "subtypes"}
+    for family in families:
+        if not isinstance(family, dict) or set(family) != family_keys:
+            raise SystemExit(f"V6 {label} injury_type_families have an invalid public shape")
+        if family.get("dimension") != "injury_type_family" or family.get("mapping_version") != "injury_type_family_2026-07-21_v1":
+            raise SystemExit(f"V6 {label} injury_type_families lost their versioned mapping")
+        subtypes = family.get("subtypes")
+        if not isinstance(subtypes, list) or not subtypes:
+            raise SystemExit(f"V6 {label} injury_type_families require subtype evidence")
+        for subtype in subtypes:
+            if not isinstance(subtype, dict) or set(subtype) != profile_keys:
+                raise SystemExit(f"V6 {label} injury type family subtype has an invalid public shape")
+            if subtype.get("dimension") != "injury_type" or subtype.get("setting") != family.get("setting"):
+                raise SystemExit(f"V6 {label} injury type family subtype does not match its family")
+    prior_season = payload.get("prior_season")
+    if (
+        not isinstance(prior_season, dict)
+        or set(prior_season) != {"season", "status", "note"}
+        or prior_season.get("season") != "2024-25"
+        or prior_season.get("status") != "frozen"
+    ):
+        raise SystemExit(f"V6 {label} must retain exactly the frozen prior-season marker")
+    for section in ("method", "limitations"):
+        if not isinstance(payload.get(section), list) or not all(
+            isinstance(item, str) and item for item in payload[section]
+        ):
+            raise SystemExit(f"V6 {label} {section} must be a non-empty public string array")
+    assert_public_payload_is_publishable(payload, f"V6 {label}")
 
 
 def write_parity_export_set(
@@ -5903,6 +6342,246 @@ def export_team_dashboard_parity_json(args: argparse.Namespace) -> None:
     )
 
 
+def league_release_manifest_document(
+    *, release_label: str, season: str, release_tuple: dict[str, str],
+    required_migrations: list[object], member_count: int,
+    member_input_hash: str, league_payload_sha256: str,
+    bundle_payload_sha256: str, team_payload_sha256s: dict[str, str],
+    reviewed_preflight_sha256: str,
+    reviewed_preflight_manifest_sha256: str,
+    provenance: dict[str, str], dirty_worktree_paths: list[str],
+    dirty_worktree_allowed_paths: list[str], parity_export: dict[str, Any],
+    rollback: dict[str, Any], rollback_of_release_id: str | None,
+    rollback_replaces_release_id: str | None,
+) -> dict[str, Any]:
+    """Build the deterministic local closeout record for one promoted bundle."""
+    return {
+        "schema_version": "urc_league_release_manifest_v1",
+        "status": "promoted_and_exported",
+        "release_label": release_label,
+        "season": season,
+        "release_tuple": release_tuple,
+        "required_migrations": required_migrations,
+        "member_count": member_count,
+        "member_input_hash": member_input_hash,
+        "league_payload_sha256": league_payload_sha256,
+        "bundle_payload_sha256": bundle_payload_sha256,
+        "team_payload_sha256s": team_payload_sha256s,
+        "reviewed_preflight_sha256": reviewed_preflight_sha256,
+        "reviewed_preflight_manifest_sha256": reviewed_preflight_manifest_sha256,
+        "provenance": provenance,
+        "dirty_worktree_paths": dirty_worktree_paths,
+        "dirty_worktree_allowed_paths": dirty_worktree_allowed_paths,
+        "candidate_assembly_reads": 1,
+        "promotion_candidate_validation_reads": 1,
+        "reconciliation": {
+            "migration_prerequisites": "passed",
+            "semantic_sections": "passed",
+            "member_roster": "passed",
+            "reviewed_candidate_equality": "passed",
+            "database_readback": "passed",
+            "parity_export": "passed",
+        },
+        "parity_export": {
+            "team_count": parity_export["team_count"],
+            "export_set_sha256": parity_export["export_set_sha256"],
+            "bundle_sha256": parity_export.get("bundle_sha256"),
+        },
+        "rollback": {
+            "rollback_of_release_id": rollback_of_release_id,
+            "replaces_release_id": rollback_replaces_release_id,
+            "retained_predecessor": rollback,
+        },
+    }
+
+
+def v6_local_finalizer_command(
+    *, release_id: str, release_label: str, preflight_file: Path,
+) -> str:
+    return shlex.join([
+        "python3", "-m", "pipeline", "finalize-v6-league-release-local",
+        "--release-id", release_id,
+        "--release-label", release_label,
+        "--preflight-file", str(preflight_file),
+    ])
+
+
+def finalize_v6_league_release_local(args: argparse.Namespace) -> None:
+    """Resume only the local exports/evidence for one approved V6 release."""
+    release_id = clean_text(args.release_id)
+    release_label = clean_text(args.release_label)
+    preflight_path = Path(clean_text(args.preflight_file))
+    try:
+        uuid.UUID(release_id)
+    except ValueError as error:
+        raise SystemExit("--release-id must be a UUID") from error
+    if not release_label or not preflight_path.is_file():
+        raise SystemExit("exact --release-label and existing --preflight-file are required")
+    reviewed_manifest_path = Path(f"{preflight_path}.manifest.json")
+    if not reviewed_manifest_path.is_file():
+        raise SystemExit("reviewed V6 preflight manifest is required for local finalisation")
+    try:
+        reviewed_bundle = json.loads(preflight_path.read_bytes())
+        reviewed_manifest = json.loads(reviewed_manifest_path.read_bytes())
+    except json.JSONDecodeError as error:
+        raise SystemExit("reviewed V6 preflight artefacts must be valid JSON") from error
+    if not isinstance(reviewed_bundle, dict) or not isinstance(reviewed_manifest, dict):
+        raise SystemExit("reviewed V6 preflight artefacts must be JSON objects")
+    expected_contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
+    assert_checksum_bound_release_migrations(expected_contract, "V6 local finalisation")
+
+    params = SqlParams()
+    rows = query_sql(
+        f"""
+        select release.id::text as release_id, release.release_label,
+          context.season, context.analysis_version,
+          context.classification_view_version, context.cohort_view_version,
+          run.status as pipeline_run_status, run.parameters,
+          run.code_version, run.dependency_lock_hash, run.operator,
+          league.payload_sha256 as league_payload_sha256,
+          teams.team_payload_sha256s, teams.member_count,
+          reporting.canonical_jsonb_sha256_v1(jsonb_build_object(
+            'schema_version','urc_dashboard_bundle_v2', 'season',context.season,
+            'league',league.dashboard_payload, 'teams',teams.dashboards
+          )) as bundle_payload_sha256
+        from reporting.aggregate_releases release
+        join reporting.league_release_context_v2 context on context.release_id=release.id
+        join audit.pipeline_runs run on run.id=release.pipeline_run_id
+        join reporting.league_release_payloads_v6 league on league.release_id=release.id
+        cross join lateral (
+          select count(*)::integer as member_count,
+            jsonb_object_agg(payload.team_key,payload.payload_sha256 order by payload.team_key)
+              as team_payload_sha256s,
+            jsonb_agg(jsonb_build_object('team_key',payload.team_key,'dashboard',payload.dashboard_payload)
+              order by payload.team_key) as dashboards
+          from reporting.team_dashboard_payloads_v2 payload
+          where payload.bundle_release_id=release.id
+        ) teams
+        where release.id={params.text(release_id)}::uuid
+          and release.release_label={params.text(release_label)}
+          and release.status='approved' and context.season='2025-26'
+          and context.analysis_version='v6'
+        """,
+        params.values,
+    )
+    if len(rows) != 1:
+        raise SystemExit("exact approved V6 release identity was not found")
+    row = rows[0]
+    parameters = row.get("parameters")
+    team_payload_sha256s = row.get("team_payload_sha256s")
+    if (
+        row.get("pipeline_run_status") != "succeeded"
+        or row.get("member_count") != 16
+        or not isinstance(parameters, dict)
+        or not isinstance(team_payload_sha256s, dict)
+        or len(team_payload_sha256s) != 16
+    ):
+        raise SystemExit("approved V6 release audit or member snapshot is incomplete")
+
+    reviewed_sha256 = sha256_file(preflight_path)
+    reviewed_manifest_sha256 = sha256_file(reviewed_manifest_path)
+    if (
+        parameters.get("reviewed_preflight_sha256") != reviewed_sha256
+        or parameters.get("reviewed_preflight_manifest_sha256") != reviewed_manifest_sha256
+        or reviewed_manifest.get("preflight_file_sha256") != reviewed_sha256
+    ):
+        raise SystemExit("reviewed V6 preflight checksums do not match the approved release audit")
+    expected_migrations = [
+        {"version": item.version, "name": item.name, "sha256": item.sha256}
+        for item in expected_contract.required_migration_contracts
+    ]
+    if reviewed_manifest.get("required_migrations") != expected_migrations:
+        raise SystemExit("reviewed V6 preflight does not bind the exact migration contract")
+    if reviewed_manifest.get("local_evidence_files") != year2_release_local_evidence_records(expected_contract):
+        raise SystemExit("reviewed V6 preflight does not bind the exact local evidence bytes")
+    if (
+        reviewed_manifest.get("bundle_payload_sha256") != row.get("bundle_payload_sha256")
+        or parameters.get("bundle_payload_sha256") != row.get("bundle_payload_sha256")
+        or reviewed_manifest.get("league_payload_sha256") != row.get("league_payload_sha256")
+        or parameters.get("league_dashboard_payload_sha256") != row.get("league_payload_sha256")
+        or reviewed_manifest.get("team_payload_sha256s") != team_payload_sha256s
+        or parameters.get("team_dashboard_payload_sha256s") != team_payload_sha256s
+        or reviewed_manifest.get("member_input_hash") != parameters.get("member_input_hash")
+    ):
+        raise SystemExit("approved V6 database payloads differ from the reviewed preflight evidence")
+
+    approved_bundle, metadata = current_league_bundle_snapshot("2025-26")
+    if metadata["release_id"] != release_id or metadata["release_label"] != release_label:
+        raise SystemExit("requested V6 release is no longer the currently approved complete bundle")
+    diffs = diff_json_documents(reviewed_bundle, approved_bundle)
+    if diffs:
+        raise SystemExit(
+            "approved V6 bundle differs from the reviewed preflight: "
+            + ", ".join(diff["path"] for diff in diffs[:10])
+        )
+    parity_export = write_team_dashboard_parity_exports(
+        "2025-26", expected_release_id=release_id,
+        expected_release_label=release_label, expected_bundle=reviewed_bundle,
+    )
+
+    predecessor_id = clean_text(parameters.get("predecessor_release_id"))
+    if predecessor_id:
+        predecessor_params = SqlParams()
+        predecessor_rows = query_sql(
+            f"select release_label,approved_at from reporting.aggregate_releases "
+            f"where id={predecessor_params.text(predecessor_id)}::uuid and status in ('approved','retired')",
+            predecessor_params.values,
+        )
+        if len(predecessor_rows) != 1:
+            raise SystemExit("retained V6 predecessor audit is incomplete")
+        rollback = {
+            "release_id": predecessor_id,
+            "release_label": predecessor_rows[0]["release_label"],
+            "approved_at": predecessor_rows[0]["approved_at"],
+            "bundle_sha256": parameters.get("predecessor_bundle_sha256"),
+            "snapshot_sha256": parameters.get("predecessor_snapshot_sha256"),
+        }
+    else:
+        rollback = {"status": "no predecessor existed"}
+
+    release_manifest = league_release_manifest_document(
+        release_label=release_label,
+        season="2025-26",
+        release_tuple=reviewed_manifest["release_tuple"],
+        required_migrations=expected_migrations,
+        member_count=16,
+        member_input_hash=parameters["member_input_hash"],
+        league_payload_sha256=row["league_payload_sha256"],
+        bundle_payload_sha256=row["bundle_payload_sha256"],
+        team_payload_sha256s=team_payload_sha256s,
+        reviewed_preflight_sha256=reviewed_sha256,
+        reviewed_preflight_manifest_sha256=reviewed_manifest_sha256,
+        provenance={
+            "code_version": row["code_version"],
+            "dependency_lock_hash": row["dependency_lock_hash"],
+            "operator": row["operator"],
+        },
+        dirty_worktree_paths=reviewed_manifest.get("dirty_worktree_paths", []),
+        dirty_worktree_allowed_paths=reviewed_manifest.get("dirty_worktree_allowed_paths", []),
+        parity_export=parity_export,
+        rollback=rollback,
+        rollback_of_release_id=reviewed_manifest.get("rollback_of_release_id"),
+        rollback_replaces_release_id=reviewed_manifest.get("rollback_replaces_release_id"),
+    )
+    release_manifest_path = Path("data/reporting") / f"{release_label}_release_manifest.json"
+    if release_manifest_path.exists():
+        try:
+            existing_manifest = json.loads(release_manifest_path.read_bytes())
+        except json.JSONDecodeError as error:
+            raise SystemExit("existing V6 release manifest is invalid JSON") from error
+        if existing_manifest != release_manifest:
+            raise SystemExit("existing V6 release manifest differs from deterministic finalisation")
+    else:
+        write_json_atomic(release_manifest_path, release_manifest)
+    print(json.dumps({
+        "status": "v6_local_finalisation_complete",
+        "release_id": release_id,
+        "release_label": release_label,
+        "release_manifest_path": str(release_manifest_path),
+        "parity_export": release_manifest["parity_export"],
+    }, indent=2))
+
+
 def record_failed_league_release_attempt(
     *, label: str, season: str, input_hash: str, output_hash: str,
     parameters: dict[str, Any], provenance: dict[str, str], failure_stage: str,
@@ -5954,6 +6633,7 @@ def league_release_plan(
         f"data/reporting/urc_dashboard_{season}_{analysis_version}_preflight.json"
     )
     previous_path = f"data/reporting/urc_dashboard_{season}_previous.json"
+    reviewer_arg = "Abdel Babiker" if analysis_version == "v6" else "<reviewer>"
     runner = ["node", "pipeline/run_with_pooler.mjs", "python3", "-m", "pipeline"]
     steps: list[dict[str, Any]] = [
         {
@@ -5976,11 +6656,26 @@ def league_release_plan(
                 ),
             }
         )
+    first_promotion = shlex.join(
+        runner + ["release-league", "--season", season]
+        + tuple_args
+        + ["--preflight-file", preflight_path, "--preflight-reviewer", reviewer_arg]
+    )
+    successor_promotion = shlex.join(
+        runner + ["release-league", "--season", season]
+        + tuple_args
+        + [
+            "--previous-bundle-file", previous_path,
+            "--preflight-file", preflight_path,
+            "--preflight-reviewer", reviewer_arg,
+        ]
+    )
     steps.extend(
         [
             {
                 "stage": "read_only_live",
                 "approval": "database read access only",
+                "condition": "only when an approved predecessor exists",
                 "action": shlex.join(
                     runner + ["release-league", "--season", season]
                     + tuple_args
@@ -6004,15 +6699,8 @@ def league_release_plan(
             {
                 "stage": "live_write",
                 "approval": "exact hosted promotion required",
-                "action": shlex.join(
-                    runner + ["release-league", "--season", season]
-                    + tuple_args
-                    + [
-                        "--previous-bundle-file", previous_path,
-                        "--preflight-file", preflight_path,
-                        "--preflight-reviewer", "<reviewer>",
-                    ]
-                ),
+                "action": first_promotion,
+                "action_if_predecessor_exists": successor_promotion,
                 "includes": "promotion and 16-team parity export",
             },
         ]
@@ -6028,8 +6716,27 @@ def league_release_plan(
         "database_access": "none",
         "steps": steps,
         "rollback": (
-            "re-promote the retained predecessor tuple, then regenerate the "
-            "16-team parity exports"
+            {
+                "mode": "append_only_retained_bundle_successor",
+                "target": "<exact-predecessor-release-uuid>",
+                "preflight": shlex.join(
+                    runner + ["release-league", "--season", season]
+                    + tuple_args
+                    + [
+                        "--rollback-of-release-id", "<exact-predecessor-release-uuid>",
+                        "--preflight", "--output",
+                        f"data/reporting/urc_dashboard_{season}_v6_rollback_preflight.json",
+                    ]
+                ),
+                "promotion": "run the same command with --previous-bundle-file, "
+                "the reviewed --preflight-file, and --preflight-reviewer 'Abdel Babiker'",
+                "invariant": "creates a new approved release and never re-approves history",
+            }
+            if analysis_version == "v6"
+            else (
+                "re-promote the retained predecessor tuple, then regenerate the "
+                "16-team parity exports"
+            )
         ),
     }
 
@@ -6040,6 +6747,16 @@ def load_league_release_candidate(
     league_candidate_view: str, team_candidate_view: str,
 ) -> dict[str, Any]:
     """Load and hash the build-pinned league and 16-team candidate once."""
+    dashboard_hash_sql = (
+        "reporting.canonical_jsonb_sha256_v1(dashboard)"
+        if analysis_version == "v6"
+        else "encode(digest(convert_to(dashboard::text, 'UTF8'), 'sha256'), 'hex')"
+    )
+    bundle_hash_sql = (
+        "reporting.canonical_jsonb_sha256_v1(document)"
+        if analysis_version == "v6"
+        else "encode(digest(convert_to(document::text, 'UTF8'), 'sha256'), 'hex')"
+    )
     candidate_params = SqlParams()
     rows = query_sql(
         f"""
@@ -6076,7 +6793,7 @@ def load_league_release_candidate(
             ) order by team_key) as dashboards,
             jsonb_object_agg(
               team_key,
-              encode(digest(convert_to(dashboard::text, 'UTF8'), 'sha256'), 'hex')
+              {dashboard_hash_sql}
               order by team_key
             ) as hashes
           from team_rows
@@ -6093,9 +6810,9 @@ def load_league_release_candidate(
         )
         select dashboard, classification_evidence_sha256, cohort_evidence_sha256,
                candidates as team_payloads, hashes as team_payload_sha256s,
-               encode(digest(convert_to(dashboard::text, 'UTF8'), 'sha256'), 'hex')
+               {dashboard_hash_sql}
                  as league_payload_sha256,
-               encode(digest(convert_to(document::text, 'UTF8'), 'sha256'), 'hex')
+               {bundle_hash_sql}
                  as bundle_payload_sha256,
                document::text as bundle_payload_json
         from bundle
@@ -6110,6 +6827,82 @@ def load_league_release_candidate(
     return rows[0]
 
 
+def load_v6_retained_league_rollback_candidate(
+    *, season: str, rollback_of_release_id: str,
+) -> dict[str, Any]:
+    """Load one retained V6 bundle as an append-only rollback successor source."""
+    params = SqlParams()
+    rows = query_sql(
+        f"""
+        with current_approved as (
+          select context.release_id,
+            run.parameters ->> 'predecessor_release_id' as predecessor_release_id
+          from reporting.league_release_context_v2 context
+          join reporting.aggregate_releases release on release.id = context.release_id
+          join audit.pipeline_runs run on run.id = release.pipeline_run_id
+          where context.season = {params.text(season)}
+            and context.analysis_version = 'v6' and release.status = 'approved'
+          order by release.approved_at desc nulls last, release.created_at desc,
+            context.release_id desc
+          limit 1
+        ), prior as (
+          select context.release_id, context.season, context.analysis_version,
+            context.classification_view_version, context.classification_evidence_sha256,
+            context.cohort_view_version, context.cohort_evidence_sha256,
+            league.dashboard_payload as dashboard,
+            current_approved.release_id as replaces_release_id
+          from reporting.league_release_context_v2 context
+          join reporting.aggregate_releases release on release.id = context.release_id
+          join reporting.league_release_payloads_v6 league on league.release_id = context.release_id
+          join current_approved
+            on current_approved.predecessor_release_id = context.release_id::text
+          where context.release_id = {params.text(rollback_of_release_id)}::uuid
+            and context.season = {params.text(season)} and context.analysis_version = 'v6'
+            and release.status in ('approved', 'retired')
+        ), team_rows as (
+          select payload.team_key, payload.team_release_id::text, payload.curated_build_id::text,
+            payload.dashboard_payload as dashboard
+          from reporting.team_dashboard_payloads_v2 payload
+          join prior on prior.release_id = payload.bundle_release_id
+        ), teams as (
+          select jsonb_agg(jsonb_build_object(
+              'team_key', team_key, 'team_release_id', team_release_id,
+              'curated_build_id', curated_build_id, 'dashboard', dashboard
+            ) order by team_key) as candidates,
+            jsonb_agg(jsonb_build_object('team_key', team_key, 'dashboard', dashboard)
+              order by team_key) as dashboards,
+            jsonb_object_agg(team_key, reporting.canonical_jsonb_sha256_v1(dashboard)
+              order by team_key) as hashes
+          from team_rows
+        ), bundle as (
+          select prior.*, teams.candidates, teams.hashes,
+            jsonb_build_object('schema_version', 'urc_dashboard_bundle_v2',
+              'season', prior.season, 'league', prior.dashboard, 'teams', teams.dashboards) as document
+          from prior cross join teams
+        )
+        select dashboard, classification_evidence_sha256, cohort_evidence_sha256,
+          replaces_release_id::text,
+          candidates as team_payloads, hashes as team_payload_sha256s,
+          reporting.canonical_jsonb_sha256_v1(dashboard) as league_payload_sha256,
+          reporting.canonical_jsonb_sha256_v1(document) as bundle_payload_sha256,
+          document::text as bundle_payload_json
+        from bundle
+        """,
+        params.values,
+    )
+    if len(rows) != 1:
+        raise SystemExit("V6 rollback requires exactly one retained immutable 16-team bundle")
+    candidate = rows[0]
+    team_payloads = candidate.get("team_payloads")
+    if (
+        not isinstance(team_payloads, list)
+        or len(team_payloads) != 16
+        or len({row.get("team_key") for row in team_payloads if isinstance(row, dict)}) != 16
+    ):
+        raise SystemExit("V6 rollback retained bundle must contain exactly 16 team payloads")
+    return candidate
+
+
 def release_league(args: argparse.Namespace) -> None:
     """Preflight and atomically publish the build-pinned 16-team V2 league dashboard."""
     season = clean_text(args.season)
@@ -6122,12 +6915,20 @@ def release_league(args: argparse.Namespace) -> None:
         getattr(args, "allow_legacy_preflight_without_manifest", False)
     )
     previous_bundle_file_arg = clean_text(getattr(args, "previous_bundle_file", ""))
-    analysis_version = clean_text(getattr(args, "analysis_version", "v2") or "v2")
-    classification_view_version = clean_text(
-        getattr(args, "classification_view_version", "v2") or "v2"
+    rollback_of_release_id = clean_text(
+        getattr(args, "rollback_of_release_id", "")
     )
-    cohort_view_version = clean_text(
-        getattr(args, "cohort_view_version", "v2") or "v2"
+    default_release_tuple = (
+        YEAR2_2025_26_RELEASE_TUPLE if season == "2025-26" else ("v2", "v2", "v2")
+    )
+    analysis_version = clean_text(getattr(args, "analysis_version", "")) or default_release_tuple[0]
+    classification_view_version = (
+        clean_text(getattr(args, "classification_view_version", ""))
+        or default_release_tuple[1]
+    )
+    cohort_view_version = (
+        clean_text(getattr(args, "cohort_view_version", ""))
+        or default_release_tuple[2]
     )
     release_tuple = (
         analysis_version,
@@ -6140,6 +6941,13 @@ def release_league(args: argparse.Namespace) -> None:
             year2_release_contract = release_contract_for(season, release_tuple)
         except ValueError as error:
             raise SystemExit(str(error)) from error
+    if rollback_of_release_id:
+        if season != "2025-26" or analysis_version != "v6":
+            raise SystemExit("--rollback-of-release-id is available only for the 2025-26 V6 release")
+        try:
+            rollback_of_release_id = str(uuid.UUID(rollback_of_release_id))
+        except ValueError as error:
+            raise SystemExit("--rollback-of-release-id must be a UUID") from error
     supported_release_variants = {
         ("v2", "v2", "v2"),
         ("v2", "reporting_classification_2026-07-20_v1", "v2"),
@@ -6206,7 +7014,7 @@ def release_league(args: argparse.Namespace) -> None:
         )
     )
     team_candidate_view = (
-        year2_release_contract.team_candidate_view
+        year2_release_contract.league_team_candidate_view
         if analysis_version == "v6" and year2_release_contract is not None
         else (
             "analysis.team_dashboard_release_candidates_analysis_window_v5"
@@ -6221,6 +7029,8 @@ def release_league(args: argparse.Namespace) -> None:
         )
         )
     )
+    if analysis_version == "v6" and not team_candidate_view:
+        raise SystemExit("V6 release contract lacks an immutable league team candidate view")
     member_view = (
         year2_release_contract.member_view
         if analysis_version == "v6" and year2_release_contract is not None
@@ -6281,6 +7091,8 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit("--preflight-reviewer is required with --preflight-file")
     if reviewer and not preflight_file_arg:
         raise SystemExit("--preflight-reviewer requires --preflight-file")
+    if analysis_version == "v6" and preflight_file_arg and reviewer != "Abdel Babiker":
+        raise SystemExit("V6 league promotion requires --preflight-reviewer 'Abdel Babiker'")
     if allow_legacy_preflight_without_manifest and (
         preflight or not preflight_file_arg
     ):
@@ -6383,17 +7195,20 @@ def release_league(args: argparse.Namespace) -> None:
         ])
     if not preflight:
         required_migrations.append(REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION)
-    migration_rows = query_sql(
-        "select version from supabase_migrations.schema_migrations "
-        "where version = any(array["
-        + ", ".join(f"'{version}'" for version in required_migrations)
-        + "])"
-    )
-    if {row["version"] for row in migration_rows} != set(required_migrations):
-        raise SystemExit(
-            "release-league requires tracked migrations "
-            + ", ".join(required_migrations)
+    if analysis_version == "v6" and year2_release_contract is not None:
+        assert_checksum_bound_release_migrations(year2_release_contract, "V6 league release")
+    else:
+        migration_rows = query_sql(
+            "select version from supabase_migrations.schema_migrations "
+            "where version = any(array["
+            + ", ".join(f"'{version}'" for version in required_migrations)
+            + "])"
         )
+        if {row["version"] for row in migration_rows} != set(required_migrations):
+            raise SystemExit(
+                "release-league requires tracked migrations "
+                + ", ".join(required_migrations)
+            )
     if analysis_version == "v6" and year2_release_contract is not None:
         availability_params = SqlParams()
         availability_rows = query_sql(
@@ -6413,13 +7228,20 @@ def release_league(args: argparse.Namespace) -> None:
 
     workflow_started = time.perf_counter()
     candidate_started = time.perf_counter()
-    candidate = load_league_release_candidate(
-        season=season,
-        analysis_version=analysis_version,
-        classification_view_version=classification_view_version,
-        cohort_view_version=cohort_view_version,
-        league_candidate_view=league_candidate_view,
-        team_candidate_view=team_candidate_view,
+    candidate = (
+        load_v6_retained_league_rollback_candidate(
+            season=season,
+            rollback_of_release_id=rollback_of_release_id,
+        )
+        if rollback_of_release_id
+        else load_league_release_candidate(
+            season=season,
+            analysis_version=analysis_version,
+            classification_view_version=classification_view_version,
+            cohort_view_version=cohort_view_version,
+            league_candidate_view=league_candidate_view,
+            team_candidate_view=team_candidate_view,
+        )
     )
     candidate_query_ms = round((time.perf_counter() - candidate_started) * 1000, 3)
     if not isinstance(candidate.get("dashboard"), dict):
@@ -6428,6 +7250,8 @@ def release_league(args: argparse.Namespace) -> None:
             "found an incomplete payload"
         )
     dashboard = candidate["dashboard"]
+    if analysis_version == "v6":
+        assert_v6_public_dashboard_contract(dashboard, "league dashboard")
     classification_evidence_sha256 = clean_text(
         candidate.get("classification_evidence_sha256")
     ) or None
@@ -6438,7 +7262,7 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit("accepted reporting classification evidence is missing")
     if cohort_view_version != "v2" and not cohort_evidence_sha256:
         raise SystemExit("accepted cohort evidence is missing")
-    if analysis_version in {"v3", "v4", "v5", "v6"}:
+    if analysis_version in {"v3", "v4", "v5", "v6"} and not rollback_of_release_id:
         if analysis_version == "v6" and year2_release_contract is not None:
             semantic_cohort_view = year2_release_contract.injury_cohort_view
             semantic_monthly_view = year2_release_contract.league_monthly_view
@@ -6517,37 +7341,52 @@ def release_league(args: argparse.Namespace) -> None:
             )
     classification_adjudications: list[dict[str, Any]] = []
     if classification_view_version != "v2":
-        rule_params = SqlParams()
-        if classification_view_version == "reporting_classification_2026-07-22_v2":
-            adjudication_filter = """
-              (rule_version = 'reporting_classification_2026-07-20_v1'
-                and adjudication_ref in ('IA-02', 'ACL-01'))
-              or (rule_version = 'reporting_classification_2026-07-22_v2'
-                and adjudication_ref = 'OSIICS-01')
-            """
-            expected_refs = {"IA-02", "ACL-01", "OSIICS-01"}
+        if analysis_version == "v6" and year2_release_contract is not None:
+            # Year 2 carries only the approved catalogue and conservative
+            # inference rule, never the prior season's source-row ledger.
+            classification_adjudications = [{
+                "rule_version": "reporting_classification_2026-07-22_v2",
+                "rule_evidence_locator": "docs/evidence/urc_2025_26_classification_rule.json",
+                "rule_evidence_sha256": "e898320fc5fa8cdfbf4fde4382d1ade62c87fe2dbef820ecf72b557bfb07cd5f",
+                "mapping_catalogue_projection_sha256": "79767a9fc4212309c8fa01749ddf47541a251e467897268a9c8edeb4265553ff",
+                "mapping_catalogue_row_count": 52,
+                "multi_type_catalogue_projection_sha256": "d7aa844af7a4e6a53072f90e129da5357dfd4523aef415ecf84fd447702db55a",
+                "multi_type_catalogue_row_count": 1,
+                "application_scope": "catalogue_and_conservative_inference_only",
+                "year1_row_adjudications": "not_carried_forward",
+            }]
         else:
-            adjudication_filter = """
-              rule_version = 'reporting_classification_2026-07-20_v1'
-              and adjudication_ref in ('IA-02', 'ACL-01')
-            """
-            expected_refs = {"IA-02", "ACL-01"}
-        classification_adjudications = query_sql(
-            f"""
-            select adjudication_ref, rule_version, evidence_sha256,
-                   workbook_sha256, evidence_manifest_sha256, reviewer,
-                   workbook_snapshot_locator, migration_version, migration_sha256,
-                   rationale
-            from audit.rule_adjudications
-            where {adjudication_filter}
-            order by adjudication_ref
-            """,
-            rule_params.values,
-        )
-        if len(classification_adjudications) != len(expected_refs) or {
-            row["adjudication_ref"] for row in classification_adjudications
-        } != expected_refs:
-            raise SystemExit("exact reporting-classification evidence is incomplete")
+            rule_params = SqlParams()
+            if classification_view_version == "reporting_classification_2026-07-22_v2":
+                adjudication_filter = """
+                  (rule_version = 'reporting_classification_2026-07-20_v1'
+                    and adjudication_ref in ('IA-02', 'ACL-01'))
+                  or (rule_version = 'reporting_classification_2026-07-22_v2'
+                    and adjudication_ref = 'OSIICS-01')
+                """
+                expected_refs = {"IA-02", "ACL-01", "OSIICS-01"}
+            else:
+                adjudication_filter = """
+                  rule_version = 'reporting_classification_2026-07-20_v1'
+                  and adjudication_ref in ('IA-02', 'ACL-01')
+                """
+                expected_refs = {"IA-02", "ACL-01"}
+            classification_adjudications = query_sql(
+                f"""
+                select adjudication_ref, rule_version, evidence_sha256,
+                       workbook_sha256, evidence_manifest_sha256, reviewer,
+                       workbook_snapshot_locator, migration_version, migration_sha256,
+                       rationale
+                from audit.rule_adjudications
+                where {adjudication_filter}
+                order by adjudication_ref
+                """,
+                rule_params.values,
+            )
+            if len(classification_adjudications) != len(expected_refs) or {
+                row["adjudication_ref"] for row in classification_adjudications
+            } != expected_refs:
+                raise SystemExit("exact reporting-classification evidence is incomplete")
     cohort_adjudications: list[dict[str, Any]] = []
     if cohort_view_version != "v2":
         cohort_params = SqlParams()
@@ -6608,19 +7447,34 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit(
             f"release-league requires 16 complete team dashboard payloads, found {len(team_payloads)}"
         )
+    if analysis_version == "v6":
+        for row in team_payloads:
+            if not isinstance(row.get("team_key"), str) or not row["team_key"]:
+                raise SystemExit("V6 league candidate team payload lacks a team key")
+            assert_v6_public_dashboard_contract(row["dashboard"], row["team_key"])
     if analysis_version in {"v3", "v4", "v5", "v6"} and any(
         "injury_cohort_filters" in row["dashboard"].get("coverage", {})
         for row in team_payloads
     ):
         raise SystemExit("season-bound team payload retained stale V2 cohort filters")
 
-    member_params = SqlParams()
-    members = query_sql(
-        f"select team_key, team_release_id::text, curated_build_id::text "
-        f"from {member_view} "
-        f"where season = {member_params.text(season)} order by team_key",
-        member_params.values,
-    )
+    if rollback_of_release_id:
+        members = [
+            {
+                "team_key": row["team_key"],
+                "team_release_id": row["team_release_id"],
+                "curated_build_id": row["curated_build_id"],
+            }
+            for row in sorted(team_payloads, key=lambda item: item["team_key"])
+        ]
+    else:
+        member_params = SqlParams()
+        members = query_sql(
+            f"select team_key, team_release_id::text, curated_build_id::text "
+            f"from {member_view} "
+            f"where season = {member_params.text(season)} order by team_key",
+            member_params.values,
+        )
     if len(members) != 16:
         raise SystemExit(f"release-league requires 16 approved member releases, found {len(members)}")
     member_by_team = {member["team_key"]: member for member in members}
@@ -6668,6 +7522,22 @@ def release_league(args: argparse.Namespace) -> None:
         "reconciliation": max(reconciliation_ms, 0),
         "preflight_total": round((time.perf_counter() - workflow_started) * 1000, 3),
     }
+    manifest_candidate_views = (
+        {
+            "league": "reporting.league_release_payloads_v6",
+            "teams": "reporting.team_dashboard_payloads_v2",
+        }
+        if rollback_of_release_id
+        else {"league": league_candidate_view, "teams": team_candidate_view}
+    )
+    manifest_required_migrations: list[object] = (
+        [
+            {"version": item.version, "name": item.name, "sha256": item.sha256}
+            for item in year2_release_contract.required_migration_contracts
+        ]
+        if analysis_version == "v6" and year2_release_contract is not None
+        else list(required_migrations)
+    )
 
     if preflight:
         output_arg = clean_text(args.output or "")
@@ -6690,11 +7560,12 @@ def release_league(args: argparse.Namespace) -> None:
                 "classification_view_version": classification_view_version,
                 "cohort_view_version": cohort_view_version,
             },
-            "candidate_views": {
-                "league": league_candidate_view,
-                "teams": team_candidate_view,
-            },
-            "required_migrations": required_migrations,
+            "candidate_views": manifest_candidate_views,
+            "rollback_of_release_id": rollback_of_release_id or None,
+            "rollback_replaces_release_id": (
+                candidate.get("replaces_release_id") if rollback_of_release_id else None
+            ),
+            "required_migrations": manifest_required_migrations,
             "member_count": len(members),
             "member_input_hash": member_input_hash,
             "league_payload_sha256": league_payload_sha256,
@@ -6704,6 +7575,9 @@ def release_league(args: argparse.Namespace) -> None:
             "evidence_sha256s": v5_evidence_sha256s,
             "classification_evidence_sha256": classification_evidence_sha256,
             "cohort_evidence_sha256": cohort_evidence_sha256,
+            "local_evidence_files": year2_release_local_evidence_records(year2_release_contract)
+            if analysis_version == "v6" and year2_release_contract is not None
+            else [],
             "classification_adjudications": classification_adjudications,
             "classification_adjudications_sha256": sha256_json(
                 classification_adjudications
@@ -6723,7 +7597,6 @@ def release_league(args: argparse.Namespace) -> None:
                 "member_roster": "passed",
                 "candidate_hashes": "passed",
             },
-            "timings_ms": timings_ms,
         }
         write_json_atomic(manifest_path, preflight_manifest)
         print(
@@ -6768,9 +7641,13 @@ def release_league(args: argparse.Namespace) -> None:
     except json.JSONDecodeError as exc:
         raise SystemExit(f"league preflight file is invalid JSON: {preflight_path}") from exc
     reviewed_hash_params = SqlParams()
+    reviewed_bundle_hash_sql = (
+        f"reporting.canonical_jsonb_sha256_v1(({reviewed_hash_params.text(reviewed_bytes.decode('utf-8'))})::jsonb)"
+        if analysis_version == "v6"
+        else f"encode(digest(convert_to(({reviewed_hash_params.text(reviewed_bytes.decode('utf-8'))})::jsonb::text, 'UTF8'), 'sha256'), 'hex')"
+    )
     reviewed_hash_rows = query_sql(
-        f"select encode(digest(convert_to(({reviewed_hash_params.text(reviewed_bytes.decode('utf-8'))})::jsonb::text, "
-        f"'UTF8'), 'sha256'), 'hex') as bundle_payload_sha256",
+        f"select {reviewed_bundle_hash_sql} as bundle_payload_sha256",
         reviewed_hash_params.values,
     )
     reviewed_diffs = diff_json_documents(reviewed_bundle, public_bundle)
@@ -6802,21 +7679,23 @@ def release_league(args: argparse.Namespace) -> None:
             "classification_view_version": classification_view_version,
             "cohort_view_version": cohort_view_version,
         }
-        expected_candidate_views = {
-            "league": league_candidate_view,
-            "teams": team_candidate_view,
-        }
-        preflight_required_migrations = [
-            version
-            for version in required_migrations
-            if version != REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
-        ]
+        expected_candidate_views = manifest_candidate_views
+        preflight_required_migrations: list[object] = (
+            manifest_required_migrations
+            if analysis_version == "v6"
+            else [
+                version
+                for version in required_migrations
+                if version != REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+            ]
+        )
         manifest_checks = (
             (
                 "schema_version",
                 reviewed_manifest.get("schema_version"),
                 "urc_league_release_preflight_manifest_v1",
             ),
+            ("status", reviewed_manifest.get("status"), "preflight"),
             ("season", reviewed_manifest.get("season"), season),
             (
                 "release_tuple",
@@ -6827,6 +7706,16 @@ def release_league(args: argparse.Namespace) -> None:
                 "candidate_views",
                 reviewed_manifest.get("candidate_views"),
                 expected_candidate_views,
+            ),
+            (
+                "rollback_of_release_id",
+                reviewed_manifest.get("rollback_of_release_id"),
+                rollback_of_release_id or None,
+            ),
+            (
+                "rollback_replaces_release_id",
+                reviewed_manifest.get("rollback_replaces_release_id"),
+                candidate.get("replaces_release_id") if rollback_of_release_id else None,
             ),
             (
                 "required_migrations",
@@ -6879,6 +7768,13 @@ def release_league(args: argparse.Namespace) -> None:
                 cohort_evidence_sha256,
             ),
             (
+                "local_evidence_files",
+                reviewed_manifest.get("local_evidence_files"),
+                year2_release_local_evidence_records(year2_release_contract)
+                if analysis_version == "v6" and year2_release_contract is not None
+                else [],
+            ),
+            (
                 "classification_adjudications",
                 reviewed_manifest.get("classification_adjudications"),
                 classification_adjudications,
@@ -6916,7 +7812,28 @@ def release_league(args: argparse.Namespace) -> None:
                 reviewed_manifest.get("dirty_worktree_allowed_paths"),
                 dirty_override_allowed_paths,
             ),
+            (
+                "candidate_assembly_reads",
+                reviewed_manifest.get("candidate_assembly_reads"),
+                1,
+            ),
+            (
+                "reconciliation",
+                reviewed_manifest.get("reconciliation"),
+                {
+                    "migration_prerequisites": "passed",
+                    "semantic_sections": "passed",
+                    "member_roster": "passed",
+                    "candidate_hashes": "passed",
+                },
+            ),
         )
+        expected_manifest_keys = {field for field, _actual, _expected in manifest_checks}
+        if set(reviewed_manifest) != expected_manifest_keys:
+            raise SystemExit(
+                "league preflight manifest has missing or unknown fields: "
+                f"actual={sorted(reviewed_manifest)}, expected={sorted(expected_manifest_keys)}"
+            )
         first_manifest_mismatch = next(
             (
                 (field, actual, expected)
@@ -6974,6 +7891,11 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit(
             "--previous-bundle-file is only valid when an approved predecessor exists"
         )
+    if rollback_of_release_id:
+        if predecessor is None or predecessor["release_id"] != candidate.get("replaces_release_id"):
+            raise SystemExit(
+                "V6 rollback target is no longer the exact predecessor of the current approved bundle"
+            )
 
     label_prefix = f"urc-{season}-{analysis_version}-{bundle_payload_sha256[:12]}"
     attempt_params = SqlParams()
@@ -6987,6 +7909,14 @@ def release_league(args: argparse.Namespace) -> None:
     generated_at = clean_text(dashboard.get("generated_at"))
     if not generated_at:
         raise SystemExit("league payload generated_at is missing")
+    v6_validation_migration: dict[str, str] | None = None
+    if analysis_version == "v6" and year2_release_contract is not None:
+        validation_contract = year2_release_contract.required_migration_contracts[-1]
+        v6_validation_migration = {
+            "version": validation_contract.version,
+            "name": validation_contract.name,
+            "sha256": validation_contract.sha256,
+        }
     release_parameters = {
         "analysis_version": analysis_version,
         "classification_view_version": classification_view_version,
@@ -7010,17 +7940,25 @@ def release_league(args: argparse.Namespace) -> None:
             allow_legacy_preflight_without_manifest
         ),
         "preflight_reviewer": reviewer,
-        "payload_hash_validation_migration": REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION,
+        "payload_hash_validation_migration": (
+            v6_validation_migration
+            if v6_validation_migration is not None
+            else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+        ),
         "payload_candidate_validation_migration": (
-            INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
-            if uses_osiics_successor
+            v6_validation_migration
+            if v6_validation_migration is not None
             else (
-                CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION
-                if analysis_version == "v5"
+                INCREMENTAL_CLASSIFICATION_BUNDLE_MIGRATION_VERSION
+                if uses_osiics_successor
                 else (
-                    LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION
-                    if analysis_version == "v4"
-                    else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+                    CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION
+                    if analysis_version == "v5"
+                    else (
+                        LINEAGE_V4_CANDIDATE_FAST_PATH_MIGRATION_VERSION
+                        if analysis_version == "v4"
+                        else REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
+                    )
                 )
             )
         ),
@@ -7031,6 +7969,7 @@ def release_league(args: argparse.Namespace) -> None:
         "promotion_candidate_validation_reads": 1,
         "preflight_timings_ms": timings_ms,
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
+        "rollback_of_release_id": rollback_of_release_id or None,
     }
     if predecessor is not None:
         release_parameters.update({
@@ -7060,6 +7999,122 @@ def release_league(args: argparse.Namespace) -> None:
           where id = {params.text(predecessor['release_id'])}::uuid
             and status = 'approved';
         """
+    if rollback_of_release_id:
+        reviewed_member_guard_sql = f"""
+        perform 1
+        from curated.builds build
+          join reviewed_league_members member on member.curated_build_id = build.id
+        where build.season = {params.text(season)}
+          and build.team_key = member.team_key
+        order by member.team_key, build.id
+        for update;
+        if (
+          select count(*)
+          from curated.builds build
+            join reviewed_league_members member on member.curated_build_id = build.id
+          where build.season = {params.text(season)}
+            and build.team_key = member.team_key
+        ) <> 16 then
+          raise exception 'retained rollback curated-build identities are incomplete';
+        end if;
+        """
+        rollback_context_insert_sql = f"""
+      insert into reporting.v6_league_rollback_context
+        (release_id, rollback_of_release_id, replaces_release_id)
+      select id, {params.text(rollback_of_release_id)}::uuid,
+        {params.text(candidate['replaces_release_id'])}::uuid
+      from current_league_release;
+        """
+        league_payload_insert_sql = f"""
+      insert into reporting.league_release_payloads_v2
+        (release_id, dashboard_payload)
+      select id, {params.jsonb(dashboard)}
+      from current_league_release;
+        """
+        team_payload_insert_sql = f"""
+      insert into reporting.team_dashboard_payloads_v2
+        (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
+      select current_league_release.id, retained.team_key,
+        retained.team_release_id::uuid, retained.curated_build_id::uuid,
+        retained.dashboard
+      from current_league_release,
+        jsonb_to_recordset({params.jsonb(team_payloads)}) as retained(
+          team_key text, team_release_id text, curated_build_id text, dashboard jsonb
+        );
+        """
+    else:
+        reviewed_member_guard_sql = f"""
+        -- Build-curated supersedes the previous active row before inserting a
+        -- replacement. Lock each reviewed row in the same roster order before
+        -- the post-lock member-view comparison, so a concurrent rebuild must
+        -- either finish first and make this promotion fail closed, or wait
+        -- until the immutable bundle has been committed.
+        perform 1
+        from curated.builds build
+          join reviewed_league_members member on member.curated_build_id = build.id
+        where build.season = {params.text(season)}
+          and build.team_key = member.team_key
+        order by member.team_key, build.id
+        for update;
+        if (
+          select count(*)
+          from curated.builds build
+            join reviewed_league_members member on member.curated_build_id = build.id
+          where build.season = {params.text(season)}
+            and build.team_key = member.team_key
+            and build.status = 'active'
+        ) <> 16 then
+          raise exception 'reviewed active curated builds changed after preflight validation';
+        end if;
+        if exists (
+          select 1 from reviewed_league_members member
+          full join (
+            select team_key, team_release_id, curated_build_id
+            from {member_view}
+            where season = {params.text(season)}
+          ) live
+            on live.team_key = member.team_key
+           and live.team_release_id = member.team_release_id
+           and live.curated_build_id = member.curated_build_id
+          where member.team_key is null or live.team_key is null
+        ) then
+          raise exception 'reviewed bundle member identities changed after preflight validation';
+        end if;
+        """
+        rollback_context_insert_sql = ""
+        league_payload_insert_sql = f"""
+      insert into reporting.league_release_payloads_v2
+        (release_id, dashboard_payload)
+      select current_league_release.id, candidate.dashboard
+      from current_league_release
+      join {league_candidate_view} candidate
+        on candidate.season = {params.text(season)}
+       and candidate.analysis_version = {params.text(analysis_version)}
+       and candidate.classification_view_version = {params.text(classification_view_version)}
+       and candidate.classification_evidence_sha256 is not distinct from
+         {params.text(classification_evidence_sha256)}
+       and candidate.cohort_view_version = {params.text(cohort_view_version)}
+       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)};
+        """
+        team_payload_insert_sql = f"""
+      insert into reporting.team_dashboard_payloads_v2
+        (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
+      select current_league_release.id, candidate.team_key, candidate.team_release_id,
+        candidate.curated_build_id, candidate.dashboard
+      from current_league_release
+      join {team_candidate_view} candidate
+        on candidate.season = {params.text(season)}
+       and candidate.analysis_version = {params.text(analysis_version)}
+       and candidate.classification_view_version = {params.text(classification_view_version)}
+       and candidate.classification_evidence_sha256 is not distinct from
+         {params.text(classification_evidence_sha256)}
+       and candidate.cohort_view_version = {params.text(cohort_view_version)}
+       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)}
+      join reviewed_league_members expected
+        on expected.team_key = candidate.team_key
+       and expected.team_release_id = candidate.team_release_id
+       and expected.curated_build_id = candidate.curated_build_id;
+        """
     sql = f"""
       {protected_alias_scan_sql('league release gate')}
 
@@ -7084,23 +8139,11 @@ def release_league(args: argparse.Namespace) -> None:
         member_count integer;
       begin
         select count(*) into member_count from reviewed_league_members;
-        if member_count <> 16 then
+        if member_count <> 16
+           or (select count(distinct team_key) from reviewed_league_members) <> 16 then
           raise exception 'reviewed bundle must contain exactly 16 distinct members';
         end if;
-        if exists (
-          select 1 from reviewed_league_members member
-          full join (
-            select team_key, team_release_id, curated_build_id
-            from {member_view}
-            where season = {params.text(season)}
-          ) live
-            on live.team_key = member.team_key
-           and live.team_release_id = member.team_release_id
-           and live.curated_build_id = member.curated_build_id
-          where member.team_key is null or live.team_key is null
-        ) then
-          raise exception 'reviewed bundle member identities changed after preflight validation';
-        end if;
+        {reviewed_member_guard_sql}
       end $$;
 
       create temp table current_league_release on commit drop as
@@ -7144,6 +8187,8 @@ def release_league(args: argparse.Namespace) -> None:
         {params.text(cohort_view_version)}, {params.text(cohort_evidence_sha256)}
       from current_league_release;
 
+      {rollback_context_insert_sql}
+
       insert into reporting.league_release_members_v2
         (release_id, team_key, team_release_id, curated_build_id)
       select current_league_release.id, member.team_key, member.team_release_id::uuid,
@@ -7153,36 +8198,9 @@ def release_league(args: argparse.Namespace) -> None:
           team_key text, team_release_id text, curated_build_id text
         );
 
-      insert into reporting.league_release_payloads_v2
-        (release_id, dashboard_payload)
-      select current_league_release.id, candidate.dashboard
-      from current_league_release
-      join {league_candidate_view} candidate
-        on candidate.season = {params.text(season)}
-       and candidate.analysis_version = {params.text(analysis_version)}
-       and candidate.classification_view_version = {params.text(classification_view_version)}
-       and candidate.classification_evidence_sha256 is not distinct from
-         {params.text(classification_evidence_sha256)}
-       and candidate.cohort_view_version = {params.text(cohort_view_version)}
-       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)};
+      {league_payload_insert_sql}
 
-      insert into reporting.team_dashboard_payloads_v2
-        (bundle_release_id, team_key, team_release_id, curated_build_id, dashboard_payload)
-      select current_league_release.id, candidate.team_key, candidate.team_release_id,
-        candidate.curated_build_id, candidate.dashboard
-      from current_league_release
-      join {team_candidate_view} candidate
-        on candidate.season = {params.text(season)}
-       and candidate.analysis_version = {params.text(analysis_version)}
-       and candidate.classification_view_version = {params.text(classification_view_version)}
-       and candidate.classification_evidence_sha256 is not distinct from
-         {params.text(classification_evidence_sha256)}
-       and candidate.cohort_view_version = {params.text(cohort_view_version)}
-       and candidate.cohort_evidence_sha256 is not distinct from {params.text(cohort_evidence_sha256)}
-      join reviewed_league_members expected
-        on expected.team_key = candidate.team_key
-       and expected.team_release_id = candidate.team_release_id
-       and expected.curated_build_id = candidate.curated_build_id;
+      {team_payload_insert_sql}
 
       {predecessor_retire_sql}
 
@@ -7195,22 +8213,46 @@ def release_league(args: argparse.Namespace) -> None:
       declare
         published_league_count integer;
         published_team_count integer;
+        published_v6_league_count integer;
+        published_v6_team_count integer;
+        published_v6_token_count integer;
         stored_league_hash text;
         stored_team_hashes jsonb;
         stored_bundle_hash text;
       begin
-        select count(*) into published_league_count
-        from reporting.latest_league_dashboard_v2 d
-        where d.season = {params.text(season)};
-        if published_league_count <> 1 then
-          raise exception 'published league dashboard bundle must expose exactly one league row';
-        end if;
+        if {params.text(analysis_version)} = 'v6' then
+          select count(*) into published_v6_league_count
+          from reporting.latest_league_dashboard_v6 d
+          where d.season = {params.text(season)};
+          if published_v6_league_count <> 1 then
+            raise exception 'V6 public league reader must expose exactly one completed bundle';
+          end if;
+          select count(*) into published_v6_team_count
+          from reporting.latest_team_dashboard_v6 d
+          where d.season = {params.text(season)};
+          if published_v6_team_count <> 16 then
+            raise exception 'V6 public team reader must expose exactly sixteen completed members';
+          end if;
+          select count(*) into published_v6_token_count
+          from reporting.latest_dashboard_cache_token_v2 token
+          where token.season = {params.text(season)};
+          if published_v6_token_count <> 1 then
+            raise exception 'V6 public cache token must expose exactly one completed bundle';
+          end if;
+        else
+          select count(*) into published_league_count
+          from reporting.latest_league_dashboard_v2 d
+          where d.season = {params.text(season)};
+          if published_league_count <> 1 then
+            raise exception 'published league dashboard bundle must expose exactly one league row';
+          end if;
 
-        select count(*) into published_team_count
-        from reporting.latest_team_dashboard_v2 d
-        where d.season = {params.text(season)};
-        if published_team_count <> 16 then
-          raise exception 'published team dashboard bundle must expose exactly 16 teams';
+          select count(*) into published_team_count
+          from reporting.latest_team_dashboard_v2 d
+          where d.season = {params.text(season)};
+          if published_team_count <> 16 then
+            raise exception 'published team dashboard bundle must expose exactly 16 teams';
+          end if;
         end if;
 
         select p.payload_sha256 into stored_league_hash
@@ -7286,10 +8328,43 @@ def release_league(args: argparse.Namespace) -> None:
                 provenance=provenance, failure_stage="database_promotion_rolled_back",
             )
         raise
+    v6_finalizer_command = ""
+    if analysis_version == "v6":
+        identity_params = SqlParams()
+        identity_rows = query_sql(
+            f"select release.id::text as release_id "
+            f"from reporting.aggregate_releases release "
+            f"join reporting.league_release_context_v2 context "
+            f"on context.release_id = release.id "
+            f"where release.release_label = {identity_params.text(label)} "
+            f"and release.status = 'approved' "
+            f"and context.season = {identity_params.text(season)} "
+            f"and context.analysis_version = 'v6'",
+            identity_params.values,
+        )
+        if len(identity_rows) != 1 or not clean_text(identity_rows[0].get("release_id")):
+            raise SystemExit(
+                "V6 league promotion succeeded, but the exact approved release identity "
+                "could not be read back. Do not rerun promotion; recover the approved UUID "
+                f"for label {label!r}, then use finalize-v6-league-release-local with "
+                f"--release-label {label!r} and --preflight-file {str(preflight_path)!r}."
+            )
+        v6_finalizer_command = v6_local_finalizer_command(
+            release_id=clean_text(identity_rows[0]["release_id"]),
+            release_label=label,
+            preflight_file=preflight_path,
+        )
     try:
         export_path.parent.mkdir(parents=True, exist_ok=True)
         os.replace(staged_export_path, export_path)
-    except BaseException:
+    except BaseException as export_error:
+        if analysis_version == "v6":
+            raise SystemExit(
+                "V6 league promotion succeeded, but the local league export "
+                f"replacement failed. The approved append-only release {label!r} "
+                f"was retained; repair the local league export path, then run exactly: "
+                f"{v6_finalizer_command}. Historical releases were not re-approved."
+            ) from export_error
         recovery_params = SqlParams()
         predecessor_id = predecessor["release_id"] if predecessor is not None else None
         run_sql(
@@ -7357,6 +8432,12 @@ def release_league(args: argparse.Namespace) -> None:
             expected_bundle=public_bundle,
         )
     except BaseException as exc:
+        if analysis_version == "v6":
+            raise SystemExit(
+                "V6 league promotion succeeded, but the mandatory 16-team parity "
+                "export failed. The approved release was retained; repair the parity "
+                f"export path, then run exactly: {v6_finalizer_command}. Error: {exc}"
+            ) from exc
         raise SystemExit(
             "league promotion succeeded, but the mandatory 16-team parity "
             "export failed; rerun export-team-dashboards for the approved "
@@ -7367,60 +8448,44 @@ def release_league(args: argparse.Namespace) -> None:
     release_manifest_path = (
         Path("data/reporting") / f"{label}_release_manifest.json"
     )
-    release_manifest = {
-            "schema_version": "urc_league_release_manifest_v1",
-            "status": "promoted_and_exported",
-            "release_label": label,
-            "season": season,
-            "release_tuple": {
-                "analysis_version": analysis_version,
-                "classification_view_version": classification_view_version,
-                "cohort_view_version": cohort_view_version,
-            },
-            "required_migrations": required_migrations,
-            "member_count": len(members),
-            "member_input_hash": member_input_hash,
-            "league_payload_sha256": league_payload_sha256,
-            "bundle_payload_sha256": bundle_payload_sha256,
-            "team_payload_sha256s": team_payload_sha256s,
-            "reviewed_preflight_sha256": reviewed_sha256,
-            "reviewed_preflight_manifest_sha256": reviewed_manifest_sha256,
-            "provenance": {
-                "code_version": provenance["code_version"],
-                "dependency_lock_hash": provenance["dependency_lock_hash"],
-                "operator": provenance["operator"],
-            },
-            "dirty_worktree_paths": current_dirty_paths,
-            "dirty_worktree_allowed_paths": dirty_override_allowed_paths,
-            "candidate_assembly_reads": 1,
-            "promotion_candidate_validation_reads": 1,
-            "reconciliation": {
-                "migration_prerequisites": "passed",
-                "semantic_sections": "passed",
-                "member_roster": "passed",
-                "reviewed_candidate_equality": "passed",
-                "database_readback": "passed",
-                "parity_export": "passed",
-            },
-            "parity_export": {
-                "team_count": parity_export["team_count"],
-                "export_set_sha256": parity_export["export_set_sha256"],
-                "bundle_sha256": parity_export.get("bundle_sha256"),
-            },
-            "timings_ms": {
-                **timings_ms,
-                "parity_export": parity_export_ms,
-                "workflow_total": workflow_total_ms,
-            },
-            "rollback": (
-                predecessor
-                if predecessor is not None
-                else {"status": "no predecessor existed"}
-            ),
-        }
+    release_manifest = league_release_manifest_document(
+        release_label=label,
+        season=season,
+        release_tuple={
+            "analysis_version": analysis_version,
+            "classification_view_version": classification_view_version,
+            "cohort_view_version": cohort_view_version,
+        },
+        required_migrations=manifest_required_migrations,
+        member_count=len(members),
+        member_input_hash=member_input_hash,
+        league_payload_sha256=league_payload_sha256,
+        bundle_payload_sha256=bundle_payload_sha256,
+        team_payload_sha256s=team_payload_sha256s,
+        reviewed_preflight_sha256=reviewed_sha256,
+        reviewed_preflight_manifest_sha256=reviewed_manifest_sha256,
+        provenance={
+            "code_version": provenance["code_version"],
+            "dependency_lock_hash": provenance["dependency_lock_hash"],
+            "operator": provenance["operator"],
+        },
+        dirty_worktree_paths=current_dirty_paths,
+        dirty_worktree_allowed_paths=dirty_override_allowed_paths,
+        parity_export=parity_export,
+        rollback=(predecessor if predecessor is not None else {"status": "no predecessor existed"}),
+        rollback_of_release_id=rollback_of_release_id or None,
+        rollback_replaces_release_id=(candidate.get("replaces_release_id") if rollback_of_release_id else None),
+    )
     try:
         write_json_atomic(release_manifest_path, release_manifest)
     except BaseException as exc:
+        if analysis_version == "v6":
+            raise SystemExit(
+                "V6 league promotion and parity export succeeded, but the local "
+                "release manifest write failed. The approved release was retained; "
+                f"repair the release manifest path, then run exactly: "
+                f"{v6_finalizer_command}. Error: {exc}"
+            ) from exc
         raise SystemExit(
             "league promotion and parity export succeeded, but the local "
             "release manifest write failed; do not rerun promotion, preserve "
@@ -9260,18 +10325,49 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
     # structure before a checksum lookup or any database read. The frozen
     # 2024-25 correction file deliberately stays on its existing path.
     fixture_provenance: list[dict[str, object]] = []
-    if fixture_contract_for(season) is not None:
+    fixture_contract = fixture_contract_for(season)
+    has_fixture_contract = fixture_contract is not None
+    if has_fixture_contract:
+        assert fixture_contract is not None
+        assert_local_evidence_bytes([{
+            "role": "fixture_preparation",
+            "locator": fixture_contract.evidence_locator,
+            "sha256": fixture_contract.evidence_sha256,
+        }], "Year 2 fixture load")
         try:
             validate_fixture_rows(season, rows)
-            fixture_provenance = fixture_provenance_rows(season, rows)
         except ValueError as error:
             raise SystemExit(str(error)) from error
 
     file_hash = sha256_file(path)
+    if has_fixture_contract:
+        # The first validation above deliberately happens before any checksum
+        # or database access.  This second pure construction binds the actual
+        # prepared CSV bytes to the already-validated upstream response proof.
+        try:
+            fixture_provenance = fixture_provenance_rows(
+                season, rows, prepared_file_sha256=file_hash,
+            )
+            validate_fixture_provenance_binding(season, rows, fixture_provenance)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+
     if str(path) == URC_FIXTURES_2024_25_CORRECTED_PATH and file_hash != URC_FIXTURES_2024_25_CORRECTED_SHA256:
         raise SystemExit(
             "fixture file checksum mismatch for the documented 2024-25 corrected fixture file "
             f"(docs/EXPOSURE_CLEANING_PROTOCOL.md): expected {URC_FIXTURES_2024_25_CORRECTED_SHA256}, got {file_hash}"
+        )
+
+    if fixture_provenance:
+        year2_contract = release_contract_for(
+            "2025-26", YEAR2_2025_26_RELEASE_TUPLE,
+        )
+        fixture_migration = next(
+            item for item in year2_contract.required_migration_contracts
+            if item.version == YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION
+        )
+        assert_checksum_bound_migrations(
+            (fixture_migration,), "Year 2 fixture load",
         )
 
     existing_params = SqlParams()
@@ -9348,11 +10444,63 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         )"""
         for r in fixture_rows
     )
+    expected_fixture_values_sql = ",".join(
+        f"""(
+          {params.text(season)}, {r['source_row_number']},
+          {params.text(r['stage'])}, {params.text(r['round'])},
+          {params.text(r['match_date'])}::date, {params.text(r['date_status'])},
+          {params.text(r['home_team_key'])}, {params.text(r['away_team_key'])},
+          {params.text(file_hash)}
+        )"""
+        for r in fixture_rows
+    )
+    fixture_exact_binding_sql = (
+        f"""
+      create temp table expected_curated_fixtures (
+        season text not null,
+        source_row_number integer not null,
+        stage text not null,
+        round text not null,
+        match_date date not null,
+        date_status text not null,
+        home_team_key text not null,
+        away_team_key text not null,
+        source_file_sha256 text not null
+      ) on commit drop;
+
+      insert into expected_curated_fixtures values {expected_fixture_values_sql};
+
+      do $$
+      begin
+        if exists (
+          select 1
+          from expected_curated_fixtures expected
+          full join (
+            select season, source_row_number, stage, round, match_date,
+              date_status, home_team_key, away_team_key, source_file_sha256
+            from curated.fixtures where season = {params.text(season)}
+          ) actual using (season, source_row_number)
+          where expected.season is null or actual.season is null
+             or actual.stage is distinct from expected.stage
+             or actual.round is distinct from expected.round
+             or actual.match_date is distinct from expected.match_date
+             or actual.date_status is distinct from expected.date_status
+             or actual.home_team_key is distinct from expected.home_team_key
+             or actual.away_team_key is distinct from expected.away_team_key
+             or actual.source_file_sha256 is distinct from expected.source_file_sha256
+        ) then
+          raise exception 'curated fixtures differ from the exact prepared schedule';
+        end if;
+      end $$;
+        """
+        if fixture_provenance else ""
+    )
     provenance_values_sql = ",".join(
         f"""(
           {params.text(season)}, {item['source_row_number']},
           {params.text(item['upstream_match_id'])}, {params.text(item['source_locator'])},
-          {params.text(item['source_request_sha256'])}, {params.text(item['source_response_sha256'])},
+          {params.text(item['prepared_file_sha256'])},
+          {params.text(item['source_request_sha256'])}, {params.text(item['upstream_response_sha256'])},
           {params.text(item['retrieved_at'])}::timestamptz
         )"""
         for item in fixture_provenance
@@ -9364,8 +10512,9 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         source_row_number integer not null,
         upstream_match_id text not null,
         source_locator text not null,
+        prepared_file_sha256 text not null,
         source_request_sha256 text not null,
-        source_response_sha256 text not null,
+        upstream_response_sha256 text not null,
         retrieved_at timestamptz not null
       ) on commit drop;
 
@@ -9373,7 +10522,8 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
 
       insert into curated.fixture_provenance_v1 (
         season, source_row_number, upstream_match_id, source_locator,
-        source_request_sha256, source_response_sha256, retrieved_at, registered_by_run_id
+        prepared_file_sha256, source_request_sha256, upstream_response_sha256,
+        retrieved_at, registered_by_run_id
       )
       select expected.*, (select id from current_run)
       from expected_fixture_provenance expected
@@ -9388,11 +10538,20 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
             using (season, source_row_number)
           where actual.upstream_match_id is distinct from expected.upstream_match_id
              or actual.source_locator is distinct from expected.source_locator
+             or actual.prepared_file_sha256 is distinct from expected.prepared_file_sha256
              or actual.source_request_sha256 is distinct from expected.source_request_sha256
-             or actual.source_response_sha256 is distinct from expected.source_response_sha256
+             or actual.upstream_response_sha256 is distinct from expected.upstream_response_sha256
              or actual.retrieved_at is distinct from expected.retrieved_at
         ) then
           raise exception 'fixture provenance conflicts with existing immutable evidence';
+        end if;
+        if exists (
+          select 1
+          from expected_fixture_provenance expected
+          join curated.fixtures fixture using (season, source_row_number)
+          where fixture.source_file_sha256 is distinct from expected.prepared_file_sha256
+        ) then
+          raise exception 'fixture provenance is not bound to the accepted curated fixture bytes';
         end if;
       end $$;
         """
@@ -9400,11 +10559,24 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
     )
     year2_fixture_migration_guard = (
         f"""
-        if not exists (select 1 from supabase_migrations.schema_migrations where version = '{YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION}') then
-          raise exception 'load-curated-fixtures requires migration {YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION}_urc_2025_26_reporting_contract for Year 2 provenance';
+        if not exists (
+          select 1 from supabase_migrations.schema_migrations
+          where version = {params.text(fixture_migration.version)}
+            and name = {params.text(fixture_migration.name)}
+            and statements = array[{params.text(fixture_migration.statement)}]::text[]
+        ) then
+          raise exception 'load-curated-fixtures requires the exact checksum-bound Year 2 provenance migration';
         end if;
         """
         if fixture_provenance else ""
+    )
+    fixture_evidence_record = (
+        {
+            "role": "fixture_preparation",
+            "locator": fixture_contract.evidence_locator,
+            "sha256": fixture_contract.evidence_sha256,
+        }
+        if fixture_contract is not None else None
     )
     sql = f"""
       do $$
@@ -9423,7 +10595,7 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         insert into audit.pipeline_runs (command, season, status, input_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values (
           'load-curated-fixtures', {params.text(season)}, 'succeeded', {params.text(file_hash)},
-          {params.jsonb({"file": str(path), "rows": len(fixture_rows), "rule_version": CURATED_FIXTURE_LOAD_RULE_VERSION})},
+          {params.jsonb({"file": str(path), "rows": len(fixture_rows), "rule_version": CURATED_FIXTURE_LOAD_RULE_VERSION, "local_evidence_file": fixture_evidence_record})},
           now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
@@ -9443,6 +10615,7 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
       insert into curated.fixtures (season, stage, round, match_date, date_status, home_team_key, away_team_key, source_row_number, source_file_sha256, loaded_by_run_id)
       values {values_sql}
       on conflict (season, source_row_number) do nothing;
+      {fixture_exact_binding_sql}
       {fixture_provenance_insert_sql}
     """
     run_sql(sql, params.values)
@@ -12499,7 +13672,14 @@ def main() -> None:
         help="exact current approved bundle snapshot required for every bundle re-release",
     )
     league_release_parser.add_argument(
-        "--analysis-version", default="v2", choices=["v2", "v3", "v4", "v5", "v6"],
+        "--rollback-of-release-id", default="",
+        help=(
+            "2025-26 V6 only: create an append-only successor from the exact "
+            "retained immutable bundle identified by this release UUID"
+        ),
+    )
+    league_release_parser.add_argument(
+        "--analysis-version", default="", choices=["v2", "v3", "v4", "v5", "v6"],
         help=(
             "analytical candidate family; V3 requires the accepted season-bound cohort "
             "and V4 requires the accepted lineage cohort; V5 requires the accepted "
@@ -12507,7 +13687,7 @@ def main() -> None:
         ),
     )
     league_release_parser.add_argument(
-        "--classification-view-version", default="v2",
+        "--classification-view-version", default="",
         choices=[
             "v2",
             "reporting_classification_2026-07-20_v1",
@@ -12515,7 +13695,7 @@ def main() -> None:
         ],
     )
     league_release_parser.add_argument(
-        "--cohort-view-version", default="v2",
+        "--cohort-view-version", default="",
         choices=[
             "v2",
             "season_bound_2026-07-20_v1",
@@ -12547,11 +13727,17 @@ def main() -> None:
             "use their generated manifest"
         ),
     )
-    league_release_parser.set_defaults(func=release_league)
+    league_release_parser.set_defaults(func=release_league, command_name="release-league")
 
     team_parity_parser = subcommands.add_parser("export-team-dashboards")
     team_parity_parser.add_argument("--season", required=True)
     team_parity_parser.set_defaults(func=export_team_dashboard_parity_json)
+
+    v6_finalize_parser = subcommands.add_parser("finalize-v6-league-release-local")
+    v6_finalize_parser.add_argument("--release-id", required=True)
+    v6_finalize_parser.add_argument("--release-label", required=True)
+    v6_finalize_parser.add_argument("--preflight-file", required=True)
+    v6_finalize_parser.set_defaults(func=finalize_v6_league_release_local)
 
     diff_dashboard_json_parser = subcommands.add_parser("diff-dashboard-json")
     diff_dashboard_json_parser.add_argument("--old", required=True)
@@ -12795,6 +13981,22 @@ def main() -> None:
     correction_rollback_parser.set_defaults(func=correction_rollback)
 
     args = parser.parse_args()
+    if getattr(args, "command_name", "") == "release-league" and not any(
+        clean_text(getattr(args, field, ""))
+        for field in (
+            "analysis_version", "classification_view_version", "cohort_view_version",
+        )
+    ):
+        default_tuple = (
+            YEAR2_2025_26_RELEASE_TUPLE
+            if clean_text(args.season) == "2025-26"
+            else ("v2", "v2", "v2")
+        )
+        (
+            args.analysis_version,
+            args.classification_view_version,
+            args.cohort_view_version,
+        ) = default_tuple
     args.func(args)
 
 

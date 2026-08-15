@@ -1,5 +1,5 @@
 {
-  "evidence_version": "urc_2025_26_reporting_contract_v1",
+  "evidence_version": "urc_2025_26_reporting_contract_v2",
   "decision_ref": "ANALYSIS-WINDOW-2025-26-01",
   "season": "2025-26",
   "analysis_tuple": {
@@ -22,17 +22,39 @@
       "upstream_match_id",
       "source_locator",
       "source_request_sha256",
-      "source_response_sha256",
+      "upstream_response_sha256",
       "retrieved_at"
-    ]
+    ],
+    "preparation_evidence": {
+      "locator": "docs/evidence/urc_2025_26_fixture_preparation.json",
+      "sha256": "7b9a79ae5aeb3d8895d31e2c8d48ac0a555b40d772739b7949acac57f3a6d7ff",
+      "official_endpoint": "https://www.unitedrugby.com/graphql",
+      "source_locator_pattern": "https://www\\.unitedrugby\\.com/graphql#data\\.matchstats\\[[0-9]+\\]",
+      "source_request_sha256": "57f968c98a21c0fc3f8350c03beffdc5ccfa89e7221e3ba13200bae16ff6b1af",
+      "upstream_response_sha256": "411d683d87619bd35f1e6ce62951c0c1ad4aa1ccd57e042ac77651def0e017f6",
+      "prepared_fixture_csv_sha256": "071520f3f3c3dbe1979c8a42936d42bed9bc9b61ecf82131cc8151417d035d1b",
+      "retrieved_at": "2026-08-15T01:09:13Z"
+    }
   },
   "release_guard": {
     "candidate_objects_required": [
+      "analysis.accepted_urc_fixtures_v6",
+      "analysis.analysis_window_reporting_classification_v6",
+      "analysis.analysis_window_injury_cohort_v6",
+      "analysis.analysis_window_league_monthly_v6",
+      "analysis.analysis_window_league_summary_v6",
       "analysis.team_dashboard_release_candidates_analysis_window_v6",
+      "analysis.league_team_dashboard_release_candidates_analysis_window_v6",
       "analysis.league_dashboard_release_candidates_analysis_window_v6"
     ],
-    "status": "blocked_pending_evidence_backed_v6_computational_successor",
+    "migration_prerequisites": ["20260815010000", "20260815020000", "20260815030000"],
+    "status": "prepared-not-applied-source-blocked",
     "year1_mutation": "prohibited"
+  },
+  "classification_contract": {
+    "catalogue_rule_version": "reporting_classification_2026-07-22_v2",
+    "carry_forward": "catalogue and conservative inference only; no 2024-25 row ledger or row adjudication is applied to Year 2",
+    "precedence": "existing non-Unknown curated controlled values, then exact OSIICS mapping or one unique explicit body/type signal, otherwise Unknown"
   },
   "metric_contract": {
     "incidence": "pooled time-loss injuries / pooled exposure hours * 1000",

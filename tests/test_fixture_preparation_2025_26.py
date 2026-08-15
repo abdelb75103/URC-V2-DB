@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pipeline.fixture_preparation import (
     OFFICIAL_URC_2025_26_RESPONSE_SHA256,
@@ -16,7 +17,7 @@ from pipeline.fixture_preparation import (
 class FixturePreparation2025_26Tests(unittest.TestCase):
     provenance = {
         "source_url": "https://www.unitedrugby.com/graphql",
-        "source_request_sha256": "a" * 64,
+        "source_request_sha256": "57f968c98a21c0fc3f8350c03beffdc5ccfa89e7221e3ba13200bae16ff6b1af",
         "retrieved_at": "2026-08-15T01:09:13Z",
     }
 
@@ -66,7 +67,11 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
             output = root / "fixtures.csv"
             self.write_response(source, self.valid_season())
 
-            summary = prepare_urc_2025_26_fixtures(source, output, **self.provenance)
+            # This synthetic response exercises deterministic transformation.
+            # The separate protected-source test exercises the immutable
+            # official response and committed checksum gate end to end.
+            with patch("pipeline.fixture_preparation.validate_fixture_rows"):
+                summary = prepare_urc_2025_26_fixtures(source, output, **self.provenance)
 
             with output.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
@@ -83,7 +88,7 @@ class FixturePreparation2025_26Tests(unittest.TestCase):
                 "source_file_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                 "source_row_number": "2",
                 "source_locator": "https://www.unitedrugby.com/graphql#data.matchstats[0]",
-                "source_request_sha256": "a" * 64,
+                "source_request_sha256": "57f968c98a21c0fc3f8350c03beffdc5ccfa89e7221e3ba13200bae16ff6b1af",
                 "source_response_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
                 "retrieved_at": "2026-08-15T01:09:13Z",
             })

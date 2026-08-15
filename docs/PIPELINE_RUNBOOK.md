@@ -21,9 +21,9 @@ The base implementation is migration `20260726200000_dynamic_row_correction_pipe
 
 Frozen V2 bundle storage is not extended or bypassed. Dynamic promotion and rollback write only to `reporting.correction_release_context_v1` or `reporting.correction_rollback_context_v1`, `reporting.correction_league_payloads_v1`, and `reporting.correction_team_payloads_v1`. They never insert into `reporting.league_release_context_v2`, `reporting.league_release_payloads_v2`, or `reporting.team_dashboard_payloads_v2`.
 
-Three unified additive views expose either storage family without rewriting it: `reporting.dashboard_bundle_context_v1`, `reporting.dashboard_bundle_league_payloads_v1`, and `reporting.dashboard_bundle_team_payloads_v1`. The internal `reporting.latest_approved_dashboard_bundle_v4` selector chooses the newest complete approved V2, correction, or rollback bundle. `lib/reporting.ts` reads only the allowlisted `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` projections. Before any correction is approved, those V5 views project the current V5 V2 bundle exactly.
+Three unified additive views expose either storage family without rewriting it: `reporting.dashboard_bundle_context_v1`, `reporting.dashboard_bundle_league_payloads_v1`, and `reporting.dashboard_bundle_team_payloads_v1`. The internal `reporting.latest_approved_dashboard_bundle_v4` selector chooses the newest complete approved V2, correction, or rollback bundle. For 2024-25, the correction path is exposed through the allowlisted V5 projections. The shared application now reads only `reporting.latest_team_dashboard_v6` and `reporting.latest_league_dashboard_v6`: those V6 readers pass historical seasons through the V5 projections unchanged and activate a 2025-26 payload only when its complete reviewed V6 bundle is approved.
 
-The unified sources and internal V4 selector are private and ungranted to `web_reader`. The V5 reader views execute their joins under the owning definer, expose only the explicit dashboard allowlist, and are the only new surfaces introduced for `web_reader`. Historical V2, V3 and V4 aggregate-reader grants remain temporarily available for deployment rollback; the application no longer queries them. Retire those older grants only through an additive migration after the V5 deployment and rollback window are verified. This prevents direct reader access to bundle context, correction payload storage, release identifiers, build identifiers, correction evidence, or audit state.
+The unified sources and internal V4 selector are private and ungranted to `web_reader`. The historical V5 reader views execute their joins under the owning definer and expose only the explicit dashboard allowlist. The V6 successor adds only the season-aware V6 team and league readers, the V2 cache-token reader and the boolean V2 target-attestation reader to `web_reader`; its bundle selectors and payload storage remain private. Historical V2, V3 and V4 aggregate-reader grants remain temporarily available for deployment rollback; the application no longer queries them. Retire those older grants only through an additive migration after the V5 deployment and rollback window are verified. This prevents direct reader access to bundle context, correction payload storage, release identifiers, build identifiers, correction evidence, or audit state.
 
 The correction release tables and CLI currently enforce a complete 16-team bundle. A new or replacement club follows the normal profile, intake, processing and release path. If a season expands beyond 16 members, introduce an additive correction-contract successor before using correction promotion for that season.
 
@@ -53,7 +53,7 @@ A team/season is reproducible only when all of the following are true:
 5. Manual decisions are immutable adjudications keyed to the exact source evidence; they are reapplied by the pipeline rather than hand-edited into outputs.
 6. Curated rows retain both `source_row_id` and `record_version_id` and belong to one active, non-stale, checksummed build.
 7. Published metrics come from versioned SQL analysis views and retain their numerator, denominator, view/cohort version, build, and release identity.
-8. The public payload is an immutable reviewed snapshot, and the website reads only the least-privilege correction-aware `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` views.
+8. The public payload is an immutable reviewed snapshot, and the website reads only the least-privilege season-aware `reporting.latest_team_dashboard_v6` and `reporting.latest_league_dashboard_v6` views. Their historical-season branch is the frozen correction-aware V5 reader path.
 
 The formal boundary begins at the supplied pseudonymised, standardised intake. Upstream pseudonymisation or standardisation is claimed as reproducible only when its retained script, checksum bridge, locator evidence, and row reconciliation prove it.
 
@@ -72,9 +72,9 @@ The formal boundary begins at the supplied pseudonymised, standardised intake. U
 | 5. Adjudicate | Use the narrow adjudication command matching the approved decision; then reprocess/reapply through the pipeline. | Immutable `audit.adjudications`, evidence fingerprint, reviewer, post-decision processing state and events. | Live write; exact decision and target require approval. |
 | 6. Curate | `python3 -m pipeline build-curated --team <name> --season <season>` | `curated.builds`, typed injuries/exposure, source and record-version FKs, output hash, counts, denominators. | Live write; requires exactly one processed injury source, one processed exposure source, season fixtures, and exactly one active non-stale build for release. |
 | 7. Verify | `reconcile-curated` and `verify-analysis-parity` against the exact candidate. | Count/metric reconciliation and candidate parity evidence. | Read-only against the database; no promotion. |
-| 8a. Team release | First: `release --preflight`, review, then `release --preflight-file ... --preflight-reviewer ...`. Re-release: use the exact approved predecessor snapshot and, for numeric drift, an approved restatement envelope. | `reporting.aggregate_releases`, `release_context`, `release_table_rows`, reviewer and candidate hashes, build/view/run identity. | Preflight is read-only. Promotion is a separately approved live write. |
+| 8a. Team release | V2 to V5: first use `release --preflight`, then review and promote; a legacy re-release uses the exact predecessor snapshot and any required restatement envelope. V6: follow the Year 2 subsection below; predecessor selection is automatic and immutable. | Versioned release context and payload storage, reviewer and candidate hashes, build/view/run identity. | Preflight is read-only. Promotion is a separately approved live write. |
 | 8b. League bundle | Run `release-league` with the accepted analysis/classification/cohort tuple, then promote the reviewed exact file. Classification-only successors use the incremental candidate views: they inherit the approved payload and replace only `body_locations`, `injury_types`, and `injury_profiles`. | One immutable 16-team bundle, member release/build identities, classification/cohort evidence hashes, canonical payload hash, and retained predecessor. | Preflight is read-only. Promotion is a separately approved live write. Never rebuild or overwrite unrelated metrics for a classification-only change. |
-| 9. Serve | `lib/reporting.ts` queries `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5`. The private V4 bundle selector chooses either frozen V2 or additive correction payloads; V5 exposes the complete dashboard allowlist, including `contact_distribution`. | Zod-validated, whitelisted aggregate payload only; no release, build, correction, or audit identifiers cross the boundary. Private unified views are ungranted to `web_reader`. | Website is read-only and fails closed. |
+| 9. Serve | `lib/reporting.ts` queries the V6 team and league readers. They expose a complete approved 2025-26 V6 bundle or pass historical seasons through the private V5 bundle selector unchanged. | Zod-validated, whitelisted aggregate payload only; no release, build, correction, or audit identifiers cross the boundary. Private unified views are ungranted to `web_reader`. | Website is read-only and fails closed. |
 
 The 2024-25 V3 league bundle is an additive successor cohort. It does not rewrite frozen V1 team releases or historical migrations. Broader diagnosis inference in `tools/sql/dashboard_v3_preview.sql` remains a local experiment and is not part of the accepted pipeline.
 
@@ -154,7 +154,9 @@ single result supplies the reviewed bundle, PostgreSQL canonical hashes and
 downstream equality checks. It writes a Git-ignored
 `<preflight>.manifest.json` sidecar recording the tuple, migration
 prerequisites, evidence hashes, candidate hashes, reconciliation status and
-timings, plus the exact code/dependency provenance and authorised dirty paths.
+the exact code/dependency provenance and authorised dirty paths. For V6, the
+migration prerequisites are exact version, name and SHA-256 triples and the
+reviewed manifest must contain exactly the deterministic authoritative fields.
 Promotion requires and validates that sidecar, performs the existing
 immutable database readback, regenerates parity exports, and writes a
 Git-ignored release manifest with the export-set hash and rollback tuple.
@@ -363,7 +365,7 @@ The ceremony below is retained as the record of how the retired pre-restatement 
 
 **Before any release.** Commit implementation changes first: `release`, including preflight, refuses a dirty Git tree.
 
-**First release for a team/season.**
+**First legacy V2 to V5 release for a team/season.**
 
 ```bash
 python3 -m pipeline release --team <LegacyName> --season <season> --preflight
@@ -378,7 +380,7 @@ python3 -m pipeline release --team <LegacyName> --season <season> \
 
 The CLI blocks before SQL if any field except `generated_at` changed, and records both reviewer and candidate checksum in audit parameters. It inserts an invisible draft with an open audit run, verifies and serializes that exact snapshot, then atomically promotes it to approved/succeeded. A failed attempt is retired/failed and an identical retry receives a new immutable label. If local artifact export fails after promotion, cleanup restores the exact prior approved predecessor when one existed. Confirm independently with `diff-dashboard-json --preflight-release --old <candidate> --new content/reporting/<team_key>_dashboard_<season>.json`; only `generated_at` may differ.
 
-**Re-release for a team/season.** Snapshot the old JSON from HEAD first:
+**Legacy V2 to V5 re-release for a team/season.** Snapshot the old JSON from HEAD first:
 
 ```bash
 git show HEAD:content/reporting/<team_key>_dashboard_<season>.json \
@@ -393,7 +395,7 @@ The CLI caches, parses, and hashes that snapshot before its first database query
 
 **Per-team closeout.** Commit that team's `content/reporting/*.json` before the next team's release, then query for protected-alias pattern hits after live loads and before closeout.
 
-**League bundle.** A team release does not update the website by itself. After all intended member releases are accepted:
+**Legacy V2 to V5 league bundle.** A team release does not update the website by itself. After all intended member releases are accepted:
 
 ```bash
 python3 -m pipeline release-league --season <season> --snapshot-current \
@@ -416,6 +418,18 @@ python3 -m pipeline export-team-dashboards --season <season>
 
 That recovery command reads the approved bundle through the existing snapshot
 path and rewrites the same 16 files.
+
+### 2025-26 V6 release and rollback
+
+Status: implemented locally and intentionally uninstalled while the Year 2 profiling and adjudication gates remain open. Do not run any command in this subsection until the exact approved live target has been proved immediately beforehand and the named database action has separate approval.
+
+V6 team preflight uses `release --season 2025-26 --preflight`. Its Git-ignored manifest binds the exact payload, build and automatic immutable predecessor, classification and cohort evidence, required migration version/name/SHA triples, and code/dependency provenance. Promotion accepts neither `--previous-dashboard-file` nor `--restatement-file`; it requires the reviewed preflight and exact `--preflight-reviewer "Abdel Babiker"`. Team promotion writes no public or local dashboard export. Only a completed league closeout writes the league file and full 16-team parity set.
+
+After exactly 16 approved V6 team releases exist, `release-league --season 2025-26 --preflight` assembles one immutable candidate from those stored team bytes. Promotion requires the exact reviewed manifest, exact migration triples, current candidate/member reconciliation, and `--preflight-reviewer "Abdel Babiker"`. The V6 reader activates only the completed approved league bundle, so partial team promotion cannot change the served season.
+
+Rollback is append-only. First snapshot the currently approved bundle, then preflight the exact retained predecessor using `release-league --season 2025-26 --rollback-of-release-id <exact-predecessor-release-uuid> --preflight`. Review that preflight and its manifest, then promote the same file with `--rollback-of-release-id`, the required previous-bundle snapshot, and `--preflight-reviewer "Abdel Babiker"`. The command proves that the requested retained bundle is the current release's recorded predecessor and creates a new successor containing those retained bytes. It never changes a retired historical release back to approved. Use `release-league --plan` for the exact current command sequence and predecessor placeholder.
+
+If V6 database promotion succeeds but the local league export, parity set or release manifest fails, do not rerun promotion. Run `finalize-v6-league-release-local --release-id <approved-release-uuid> --release-label <approved-label> --preflight-file <reviewed-preflight.json>`. This route is database-read-only: it reattests the exact approved release, stored payload hashes, 16 member bytes and both reviewed preflight checksums, then regenerates only the local league/team exports and deterministic release manifest. It refuses a different current bundle or an existing manifest with different bytes.
 
 ## How to explain one row
 

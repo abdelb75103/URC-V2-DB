@@ -49,6 +49,28 @@ class ExportTeamDashboardParityTests(unittest.TestCase):
             "reporting.dashboard_bundle_team_payloads_v1", self.snapshot_source
         )
 
+    def test_year2_snapshot_uses_only_the_complete_v6_bundle_and_immutable_payloads(self) -> None:
+        row = {
+            "release_id": "00000000-0000-0000-0000-000000000001",
+            "release_label": "year2",
+            "approved_at": "2026-08-15T00:00:00Z",
+            "league": {"season": "2025-26"},
+            "teams": [
+                {"team_key": f"team-{index:02d}", "dashboard": {"season": "2025-26"}}
+                for index in range(16)
+            ],
+        }
+        with patch("pipeline.__main__.query_sql", return_value=[row]) as query:
+            bundle, metadata = current_league_bundle_snapshot("2025-26")
+        sql = query.call_args.args[0]
+        self.assertIn("reporting.latest_approved_league_bundle_v6", sql)
+        self.assertIn("reporting.league_release_payloads_v6", sql)
+        self.assertIn("reporting.team_dashboard_payloads_v2", sql)
+        self.assertNotIn("reporting.latest_approved_dashboard_bundle_v4", sql)
+        self.assertNotIn("reporting.dashboard_bundle_team_payloads_v1", sql)
+        self.assertEqual(len(bundle["teams"]), 16)
+        self.assertEqual(metadata["release_label"], "year2")
+
     def test_writes_the_committed_per_team_paths(self) -> None:
         self.assertIn('f"{team_key}_dashboard_{season}.json"', self.source)
         self.assertIn('Path("content") / "reporting"', self.source)

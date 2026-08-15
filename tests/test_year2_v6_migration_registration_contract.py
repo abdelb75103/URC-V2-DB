@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+import unittest
+from unittest.mock import patch
+
+import pipeline.__main__ as pipeline
+from pipeline.season_contracts import (
+    YEAR2_2025_26_RELEASE_CONTRACT,
+    YEAR2_2025_26_RELEASE_TUPLE,
+    release_contract_for,
+)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+REGISTRATION = (
+    ROOT / "tools/sql/register_urc_2025_26_v6_migrations.sql"
+).read_text(encoding="utf-8")
+
+
+class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
+    def test_release_contract_binds_each_local_migration_to_one_registered_checksum(self) -> None:
+        contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
+        self.assertEqual(contract, YEAR2_2025_26_RELEASE_CONTRACT)
+        self.assertEqual(
+            {item.version for item in contract.required_migration_contracts},
+            set(contract.required_migrations),
+        )
+        for item in contract.required_migration_contracts:
+            migration = ROOT / "supabase/migrations" / f"{item.version}_{item.name}.sql"
+            self.assertEqual(item.sha256, hashlib.sha256(migration.read_bytes()).hexdigest())
+            self.assertEqual(REGISTRATION.count(item.statement), 2)
+            self.assertIn(f"'{item.version}',", REGISTRATION)
+            self.assertIn(f"'{item.name}'", REGISTRATION)
+
+    def test_registration_fails_closed_on_missing_objects_or_private_table_grants(self) -> None:
+        for token in (
+            "URC 2025-26 V6 migration objects are incomplete",
+            "URC 2025-26 V6 private release storage is not least-privilege",
+            "URC 2025-26 V6 migration registration is absent or checksum-mismatched",
+            "on conflict (version) do nothing",
+            "relrowsecurity",
+        ):
+            self.assertIn(token, REGISTRATION)
+
+    def test_runtime_release_gate_checks_local_bytes_and_exact_database_rows(self) -> None:
+        source = pipeline.assert_checksum_bound_release_migrations.__doc__ or ""
+        self.assertIn("local V6 migration bytes", source)
+        implementation = __import__("inspect").getsource(
+            pipeline.assert_checksum_bound_release_migrations
+        ) + __import__("inspect").getsource(pipeline.assert_checksum_bound_migrations)
+        self.assertIn("sha256_file(migration_path) != item.sha256", implementation)
+        self.assertIn("item.statement", implementation)
+        self.assertIn("schema_migrations", implementation)
+
+    def test_runtime_release_gate_rejects_a_registered_checksum_mismatch_without_database_access(self) -> None:
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+        exact_rows = [
+            {"version": item.version, "name": item.name, "statements": [item.statement]}
+            for item in contract.required_migration_contracts
+        ]
+        with patch.object(pipeline, "query_sql", return_value=exact_rows):
+            pipeline.assert_checksum_bound_release_migrations(contract, "test")
+        mismatch = [*exact_rows]
+        mismatch[0] = {**mismatch[0], "statements": ["migration_sha256=" + "0" * 64]}
+        with patch.object(pipeline, "query_sql", return_value=mismatch):
+            with self.assertRaisesRegex(SystemExit, "exact registered migration checksums"):
+                pipeline.assert_checksum_bound_release_migrations(contract, "test")
+
+
+if __name__ == "__main__":
+    unittest.main()

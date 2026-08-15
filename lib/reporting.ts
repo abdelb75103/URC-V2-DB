@@ -221,6 +221,256 @@ const dashboardRowSchema = z.object({
   limitations: z.array(z.string()),
 });
 
+const v6HeadlineCountSchema = z.object({
+  key: z.enum(["recorded_injuries", "time_loss_injuries", "severity_median_days"]),
+  label: z.string(), value: z.number().nullable(), unit: z.string(), formula: z.string(),
+}).strict();
+const v6HeadlineRateSchema = z.object({
+  key: z.enum(["incidence_per_1000h", "severity_mean_days", "burden_per_1000h"]),
+  label: z.string(), value: z.number().nullable(), unit: z.string(),
+  numerator: z.number().nullable(), denominator: z.number().nullable(), formula: z.string(),
+}).strict();
+const v6HeadlineSchema = z.tuple([
+  v6HeadlineCountSchema.extend({
+    key: z.literal("recorded_injuries"),
+    formula: z.literal("count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"),
+  }).strict(),
+  v6HeadlineCountSchema.extend({
+    key: z.literal("time_loss_injuries"),
+    formula: z.literal("count(eligible injury rows where days lost > 0)"),
+  }).strict(),
+  v6HeadlineRateSchema.extend({
+    key: z.literal("incidence_per_1000h"),
+    formula: z.literal("pooled time-loss injuries / pooled exposure hours * 1000"),
+  }).strict(),
+  v6HeadlineRateSchema.extend({
+    key: z.literal("severity_mean_days"),
+    formula: z.literal("pooled days lost / pooled time-loss injuries"),
+  }).strict(),
+  v6HeadlineCountSchema.extend({
+    key: z.literal("severity_median_days"),
+    formula: z.literal("median(days lost) across pooled time-loss injuries"),
+  }).strict(),
+  v6HeadlineRateSchema.extend({
+    key: z.literal("burden_per_1000h"),
+    formula: z.literal("pooled days lost / pooled exposure hours * 1000"),
+  }).strict(),
+]);
+const v6MonthlyRowSchema = z.object({
+  month: z.string(), exposure_hours: z.number().nullable(), distance_km: z.number().nullable(),
+  time_loss_injuries: z.number(), days_lost: z.number(),
+  incidence_per_1000h: z.number().nullable(), burden_per_1000h: z.number().nullable(),
+}).strict();
+const v6CategoryRowSchema = z.object({
+  key: z.string(), label: z.string(), time_loss_injuries: z.number(), days_lost: z.number(),
+  exposure_hours: z.number().nullable(), incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(), mean_severity_days: z.number().nullable(),
+}).strict();
+const v6SettingSplitRowSchema = z.object({
+  key: z.enum(["all", "match", "training", "unknown"]),
+  label: z.string(), time_loss_injuries: z.number(), days_lost: z.number(),
+  exposure_hours: z.number().nullable(),
+}).strict();
+const v6SettingMetricSchema = z.object({
+  setting: z.enum(["all", "match", "training", "unknown"]),
+  label: z.string(),
+  time_loss_injuries: z.number(),
+  days_lost: z.number(),
+  exposure_hours: z.number().nullable(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+}).strict();
+const v6InjuryProfileSchema = z.object({
+  dimension: z.enum(["body_location", "injury_type", "injury_profile", "diagnosis"]),
+  code: z.string(),
+  label: z.string(),
+  setting: z.enum(["all", "match", "training", "unknown"]),
+  time_loss_injuries: z.number(),
+  days_lost: z.number(),
+  exposure_hours: z.number().nullable(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+}).strict();
+const v6InjuryTypeSubtypeSchema = v6InjuryProfileSchema.extend({
+  dimension: z.literal("injury_type"),
+}).strict();
+const v6InjuryProfilesSchema = z.array(v6InjuryProfileSchema).superRefine((profiles, context) => {
+  if (profiles.length > 0 && !profiles.some((profile) => profile.dimension === "diagnosis")) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "V6 injury profiles require the accepted diagnosis dimension",
+    });
+  }
+});
+const v6InjuryTypeFamilySchema = z.object({
+  dimension: z.literal("injury_type_family"),
+  code: z.string(),
+  label: z.string(),
+  setting: z.enum(["all", "match", "training", "unknown"]),
+  time_loss_injuries: z.number(),
+  days_lost: z.number(),
+  exposure_hours: z.number().nullable(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+  mapping_version: z.literal("injury_type_family_2026-07-21_v1"),
+  subtypes: z.array(v6InjuryTypeSubtypeSchema).min(1),
+}).strict().superRefine((family, context) => {
+  family.subtypes.forEach((subtype, index) => {
+    if (subtype.setting !== family.setting) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["subtypes", index, "setting"],
+        message: "Subtype setting must match its injury type family setting",
+      });
+    }
+  });
+});
+const v6SeverityRowSchema = severityRowSchema.strict();
+const v6ContactRowSchema = (
+  setting: "all" | "match" | "training" | "unknown",
+  key: "contact" | "non_contact" | "unknown",
+  label: "Contact" | "Non-contact" | "Unknown",
+) => z.object({
+  key: z.literal(key),
+  label: z.literal(label),
+  setting: z.literal(setting),
+  recorded_injuries: z.number(),
+  time_loss_injuries: z.number(),
+}).strict();
+const v6ContactDistributionSchema = z.tuple([
+  v6ContactRowSchema("all", "contact", "Contact"),
+  v6ContactRowSchema("all", "non_contact", "Non-contact"),
+  v6ContactRowSchema("all", "unknown", "Unknown"),
+  v6ContactRowSchema("match", "contact", "Contact"),
+  v6ContactRowSchema("match", "non_contact", "Non-contact"),
+  v6ContactRowSchema("match", "unknown", "Unknown"),
+  v6ContactRowSchema("training", "contact", "Contact"),
+  v6ContactRowSchema("training", "non_contact", "Non-contact"),
+  v6ContactRowSchema("training", "unknown", "Unknown"),
+  v6ContactRowSchema("unknown", "contact", "Contact"),
+  v6ContactRowSchema("unknown", "non_contact", "Non-contact"),
+  v6ContactRowSchema("unknown", "unknown", "Unknown"),
+]);
+
+const v6CoverageCommonShape = {
+  exposure_rows: z.number(),
+  exposed_players: z.number(),
+  weeks: z.number(),
+  match_hours: z.number().nullable(),
+  training_hours: z.number().nullable(),
+  hours: z.number(),
+  distance_km: z.number(),
+  included_exposure_status: z.string(),
+  analysis_window_start: z.string(),
+  analysis_window_end: z.string(),
+};
+const v6TeamCoverageSchema = z.object({
+  ...v6CoverageCommonShape,
+  exposure_grain: z.string(),
+}).strict();
+const v6LeagueCoverageSchema = z.object({
+  ...v6CoverageCommonShape,
+  teams_included: z.literal(16),
+}).strict();
+
+const v6DashboardShape = {
+  team: z.string(),
+  season: z.literal("2025-26"),
+  generated_at: z.union([z.string(), z.date()]),
+  analysis_window: z.object({
+    start: z.string(),
+    end: z.string(),
+    basis: z.string(),
+  }).strict(),
+  method: z.array(z.string()),
+  headline: v6HeadlineSchema,
+  setting_split: z.tuple([
+    v6SettingSplitRowSchema.extend({ key: z.literal("all") }).strict(),
+    v6SettingSplitRowSchema.extend({ key: z.literal("match") }).strict(),
+    v6SettingSplitRowSchema.extend({ key: z.literal("training") }).strict(),
+    v6SettingSplitRowSchema.extend({ key: z.literal("unknown") }).strict(),
+  ]),
+  setting_metrics: z.tuple([
+    v6SettingMetricSchema.extend({ setting: z.literal("all") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("match") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("training") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("unknown") }).strict(),
+  ]),
+  monthly: z.array(v6MonthlyRowSchema),
+  body_locations: z.array(v6CategoryRowSchema),
+  injury_types: z.array(v6CategoryRowSchema),
+  injury_profiles: v6InjuryProfilesSchema,
+  injury_type_families: z.array(v6InjuryTypeFamilySchema),
+  severity_distribution: z.array(v6SeverityRowSchema),
+  contact_distribution: v6ContactDistributionSchema,
+  prior_season: z.object({
+    season: z.literal("2024-25"),
+    status: z.literal("frozen"),
+    note: z.string(),
+  }).strict(),
+  limitations: z.array(z.string()),
+};
+const v6TeamDashboardRowSchema = z.object({
+  ...v6DashboardShape,
+  coverage: v6TeamCoverageSchema,
+}).strict();
+const v6LeagueDashboardRowSchema = z.object({
+  ...v6DashboardShape,
+  coverage: v6LeagueCoverageSchema,
+}).strict();
+const v6ComparisonSourceRowSchema = z.object({
+  team_key: z.string(),
+  team: z.string(),
+  coverage: v6TeamCoverageSchema,
+  headline: v6HeadlineSchema,
+  setting_metrics: z.tuple([
+    v6SettingMetricSchema.extend({ setting: z.literal("all") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("match") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("training") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("unknown") }).strict(),
+  ]),
+}).strict();
+const v6LeagueMetricsSourceSchema = z.object({
+  coverage: v6LeagueCoverageSchema,
+  headline: v6HeadlineSchema,
+  setting_metrics: z.tuple([
+    v6SettingMetricSchema.extend({ setting: z.literal("all") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("match") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("training") }).strict(),
+    v6SettingMetricSchema.extend({ setting: z.literal("unknown") }).strict(),
+  ]),
+}).strict();
+
+export function parseDashboardReaderRow(
+  raw: unknown,
+  season: string,
+  scope: "team" | "league",
+): z.infer<typeof dashboardRowSchema> {
+  if (season !== "2025-26") return dashboardRowSchema.parse(raw);
+  return (scope === "team" ? v6TeamDashboardRowSchema : v6LeagueDashboardRowSchema).parse(raw);
+}
+
+function parseComparisonReaderRow(
+  raw: unknown,
+  season: string,
+): z.infer<typeof comparisonSourceRowSchema> {
+  return season === "2025-26"
+    ? v6ComparisonSourceRowSchema.parse(raw)
+    : comparisonSourceRowSchema.parse(raw);
+}
+
+function parseLeagueMetricsReaderRow(
+  raw: unknown,
+  season: string,
+): z.infer<typeof leagueMetricsSourceSchema> {
+  return season === "2025-26"
+    ? v6LeagueMetricsSourceSchema.parse(raw)
+    : leagueMetricsSourceSchema.parse(raw);
+}
+
 function stripNulls<T extends Record<string, unknown>>(row: T): T {
   return Object.fromEntries(
     Object.entries(row).filter(([, v]) => v !== null && v !== undefined)
@@ -409,7 +659,7 @@ export async function getTeamDashboard(
     throw new Error(`expected one dashboard row for team ${teamId}, got ${result.rows.length}`);
   }
 
-  const row = dashboardRowSchema.parse(result.rows[0]);
+  const row = parseDashboardReaderRow(result.rows[0], season, "team");
 
   // Rebuilt field-by-field: only the published dashboard payload crosses
   // this boundary (never release ids, build ids, or future view columns).
@@ -437,7 +687,7 @@ export async function getLeagueDashboard(
     throw new Error(`expected one league dashboard row for season ${season}, got ${result.rows.length}`);
   }
 
-  return normalizeDashboardRow(dashboardRowSchema.parse(result.rows[0]), "league");
+  return normalizeDashboardRow(parseDashboardReaderRow(result.rows[0], season, "league"), "league");
 }
 
 /**
@@ -459,11 +709,11 @@ export async function getTeamComparisons(
     [season]
   );
 
-  return normalizeTeamComparisons(result.rows);
+  return normalizeTeamComparisons(result.rows, season);
 }
 
-function normalizeTeamComparisons(rawRows: unknown[]): TeamComparisonRow[] {
-  return normalizeTeamComparisonsWithKeys(rawRows).rows;
+function normalizeTeamComparisons(rawRows: unknown[], season = "2024-25"): TeamComparisonRow[] {
+  return normalizeTeamComparisonsWithKeys(rawRows, season).rows;
 }
 
 /**
@@ -472,12 +722,12 @@ function normalizeTeamComparisons(rawRows: unknown[]): TeamComparisonRow[] {
  * The map never crosses the server-component boundary; only the single
  * comparison_id belonging to the page's own team does.
  */
-function normalizeTeamComparisonsWithKeys(rawRows: unknown[]): {
+function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"): {
   rows: TeamComparisonRow[];
   comparisonIdByTeamKey: Map<string, string>;
 } {
   const internalRows = rawRows.map((raw) => {
-    const row = comparisonSourceRowSchema.parse(raw);
+    const row = parseComparisonReaderRow(raw, season);
     const metric = (setting: SettingMetricRow["setting"]) => {
       const value = row.setting_metrics.find((item) => item.setting === setting);
       if (!value) return null;
@@ -581,13 +831,19 @@ async function loadTeamPageData(
   );
   if (result.rows.length !== 1) throw new Error("expected one team page snapshot row");
 
-  const snapshot = z.object({
-    dashboard: dashboardRowSchema.nullable(),
-    comparisons: z.array(comparisonSourceRowSchema),
-    league_metrics: leagueMetricsSourceSchema.nullable(),
-  }).parse(result.rows[0]);
+  const snapshot = season === "2025-26"
+    ? z.object({
+        dashboard: v6TeamDashboardRowSchema.nullable(),
+        comparisons: z.array(v6ComparisonSourceRowSchema),
+        league_metrics: v6LeagueMetricsSourceSchema.nullable(),
+      }).strict().parse(result.rows[0])
+    : z.object({
+        dashboard: dashboardRowSchema.nullable(),
+        comparisons: z.array(comparisonSourceRowSchema),
+        league_metrics: leagueMetricsSourceSchema.nullable(),
+      }).parse(result.rows[0]);
 
-  const { rows, comparisonIdByTeamKey } = normalizeTeamComparisonsWithKeys(snapshot.comparisons);
+  const { rows, comparisonIdByTeamKey } = normalizeTeamComparisonsWithKeys(snapshot.comparisons, season);
 
   return {
     dashboard: snapshot.dashboard
@@ -595,7 +851,7 @@ async function loadTeamPageData(
       : undefined,
     comparisons: rows,
     leagueMetrics: snapshot.league_metrics
-      ? normalizeLeagueMetrics(snapshot.league_metrics)
+      ? normalizeLeagueMetrics(parseLeagueMetricsReaderRow(snapshot.league_metrics, season))
       : [],
     viewer_comparison_id: comparisonIdByTeamKey.get(teamId) ?? null,
   };
@@ -652,18 +908,23 @@ async function loadLeaguePageData(
   );
   if (result.rows.length !== 1) throw new Error("expected one league page snapshot row");
 
-  const snapshot = z.object({
-    dashboard: dashboardRowSchema.nullable(),
-    comparisons: z.array(comparisonSourceRowSchema),
-  }).parse(result.rows[0]);
+  const snapshot = season === "2025-26"
+    ? z.object({
+        dashboard: v6LeagueDashboardRowSchema.nullable(),
+        comparisons: z.array(v6ComparisonSourceRowSchema),
+      }).strict().parse(result.rows[0])
+    : z.object({
+        dashboard: dashboardRowSchema.nullable(),
+        comparisons: z.array(comparisonSourceRowSchema),
+      }).parse(result.rows[0]);
 
   return {
     dashboard: snapshot.dashboard
       ? normalizeDashboardRow(snapshot.dashboard, "league")
       : undefined,
-    comparisons: normalizeTeamComparisons(snapshot.comparisons),
+    comparisons: normalizeTeamComparisons(snapshot.comparisons, season),
     leagueMetrics: snapshot.dashboard
-      ? normalizeLeagueMetrics(snapshot.dashboard)
+      ? normalizeLeagueMetrics(parseLeagueMetricsReaderRow(snapshot.dashboard, season))
       : [],
   };
 }
@@ -721,7 +982,10 @@ export async function getLeagueSettingMetrics(
     [season]
   );
   if (result.rows.length !== 1) return [];
-  return normalizeSettingMetrics(z.array(settingMetricSchema).parse(result.rows[0].setting_metrics));
+  const schema = season === "2025-26"
+    ? z.array(v6SettingMetricSchema)
+    : z.array(settingMetricSchema);
+  return normalizeSettingMetrics(schema.parse(result.rows[0].setting_metrics));
 }
 
 function normalizeSettingMetrics(items: z.infer<typeof settingMetricSchema>[]): SettingMetricRow[] {
