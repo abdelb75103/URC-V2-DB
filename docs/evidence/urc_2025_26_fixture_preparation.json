@@ -18,10 +18,17 @@
   },
   "prepared_fixture_csv": {
     "storage": "protected_local_output_outside_git",
-    "sha256": "cf4add60a896ed2bb30be7b1af55234291ad7e63f081fe535d9f60964469a63f",
+    "sha256": "071520f3f3c3dbe1979c8a42936d42bed9bc9b61ecf82131cc8151417d035d1b",
     "row_count": 151,
     "season_value": "2025-26",
-    "source_locator_format": "data.matchstats[index]"
+    "source_locator_format": "https://www.unitedrugby.com/graphql#data.matchstats[index]",
+    "row_provenance_fields": [
+      "match_id",
+      "source_locator",
+      "source_request_sha256",
+      "source_response_sha256",
+      "retrieved_at"
+    ]
   },
   "validation": {
     "teams": 16,
