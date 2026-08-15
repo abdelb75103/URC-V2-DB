@@ -116,6 +116,44 @@ class Allocate2025_26IdentitiesTests(unittest.TestCase):
                     audit_path=root / "audit.json",
                 )
 
+    def test_private_row_locator_requests_allocate_each_new_identity_once(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            codebook = self.write_codebook(root)
+            directory = root / "requests/club-one"
+            directory.mkdir(parents=True)
+            (directory / "identity_allocation_request_raw_private.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "identity_allocation_request_raw_private_v1",
+                        "season": "2025-26",
+                        "team_key": "club-one",
+                        "do_not_allocate_ids": True,
+                        "present_new_allocation_candidate_count": 3,
+                        "raw_identity_candidates": [
+                            {"raw_identity_value": "New One", "request_status": "new_identity_allocation_candidate"},
+                            {"raw_identity_value": "New One", "request_status": "new_identity_allocation_candidate"},
+                            {"raw_identity_value": "New Two", "request_status": "new_identity_allocation_candidate"},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            outputs = prepare_identity_allocation(
+                codebook=codebook,
+                requests_root=root / "requests",
+                expected_codebook_sha256=hashlib.sha256(codebook.read_bytes()).hexdigest(),
+                candidate_codebook=root / "candidate.csv",
+                bridge_path=root / "bridge.json",
+                audit_path=root / "audit.json",
+            )
+
+            self.assertEqual(outputs["appended_identities"], 2)
+            self.assertEqual(outputs["resolved_identities"], 2)
+            audit = json.loads((root / "audit.json").read_text(encoding="utf-8"))
+            self.assertEqual(audit["source_identity_candidate_rows"], 3)
+            self.assertEqual(audit["requested_identity_rows"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
