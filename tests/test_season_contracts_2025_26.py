@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 import io
+import inspect
 import json
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -184,6 +185,13 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, "match IDs must be unique"):
                 pipeline.load_curated_fixtures(args)
         query_sql.assert_not_called()
+
+    def test_year2_fixture_loader_rejects_conflicting_existing_provenance(self) -> None:
+        source = inspect.getsource(pipeline.load_curated_fixtures)
+
+        self.assertIn("expected_fixture_provenance", source)
+        self.assertIn("is distinct from", source)
+        self.assertIn("fixture provenance conflicts with existing immutable evidence", source)
 
     def test_year2_release_plan_accepts_only_the_registered_v6_tuple_without_database_access(self) -> None:
         args = SimpleNamespace(

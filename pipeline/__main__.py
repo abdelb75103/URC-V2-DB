@@ -9103,19 +9103,25 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         f"select count(*) as n from curated.fixtures where season = {existing_params.text(season)}",
         existing_params.values,
     )
-    if existing and int(existing[0]["n"]) > 0:
+    existing_count = int(existing[0]["n"]) if existing else 0
+    if existing_count > 0 and not fixture_provenance:
         print(
             json.dumps(
                 {
                     "status": "no_op",
                     "reason": "curated.fixtures already loaded for this season",
                     "season": season,
-                    "existing_rows": int(existing[0]["n"]),
+                    "existing_rows": existing_count,
                 },
                 indent=2,
             )
         )
         return
+    if fixture_provenance and existing_count not in {0, len(rows)}:
+        raise SystemExit(
+            "curated.fixtures contains a partial Year 2 fixture set; "
+            f"expected 0 or {len(rows)} rows, found {existing_count}"
+        )
 
     # Resolve every home/away team name through reporting.team_key_aliases.
     # These are public club names (e.g. 'Cardiff Rugby', 'Glasgow
@@ -9171,17 +9177,48 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
           {params.text(season)}, {item['source_row_number']},
           {params.text(item['upstream_match_id'])}, {params.text(item['source_locator'])},
           {params.text(item['source_request_sha256'])}, {params.text(item['source_response_sha256'])},
-          {params.text(item['retrieved_at'])}::timestamptz, (select id from current_run)
+          {params.text(item['retrieved_at'])}::timestamptz
         )"""
         for item in fixture_provenance
     )
     fixture_provenance_insert_sql = (
         f"""
+      create temp table expected_fixture_provenance (
+        season text not null,
+        source_row_number integer not null,
+        upstream_match_id text not null,
+        source_locator text not null,
+        source_request_sha256 text not null,
+        source_response_sha256 text not null,
+        retrieved_at timestamptz not null
+      ) on commit drop;
+
+      insert into expected_fixture_provenance values {provenance_values_sql};
+
       insert into curated.fixture_provenance_v1 (
         season, source_row_number, upstream_match_id, source_locator,
         source_request_sha256, source_response_sha256, retrieved_at, registered_by_run_id
-      ) values {provenance_values_sql}
+      )
+      select expected.*, (select id from current_run)
+      from expected_fixture_provenance expected
       on conflict (season, source_row_number) do nothing;
+
+      do $$
+      begin
+        if exists (
+          select 1
+          from expected_fixture_provenance expected
+          left join curated.fixture_provenance_v1 actual
+            using (season, source_row_number)
+          where actual.upstream_match_id is distinct from expected.upstream_match_id
+             or actual.source_locator is distinct from expected.source_locator
+             or actual.source_request_sha256 is distinct from expected.source_request_sha256
+             or actual.source_response_sha256 is distinct from expected.source_response_sha256
+             or actual.retrieved_at is distinct from expected.retrieved_at
+        ) then
+          raise exception 'fixture provenance conflicts with existing immutable evidence';
+        end if;
+      end $$;
         """
         if fixture_provenance else ""
     )
