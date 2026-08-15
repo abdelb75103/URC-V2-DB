@@ -53,7 +53,7 @@ test('league dashboard uses the approved database consumer view and fails closed
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
   assert.doesNotMatch(page, /getExposureReviewPreview|exposurePreview/);
 
-  assert.match(reporting, /reporting\.latest_league_dashboard_v5/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v6/);
   assert.match(reporting, /where season = \$1/);
   assert.match(reporting, /expected one league dashboard row/);
   assert.doesNotMatch(reporting, /reduce\(|incidence.*\/.*hours|burden.*\/.*hours/i);
@@ -66,12 +66,15 @@ test('published league dashboard is unlocked on the homepage', async () => {
   assert.match(home, /href="\/urc"/);
 });
 
-test('team dashboard reads the correction-aware v5 approved-build projection', async () => {
+test('shared readers use the v6 successor while preserving direct Year 1 pass-through', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../supabase/migrations/20260815030000_urc_2025_26_team_release_v6.sql', import.meta.url), 'utf8');
 
-  assert.match(reporting, /reporting\.latest_team_dashboard_v5/);
-  assert.match(reporting, /reporting\.latest_league_dashboard_v5/);
-  assert.doesNotMatch(reporting, /reporting\.latest_(?:team|league)_dashboard_v[23]/);
+  assert.match(reporting, /reporting\.latest_team_dashboard_v6/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v6/);
+  assert.match(migration, /from reporting\.latest_team_dashboard_v5\s+where season <> '2025-26'/);
+  assert.match(migration, /from reporting\.latest_league_dashboard_v5\s+where season <> '2025-26'/);
+  assert.match(migration, /from reporting\.latest_dashboard_cache_token_v1\s+where season <> '2025-26'/);
   assert.match(reporting, /contact_distribution/);
   assert.match(reporting, /setting_metrics/);
   assert.match(reporting, /injury_profiles/);
@@ -80,7 +83,7 @@ test('team dashboard reads the correction-aware v5 approved-build projection', a
   assert.match(reporting, /getTeamPageData/);
   assert.match(reporting, /getLeaguePageData/);
   assert.match(reporting, /one MVCC snapshot/);
-  assert.match(reporting, /latest_dashboard_cache_token_v1/);
+  assert.match(reporting, /latest_dashboard_cache_token_v2/);
   assert.match(reporting, /DASHBOARD_PAYLOAD_CACHE_MILLISECONDS = 300_000/);
   assert.match(reporting, /loadStrictlyCachedDashboardPayload/);
   assert.match(reporting, /token-query[\s\S]*fail-closed behaviour/);
@@ -134,7 +137,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   let queryText = '';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v1')) {
+      if (sql.includes('approved_dashboard_reader_target_v2')) {
         return { rows: [{ target_attested: true }] };
       }
       queryText = sql;
@@ -195,7 +198,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   try {
     const { getLeagueDashboard } = await loadReportingForFixtureTest();
     const dashboard = await getLeagueDashboard();
-    assert.match(queryText, /reporting\.latest_league_dashboard_v5/);
+    assert.match(queryText, /reporting\.latest_league_dashboard_v6/);
     assert.equal(dashboard.injury_type_families[0].burden_per_1000h, 50.8333333333);
     assert.equal(dashboard.injury_type_families[0].subtypes[0].code, 'muscle_injury');
 
@@ -254,7 +257,7 @@ test('team comparison overall setting is a validated projection of released head
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => ({
-      ...(sql.includes('approved_dashboard_reader_target_v1')
+      ...(sql.includes('approved_dashboard_reader_target_v2')
         ? { rows: [{ target_attested: true }] }
         : { rows: [{
         team_key: 'fixture-team',
@@ -345,10 +348,10 @@ test('league and team page metrics include the released overall benchmark', asyn
   let releaseToken = 'release-a';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v1')) {
+      if (sql.includes('approved_dashboard_reader_target_v2')) {
         return { rows: [{ target_attested: true }] };
       }
-      if (sql.includes('latest_dashboard_cache_token_v1')) {
+      if (sql.includes('latest_dashboard_cache_token_v2')) {
         tokenQueryCount += 1;
         return { rows: [{ cache_token: releaseToken }] };
       }
@@ -377,10 +380,10 @@ test('league and team page metrics include the released overall benchmark', asyn
     assert.equal(pageData.leagueMetrics[0].burden_per_1000h, 93.75);
 
     globalThis.__urcWebReaderPool.query = async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v1')) {
+      if (sql.includes('approved_dashboard_reader_target_v2')) {
         return { rows: [{ target_attested: true }] };
       }
-      if (sql.includes('latest_dashboard_cache_token_v1')) {
+      if (sql.includes('latest_dashboard_cache_token_v2')) {
         return { rows: [{ cache_token: 'release-a' }] };
       }
       return {

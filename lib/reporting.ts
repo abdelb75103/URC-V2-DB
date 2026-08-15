@@ -377,9 +377,9 @@ function teamDisplayAliases(): Record<string, string> {
 /**
  * Reads the latest approved release for a team from
  * reporting.latest_team_dashboard_v6 and validates it into DashboardData.
- * The V5 consumer view keeps the allowlisted immutable snapshot projection,
- * adds the versioned injury-type family roll-up, and follows audited
- * correction-aware bundle promotion while retaining contact distribution.
+ * The V6 successor keeps the V5 allowlisted immutable projection for Year 1
+ * and adds the season-bound Year 2 release payload without widening the
+ * frozen release-table contract.
  *
  * Fail-closed contract:
  * - No reader credential or no approved release -> undefined (the dynamic
@@ -570,8 +570,8 @@ async function loadTeamPageData(
            where season = $2
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
-       -- Deliberately still v3: this subquery projects only coverage, headline
-       -- and setting_metrics, so it gains nothing from the v4 contact column.
+       -- The unified successor projects only coverage, headline and
+       -- setting_metrics for the league benchmark.
        (select to_jsonb(league_metrics_row) from (
           select coverage, headline, setting_metrics
           from reporting.latest_league_dashboard_v6
