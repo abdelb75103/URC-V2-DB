@@ -51,7 +51,7 @@ export default async function TeamPage({
     viewerComparisonId = null;
   }
   try {
-    supplement = await getDashboardSupplement(team.id);
+    supplement = await getDashboardSupplement(team.id, season);
   } catch {
     supplement = undefined;
   }

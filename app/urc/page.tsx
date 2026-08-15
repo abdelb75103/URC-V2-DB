@@ -28,7 +28,7 @@ export default async function UrcOverallPage({
     leagueMetrics = [];
   }
   try {
-    supplement = await getDashboardSupplement('urc');
+    supplement = await getDashboardSupplement('urc', season);
   } catch {
     supplement = undefined;
   }
