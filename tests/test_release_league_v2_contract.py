@@ -4,7 +4,12 @@ import inspect
 from pathlib import Path
 import unittest
 
-from pipeline.__main__ import load_league_release_candidate, release_league
+from pipeline.__main__ import (
+    league_release_manifest_document,
+    league_release_plan,
+    load_league_release_candidate,
+    release_league,
+)
 
 
 class ReleaseLeagueV2ContractTests(unittest.TestCase):
@@ -18,6 +23,65 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         self.assertIn('"league": dashboard', self.source)
         self.assertIn('"teams": [', self.source)
         self.assertIn("diff_json_documents(reviewed_bundle, public_bundle)", self.source)
+
+    def test_frozen_year1_plan_preserves_the_legacy_predecessor_workflow(self) -> None:
+        plan = league_release_plan(
+            season="2024-25",
+            analysis_version="v5",
+            classification_view_version="reporting_classification_2026-07-22_v2",
+            cohort_view_version="analysis_window_2024-25_2026-07-25_v1",
+        )
+        snapshot = next(
+            step for step in plan["steps"]
+            if "--snapshot-current" in step.get("action", "")
+        )
+        self.assertNotIn("condition", snapshot)
+        promotion = next(
+            step for step in plan["steps"]
+            if step["stage"] == "live_write" and "release-league" in step["action"]
+        )
+        self.assertIn("--previous-bundle-file", promotion["action"])
+        self.assertNotIn("action_if_predecessor_exists", promotion)
+        self.assertEqual(
+            plan["rollback"],
+            "re-promote the retained predecessor tuple, then regenerate the 16-team parity exports",
+        )
+
+    def test_frozen_year1_manifest_preserves_legacy_timings_and_rollback_shape(self) -> None:
+        predecessor = {"release_id": "year1-release", "release_label": "year1"}
+        timings = {"candidate_load": 1.25, "workflow_total": 3.5}
+        manifest = league_release_manifest_document(
+            release_label="year1", season="2024-25",
+            release_tuple={"analysis_version": "v5", "classification_view_version": "c", "cohort_view_version": "h"},
+            required_migrations=["m"], member_count=16, member_input_hash="a" * 64,
+            league_payload_sha256="b" * 64, bundle_payload_sha256="c" * 64,
+            team_payload_sha256s={"team": "d" * 64},
+            reviewed_preflight_sha256="e" * 64,
+            reviewed_preflight_manifest_sha256="f" * 64,
+            provenance={"code_version": "x", "dependency_lock_hash": "y", "operator": "z"},
+            dirty_worktree_paths=[], dirty_worktree_allowed_paths=[],
+            parity_export={"team_count": 16, "export_set_sha256": "1" * 64, "bundle_sha256": "2" * 64},
+            rollback=predecessor, rollback_of_release_id=None,
+            rollback_replaces_release_id=None, timings_ms=timings,
+        )
+        self.assertEqual(manifest["timings_ms"], timings)
+        self.assertEqual(manifest["rollback"], predecessor)
+        self.assertNotIn("retained_predecessor", manifest["rollback"])
+
+    def test_v6_preflight_and_audit_fields_do_not_change_year1_contracts(self) -> None:
+        self.assertIn("preflight_manifest[\"timings_ms\"] = timings_ms", self.source)
+        self.assertIn("if analysis_version == \"v6\":\n        release_parameters", self.source)
+        self.assertNotIn(
+            '"rollback_of_release_id": rollback_of_release_id or None,\n    }',
+            self.source,
+        )
+        fixture_source = inspect.getsource(__import__(
+            "pipeline.__main__", fromlist=["load_curated_fixtures"]
+        ).load_curated_fixtures)
+        self.assertIn(
+            'if fixture_evidence_record is not None:\n        fixture_run_parameters["local_evidence_file"]',
+            fixture_source,
+        )
 
     def test_release_snapshots_league_and_all_team_payloads(self) -> None:
         self.assertIn('team_candidate_view = (', self.source)

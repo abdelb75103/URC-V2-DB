@@ -6353,9 +6353,10 @@ def league_release_manifest_document(
     dirty_worktree_allowed_paths: list[str], parity_export: dict[str, Any],
     rollback: dict[str, Any], rollback_of_release_id: str | None,
     rollback_replaces_release_id: str | None,
+    timings_ms: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the deterministic local closeout record for one promoted bundle."""
-    return {
+    manifest = {
         "schema_version": "urc_league_release_manifest_v1",
         "status": "promoted_and_exported",
         "release_label": release_label,
@@ -6387,12 +6388,20 @@ def league_release_manifest_document(
             "export_set_sha256": parity_export["export_set_sha256"],
             "bundle_sha256": parity_export.get("bundle_sha256"),
         },
-        "rollback": {
+    }
+    if season == "2025-26" and release_tuple.get("analysis_version") == "v6":
+        manifest["rollback"] = {
             "rollback_of_release_id": rollback_of_release_id,
             "replaces_release_id": rollback_replaces_release_id,
             "retained_predecessor": rollback,
-        },
-    }
+        }
+    else:
+        # The frozen Year 1 manifest shape is a public audit contract. Keep its
+        # direct predecessor object and timing block byte-for-byte compatible;
+        # the append-only rollback envelope is V6-only.
+        manifest["timings_ms"] = timings_ms or {}
+        manifest["rollback"] = rollback
+    return manifest
 
 
 def v6_local_finalizer_command(
@@ -6670,8 +6679,8 @@ def league_release_plan(
             "--preflight-reviewer", reviewer_arg,
         ]
     )
-    steps.extend(
-        [
+    if analysis_version == "v6":
+        steps.extend([
             {
                 "stage": "read_only_live",
                 "approval": "database read access only",
@@ -6703,8 +6712,42 @@ def league_release_plan(
                 "action_if_predecessor_exists": successor_promotion,
                 "includes": "promotion and 16-team parity export",
             },
-        ]
-    )
+        ])
+    else:
+        # Preserve the frozen Year 1 operator plan exactly. Every accepted
+        # Year 1 release already has a predecessor, so its snapshot and
+        # predecessor-bound promotion are unconditional legacy steps.
+        steps.extend([
+            {
+                "stage": "read_only_live",
+                "approval": "database read access only",
+                "action": shlex.join(
+                    runner + ["release-league", "--season", season]
+                    + tuple_args
+                    + ["--snapshot-current", "--output", previous_path]
+                ),
+            },
+            {
+                "stage": "read_only_live",
+                "approval": "database read access only",
+                "action": shlex.join(
+                    runner + ["release-league", "--season", season]
+                    + tuple_args
+                    + ["--preflight", "--output", preflight_path]
+                ),
+            },
+            {
+                "stage": "human_review",
+                "approval": "record review of the exact preflight file",
+                "action": preflight_path,
+            },
+            {
+                "stage": "live_write",
+                "approval": "exact hosted promotion required",
+                "action": successor_promotion,
+                "includes": "promotion and 16-team parity export",
+            },
+        ])
     return {
         "status": "plan",
         "season": season,
@@ -7561,10 +7604,6 @@ def release_league(args: argparse.Namespace) -> None:
                 "cohort_view_version": cohort_view_version,
             },
             "candidate_views": manifest_candidate_views,
-            "rollback_of_release_id": rollback_of_release_id or None,
-            "rollback_replaces_release_id": (
-                candidate.get("replaces_release_id") if rollback_of_release_id else None
-            ),
             "required_migrations": manifest_required_migrations,
             "member_count": len(members),
             "member_input_hash": member_input_hash,
@@ -7575,9 +7614,6 @@ def release_league(args: argparse.Namespace) -> None:
             "evidence_sha256s": v5_evidence_sha256s,
             "classification_evidence_sha256": classification_evidence_sha256,
             "cohort_evidence_sha256": cohort_evidence_sha256,
-            "local_evidence_files": year2_release_local_evidence_records(year2_release_contract)
-            if analysis_version == "v6" and year2_release_contract is not None
-            else [],
             "classification_adjudications": classification_adjudications,
             "classification_adjudications_sha256": sha256_json(
                 classification_adjudications
@@ -7598,6 +7634,19 @@ def release_league(args: argparse.Namespace) -> None:
                 "candidate_hashes": "passed",
             },
         }
+        if analysis_version == "v6" and year2_release_contract is not None:
+            preflight_manifest.update({
+                "rollback_of_release_id": rollback_of_release_id or None,
+                "rollback_replaces_release_id": (
+                    candidate.get("replaces_release_id") if rollback_of_release_id else None
+                ),
+                "local_evidence_files": year2_release_local_evidence_records(
+                    year2_release_contract
+                ),
+            })
+        else:
+            # Frozen Year 1 preflights retain their exact historical key set.
+            preflight_manifest["timings_ms"] = timings_ms
         write_json_atomic(manifest_path, preflight_manifest)
         print(
             json.dumps(
@@ -7689,7 +7738,7 @@ def release_league(args: argparse.Namespace) -> None:
                 if version != REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION
             ]
         )
-        manifest_checks = (
+        manifest_checks = [
             (
                 "schema_version",
                 reviewed_manifest.get("schema_version"),
@@ -7706,16 +7755,6 @@ def release_league(args: argparse.Namespace) -> None:
                 "candidate_views",
                 reviewed_manifest.get("candidate_views"),
                 expected_candidate_views,
-            ),
-            (
-                "rollback_of_release_id",
-                reviewed_manifest.get("rollback_of_release_id"),
-                rollback_of_release_id or None,
-            ),
-            (
-                "rollback_replaces_release_id",
-                reviewed_manifest.get("rollback_replaces_release_id"),
-                candidate.get("replaces_release_id") if rollback_of_release_id else None,
             ),
             (
                 "required_migrations",
@@ -7766,13 +7805,6 @@ def release_league(args: argparse.Namespace) -> None:
                 "cohort_evidence_sha256",
                 reviewed_manifest.get("cohort_evidence_sha256"),
                 cohort_evidence_sha256,
-            ),
-            (
-                "local_evidence_files",
-                reviewed_manifest.get("local_evidence_files"),
-                year2_release_local_evidence_records(year2_release_contract)
-                if analysis_version == "v6" and year2_release_contract is not None
-                else [],
             ),
             (
                 "classification_adjudications",
@@ -7827,7 +7859,29 @@ def release_league(args: argparse.Namespace) -> None:
                     "candidate_hashes": "passed",
                 },
             ),
-        )
+        ]
+        if analysis_version == "v6" and year2_release_contract is not None:
+            manifest_checks.extend([
+                (
+                    "rollback_of_release_id",
+                    reviewed_manifest.get("rollback_of_release_id"),
+                    rollback_of_release_id or None,
+                ),
+                (
+                    "rollback_replaces_release_id",
+                    reviewed_manifest.get("rollback_replaces_release_id"),
+                    candidate.get("replaces_release_id") if rollback_of_release_id else None,
+                ),
+                (
+                    "local_evidence_files",
+                    reviewed_manifest.get("local_evidence_files"),
+                    year2_release_local_evidence_records(year2_release_contract),
+                ),
+            ])
+        else:
+            manifest_checks.append(
+                ("timings_ms", reviewed_manifest.get("timings_ms"), timings_ms)
+            )
         expected_manifest_keys = {field for field, _actual, _expected in manifest_checks}
         if set(reviewed_manifest) != expected_manifest_keys:
             raise SystemExit(
@@ -7969,8 +8023,9 @@ def release_league(args: argparse.Namespace) -> None:
         "promotion_candidate_validation_reads": 1,
         "preflight_timings_ms": timings_ms,
         "match_exposure_decision": "all_registered_season_fixtures_15_players_x_80_minutes_div_60",
-        "rollback_of_release_id": rollback_of_release_id or None,
     }
+    if analysis_version == "v6":
+        release_parameters["rollback_of_release_id"] = rollback_of_release_id or None
     if predecessor is not None:
         release_parameters.update({
             "predecessor_release_id": predecessor["release_id"],
@@ -8475,6 +8530,15 @@ def release_league(args: argparse.Namespace) -> None:
         rollback=(predecessor if predecessor is not None else {"status": "no predecessor existed"}),
         rollback_of_release_id=rollback_of_release_id or None,
         rollback_replaces_release_id=(candidate.get("replaces_release_id") if rollback_of_release_id else None),
+        timings_ms=(
+            {
+                **timings_ms,
+                "parity_export": parity_export_ms,
+                "workflow_total": workflow_total_ms,
+            }
+            if analysis_version != "v6"
+            else None
+        ),
     )
     try:
         write_json_atomic(release_manifest_path, release_manifest)
@@ -10578,6 +10642,13 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         }
         if fixture_contract is not None else None
     )
+    fixture_run_parameters: dict[str, object] = {
+        "file": str(path),
+        "rows": len(fixture_rows),
+        "rule_version": CURATED_FIXTURE_LOAD_RULE_VERSION,
+    }
+    if fixture_evidence_record is not None:
+        fixture_run_parameters["local_evidence_file"] = fixture_evidence_record
     sql = f"""
       do $$
       begin
@@ -10595,7 +10666,7 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         insert into audit.pipeline_runs (command, season, status, input_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values (
           'load-curated-fixtures', {params.text(season)}, 'succeeded', {params.text(file_hash)},
-          {params.jsonb({"file": str(path), "rows": len(fixture_rows), "rule_version": CURATED_FIXTURE_LOAD_RULE_VERSION, "local_evidence_file": fixture_evidence_record})},
+          {params.jsonb(fixture_run_parameters)},
           now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
