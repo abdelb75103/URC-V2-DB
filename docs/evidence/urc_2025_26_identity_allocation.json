@@ -43,6 +43,20 @@
     "recovered_snapshot_sha256": "a9f8e05346bf205fc6e2447798335683c649577ee1c21597ed634ea3a201db0f",
     "post_allocation_refresh_audit_sha256": "c46b462c13b5f0b31f1c26b6d9bbd6c49e64835c02fd99eca5b9669d2e71edd2"
   },
+  "other_ten_team_refresh": {
+    "accepted_candidate_groups": 394,
+    "injury_rows": 4661,
+    "injury_rows_mapped": 1901,
+    "injury_rows_unknown": 2760,
+    "exposure_rows": 56612,
+    "exposure_rows_mapped": 32237,
+    "exposure_rows_unknown": 24375,
+    "unproved_role_rows_unknown": 27135,
+    "residual_allocation_candidates": 0,
+    "pending_pseudonyms": 0,
+    "protected_aggregate_sha256": "8ac12d05c7c7bc0a82782d82877d28fef35a19fb9742b338332e12b9287567e0",
+    "protected_regeneration_helper_sha256": "b5b432063575fdb1f237ce14ec4245d4d407c51990b08b916255a064191f827e"
+  },
   "protected_promotion_audit_sha256": "f71bddb7ba015c97ce2f51625070d58ba81f1fe1372abd4520ebcebb87064f64",
   "remaining_ingest_gate": "blocked_by_team_profiles_and_source_completeness_not_identity_allocation"
 }
