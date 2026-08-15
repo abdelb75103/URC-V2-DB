@@ -11,6 +11,26 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-15: 2025-26 reporting and fixture-provenance contract
+
+| Field | Value |
+|---|---|
+| Status | `prepared-not-applied`: additive contract migration and local static checks only. No database row, release, payload, or 2024-25 object has changed. |
+| Rule version | Analysis `v6`; classification `reporting_classification_2026-07-22_v2`; cohort `analysis_window_2025-26_2026-08-15_v1`. |
+| Carry-forward | `season-specific` window and release identity. The V6 computational successor remains evidence-gated and must not fall back to a V5 candidate. |
+| Evidence | `docs/evidence/urc_2025_26_reporting_contract.json`, SHA-256 `a9c5ebc40a063564d70a2cc2e1f45fddb7069a900d398bea5b32208b65eaf3fe`. |
+| Migration | `20260815010000_urc_2025_26_reporting_contract.sql`, not yet applied. |
+
+**Window and retention.** The initial published cohort is the inclusive period 1 September 2025 to 30 June 2026. July and August 2025 source rows remain retained with their normal lineage, but are not members of this reporting cohort.
+
+**Fixture provenance.** Every registered 2025-26 fixture must carry an upstream official match identifier, public source locator, request and response SHA-256 values, and retrieval time in the append-only `curated.fixture_provenance_v1` relation. This supplements, rather than alters, the frozen `curated.fixtures` rows.
+
+**Promotion boundary.** `analysis.accepted_release_contracts_v1` permits only the exact Year 2 tuple and requires five explicit V6 relations: team and league candidate views plus cohort, monthly, and league-summary scientific views. The contract is intentionally false until a separate evidence-backed V6 computational migration supplies them. Existing V2-V5 candidate paths and every 2024-25 release remain unchanged.
+
+**Reader boundary.** The server-side dashboard reader now proves the configured URC project reference and queries only the least-privilege boolean attestation view before each reporting statement. The attestation exposes no release, migration, fixture, team, source, or player value.
+
+---
+
 ## 2026-08-03: No-cost Disk IO demand reduction and batch correction workflow
 
 | Field | Value |
