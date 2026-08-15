@@ -3,8 +3,18 @@
   "season": "2025-26",
   "source": {
     "kind": "official_urc_matchstats_response",
+    "publisher": "United Rugby Championship",
+    "endpoint": "https://www.unitedrugby.com/graphql",
+    "official_match_centre": "https://stats.unitedrugby.com/match-centre/2025-26/",
+    "official_fixture_release": "https://www.unitedrugby.com/urc-2025-26-fixtures/",
+    "graphql_operation": "GetRoundsData",
+    "official_season_id": 202501,
+    "request_sha256": "57f968c98a21c0fc3f8350c03beffdc5ccfa89e7221e3ba13200bae16ff6b1af",
+    "retrieved_at_utc": "2026-08-15T01:09:13Z",
     "immutable_local_storage": "outside_git",
-    "sha256": "411d683d87619bd35f1e6ce62951c0c1ad4aa1ccd57e042ac77651def0e017f6"
+    "sha256": "411d683d87619bd35f1e6ce62951c0c1ad4aa1ccd57e042ac77651def0e017f6",
+    "temporal_scope": "current_state_snapshot",
+    "history_limitation": "The official API exposes the current fixture state but no change history; retain every raw snapshot and independently inventory official adjustment notices."
   },
   "prepared_fixture_csv": {
     "storage": "protected_local_output_outside_git",
