@@ -40,6 +40,43 @@ test("reporting queries obtain database attestation before each reader SQL state
   assert.match(reporting, /approvedWebReaderQuery/);
   assert.match(reporting, /reporting\.approved_dashboard_reader_target_v1/);
   assert.match(reporting, /target_attested/);
-  assert.equal((reporting.match(/pool\.query/g) ?? []).length, 2);
-  assert.match(reporting, /assertApprovedWebReaderConfiguration\(\);[\s\S]*pool\.query\([\s\S]*assertApprovedWebReaderConfiguration\(\);[\s\S]*return pool\.query/);
+  assert.doesNotMatch(reporting, /pool\.query/);
+  assert.match(reporting, /pool\.connect\(\)[\s\S]*begin transaction read only[\s\S]*approved_dashboard_reader_target_v1[\s\S]*client\.query<any, any\[]>\(sql, values\)/);
+});
+
+test("attestation and dashboard SQL run on one read-only database session", async () => {
+  const priorUrl = process.env.WEB_READER_DB_URL;
+  process.env.WEB_READER_DB_URL =
+    "postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres";
+  const statements = [];
+  let released = false;
+  globalThis.__urcWebReaderPool = {
+    query: async () => {
+      throw new Error("pool-level query must not run an attested dashboard read");
+    },
+    connect: async () => ({
+      query: async (sql) => {
+        statements.push(sql.trim());
+        if (sql.includes("approved_dashboard_reader_target_v1")) {
+          return { rows: [{ target_attested: true }] };
+        }
+        return { rows: [] };
+      },
+      release: () => { released = true; },
+    }),
+  };
+
+  try {
+    const { getTeamDashboard } = await loadTargetModule();
+    assert.equal(await getTeamDashboard("fixture-team", "2025-26"), undefined);
+    assert.match(statements[0], /^begin transaction read only$/i);
+    assert.match(statements[1], /approved_dashboard_reader_target_v1/);
+    assert.match(statements[2], /latest_team_dashboard_v5/);
+    assert.match(statements[3], /^commit$/i);
+    assert.equal(released, true);
+  } finally {
+    globalThis.__urcWebReaderPool = undefined;
+    if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;
+    else process.env.WEB_READER_DB_URL = priorUrl;
+  }
 });

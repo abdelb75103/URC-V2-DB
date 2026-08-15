@@ -267,18 +267,34 @@ async function approvedWebReaderQuery(
   values: any[] = [],
 ) {
   assertApprovedWebReaderConfiguration();
-  const attestation = await pool.query(
-    `select target_attested
-     from reporting.approved_dashboard_reader_target_v1`,
-  );
-  if (
-    attestation.rows.length !== 1
-    || attestation.rows[0]?.target_attested !== true
-  ) {
-    throw new Error("web reader database identity does not match the approved URC project");
+  const client = await pool.connect();
+  let transactionOpen = false;
+  try {
+    await client.query("begin transaction read only");
+    transactionOpen = true;
+    const attestation = await client.query(
+      `select target_attested
+       from reporting.approved_dashboard_reader_target_v1`,
+    );
+    if (
+      attestation.rows.length !== 1
+      || attestation.rows[0]?.target_attested !== true
+    ) {
+      throw new Error("web reader database identity does not match the approved URC project");
+    }
+    assertApprovedWebReaderConfiguration();
+    const result = await client.query<any, any[]>(sql, values);
+    await client.query("commit");
+    transactionOpen = false;
+    return result;
+  } catch (error) {
+    if (transactionOpen) {
+      await client.query("rollback").catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    client.release();
   }
-  assertApprovedWebReaderConfiguration();
-  return pool.query<any, any[]>(sql, values);
 }
 
 async function approvedDashboardReleaseToken(

@@ -7,6 +7,20 @@ import ts from 'typescript';
 
 const require = createRequire(import.meta.url);
 
+function transactionMockPool(query) {
+  const pool = { query };
+  pool.connect = async () => ({
+    query: async (sql, values) => {
+      if (/^\s*(?:begin transaction read only|commit|rollback)\s*$/i.test(sql)) {
+        return { rows: [] };
+      }
+      return pool.query(sql, values);
+    },
+    release: () => undefined,
+  });
+  return pool;
+}
+
 async function loadReportingForFixtureTest() {
   const source = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
   const pgUrl = pathToFileURL(require.resolve('pg')).href;
@@ -118,8 +132,8 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   const priorUrl = process.env.WEB_READER_DB_URL;
   process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   let queryText = '';
-  globalThis.__urcWebReaderPool = {
-    query: async (sql) => {
+  globalThis.__urcWebReaderPool = transactionMockPool(
+    async (sql) => {
       if (sql.includes('approved_dashboard_reader_target_v1')) {
         return { rows: [{ target_attested: true }] };
       }
@@ -176,7 +190,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
         }],
       };
     },
-  };
+  );
 
   try {
     const { getLeagueDashboard } = await loadReportingForFixtureTest();
@@ -238,8 +252,8 @@ test('team comparison overall setting is a validated projection of released head
   const priorAliases = process.env.TEAM_DISPLAY_ALIAS_JSON;
   process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
-  globalThis.__urcWebReaderPool = {
-    query: async (sql) => ({
+  globalThis.__urcWebReaderPool = transactionMockPool(
+    async (sql) => ({
       ...(sql.includes('approved_dashboard_reader_target_v1')
         ? { rows: [{ target_attested: true }] }
         : { rows: [{
@@ -255,7 +269,7 @@ test('team comparison overall setting is a validated projection of released head
         setting_metrics: [{ setting: 'match', label: 'Match', time_loss_injuries: 1, days_lost: 2, exposure_hours: 3, incidence_per_1000h: 4, burden_per_1000h: 5, mean_severity_days: 6 }],
       }] }),
     }),
-  };
+  );
 
   try {
     const { getTeamComparisons } = await loadReportingForFixtureTest();
@@ -329,8 +343,8 @@ test('league and team page metrics include the released overall benchmark', asyn
   let tokenQueryCount = 0;
   let payloadQueryCount = 0;
   let releaseToken = 'release-a';
-  globalThis.__urcWebReaderPool = {
-    query: async (sql) => {
+  globalThis.__urcWebReaderPool = transactionMockPool(
+    async (sql) => {
       if (sql.includes('approved_dashboard_reader_target_v1')) {
         return { rows: [{ target_attested: true }] };
       }
@@ -346,7 +360,7 @@ test('league and team page metrics include the released overall benchmark', asyn
       }],
       });
     },
-  };
+  );
 
   try {
     const { getLeaguePageData, getTeamPageData } = await loadReportingForFixtureTest();
