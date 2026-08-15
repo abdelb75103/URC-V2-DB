@@ -1,0 +1,38 @@
+{
+  "schema_version": "urc_2025_26_drive_acquisition_v1",
+  "source": {
+    "provider": "Google Drive",
+    "folder_id": "1oee0bNkO5ssTZqhaW-5Ai-NXbmVHRH23",
+    "access_mode": "immutable_read_only",
+    "operations_used": [
+      "list",
+      "inspect_metadata",
+      "download",
+      "export_native_sheet"
+    ],
+    "mutations_attempted": 0
+  },
+  "acquisition": {
+    "file_count": 162,
+    "failure_count": 0,
+    "missing_file_count": 0,
+    "extra_file_count": 0,
+    "drive_reported_bytes": 21431117,
+    "protected_local_bytes": 21460664,
+    "tree_sha256": "1dc0d3e7f90118e280c8fde3ac54c848b9e22d7f8cf25e656e1e47cafb39c20d",
+    "protected_manifest_sha256": "dbb3d7e21a0bc88f1ae98adc1d759e43dc491ee842a6821b6471ef7f419e5942",
+    "protected_storage": "outside_git",
+    "directory_mode": "0700",
+    "file_mode": "0600"
+  },
+  "native_google_sheet": {
+    "count": 1,
+    "drive_file_id": "1VjQ8bG1Hgxjxj96CoLCUoKjELyVHMGfPKmfyJx-u6Uk",
+    "drive_mime_type": "application/vnd.google-apps.spreadsheet",
+    "export_mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "drive_reported_bytes": 5799,
+    "exported_bytes": 35346,
+    "exported_sha256": "83b0ef5ef13d84d8b3cfd5be47bedfd1252111e5c9d34fb1a9ab9e73c9873c11",
+    "byte_difference_explanation": "The only source/local byte-count difference is the connector's deterministic XLSX export of the native Google Sheet."
+  }
+}
