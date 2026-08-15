@@ -1,0 +1,120 @@
+{
+  "schema_version": "urc_2025_26_manual_checks_v1",
+  "as_of": "2026-08-15",
+  "season": "2025-26",
+  "release_eligibility": "blocked",
+  "scope": "Aggregate-only manual checks; no direct identifiers, source rows, mapping values, or re-identification data.",
+  "source_completeness": {
+    "raw_corpus": {
+      "files": 162,
+      "manifest_entries": 162,
+      "missing": 0,
+      "changed": 0,
+      "extra": 0,
+      "mode_violations": 0,
+      "manifest_sha256": "dbb3d7e21a0bc88f1ae98adc1d759e43dc491ee842a6821b6471ef7f419e5942"
+    },
+    "encrypted_sources": {
+      "total_files": 13,
+      "total_bytes": 4141568,
+      "legitimate_access_search": "exhausted_no_authorised_password_or_unencrypted_equivalent_found",
+      "brute_force_or_unauthorised_decryption": false,
+      "teams": [
+        {
+          "team": "Dragons",
+          "files": 2,
+          "bytes": 641024,
+          "content": "injury",
+          "supersession": "not_proven"
+        },
+        {
+          "team": "Ospreys",
+          "files": 6,
+          "unique_contents": 5,
+          "bytes": 1942016,
+          "content": "mixed_monthly",
+          "supersession": "not_proven",
+          "staged_injury_rows": 0,
+          "interpretation": "injury_evidence_unavailable_not_zero_injuries"
+        },
+        {
+          "team": "Scarlets",
+          "files": 5,
+          "bytes": 1558528,
+          "content": "mixed_monthly",
+          "supersession": "not_proven"
+        }
+      ]
+    }
+  },
+  "identity_gate": {
+    "status": "passed_identity_only",
+    "persistent_ids_allocated": 486,
+    "accepted_groups_resolved": 492,
+    "residual_candidates": 0,
+    "blank_source_rows": 412,
+    "blank_source_treatment": "Unknown",
+    "codebook_location": "protected_outside_git",
+    "ingest_authorisation": false,
+    "reason": "Identity completion does not override source, profile, exposure-grain, date-order, taxonomy, or clinical adjudication gates."
+  },
+  "profile_and_semantics": {
+    "teams_profiled": 16,
+    "ingest_ready_teams": 0,
+    "adjudication_required_teams": 16,
+    "proved_session_exposure_grain": [
+      "Cardiff Rugby",
+      "Dragons RFC",
+      "Hollywoodbets Sharks",
+      "Lions",
+      "Ospreys",
+      "Scarlets"
+    ],
+    "unknown_exposure_grain": [
+      "Benetton Rugby",
+      "Zebre Parma",
+      "Edinburgh Rugby",
+      "Glasgow Warriors",
+      "Vodacom Bulls",
+      "DHL Stormers"
+    ],
+    "proved_weekly_exposure_grain": [
+      "Connacht Rugby",
+      "Leinster Rugby",
+      "Munster Rugby",
+      "Ulster Rugby"
+    ],
+    "additional_date_order_checks": [
+      {
+        "team": "Edinburgh Rugby",
+        "status": "ambiguous_or_unparseable_mapped_to_Unknown",
+        "values": 1908
+      },
+      {
+        "team": "Glasgow Warriors",
+        "status": "genuinely_ambiguous_mapped_to_Unknown",
+        "values": 728
+      },
+      {
+        "team": "Hollywoodbets Sharks",
+        "status": "date_order_Unknown"
+      }
+    ]
+  },
+  "required_manual_resolutions": [
+    "Obtain legitimate access to the 13 encrypted sources or authoritative checksum-bound unencrypted replacements; otherwise retain the precise completeness gaps.",
+    "Confirm that Ospreys injury evidence is complete before any injury metric is computed; zero staged rows must never be interpreted as zero injuries.",
+    "Complete and approve every team profile, including date semantics, row grain, taxonomy, source precedence, duplicate/conflict adjudication, and reporting-window scope.",
+    "Resolve or explicitly exclude exposure rows whose player identity semantics or exposure grain remain unproved.",
+    "Keep every unresolved or genuinely absent value Unknown; do not infer dates, identities, exposure grain, clinical categories, or source supersession."
+  ],
+  "allowed_next_state": "protected_adjudication_and_source_resolution_only",
+  "forbidden_while_blocked": [
+    "master_workbook_generation",
+    "database_ingest",
+    "migration_application",
+    "candidate_build",
+    "release_approval_or_promotion",
+    "public_or_team_url_sharing"
+  ]
+}
