@@ -30,7 +30,7 @@ class Year2ReportingV6SqlContractTests(unittest.TestCase):
         self.assertIn("'analysis_window_2025-26_2026-08-15_v1'", self.sql)
         self.assertIn("date '2025-09-01'", self.sql)
         self.assertIn("date '2026-06-30'", self.sql)
-        self.assertNotIn("2024-25", self.sql)
+        self.assertIn("'2024-25'", self.sql)  # frozen prior-season display metadata only
         self.assertNotIn("_v5", self.sql)
 
     def test_undated_rows_remain_in_totals_but_not_monthly_series(self) -> None:
@@ -39,10 +39,10 @@ class Year2ReportingV6SqlContractTests(unittest.TestCase):
         self.assertIn("or injury.date_injured is null", cohort)
         self.assertIn("and date_injured is not null", monthly)
 
-    def test_release_candidates_fail_closed_without_exactly_sixteen_member_builds(self) -> None:
-        self.assertIn("count(*) from analysis.league_member_releases_v2 where season='2025-26')=16", self.sql)
-        self.assertIn("count(distinct team_key) from analysis.league_member_releases_v2 where season='2025-26')=16", self.sql)
-        self.assertIn("analysis.league_member_releases_v2", self.sql)
+    def test_team_candidates_are_active_build_derived_and_fail_closed_at_sixteen(self) -> None:
+        self.assertIn("analysis.analysis_window_active_builds_v6", self.sql)
+        self.assertIn("count(*) from curated.builds where season='2025-26' and status='active')=16", self.sql)
+        self.assertNotIn("league_member_releases", self.sql)
         self.assertIn("curated.builds", self.sql)
 
     def test_display_uses_curated_categories_without_new_source_mapping(self) -> None:

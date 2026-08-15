@@ -53,6 +53,7 @@ class ReleaseContract:
     cohort_view_version: str
     league_candidate_view: str | None = None
     team_candidate_view: str | None = None
+    member_view: str | None = None
     injury_cohort_view: str | None = None
     league_monthly_view: str | None = None
     league_summary_view: str | None = None
@@ -112,10 +113,11 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     cohort_view_version=YEAR2_2025_26_RELEASE_TUPLE[2],
     league_candidate_view="analysis.league_dashboard_release_candidates_analysis_window_v6",
     team_candidate_view="analysis.team_dashboard_release_candidates_analysis_window_v6",
+    member_view="analysis.league_member_releases_v6",
     injury_cohort_view="analysis.analysis_window_injury_cohort_v6",
     league_monthly_view="analysis.analysis_window_league_monthly_v6",
     league_summary_view="analysis.analysis_window_league_summary_v6",
-    required_migrations=("20260815010000", "20260815020000"),
+    required_migrations=("20260815010000", "20260815020000", "20260815030000"),
     release_rule_version="league_dashboard_release_2026-08-15_v6",
     release_reason_code="league_dashboard_release_v6",
     decision_recorded_at="2026-08-15",

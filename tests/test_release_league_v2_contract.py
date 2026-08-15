@@ -58,7 +58,10 @@ class ReleaseLeagueV2ContractTests(unittest.TestCase):
         )[0]
         self.assertIn("create temp table reviewed_league_members", write_sql)
         self.assertIn("reviewed bundle member identities changed after preflight validation", write_sql)
-        self.assertIn("from analysis.league_member_releases_v2\n            where season = {params.text(season)}", write_sql)
+        # The frozen route resolves this exact V2 view; the additive V6 route
+        # supplies its registered zero-or-sixteen member view instead.
+        self.assertIn('else "analysis.league_member_releases_v2"', self.source)
+        self.assertIn("from {member_view}\n            where season = {params.text(season)}", write_sql)
         self.assertEqual(write_sql.count("join {league_candidate_view} candidate"), 1)
         self.assertEqual(write_sql.count("join {team_candidate_view} candidate"), 1)
         self.assertIn("join reviewed_league_members expected", write_sql)

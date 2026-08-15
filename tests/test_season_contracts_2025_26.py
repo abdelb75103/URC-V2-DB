@@ -97,10 +97,11 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             contract.team_candidate_view,
             "analysis.team_dashboard_release_candidates_analysis_window_v6",
         )
+        self.assertEqual(contract.member_view, "analysis.league_member_releases_v6")
         self.assertEqual(contract.injury_cohort_view, "analysis.analysis_window_injury_cohort_v6")
         self.assertEqual(contract.league_monthly_view, "analysis.analysis_window_league_monthly_v6")
         self.assertEqual(contract.league_summary_view, "analysis.analysis_window_league_summary_v6")
-        self.assertEqual(contract.required_migrations, ("20260815010000", "20260815020000"))
+        self.assertEqual(contract.required_migrations, ("20260815010000", "20260815020000", "20260815030000"))
         self.assertEqual(contract.cohort_adjudication_ref, "ANALYSIS-WINDOW-2025-26-01")
         self.assertEqual(
             contract.cohort_evidence_locator,

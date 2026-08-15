@@ -4697,6 +4697,172 @@ def release_failure_cleanup_statement(
     return sql, params.values
 
 
+def release_team_v6(args: argparse.Namespace) -> None:
+    """Promote one reviewed Year 2 team payload without legacy release tables.
+
+    The candidate is deliberately build-derived and has no accepted-release
+    dependency.  A later league release can only see this immutable payload
+    through ``analysis.league_member_releases_v6`` once all sixteen teams are
+    approved.
+    """
+    team = clean_text(args.team)
+    season = clean_text(args.season)
+    if not team or season != "2025-26":
+        raise SystemExit("release_team_v6 requires --team and --season 2025-26")
+    preflight = bool(getattr(args, "preflight", False))
+    preflight_file = clean_text(getattr(args, "preflight_file", "") or "")
+    reviewer = clean_text(getattr(args, "preflight_reviewer", "") or "")
+    if preflight and preflight_file:
+        raise SystemExit("--preflight cannot be combined with --preflight-file")
+    if bool(getattr(args, "previous_dashboard_file", "") or getattr(args, "restatement_file", "")):
+        raise SystemExit("V6 re-releases require an additive successor protocol; this command permits first releases only")
+    if preflight_file and not reviewer:
+        raise SystemExit("--preflight-reviewer is required with --preflight-file")
+    if reviewer and not preflight_file:
+        raise SystemExit("--preflight-reviewer requires --preflight-file")
+    if not preflight and not preflight_file:
+        raise SystemExit("V6 team release requires --preflight or a reviewed --preflight-file")
+
+    team_key = resolve_team_key(team)
+    contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
+    if not contract.team_candidate_view:
+        raise SystemExit("V6 release contract lacks a team candidate view")
+    migration_list = ", ".join(repr(version) for version in contract.required_migrations)
+    applied = {
+        row["version"] for row in query_sql(
+            f"select version from supabase_migrations.schema_migrations where version in ({migration_list})"
+        )
+    }
+    missing = sorted(set(contract.required_migrations) - applied)
+    if missing:
+        raise SystemExit(f"V6 team release requires migrations {', '.join(missing)}")
+
+    candidate_params = SqlParams()
+    rows = query_sql(
+        f"""
+        select team_key, season, curated_build_id::text, analysis_version,
+          classification_view_version, classification_evidence_sha256,
+          cohort_view_version, cohort_evidence_sha256, dashboard
+        from {contract.team_candidate_view}
+        where team_key = {candidate_params.text(team_key)}
+          and season = '2025-26' and analysis_version = 'v6'
+          and classification_view_version = 'reporting_classification_2026-07-22_v2'
+          and cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+        """,
+        candidate_params.values,
+    )
+    if len(rows) != 1 or not isinstance(rows[0].get("dashboard"), dict):
+        raise SystemExit("V6 team release requires exactly one complete active-build candidate")
+    candidate = rows[0]
+    if not all(
+        isinstance(candidate.get(field), str)
+        and re.fullmatch(r"[0-9a-f]{64}", candidate[field])
+        for field in ("classification_evidence_sha256", "cohort_evidence_sha256")
+    ):
+        raise SystemExit("V6 team candidate lacks exact classification or cohort evidence")
+    dashboard = candidate["dashboard"]
+    assert_public_payload_is_publishable(dashboard, "V6 team dashboard")
+    payload_sha256 = sha256_json(dashboard)
+    label = f"urc-2025-26-v6-{team_key}-{payload_sha256[:16]}"
+
+    history_params = SqlParams()
+    history = query_sql(
+        f"""
+        select count(*)::int as n
+        from reporting.team_release_payloads_v6 payload
+        join reporting.aggregate_releases release on release.id = payload.release_id
+        where payload.team_key = {history_params.text(team_key)} and payload.season = '2025-26'
+          and release.status in ('approved', 'retired')
+        """, history_params.values,
+    )
+    if history and int(history[0]["n"]) != 0:
+        raise SystemExit("V6 team re-release is blocked until its versioned successor is installed")
+
+    canonical = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
+    if preflight:
+        output = Path(clean_text(getattr(args, "output", "") or "") or (
+            f"data/reporting/urc_2025_26_{team_key}_{payload_sha256[:16]}_preflight.json"
+        ))
+        if Path("content/reporting").resolve() in output.resolve().parents:
+            raise SystemExit("V6 team preflight output must stay outside content/reporting")
+        write_text_atomic(output, canonical)
+        manifest = {
+            "schema_version": "urc_team_release_v6_preflight_v1",
+            "season": "2025-26", "team_key": team_key,
+            "release_tuple": {"analysis_version": "v6", "classification_view_version": contract.classification_view_version, "cohort_view_version": contract.cohort_view_version},
+            "candidate_view": contract.team_candidate_view,
+            "curated_build_id": candidate["curated_build_id"],
+            "payload_sha256": payload_sha256,
+            "preflight_file_sha256": sha256_file(output),
+        }
+        write_text_atomic(Path(f"{output}.manifest.json"), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        print(json.dumps({"status": "preflight", "output_path": str(output), "payload_sha256": payload_sha256}, indent=2))
+        return
+
+    reviewed_path = Path(preflight_file)
+    manifest_path = Path(f"{reviewed_path}.manifest.json")
+    if not reviewed_path.is_file() or not manifest_path.is_file():
+        raise SystemExit("reviewed V6 preflight and its manifest are required")
+    try:
+        reviewed = json.loads(reviewed_path.read_bytes())
+        manifest = json.loads(manifest_path.read_bytes())
+    except json.JSONDecodeError as error:
+        raise SystemExit("reviewed V6 preflight artefacts must be valid JSON") from error
+    if (reviewed != dashboard or not isinstance(manifest, dict)
+            or manifest.get("payload_sha256") != payload_sha256
+            or manifest.get("curated_build_id") != candidate["curated_build_id"]
+            or manifest.get("team_key") != team_key):
+        raise SystemExit("reviewed V6 preflight does not match the exact active-build candidate")
+
+    provenance = run_provenance()
+    if provenance["code_version"].endswith("-dirty"):
+        raise SystemExit("V6 team release refuses an uncommitted working tree")
+    params = SqlParams()
+    sql = f"""
+      do $$ begin
+        if exists (select 1 from reporting.aggregate_releases where release_label = {params.text(label)}) then
+          raise exception 'immutable V6 team release already exists';
+        end if;
+        if not exists (
+          select 1 from {contract.team_candidate_view}
+          where team_key = {params.text(team_key)} and season = '2025-26'
+            and curated_build_id = {params.text(candidate['curated_build_id'])}::uuid
+            and analysis_version = 'v6'
+        ) then raise exception 'active V6 candidate changed after review'; end if;
+      end $$;
+      create temp table current_v6_team_release on commit drop as
+      with run as (
+        insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
+        values ('release_team_v6', {params.text(team)}, '2025-26', 'started', {params.text(candidate['curated_build_id'])}, {params.text(payload_sha256)},
+          {params.jsonb({'team_key': team_key, 'release_tuple': contract.release_tuple, 'reviewer': reviewer, 'preflight_sha256': sha256_file(reviewed_path)})}, null,
+          {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}) returning id
+      ), step as (
+        insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team)
+        select id, 'release_team_v6', {params.text(contract.release_rule_version or 'league_dashboard_release_2026-08-15_v6')},
+          'team_dashboard_release_v6', 1, 1, {params.jsonb({team_key: 1})} from run
+        returning pipeline_run_id
+      ), release as (
+        insert into reporting.aggregate_releases (release_label, status, pipeline_run_id)
+        select {params.text(label)}, 'draft', id from run returning id
+      ) select id from release;
+      insert into reporting.team_release_payloads_v6
+        (release_id, team_key, season, curated_build_id, analysis_version, classification_view_version, cohort_view_version, dashboard_payload, payload_sha256)
+      select current.id, {params.text(team_key)}, '2025-26', {params.text(candidate['curated_build_id'])}::uuid, 'v6',
+        'reporting_classification_2026-07-22_v2', 'analysis_window_2025-26_2026-08-15_v1', {params.jsonb(dashboard)}, {params.text(payload_sha256)}
+      from current_v6_team_release current;
+      update reporting.aggregate_releases release set status = 'approved', approved_at = now()
+      from current_v6_team_release current where release.id = current.id and release.status = 'draft';
+      update audit.pipeline_runs run set status = 'succeeded', ended_at = now()
+      from current_v6_team_release current join reporting.aggregate_releases release on release.id = current.id
+      where run.id = release.pipeline_run_id and release.status = 'approved';
+      update audit.step_runs step set ended_at = now()
+      from current_v6_team_release current join reporting.aggregate_releases release on release.id = current.id
+      where step.pipeline_run_id = release.pipeline_run_id and step.step_name = 'release_team_v6';
+    """
+    run_sql(sql, params.values)
+    print(json.dumps({"status": "approved", "release_label": label, "payload_sha256": payload_sha256}, indent=2))
+
+
 def release(args: argparse.Namespace) -> None:
     """Phase 4 release: reads analysis.*_v1 views directly (no JSON/CSV
     input), snapshots every dashboard section into reporting.release_context
@@ -4705,6 +4871,9 @@ def release(args: argparse.Namespace) -> None:
     from that DB snapshot with internal keys stripped (never populated in
     the first place, unlike the old JSON-file-driven release()).
     """
+    if clean_text(getattr(args, "season", "")) == "2025-26":
+        release_team_v6(args)
+        return
     team = clean_text(args.team)
     season = clean_text(args.season)
     if not team or not season:
@@ -6052,6 +6221,13 @@ def release_league(args: argparse.Namespace) -> None:
         )
         )
     )
+    member_view = (
+        year2_release_contract.member_view
+        if analysis_version == "v6" and year2_release_contract is not None
+        else "analysis.league_member_releases_v2"
+    )
+    if not member_view:
+        raise SystemExit("release contract lacks a league member relation")
     release_rule_version = (
         year2_release_contract.release_rule_version
         if analysis_version == "v6" and year2_release_contract is not None
@@ -6303,7 +6479,7 @@ def release_league(args: argparse.Namespace) -> None:
             with cohort as (
               select c.*
               from {semantic_cohort_view} c
-              join analysis.league_member_releases_v2 m
+              join {member_view} m
                 using (curated_build_id, team_key, season)
               where c.season = {semantic_params.text(season)}
             ), monthly as (
@@ -6441,7 +6617,7 @@ def release_league(args: argparse.Namespace) -> None:
     member_params = SqlParams()
     members = query_sql(
         f"select team_key, team_release_id::text, curated_build_id::text "
-        f"from analysis.league_member_releases_v2 "
+        f"from {member_view} "
         f"where season = {member_params.text(season)} order by team_key",
         member_params.values,
     )
@@ -6915,7 +7091,7 @@ def release_league(args: argparse.Namespace) -> None:
           select 1 from reviewed_league_members member
           full join (
             select team_key, team_release_id, curated_build_id
-            from analysis.league_member_releases_v2
+            from {member_view}
             where season = {params.text(season)}
           ) live
             on live.team_key = member.team_key

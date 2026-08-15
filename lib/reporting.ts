@@ -274,7 +274,7 @@ async function approvedWebReaderQuery(
     transactionOpen = true;
     const attestation = await client.query(
       `select target_attested
-       from reporting.approved_dashboard_reader_target_v1`,
+       from reporting.approved_dashboard_reader_target_v2`,
     );
     if (
       attestation.rows.length !== 1
@@ -303,7 +303,7 @@ async function approvedDashboardReleaseToken(
 ): Promise<string | null> {
   const result = await approvedWebReaderQuery(pool,
     `select cache_token
-     from reporting.latest_dashboard_cache_token_v1
+     from reporting.latest_dashboard_cache_token_v2
      where season = $1`,
     [season]
   );
@@ -376,7 +376,7 @@ function teamDisplayAliases(): Record<string, string> {
 
 /**
  * Reads the latest approved release for a team from
- * reporting.latest_team_dashboard_v5 and validates it into DashboardData.
+ * reporting.latest_team_dashboard_v6 and validates it into DashboardData.
  * The V5 consumer view keeps the allowlisted immutable snapshot projection,
  * adds the versioned injury-type family roll-up, and follows audited
  * correction-aware bundle promotion while retaining contact distribution.
@@ -400,7 +400,7 @@ export async function getTeamDashboard(
             injury_types, injury_profiles, injury_type_families, severity_distribution,
             contact_distribution, prior_season,
             limitations
-     from reporting.latest_team_dashboard_v5
+     from reporting.latest_team_dashboard_v6
      where team_key = $1 and season = $2`,
     [teamId, season]
   );
@@ -428,7 +428,7 @@ export async function getLeagueDashboard(
             injury_types, injury_profiles, injury_type_families, severity_distribution,
             contact_distribution, prior_season,
             limitations
-     from reporting.latest_league_dashboard_v5
+     from reporting.latest_league_dashboard_v6
      where season = $1`,
     [season]
   );
@@ -453,7 +453,7 @@ export async function getTeamComparisons(
 
   const result = await approvedWebReaderQuery(pool,
     `select team_key, team, coverage, headline, setting_metrics
-     from reporting.latest_team_dashboard_v5
+     from reporting.latest_team_dashboard_v6
      where season = $1
      order by team_key`,
     [season]
@@ -559,14 +559,14 @@ async function loadTeamPageData(
                  injury_types, injury_profiles, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
                  limitations
-          from reporting.latest_team_dashboard_v5
+          from reporting.latest_team_dashboard_v6
           where team_key = $1 and season = $2
         ) team_row) as dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v5
+           from reporting.latest_team_dashboard_v6
            where season = $2
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
@@ -574,7 +574,7 @@ async function loadTeamPageData(
        -- and setting_metrics, so it gains nothing from the v4 contact column.
        (select to_jsonb(league_metrics_row) from (
           select coverage, headline, setting_metrics
-          from reporting.latest_league_dashboard_v5
+          from reporting.latest_league_dashboard_v6
           where season = $2
         ) league_metrics_row) as league_metrics`,
     [teamId, season]
@@ -637,14 +637,14 @@ async function loadLeaguePageData(
                  injury_types, injury_profiles, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
                  limitations
-          from reporting.latest_league_dashboard_v5
+          from reporting.latest_league_dashboard_v6
           where season = $1
         ) league_row) as dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v5
+           from reporting.latest_team_dashboard_v6
            where season = $1
          ) comparison_row
        ), '[]'::jsonb) as comparisons`,
@@ -716,7 +716,7 @@ export async function getLeagueSettingMetrics(
   if (!pool) return [];
   const result = await approvedWebReaderQuery(pool,
     `select setting_metrics
-     from reporting.latest_league_dashboard_v5
+     from reporting.latest_league_dashboard_v6
      where season = $1`,
     [season]
   );

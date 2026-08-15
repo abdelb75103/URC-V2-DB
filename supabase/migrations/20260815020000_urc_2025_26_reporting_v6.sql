@@ -22,17 +22,17 @@ where r.adjudication_ref='ANALYSIS-WINDOW-2025-26-01'
   and r.migration_version='20260815010000'
 group by r.cohort_view_version,r.season having count(*)=1;
 
-create view analysis.analysis_window_member_builds_v6
+-- These are source builds, not accepted releases.  Keeping this relation
+-- release-free is what permits the first V6 team release to be created.
+create or replace view analysis.analysis_window_active_builds_v6
 with (security_invoker = true) as
-select member.team_key,member.season,member.team_release_id,member.curated_build_id,
-  member.generated_at
-from analysis.league_member_releases_v2 member
-join curated.builds build on build.id=member.curated_build_id
- and build.team_key=member.team_key and build.season=member.season
- and build.status='active'
-where member.season='2025-26'
-  and (select count(*) from analysis.league_member_releases_v2 where season='2025-26')=16
-  and (select count(distinct team_key) from analysis.league_member_releases_v2 where season='2025-26')=16;
+select build.team_key,build.season,build.id as curated_build_id,
+  build.created_at as generated_at
+from curated.builds build join reporting.teams roster on roster.team_key=build.team_key
+where build.season='2025-26' and build.status='active'
+  and (select count(*) from curated.builds where season='2025-26' and status='active')=16
+  and (select count(distinct team_key) from curated.builds where season='2025-26' and status='active')=16
+  and (select count(*) from reporting.teams)=16;
 
 create view analysis.analysis_window_injury_cohort_v6
 with (security_invoker = true) as
@@ -54,7 +54,7 @@ select injury.id as injury_id,member.curated_build_id,member.team_key,member.sea
        when injury.days_injured>28 then 'greater_than_twenty_eight_days'
        else 'unknown_or_censored' end as severity_code,
   injury.date_injured is null as is_undated,window.cohort_view_version
-from analysis.analysis_window_member_builds_v6 member
+from analysis.analysis_window_active_builds_v6 member
 join curated.injuries injury on injury.curated_build_id=member.curated_build_id
  and injury.team_key=member.team_key and injury.season=member.season
 join analysis.reporting_season_windows_v3 window
@@ -72,7 +72,7 @@ select member.curated_build_id,member.team_key,member.season,exposure.grain as r
   coalesce(exposure.session_date,exposure.week_start_date) as period_start,
   coalesce(exposure.session_date,exposure.week_start_date)+case when exposure.grain='weekly' then 6 else 0 end as period_end,
   exposure.minutes_clean,exposure.distance_m_clean,window.cohort_view_version
-from analysis.analysis_window_member_builds_v6 member
+from analysis.analysis_window_active_builds_v6 member
 join curated.exposure exposure on exposure.curated_build_id=member.curated_build_id
  and exposure.team_key=member.team_key and exposure.season=member.season
 join analysis.reporting_season_windows_v3 window on window.cohort_view_version='analysis_window_2025-26_2026-08-15_v1' and window.season=member.season
@@ -85,13 +85,13 @@ where exposure.eligibility_status='included_pending_protocol'
 create view analysis.analysis_window_team_hours_v6
 with (security_invoker = true) as
 with exposure as (
-  select curated_build_id,team_key,season,sum(minutes_clean)/60 as total_hours,
-    sum(distance_m_clean)/1000 as distance_km,
+  select curated_build_id,team_key,season,coalesce(sum(minutes_clean),0)/60 as total_hours,
+    coalesce(sum(distance_m_clean),0)/1000 as distance_km,
     case when count(distinct reporting_grain)=1 then min(reporting_grain) else 'mixed' end as exposure_grain
   from analysis.analysis_window_team_exposure_v6 group by curated_build_id,team_key,season
 ), fixtures as (
   select member.team_key,member.season,count(*)*20.0 as match_hours
-  from analysis.analysis_window_member_builds_v6 member
+  from analysis.analysis_window_active_builds_v6 member
   join curated.fixtures fixture on fixture.season=member.season and (fixture.home_team_key=member.team_key or fixture.away_team_key=member.team_key)
   join analysis.reporting_season_windows_v3 window on window.cohort_view_version='analysis_window_2025-26_2026-08-15_v1' and window.season=fixture.season
   where fixture.match_date between window.season_start and window.season_end
@@ -111,7 +111,7 @@ select member.curated_build_id,member.team_key,member.season,
   count(cohort.injury_id) filter(where cohort.is_time_loss) as time_loss_injuries,
   coalesce(sum(cohort.days_lost) filter(where cohort.is_time_loss),0) as days_lost,
   avg(cohort.days_lost) filter(where cohort.is_time_loss) as mean_severity_days
-from analysis.analysis_window_member_builds_v6 member
+from analysis.analysis_window_active_builds_v6 member
 left join analysis.analysis_window_injury_cohort_v6 cohort using(curated_build_id,team_key,season)
 group by member.curated_build_id,member.team_key,member.season;
 
@@ -154,20 +154,20 @@ group by summary.season;
 
 create view analysis.team_dashboard_payload_analysis_window_v6
 with (security_invoker = true) as
-select member.team_key,member.season,member.team_release_id,member.curated_build_id,
+select member.team_key,member.season,null::uuid as team_release_id,member.curated_build_id,
  rules.classification_view_version,rules.classification_evidence_sha256,
  cohort.cohort_view_version,cohort.cohort_evidence_sha256,
- jsonb_build_object('generated_at',member.generated_at,'team',dashboard.team,'season',member.season,
+ jsonb_build_object('generated_at',member.generated_at,'team',roster.display_name,'season',member.season,
   'analysis_window',jsonb_build_object('start',window.season_start,'end',window.season_end,'basis','Registered Year 2 reporting window.'),
   'method',jsonb_build_array('Incidence = pooled time-loss injuries / pooled exposure hours × 1,000.','Burden = pooled days lost / pooled exposure hours × 1,000.','Season-attributed undated injuries are included in totals but excluded from monthly series.','Curated IOC categories are carried forward; unsupported mappings remain Unknown.'),
-  'coverage',jsonb_build_object('hours',hours.total_hours,'match_hours',hours.match_hours,'training_hours',hours.training_hours,'distance_km',hours.distance_km,'exposure_grain',hours.exposure_grain,'analysis_window_start',window.season_start,'analysis_window_end',window.season_end),
+  'coverage',jsonb_build_object('hours',hours.total_hours,'match_hours',hours.match_hours,'training_hours',hours.training_hours,'distance_km',hours.distance_km,'exposure_grain',hours.exposure_grain,'exposure_rows',(select count(*) from analysis.analysis_window_team_exposure_v6 exposure where exposure.curated_build_id=member.curated_build_id),'exposed_players',(select count(distinct exposure.player_uid) from curated.exposure exposure where exposure.curated_build_id=member.curated_build_id and exposure.eligibility_status='included_pending_protocol'),'weeks',(select count(distinct date_trunc('week',exposure.period_start)) from analysis.analysis_window_team_exposure_v6 exposure where exposure.curated_build_id=member.curated_build_id),'included_exposure_status','included_pending_protocol','analysis_window_start',window.season_start,'analysis_window_end',window.season_end),
   'headline',jsonb_build_array(jsonb_build_object('key','recorded_injuries','label','Recorded injuries','value',summary.recorded_injuries,'unit','injuries'),jsonb_build_object('key','time_loss_injuries','label','Time-loss injuries','value',summary.time_loss_injuries,'unit','injuries'),jsonb_build_object('key','incidence_per_1000h','label','Incidence','value',analysis.rate_per_1000_v1(summary.time_loss_injuries,hours.total_hours),'unit','per 1,000 player-hours','numerator',summary.time_loss_injuries,'denominator',hours.total_hours),jsonb_build_object('key','severity_mean_days','label','Mean severity','value',summary.mean_severity_days,'unit','days lost per injury','numerator',summary.days_lost,'denominator',summary.time_loss_injuries),jsonb_build_object('key','burden_per_1000h','label','Burden','value',analysis.rate_per_1000_v1(summary.days_lost,hours.total_hours),'unit','days lost per 1,000 player-hours','numerator',summary.days_lost,'denominator',hours.total_hours)),
   'monthly',coalesce((select jsonb_agg(jsonb_build_object('month',monthly.month_label,'exposure_hours',monthly.exposure_hours,'distance_km',monthly.distance_km,'time_loss_injuries',monthly.time_loss_injuries,'days_lost',monthly.days_lost,'incidence_per_1000h',monthly.incidence_per_1000h,'burden_per_1000h',monthly.burden_per_1000h) order by monthly.month_start) from analysis.analysis_window_monthly_v6 monthly where monthly.curated_build_id=member.curated_build_id and monthly.team_key=member.team_key and monthly.season=member.season),'[]'::jsonb),
-  'body_locations','[]'::jsonb,'injury_types','[]'::jsonb,'injury_profiles','[]'::jsonb,'severity_distribution','[]'::jsonb,'setting_split','[]'::jsonb,'setting_metrics','[]'::jsonb,'contact_distribution','[]'::jsonb,'prior_season',dashboard.prior_season,'limitations',jsonb_build_array('Candidate is unavailable until all sixteen active member builds are present.')) as dashboard
-from analysis.analysis_window_member_builds_v6 member
+  'body_locations','[]'::jsonb,'injury_types','[]'::jsonb,'injury_profiles','[]'::jsonb,'injury_type_families','[]'::jsonb,'severity_distribution','[]'::jsonb,'setting_split','[]'::jsonb,'setting_metrics','[]'::jsonb,'contact_distribution','[]'::jsonb,'prior_season',jsonb_build_object('season','2024-25','status','frozen','note','Prior season remains frozen and is not recomputed by V6.'),'limitations',jsonb_build_array('Candidate is unavailable until all sixteen active member builds are present.')) as dashboard
+from analysis.analysis_window_active_builds_v6 member
 join analysis.analysis_window_team_summary_v6 summary using(curated_build_id,team_key,season)
 join analysis.analysis_window_team_hours_v6 hours using(curated_build_id,team_key,season)
-join reporting.latest_team_dashboard dashboard on dashboard.release_id=member.team_release_id and dashboard.team_key=member.team_key and dashboard.season=member.season
+join reporting.teams roster on roster.team_key=member.team_key
 join analysis.reporting_season_windows_v3 window on window.cohort_view_version='analysis_window_2025-26_2026-08-15_v1' and window.season=member.season
 join analysis.accepted_analysis_window_cohort_rules_v6 cohort on cohort.cohort_view_version=window.cohort_view_version and cohort.season=window.season
 cross join analysis.accepted_reporting_classification_rules_v4 rules
@@ -176,13 +176,13 @@ where rules.classification_view_version='reporting_classification_2026-07-22_v2'
 create view analysis.league_dashboard_payload_analysis_window_v6
 with (security_invoker = true) as
 select summary.season,rules.classification_view_version,rules.classification_evidence_sha256,cohort.cohort_view_version,cohort.cohort_evidence_sha256,
- jsonb_build_object('generated_at',(select max(generated_at) from analysis.analysis_window_member_builds_v6),'team','URC Overall','season',summary.season,
+ jsonb_build_object('generated_at',(select max(generated_at) from analysis.analysis_window_active_builds_v6),'team','URC Overall','season',summary.season,
   'analysis_window',jsonb_build_object('start',window.season_start,'end',window.season_end,'basis','Registered Year 2 reporting window.'),
   'method',jsonb_build_array('Incidence = pooled time-loss injuries / pooled exposure hours × 1,000.','Burden = pooled days lost / pooled exposure hours × 1,000.','Season-attributed undated injuries are included in totals but excluded from monthly series.'),
-  'coverage',jsonb_build_object('hours',summary.exposure_hours,'match_hours',summary.match_exposure_hours,'training_hours',summary.training_exposure_hours,'teams_included',16,'analysis_window_start',window.season_start,'analysis_window_end',window.season_end),
+  'coverage',jsonb_build_object('hours',summary.exposure_hours,'match_hours',summary.match_exposure_hours,'training_hours',summary.training_exposure_hours,'teams_included',16,'distance_km',(select coalesce(sum(distance_km),0) from analysis.analysis_window_league_monthly_v6),'exposure_rows',(select count(*) from analysis.analysis_window_team_exposure_v6),'exposed_players',(select count(distinct exposure.player_uid) from curated.exposure exposure join analysis.analysis_window_active_builds_v6 build using(curated_build_id,team_key,season) where exposure.eligibility_status='included_pending_protocol'),'weeks',(select count(distinct date_trunc('week',exposure.period_start)) from analysis.analysis_window_team_exposure_v6 exposure),'included_exposure_status','included_pending_protocol','analysis_window_start',window.season_start,'analysis_window_end',window.season_end),
   'headline',jsonb_build_array(jsonb_build_object('key','recorded_injuries','label','Recorded injuries','value',summary.recorded_injuries,'unit','injuries'),jsonb_build_object('key','time_loss_injuries','label','Time-loss injuries','value',summary.time_loss_injuries,'unit','injuries'),jsonb_build_object('key','incidence_per_1000h','label','Incidence','value',analysis.rate_per_1000_v1(summary.time_loss_injuries,summary.exposure_hours),'unit','per 1,000 player-hours','numerator',summary.time_loss_injuries,'denominator',summary.exposure_hours),jsonb_build_object('key','severity_mean_days','label','Mean severity','value',summary.mean_severity_days,'unit','days lost per injury','numerator',summary.days_lost,'denominator',summary.time_loss_injuries),jsonb_build_object('key','burden_per_1000h','label','Burden','value',analysis.rate_per_1000_v1(summary.days_lost,summary.exposure_hours),'unit','days lost per 1,000 player-hours','numerator',summary.days_lost,'denominator',summary.exposure_hours)),
   'monthly',coalesce((select jsonb_agg(jsonb_build_object('month',monthly.month_label,'exposure_hours',monthly.exposure_hours,'distance_km',monthly.distance_km,'time_loss_injuries',monthly.time_loss_injuries,'days_lost',monthly.days_lost,'incidence_per_1000h',monthly.incidence_per_1000h,'burden_per_1000h',monthly.burden_per_1000h) order by monthly.month_start) from analysis.analysis_window_league_monthly_v6 monthly where monthly.season=summary.season),'[]'::jsonb),
-  'body_locations','[]'::jsonb,'injury_types','[]'::jsonb,'injury_profiles','[]'::jsonb,'severity_distribution','[]'::jsonb,'setting_split','[]'::jsonb,'setting_metrics','[]'::jsonb,'contact_distribution','[]'::jsonb,'prior_season',jsonb_build_object('status','frozen'),'limitations',jsonb_build_array('Candidate is unavailable until all sixteen active member builds are present.')) as dashboard
+  'body_locations','[]'::jsonb,'injury_types','[]'::jsonb,'injury_profiles','[]'::jsonb,'injury_type_families','[]'::jsonb,'severity_distribution','[]'::jsonb,'setting_split','[]'::jsonb,'setting_metrics','[]'::jsonb,'contact_distribution','[]'::jsonb,'prior_season',jsonb_build_object('season','2024-25','status','frozen','note','Prior season remains frozen and is not recomputed by V6.'),'limitations',jsonb_build_array('Candidate is unavailable until all sixteen active member builds are present.')) as dashboard
 from analysis.analysis_window_league_summary_v6 summary
 join analysis.reporting_season_windows_v3 window on window.cohort_view_version='analysis_window_2025-26_2026-08-15_v1' and window.season=summary.season
 join analysis.accepted_analysis_window_cohort_rules_v6 cohort on cohort.cohort_view_version=window.cohort_view_version and cohort.season=window.season
@@ -238,7 +238,7 @@ select injury.curated_build_id,injury.team_key,injury.season,
  case injury.activity_context when 'match' then 'match' when 'training' then 'training' else 'all' end as setting_code,
  coalesce(injury.contact_context,'unknown') as contact_context,
  count(*) as recorded_injuries,count(*) filter(where coalesce(injury.days_injured,0)>0) as time_loss_injuries
-from curated.injuries injury join analysis.analysis_window_member_builds_v6 member using(curated_build_id,team_key,season)
+from curated.injuries injury join analysis.analysis_window_active_builds_v6 member using(curated_build_id,team_key,season)
 join analysis.reporting_season_windows_v3 window on window.cohort_view_version='analysis_window_2025-26_2026-08-15_v1' and window.season=injury.season
 where injury.problem_type='injury' and injury.eligibility_status='included_pending_protocol'
 and (injury.date_injured between window.season_start and window.season_end or injury.date_injured is null)
