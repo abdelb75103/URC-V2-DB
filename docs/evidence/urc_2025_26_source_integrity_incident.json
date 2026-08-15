@@ -1,0 +1,32 @@
+{
+  "schema_version": "urc_2025_26_source_integrity_incident_v1",
+  "season": "2025-26",
+  "incident_date": "2026-08-15",
+  "scope": "one protected Edinburgh legacy workbook",
+  "target_drive_id": "1WZhE9zmln2oJkdOa3AUOwDCvUgsp4tTP",
+  "changed_file_count_detected": 1,
+  "altered_local_copy_sha256": "e3b76a5d6030908c0963c1de295836d433af41713ecdb702de4b32f08faaf069",
+  "authoritative_drive_bytes": 1240576,
+  "authoritative_drive_sha256": "bd7f6bd1c09d338d821ad0b686761b22dfed972a5c7f4363ea1546418126b2e1",
+  "restored_local_sha256": "bd7f6bd1c09d338d821ad0b686761b22dfed972a5c7f4363ea1546418126b2e1",
+  "authoritative_restore_count": 1,
+  "altered_copy_preserved_in_protected_quarantine": true,
+  "temporary_encoded_stream_removed": true,
+  "drive_mutation_attempted": false,
+  "protected_content_logged": false,
+  "post_restore_corpus_audit": {
+    "local_files": 162,
+    "manifest_entries": 162,
+    "missing": 0,
+    "changed": 0,
+    "extra": 0,
+    "mode_violations": 0,
+    "total_local_bytes": 21460664
+  },
+  "downstream_recovery": {
+    "potentially_affected_edinburgh_derivatives_invalidated": true,
+    "reprofiled_from_restored_bytes_only": true,
+    "source_bytes_unchanged_after_reprofile": true
+  },
+  "privacy": "Aggregate-only record. No protected filename, row, identifier, alias, clinical value, or raw content is included."
+}
