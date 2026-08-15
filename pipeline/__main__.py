@@ -12323,7 +12323,7 @@ def main() -> None:
         help="exact current approved bundle snapshot required for every bundle re-release",
     )
     league_release_parser.add_argument(
-        "--analysis-version", default="v2", choices=["v2", "v3", "v4", "v5"],
+        "--analysis-version", default="v2", choices=["v2", "v3", "v4", "v5", "v6"],
         help=(
             "analytical candidate family; V3 requires the accepted season-bound cohort "
             "and V4 requires the accepted lineage cohort; V5 requires the accepted "
@@ -12345,6 +12345,7 @@ def main() -> None:
             "season_bound_2026-07-20_v1",
             "lineage_2024-25_2026-07-24_v1",
             ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION,
+            "analysis_window_2025-26_2026-08-15_v1",
         ],
     )
     league_release_parser.add_argument(

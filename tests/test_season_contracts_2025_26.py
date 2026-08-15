@@ -100,7 +100,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         self.assertEqual(contract.injury_cohort_view, "analysis.analysis_window_injury_cohort_v6")
         self.assertEqual(contract.league_monthly_view, "analysis.analysis_window_league_monthly_v6")
         self.assertEqual(contract.league_summary_view, "analysis.analysis_window_league_summary_v6")
-        self.assertEqual(contract.required_migrations, ("20260815010000",))
+        self.assertEqual(contract.required_migrations, ("20260815010000", "20260815020000"))
         self.assertEqual(contract.cohort_adjudication_ref, "ANALYSIS-WINDOW-2025-26-01")
         self.assertEqual(
             contract.cohort_evidence_locator,
@@ -219,6 +219,28 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             "classification_view_version": "reporting_classification_2026-07-22_v2",
             "cohort_view_version": "analysis_window_2025-26_2026-08-15_v1",
         })
+
+    def test_release_cli_accepts_the_registered_v6_tuple(self) -> None:
+        with (
+            patch.object(pipeline, "release_league") as release,
+            patch.object(
+                pipeline.sys,
+                "argv",
+                [
+                    "pipeline", "release-league", "--preflight",
+                    "--season", "2025-26",
+                    "--analysis-version", "v6",
+                    "--classification-view-version", "reporting_classification_2026-07-22_v2",
+                    "--cohort-view-version", "analysis_window_2025-26_2026-08-15_v1",
+                ],
+            ),
+        ):
+            pipeline.main()
+        args = release.call_args.args[0]
+        self.assertEqual(
+            YEAR2_2025_26_RELEASE_TUPLE,
+            (args.analysis_version, args.classification_view_version, args.cohort_view_version),
+        )
 
 
 if __name__ == "__main__":
