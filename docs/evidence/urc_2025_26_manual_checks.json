@@ -15,17 +15,37 @@
       "manifest_sha256": "dbb3d7e21a0bc88f1ae98adc1d759e43dc491ee842a6821b6471ef7f419e5942"
     },
     "encrypted_sources": {
+      "recovery_status": "authorised_recovery_completed",
       "total_files": 13,
+      "recovered_and_verified_files": 13,
+      "unresolved_encrypted_files": 0,
       "total_bytes": 4141568,
-      "legitimate_access_search": "exhausted_no_authorised_password_or_unencrypted_equivalent_found",
       "brute_force_or_unauthorised_decryption": false,
+      "raw_corpus_unchanged_after_recovery": true,
+      "codebook_unchanged_after_recovery": true,
+      "protected_candidate_injury_rows": 393,
+      "candidate_rows_are_ingest_approved": false,
+      "recovery_does_not_imply": [
+        "source_completeness",
+        "profile_or_mapping_approval",
+        "ingest_authorisation"
+      ],
+      "remaining_decision_categories": [
+        "source_to_canonical_mapping_adjudication",
+        "reconciliation_with_existing_unencrypted_staging",
+        "unknown_identity_treatment",
+        "recovered_exposure_overlap_and_identity_semantics",
+        "scarlets_monthly_cumulative_source_precedence"
+      ],
       "teams": [
         {
           "team": "Dragons",
           "files": 2,
           "bytes": 641024,
           "content": "injury",
-          "supersession": "not_proven"
+          "protected_candidate_injury_rows": 140,
+          "decision": "adjudication_required",
+          "ingest_ready": false
         },
         {
           "team": "Ospreys",
@@ -33,16 +53,21 @@
           "unique_contents": 5,
           "bytes": 1942016,
           "content": "mixed_monthly",
-          "supersession": "not_proven",
-          "staged_injury_rows": 0,
-          "interpretation": "injury_evidence_unavailable_not_zero_injuries"
+          "protected_candidate_injury_rows": 154,
+          "zero_evidence_risk": "resolved_by_authorised_recovery",
+          "completeness_status": "not_yet_adjudicated",
+          "decision": "adjudication_required",
+          "ingest_ready": false
         },
         {
           "team": "Scarlets",
           "files": 5,
           "bytes": 1558528,
           "content": "mixed_monthly",
-          "supersession": "not_proven"
+          "protected_candidate_injury_rows": 99,
+          "source_precedence_status": "one_protected_incident_quarantined_pending_adjudication",
+          "decision": "adjudication_required",
+          "ingest_ready": false
         }
       ]
     }
@@ -102,8 +127,9 @@
     ]
   },
   "required_manual_resolutions": [
-    "Obtain legitimate access to the 13 encrypted sources or authoritative checksum-bound unencrypted replacements; otherwise retain the precise completeness gaps.",
-    "Confirm that Ospreys injury evidence is complete before any injury metric is computed; zero staged rows must never be interpreted as zero injuries.",
+    "Adjudicate the recovered Dragons, Ospreys, and Scarlets source-to-canonical mappings and reconcile the protected candidate injury rows against existing unencrypted staging before profile approval.",
+    "Keep recovered exposure evidence profile-only until overlap and player-identity semantics are proved.",
+    "Resolve the Scarlets monthly-versus-cumulative source-precedence exception; keep the single protected incident quarantined until adjudicated.",
     "Complete and approve every team profile, including date semantics, row grain, taxonomy, source precedence, duplicate/conflict adjudication, and reporting-window scope.",
     "Resolve or explicitly exclude exposure rows whose player identity semantics or exposure grain remain unproved.",
     "Keep every unresolved or genuinely absent value Unknown; do not infer dates, identities, exposure grain, clinical categories, or source supersession."
