@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import { Client } from "pg";
+import {
+  assertApprovedConnectionString,
+  proveApprovedLiveTarget,
+} from "./approved_target.mjs";
 
 const sqlPath = process.argv[2];
 const paramsPath = process.argv[3];
@@ -21,8 +25,16 @@ const connectionTimeoutMillis = (() => {
   return parsed;
 })();
 
+const connectionString = process.env.SUPABASE_DB_URL;
+try {
+  assertApprovedConnectionString(connectionString);
+} catch (error) {
+  console.error(error.message);
+  process.exit(2);
+}
+
 const client = new Client({
-  connectionString: process.env.SUPABASE_DB_URL,
+  connectionString,
   connectionTimeoutMillis,
   keepAlive: true
 });
@@ -45,6 +57,10 @@ const statementTimeoutMs = (() => {
 
 try {
   await client.connect();
+  const proof = await proveApprovedLiveTarget(client);
+  console.error(
+    `URC target proof passed: project_ref=${proof.projectRef} database=${proof.database} evidence=${proof.evidence}`
+  );
   await client.query("begin");
   // The target's default statement_timeout is 2 minutes, which is shorter than
   // a legitimate promotion transaction: release-league re-derives the league
@@ -61,6 +77,7 @@ try {
       [JSON.stringify(params)]
     );
   }
+  await proveApprovedLiveTarget(client);
   await client.query(fs.readFileSync(sqlPath, "utf8"));
   await client.query("commit");
 } catch (error) {

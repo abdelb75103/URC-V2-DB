@@ -8,7 +8,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WRAPPER = ROOT / "pipeline/run_with_pooler.mjs"
-FAKE_SECRET = "postgresql://user:never-print-this@example.invalid/postgres"
+FAKE_SECRET = (
+    "postgresql://postgres.eukkvswaxweenovqqgzr:never-print-this@"
+    "aws-0-eu-west-3.pooler.supabase.com:5432/postgres"
+)
+WRONG_TARGET_SECRET = (
+    "postgresql://postgres.aaaaaaaaaaaaaaaaaaaa:never-print-this@"
+    "aws-0-eu-west-3.pooler.supabase.com:5432/postgres"
+)
 
 
 class RunWithPoolerTests(unittest.TestCase):
@@ -116,3 +123,34 @@ class RunWithPoolerTests(unittest.TestCase):
             )
             self.assertEqual(2, result.returncode, command)
             self.assertIn("not an approved", result.stderr)
+
+    def test_wrong_project_reference_is_rejected_before_child_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory)
+            (cwd / ".env.local").write_text(
+                f"SUPABASE_DB_URL_POOLER={WRONG_TARGET_SECRET}\n",
+                encoding="utf-8",
+            )
+            pipeline = cwd / "pipeline"
+            pipeline.mkdir()
+            (pipeline / "sql_query.mjs").write_text(
+                'process.stdout.write("child-ran");\n',
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    "node",
+                    str(WRAPPER),
+                    "node",
+                    "pipeline/sql_query.mjs",
+                ],
+                cwd=cwd,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(2, result.returncode)
+        self.assertNotIn("child-ran", result.stdout)
+        self.assertIn("approved URC project", result.stderr)
+        self.assertNotIn("never-print-this", result.stdout)
+        self.assertNotIn("never-print-this", result.stderr)

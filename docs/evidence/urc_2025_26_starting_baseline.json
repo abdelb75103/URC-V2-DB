@@ -1,0 +1,67 @@
+{
+  "schema_version": "urc_2025_26_starting_baseline_v1",
+  "captured_on": "2026-08-15",
+  "git": {
+    "commit": "331f22c1410f14392cee1fce43a30be06dbdc0e1",
+    "managed_worktree_branch": "codex/urc-2025-26-goal",
+    "starting_worktree_clean": true,
+    "saved_project_branch": "main",
+    "saved_project_clean": true
+  },
+  "frozen_file_scopes": {
+    "tracked_reporting_exports": {
+      "file_count": 17,
+      "tree_sha256": "3893f68f477112bfbdb1c013710266a03756875099e7c8cd08c24bf4ee678ca6"
+    },
+    "existing_migrations": {
+      "file_count": 43,
+      "tree_sha256": "cf6139a4e0193b03753125b0e7042b23a4106d95db05ed9f42e3a36aaf56799d"
+    },
+    "frozen_rules_and_evidence": {
+      "file_count": 31,
+      "tree_sha256": "2573c782cd0771d8ef5cd652ed4cb95ba95c4742dc42c6e264ceb6880591a79f"
+    },
+    "saved_project_ignored_data_2024_25": {
+      "file_count": 28,
+      "tree_sha256": "8f32cdc3b941ff6ec304ed2a87e37cee9f1f2926f9c0e91427cff65d878959e6"
+    }
+  },
+  "approved_live_release_2024_25": {
+    "target_project_ref": "eukkvswaxweenovqqgzr",
+    "release_id": "2a0c2deb-dae6-4159-9165-7526f0ea548b",
+    "release_label": "urc-2024-25-correction-r1122-20260729-a1",
+    "status": "approved",
+    "approved_at": "2026-07-29T14:59:33.001Z",
+    "analysis_version": "v5",
+    "classification_view_version": "reporting_classification_2026-07-22_v2",
+    "cohort_view_version": "analysis_window_2024-25_2026-07-25_v1",
+    "member_count": 16,
+    "league_payload_sha256": "9a6c0c148720ab62e984aac51c6b96d9029f892374ca477952ab7ec705e1d782",
+    "canonical_bundle_sha256": "34fc4dbafb87c2ec0047c6e955ae448b20f0430ded1b0eecaf9187e76d175067",
+    "team_payload_set_sha256": "2e02e7fcece155b75a37a4155461643aea1141934af1aa69d29540178eed1df2",
+    "analysis_window": {
+      "start": "2024-09-01",
+      "end": "2025-06-30"
+    },
+    "headline": {
+      "recorded_injuries": 1662,
+      "time_loss_injuries": 787,
+      "incidence_per_1000h": 9.673899902569934,
+      "severity_mean_days": 22.33163913595934,
+      "severity_median_days": 13,
+      "burden_per_1000h": 216.03404166158398
+    },
+    "denominators": {
+      "exposure_hours": 81352.91949743334,
+      "match_hours": 6040,
+      "training_hours": 75312.91949743334,
+      "exposure_rows": 64511
+    }
+  },
+  "open_boundaries": {
+    "access_restoration_gate": "open",
+    "drive_delivery": "immutable_read_only",
+    "database_environment": "live_approved_urc_only_no_local_database",
+    "vercel_access": "prohibited"
+  }
+}

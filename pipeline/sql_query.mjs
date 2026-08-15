@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import { Client } from "pg";
+import {
+  assertApprovedConnectionString,
+  proveApprovedLiveTarget,
+} from "./approved_target.mjs";
 
 // Read-only counterpart of sql_exec.mjs: runs exactly one query inside a
 // read-only transaction and prints its rows as JSON to stdout. Used by
@@ -30,8 +34,16 @@ const connectionTimeoutMillis = (() => {
   return parsed;
 })();
 
+const connectionString = process.env.SUPABASE_DB_URL;
+try {
+  assertApprovedConnectionString(connectionString);
+} catch (error) {
+  console.error(error.message);
+  process.exit(2);
+}
+
 const client = new Client({
-  connectionString: process.env.SUPABASE_DB_URL,
+  connectionString,
   connectionTimeoutMillis,
   keepAlive: true,
   query_timeout: Number(process.env.PIPELINE_QUERY_TIMEOUT_MS || 900000)
@@ -39,6 +51,10 @@ const client = new Client({
 
 try {
   await client.connect();
+  const proof = await proveApprovedLiveTarget(client);
+  console.error(
+    `URC target proof passed: project_ref=${proof.projectRef} database=${proof.database} evidence=${proof.evidence}`
+  );
   // Postgres rejects CREATE (even for temp tables) inside a read-only
   // transaction, so the params table is a session-scoped temp table set up
   // before the transaction starts; the caller's query itself still runs
@@ -52,6 +68,7 @@ try {
     );
   }
   await client.query("begin transaction read only");
+  await proveApprovedLiveTarget(client);
   const result = await client.query(fs.readFileSync(sqlPath, "utf8"));
   const rows = Array.isArray(result) ? result[result.length - 1].rows : result.rows;
   await client.query("rollback");

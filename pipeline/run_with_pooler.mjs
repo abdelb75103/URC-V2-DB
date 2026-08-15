@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
+import { assertApprovedConnectionString } from "./approved_target.mjs";
 
 const command = process.argv.slice(2);
 if (command.length === 0) {
@@ -40,6 +41,12 @@ for (const rawLine of fs.readFileSync(".env.local", "utf8").split(/\r?\n/)) {
 const pooler = values.SUPABASE_DB_URL_POOLER;
 if (!pooler) {
   console.error("SUPABASE_DB_URL_POOLER is missing from .env.local");
+  process.exit(2);
+}
+try {
+  assertApprovedConnectionString(pooler);
+} catch (error) {
+  console.error(error.message);
   process.exit(2);
 }
 
