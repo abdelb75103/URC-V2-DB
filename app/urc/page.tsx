@@ -4,17 +4,24 @@ import { StaticImages } from '@/lib/placeholder-images';
 import { getLeaguePageData } from '@/lib/reporting';
 import { getDashboardSupplement } from '@/lib/reporting-preview';
 import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
+import { resolveDashboardSeason } from '@/lib/dashboard-season';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export default async function UrcOverallPage() {
+export default async function UrcOverallPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ season?: string | string[] }>;
+}) {
+  const { season: seasonParameter } = await searchParams;
+  const season = resolveDashboardSeason(seasonParameter);
   let dashboard;
   let comparisons: TeamComparisonRow[] = [];
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   try {
-    ({ dashboard, comparisons, leagueMetrics } = await getLeaguePageData());
+    ({ dashboard, comparisons, leagueMetrics } = await getLeaguePageData(season));
   } catch {
     dashboard = undefined;
     comparisons = [];
@@ -46,6 +53,8 @@ export default async function UrcOverallPage() {
       comparisons={comparisons}
       leagueMetrics={leagueMetrics}
       supplement={supplement}
+      season={season}
+      seasonPath="/urc"
     />
   );
 }

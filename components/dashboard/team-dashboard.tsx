@@ -37,6 +37,7 @@ import {
   type ComparisonScatterRow,
 } from '@/components/dashboard/charts';
 import type { TeamColorSet } from '@/lib/team-color';
+import { SUPPORTED_DASHBOARD_SEASONS, type DashboardSeason } from '@/lib/dashboard-season';
 
 type ProfileMetric =
   | 'time_loss_injuries'
@@ -236,6 +237,23 @@ function Segmented<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+function SeasonSelector({ season, seasonPath }: { season: DashboardSeason; seasonPath: string }) {
+  return (
+    <nav aria-label="Choose season" className="mt-3 inline-flex rounded-md border border-border bg-background/50 p-1">
+      {SUPPORTED_DASHBOARD_SEASONS.map((option) => (
+        <Link
+          key={option}
+          href={`${seasonPath}?season=${option}`}
+          aria-current={season === option ? 'page' : undefined}
+          className={`min-h-11 rounded px-3 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${season === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          {option}
+        </Link>
+      ))}
+    </nav>
   );
 }
 
@@ -1751,6 +1769,8 @@ export function TeamDashboard({
   exposurePreview,
   viewerComparisonId = null,
   teamColor,
+  season,
+  seasonPath,
 }: {
   dashboard: TeamDashboardData;
   crest: string;
@@ -1766,6 +1786,10 @@ export function TeamDashboard({
    * accent-coloured mark falls back to the --primary brand cyan.
    */
   teamColor?: TeamColorSet;
+  /** Selected supported season, resolved by the route before reporting loads. */
+  season: DashboardSeason;
+  /** Current league or team route, retained when a reader changes season. */
+  seasonPath: string;
 }) {
   const approvedProfiles = dashboard.injury_profiles ?? [];
   const profiles = withoutFrontFacingUnknown(supplement
@@ -1800,6 +1824,7 @@ export function TeamDashboard({
             {teamName} Dashboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{scopeLabel} injury and exposure surveillance - {dashboard.season}</p>
+          <SeasonSelector season={season} seasonPath={seasonPath} />
         </div>
       </header>
 

@@ -33,7 +33,7 @@ test('league dashboard uses the approved database consumer view and fails closed
   const page = await readFile(new URL('../app/urc/page.tsx', import.meta.url), 'utf8');
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
 
-  assert.match(page, /getLeaguePageData\(\)/);
+  assert.match(page, /getLeaguePageData\(season\)/);
   assert.match(page, /force-dynamic/);
   assert.match(page, /Dashboard unavailable/);
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
