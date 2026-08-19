@@ -11398,16 +11398,201 @@ def diff_dashboard_sections(committed: dict[str, Any], rendered: dict[str, Any])
     return results
 
 
+def compare_complete_public_payloads(
+    reviewed: object, candidate: object,
+) -> tuple[int, list[dict[str, Any]]]:
+    """Compare every public JSON leaf without inventing a projection.
+
+    V6 review is over the immutable candidate itself, so a legacy subset
+    renderer would weaken the gate. Both inputs have already passed the strict
+    V6 public contract before this helper is called; mismatch values are
+    therefore aggregate/public evidence only.
+    """
+    compared = 0
+    diffs: list[dict[str, Any]] = []
+
+    def record(path: str, reviewed_value: object, candidate_value: object, kind: str) -> None:
+        diffs.append({
+            "path": path,
+            "kind": kind,
+            "reviewed": reviewed_value,
+            "candidate": candidate_value,
+        })
+
+    def walk(path: str, reviewed_value: object, candidate_value: object) -> None:
+        nonlocal compared
+        if isinstance(reviewed_value, dict) and isinstance(candidate_value, dict):
+            for key in sorted(set(reviewed_value) | set(candidate_value)):
+                child = f"{path}.{key}" if path else key
+                if key not in candidate_value:
+                    record(child, reviewed_value[key], None, "missing_in_candidate")
+                elif key not in reviewed_value:
+                    record(child, None, candidate_value[key], "extra_in_candidate")
+                else:
+                    walk(child, reviewed_value[key], candidate_value[key])
+            return
+        if isinstance(reviewed_value, list) and isinstance(candidate_value, list):
+            if len(reviewed_value) != len(candidate_value):
+                record(
+                    f"{path}.length", len(reviewed_value), len(candidate_value),
+                    "row_count",
+                )
+            for index in range(max(len(reviewed_value), len(candidate_value))):
+                child = f"{path}[{index}]"
+                if index >= len(candidate_value):
+                    record(child, reviewed_value[index], None, "missing_in_candidate")
+                elif index >= len(reviewed_value):
+                    record(child, None, candidate_value[index], "extra_in_candidate")
+                else:
+                    walk(child, reviewed_value[index], candidate_value[index])
+            return
+        compared += 1
+        if isinstance(reviewed_value, (dict, list)) != isinstance(candidate_value, (dict, list)):
+            record(path, reviewed_value, candidate_value, "type_mismatch")
+        elif not parity_values_equal(reviewed_value, candidate_value):
+            record(path, reviewed_value, candidate_value, "value_mismatch")
+
+    walk("", reviewed, candidate)
+    return compared, diffs
+
+
+def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
+    """Compare a reviewed Year 2 preflight with its exact V6 DB candidate.
+
+    The database computes canonical hashes for both JSON values in the same
+    read-only query. This prevents local serialisation differences from
+    weakening the equality gate and keeps the legacy ``analysis.*_v1`` path
+    entirely out of Year 2 verification.
+    """
+    team = clean_text(args.team)
+    team_key = resolve_team_key(team)
+    contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
+    if not contract.team_candidate_view:
+        raise SystemExit("V6 analysis parity contract lacks a team candidate view")
+
+    reviewed_path = dashboard_file_for_gate(args, team_key, "2025-26")
+    if not reviewed_path.is_file():
+        raise SystemExit(f"no dashboard JSON at {reviewed_path}")
+    try:
+        reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit("reviewed V6 dashboard is not valid JSON") from error
+    assert_v6_public_dashboard_contract(reviewed, "reviewed team dashboard")
+
+    assert_checksum_bound_release_migrations(contract, "V6 analysis parity")
+    params = SqlParams()
+    rows = query_sql(
+        f"""
+        select team_key, season, analysis_version,
+          classification_view_version, classification_evidence_sha256,
+          cohort_view_version, cohort_evidence_sha256, dashboard,
+          reporting.canonical_jsonb_sha256_v1(dashboard) as candidate_payload_sha256,
+          reporting.canonical_jsonb_sha256_v1({params.jsonb(reviewed)})
+            as reviewed_payload_sha256
+        from {contract.team_candidate_view}
+        where team_key = {params.text(team_key)}
+          and season = '2025-26'
+          and analysis_version = 'v6'
+          and classification_view_version = 'reporting_classification_2026-07-22_v2'
+          and cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+        """,
+        params.values,
+    )
+    if len(rows) != 1 or not isinstance(rows[0].get("dashboard"), dict):
+        raise SystemExit(
+            "V6 analysis parity requires exactly one complete active-build candidate"
+        )
+    candidate = rows[0]
+    candidate_dashboard = candidate["dashboard"]
+    assert_v6_public_dashboard_contract(candidate_dashboard, "candidate team dashboard")
+
+    exact_fields = {
+        "season": contract.season,
+        "analysis_version": contract.analysis_version,
+        "classification_view_version": contract.classification_view_version,
+        "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+        "cohort_view_version": contract.cohort_view_version,
+        "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+    }
+    for field, expected in exact_fields.items():
+        if clean_text(candidate.get(field)) != expected:
+            raise SystemExit(f"V6 analysis parity candidate has invalid {field}")
+
+    candidate_hash = clean_text(candidate.get("candidate_payload_sha256"))
+    reviewed_hash = clean_text(candidate.get("reviewed_payload_sha256"))
+    if not re.fullmatch(r"[0-9a-f]{64}", candidate_hash) or not re.fullmatch(
+        r"[0-9a-f]{64}", reviewed_hash
+    ):
+        raise SystemExit("V6 analysis parity lacks canonical database payload hashes")
+
+    fields_compared, diffs = compare_complete_public_payloads(
+        reviewed, candidate_dashboard,
+    )
+    if reviewed_hash != candidate_hash:
+        diffs.insert(0, {
+            "path": "$canonical_payload_sha256",
+            "kind": "canonical_hash_mismatch",
+            "reviewed": reviewed_hash,
+            "candidate": candidate_hash,
+        })
+
+    log = {
+        "schema_version": "urc_v6_analysis_parity_v1",
+        "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "command": "verify-analysis-parity",
+        "team": team,
+        "team_key": team_key,
+        "season": "2025-26",
+        "reviewed_dashboard": (
+            str(reviewed_path.relative_to(REPO_ROOT))
+            if reviewed_path.is_relative_to(REPO_ROOT)
+            else str(reviewed_path)
+        ),
+        "reviewed_file_sha256": sha256_file(reviewed_path),
+        "candidate_view": contract.team_candidate_view,
+        "canonical_payload_sha256": candidate_hash,
+        "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+        "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+        "required_migrations": [
+            {"version": item.version, "name": item.name, "sha256": item.sha256}
+            for item in contract.required_migration_contracts
+        ],
+        "summary": {
+            "overall": "PARITY" if not diffs else "DIFFS",
+            "fields_compared": fields_compared,
+            "diff": len(diffs),
+        },
+        "diffs": diffs,
+    }
+    log_path = REPO_ROOT / "data" / "reporting" / f"{team_key}_analysis_parity_2025-26.json"
+    write_json_atomic(log_path, log)
+    print(json.dumps({
+        "team": team,
+        "team_key": team_key,
+        "season": "2025-26",
+        "overall": log["summary"]["overall"],
+        "fields_compared": fields_compared,
+        "diff": len(diffs),
+        "canonical_payload_sha256": candidate_hash,
+        "diff_log": str(log_path.relative_to(REPO_ROOT)),
+    }, indent=2))
+    if diffs:
+        raise SystemExit(1)
+
+
 def verify_analysis_parity(args: argparse.Namespace) -> None:
-    """Read-only Phase 3.2 gate: analysis.*_v1 views plus the release-time
-    cohort-filter evidence vs either --dashboard-file or the default committed
-    dashboard JSON. The analysis renderer remains curated-view-only; this gate
-    separately derives and exactly compares coverage.injury_cohort_filters
-    through the same helper as release. Writes only the diff log under
-    Git-ignored data/reporting/.
+    """Read-only candidate parity gate selected by the exact season contract.
+
+    Year 2 compares the complete reviewed V6 candidate and PostgreSQL canonical
+    hashes. Historical seasons retain the original ``analysis.*_v1`` renderer,
+    including its release-time cohort-filter evidence. Both routes write only
+    aggregate/public diff evidence under Git-ignored ``data/reporting/``.
     """
     team = clean_text(args.team)
     season = clean_text(args.season)
+    if season == "2025-26":
+        verify_analysis_parity_v6(args)
+        return
     team_key = resolve_team_key(team)
 
     migration = query_sql(
