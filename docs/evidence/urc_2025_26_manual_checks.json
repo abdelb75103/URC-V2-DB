@@ -1,18 +1,20 @@
 {
-  "schema_version": "urc_2025_26_manual_checks_v1",
-  "as_of": "2026-08-15",
+  "schema_version": "urc_2025_26_manual_checks_v2",
+  "as_of": "2026-08-20",
   "season": "2025-26",
-  "release_eligibility": "blocked",
-  "scope": "Aggregate-only manual checks; no direct identifiers, source rows, mapping values, or re-identification data.",
+  "release_eligibility": "blocked_pending_exact_checksum_profile_signature",
+  "scope": "Aggregate-only manual checks; no direct identifiers, source rows, mapping values, re-identification data, or protected paths.",
   "source_completeness": {
     "raw_corpus": {
-      "files": 162,
+      "baseline_files": 162,
       "manifest_entries": 162,
       "missing": 0,
       "changed": 0,
       "extra": 0,
       "mode_violations": 0,
-      "manifest_sha256": "dbb3d7e21a0bc88f1ae98adc1d759e43dc491ee842a6821b6471ef7f419e5942"
+      "manifest_sha256": "dbb3d7e21a0bc88f1ae98adc1d759e43dc491ee842a6821b6471ef7f419e5942",
+      "authoritative_drive_mutated": false,
+      "additive_glasgow_source_retained_outside_baseline": true
     },
     "encrypted_sources": {
       "recovery_status": "authorised_recovery_completed",
@@ -20,127 +22,115 @@
       "recovered_and_verified_files": 13,
       "unresolved_encrypted_files": 0,
       "total_bytes": 4141568,
-      "brute_force_or_unauthorised_decryption": false,
       "raw_corpus_unchanged_after_recovery": true,
-      "codebook_unchanged_after_recovery": true,
       "protected_candidate_injury_rows": 393,
       "candidate_rows_are_ingest_approved": false,
-      "recovery_does_not_imply": [
-        "source_completeness",
-        "profile_or_mapping_approval",
-        "ingest_authorisation"
-      ],
-      "remaining_decision_categories": [
-        "source_to_canonical_mapping_adjudication",
-        "reconciliation_with_existing_unencrypted_staging",
-        "unknown_identity_treatment",
-        "recovered_exposure_overlap_and_identity_semantics",
-        "scarlets_monthly_cumulative_source_precedence"
-      ],
       "teams": [
         {
           "team": "Dragons",
           "files": 2,
-          "bytes": 641024,
-          "content": "injury",
           "protected_candidate_injury_rows": 140,
-          "decision": "adjudication_required",
-          "ingest_ready": false
+          "accepted_initial_injury_rows": 19,
+          "remaining_recovered_rows": "retained_with_lineage_outside_initial_candidate"
         },
         {
           "team": "Ospreys",
           "files": 6,
-          "unique_contents": 5,
-          "bytes": 1942016,
-          "content": "mixed_monthly",
           "protected_candidate_injury_rows": 154,
-          "zero_evidence_risk": "resolved_by_authorised_recovery",
-          "completeness_status": "not_yet_adjudicated",
-          "decision": "adjudication_required",
-          "ingest_ready": false
+          "accepted_initial_injury_rows": 123,
+          "remaining_recovered_rows": "retained_with_lineage_outside_initial_candidate"
         },
         {
           "team": "Scarlets",
           "files": 5,
-          "bytes": 1558528,
-          "content": "mixed_monthly",
           "protected_candidate_injury_rows": 99,
-          "source_precedence_status": "one_protected_incident_quarantined_pending_adjudication",
-          "decision": "adjudication_required",
-          "ingest_ready": false
+          "accepted_initial_injury_rows": 587,
+          "recovered_overlap_disposition": "retained_quarantined_with_lineage"
         }
       ]
+    },
+    "updated_exposure_sources": {
+      "ospreys": {
+        "source_rows": 6965,
+        "eligible_rows": 5308,
+        "excluded_rows": 1657,
+        "identity": "Unknown",
+        "identity_dependent_metrics": "not_produced",
+        "source_precedence": "final_full_season_export_selected; preliminary_only_rows_quarantined"
+      },
+      "glasgow": {
+        "source_lineage_rows": 54668,
+        "session_candidate_rows": 9600,
+        "unknown_identity_rows": 321,
+        "identity_dependent_metrics": "suppressed",
+        "last_observed_date": "2026-06-05",
+        "missing_period": "2026-06-06_to_2026-06-30"
+      }
     }
   },
   "identity_gate": {
-    "status": "passed_identity_only",
-    "persistent_ids_allocated": 486,
-    "accepted_groups_resolved": 492,
-    "residual_candidates": 0,
-    "blank_source_rows": 412,
+    "status": "passed_with_explicit_unknown_limitations",
+    "current_codebook_sha256": "3c5d62cea1b83e3a4d4a58c8765125cd4c0b6a212f92a9628bc62698fabc87a5",
+    "glasgow_new_people_allocated": 6,
+    "glasgow_ambiguous_rows_retained_unknown": 321,
+    "ospreys_rows_retained_unknown": 6965,
     "blank_source_treatment": "Unknown",
-    "codebook_location": "protected_outside_git",
-    "ingest_authorisation": false,
-    "reason": "Identity completion does not override source, profile, exposure-grain, date-order, taxonomy, or clinical adjudication gates."
+    "identity_allocation_for_ambiguous_or_unproved_rows": false,
+    "reason": "Unknown identities are retained without allocation and cannot contribute to exposed-player, per-player, linkage, or identity-deduplication metrics."
   },
   "profile_and_semantics": {
     "teams_profiled": 16,
+    "approval_ready_teams": 16,
+    "signed_teams": 0,
     "ingest_ready_teams": 0,
-    "adjudication_required_teams": 16,
+    "profile_signature_status": "pending_exact_v8_checksum_signature",
     "proved_session_exposure_grain": [
       "Cardiff Rugby",
       "Dragons RFC",
+      "Edinburgh Rugby",
+      "Glasgow Warriors",
       "Hollywoodbets Sharks",
       "Lions",
       "Ospreys",
-      "Scarlets"
-    ],
-    "unknown_exposure_grain": [
-      "Benetton Rugby",
-      "Zebre Parma",
-      "Edinburgh Rugby",
-      "Glasgow Warriors",
+      "Scarlets",
       "Vodacom Bulls",
-      "DHL Stormers"
+      "DHL Stormers",
+      "Zebre Parma"
     ],
     "proved_weekly_exposure_grain": [
+      "Benetton Rugby",
       "Connacht Rugby",
       "Leinster Rugby",
       "Munster Rugby",
       "Ulster Rugby"
     ],
-    "additional_date_order_checks": [
-      {
-        "team": "Edinburgh Rugby",
-        "status": "ambiguous_or_unparseable_mapped_to_Unknown",
-        "values": 1908
-      },
-      {
-        "team": "Glasgow Warriors",
-        "status": "genuinely_ambiguous_mapped_to_Unknown",
-        "values": 728
-      },
-      {
-        "team": "Hollywoodbets Sharks",
-        "status": "date_order_Unknown"
-      }
-    ]
+    "protected_v8_envelope": {
+      "teams": 16,
+      "injury_rows": 10786,
+      "exposure_rows": 110812,
+      "root_manifest_sha256": "ab54238d226a57045addef923103cefa3c5ebde763ebb0d3d74e650e430ad499",
+      "root_file_set_sha256": "c8c80a1dd277c9944f80045ce340113a458a444942e24104c600dad3345e6d12",
+      "intake_gate_validation_status": "pass",
+      "validator_fixture_passed_teams": 16,
+      "final_unsigned_and_not_ingest_ready": true
+    }
   },
-  "required_manual_resolutions": [
-    "Adjudicate the recovered Dragons, Ospreys, and Scarlets source-to-canonical mappings and reconcile the protected candidate injury rows against existing unencrypted staging before profile approval.",
-    "Keep recovered exposure evidence profile-only until overlap and player-identity semantics are proved.",
-    "Resolve the Scarlets monthly-versus-cumulative source-precedence exception; keep the single protected incident quarantined until adjudicated.",
-    "Complete and approve every team profile, including date semantics, row grain, taxonomy, source precedence, duplicate/conflict adjudication, and reporting-window scope.",
-    "Resolve or explicitly exclude exposure rows whose player identity semantics or exposure grain remain unproved.",
-    "Keep every unresolved or genuinely absent value Unknown; do not infer dates, identities, exposure grain, clinical categories, or source supersession."
+  "coverage_gaps_and_limitations": [
+    "Benetton exposure is weekly but source hours are absent; no exposure denominator or rate is fabricated.",
+    "Zebre exposure is session-grain but source dates remain unavailable for date-bound reporting.",
+    "Glasgow uses controlling Session rows only, excludes nested periods, retains 321 ambiguous identities as Unknown, and has no observed exposure after 2026-06-05.",
+    "Ospreys exposure identities remain Unknown; only aggregate row-based hours and distance are permitted.",
+    "Stormers retains 1163 exposure rows with unproved dates as Unknown and excluded from date-bound denominators.",
+    "Recovered Dragons and Scarlets rows not selected for the initial candidate remain preserved with quarantine or exclusion lineage.",
+    "No average, placeholder, fabricated date, fabricated identity, or unsupported unit is used in a scientific input or denominator."
   ],
-  "allowed_next_state": "protected_adjudication_and_source_resolution_only",
+  "required_next_action": "Obtain the authorised signatory's exact checksum-bound approval of the protected V8 profile and mapping envelopes, then generate and validate the signed successor.",
+  "allowed_next_state": "exact_checksum_profile_signature_and_signed_envelope_generation",
   "forbidden_while_blocked": [
-    "master_workbook_generation",
     "database_ingest",
     "migration_application",
-    "candidate_build",
+    "curated_build",
     "release_approval_or_promotion",
-    "public_or_team_url_sharing"
+    "deployment_or_url_sharing"
   ]
 }
