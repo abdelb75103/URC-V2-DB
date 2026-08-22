@@ -1,4 +1,6 @@
 {
-  "approved_root_sha256s": [],
+  "approved_root_sha256s": [
+    "bbd9625ecb93517538a768f848fbda5d1060d81860d3407dadd498eabc874be9"
+  ],
   "schema": "urc_2025_26_approved_roots_v1"
 }
