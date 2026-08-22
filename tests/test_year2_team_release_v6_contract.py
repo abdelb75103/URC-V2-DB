@@ -4,6 +4,7 @@ from pathlib import Path
 import io
 import inspect
 import json
+import re
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -218,10 +219,29 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
             query.assert_called_once()
             self.assertIn("jsonb_agg", query.call_args.args[0])
             write.assert_called_once()
+            promotion_sql = write.call_args.args[0]
             self.assertIn(
                 "approved V6 team predecessor set changed after review",
-                write.call_args.args[0],
+                promotion_sql,
             )
+            self.assertIn(
+                ") <> (\n          -- Keep CASE's THEN nested so PL/pgSQL does not terminate this IF early.\n          case",
+                promotion_sql,
+            )
+            predecessor_guard = promotion_sql.split(
+                "if (\n          select count(*)",
+                1,
+            )[1].split("end if;", 1)[0]
+            depth = 1
+            top_level_then = 0
+            for token in re.finditer(r"\(|\)|\bthen\b", predecessor_guard, re.IGNORECASE):
+                if token.group() == "(":
+                    depth += 1
+                elif token.group() == ")":
+                    depth -= 1
+                elif depth == 0:
+                    top_level_then += 1
+            self.assertEqual(top_level_then, 1)
             self.assertEqual(
                 write.call_args.args[1].count(candidate_dashboard_json),
                 2,
@@ -415,7 +435,11 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         ):
             self.assertIn(token, source)
         self.assertNotIn("params.jsonb(dashboard)", source)
-        self.assertIn("then 0\n          else 1", source)
+        self.assertIn(
+            ") <> (\n          -- Keep CASE's THEN nested so PL/pgSQL does not terminate this IF early.\n          case",
+            source,
+        )
+        self.assertNotIn(") <> case", source)
         self.assertIn("select count(*)", source)
         self.assertLess(
             source.index("for update;"),

@@ -85,6 +85,8 @@ try {
     await client.query("rollback");
   } catch {}
   console.error(error.message);
+  if (error.position) console.error(`SQL error position: ${error.position}`);
+  if (error.where) console.error(`SQL error context: ${error.where}`);
   process.exitCode = 1;
 } finally {
   await client.end();

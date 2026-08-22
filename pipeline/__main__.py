@@ -6104,10 +6104,13 @@ def release_team_v6(args: argparse.Namespace) -> None:
           join reporting.aggregate_releases release on release.id = payload.release_id
           where payload.team_key = {params.text(team_key)} and payload.season = '2025-26'
             and release.status = 'approved'
-        ) <> case
-          when {params.text(predecessor['release_id'] if predecessor else None)} is null then 0
-          else 1
-        end
+        ) <> (
+          -- Keep CASE's THEN nested so PL/pgSQL does not terminate this IF early.
+          case
+            when {params.text(predecessor['release_id'] if predecessor else None)} is null then 0
+            else 1
+          end
+        )
         or (
           {params.text(predecessor['release_id'] if predecessor else None)} is not null
           and not exists (
