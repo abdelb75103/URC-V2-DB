@@ -670,7 +670,9 @@ cross join contact_domain
 left join observed using(curated_build_id, team_key, season, setting_code, contact_context);
 
 create view analysis.team_dashboard_payload_analysis_window_v6_enriched with (security_invoker=true) as
-select base.*,
+select base.team_key, base.season, base.team_release_id, base.curated_build_id,
+ base.classification_view_version, base.classification_evidence_sha256,
+ base.cohort_view_version, base.cohort_evidence_sha256,
  base.dashboard || jsonb_build_object(
   'body_locations',coalesce((select jsonb_agg(jsonb_build_object('key',code,'label',label,'time_loss_injuries',time_loss_injuries,'days_lost',days_lost,'exposure_hours',exposure_hours,'incidence_per_1000h',incidence_per_1000h,'burden_per_1000h',burden_per_1000h,'mean_severity_days',mean_severity_days) order by code) from analysis.analysis_window_profiles_v6 where curated_build_id=base.curated_build_id and team_key=base.team_key and season=base.season and dimension='body_location' and setting_code='all'),'[]'::jsonb),
   'injury_types',coalesce((select jsonb_agg(jsonb_build_object('key',code,'label',label,'time_loss_injuries',time_loss_injuries,'days_lost',days_lost,'exposure_hours',exposure_hours,'incidence_per_1000h',incidence_per_1000h,'burden_per_1000h',burden_per_1000h,'mean_severity_days',mean_severity_days) order by time_loss_injuries desc,code) from analysis.analysis_window_profiles_v6 where curated_build_id=base.curated_build_id and team_key=base.team_key and season=base.season and dimension='injury_type' and setting_code='all'),'[]'::jsonb),
@@ -750,7 +752,9 @@ from analysis.analysis_window_contact_distribution_v6
 group by season, setting_code, contact_context, contact_label;
 
 create view analysis.league_dashboard_payload_analysis_window_v6_enriched with (security_invoker=true) as
-select base.*,
+select base.season, base.classification_view_version,
+ base.classification_evidence_sha256, base.cohort_view_version,
+ base.cohort_evidence_sha256,
  base.dashboard || jsonb_build_object(
   'body_locations',coalesce((select jsonb_agg(jsonb_build_object('key',code,'label',label,'time_loss_injuries',time_loss_injuries,'days_lost',days_lost,'exposure_hours',exposure_hours,'incidence_per_1000h',incidence_per_1000h,'burden_per_1000h',burden_per_1000h,'mean_severity_days',mean_severity_days) order by code) from analysis.analysis_window_league_profiles_v6 where season=base.season and dimension='body_location' and setting_code='all'),'[]'::jsonb),
   'injury_types',coalesce((select jsonb_agg(jsonb_build_object('key',code,'label',label,'time_loss_injuries',time_loss_injuries,'days_lost',days_lost,'exposure_hours',exposure_hours,'incidence_per_1000h',incidence_per_1000h,'burden_per_1000h',burden_per_1000h,'mean_severity_days',mean_severity_days) order by time_loss_injuries desc,code) from analysis.analysis_window_league_profiles_v6 where season=base.season and dimension='injury_type' and setting_code='all'),'[]'::jsonb),

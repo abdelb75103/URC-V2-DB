@@ -48,6 +48,17 @@ class Year2ReportingV6SqlContractTests(unittest.TestCase):
         )
         self.assertIn("reporting_season_windows_v3 season_window", self.sql)
 
+    def test_enriched_payload_views_replace_the_dashboard_column(self) -> None:
+        self.assertNotIn("select base.*,", self.sql)
+        self.assertIn(
+            "select base.team_key, base.season, base.team_release_id, base.curated_build_id,",
+            self.sql,
+        )
+        self.assertIn(
+            "select base.season, base.classification_view_version,",
+            self.sql,
+        )
+
     def test_undated_rows_remain_in_totals_but_not_monthly_series(self) -> None:
         classification = self.sql.split(
             "create view analysis.analysis_window_reporting_classification_v6", 1
