@@ -3551,8 +3551,8 @@ def process_intake(args: argparse.Namespace) -> None:
     cohort_signal_team_key = resolve_team_key(args.team)
     own_team_alias = own_team_alias_for(cohort_signal_team_key, load_fixture_team_aliases())
 
-    record_sql = []
-    event_sql = []
+    record_rows: list[dict[str, object]] = []
+    event_rows: list[dict[str, object]] = []
     output_states: list[dict[str, object]] = []
     params = SqlParams()
     provenance = run_provenance()
@@ -3615,30 +3615,26 @@ def process_intake(args: argparse.Namespace) -> None:
         if events:
             changed_rows += 1
         raw_id = raw_record_id(args.team, args.season, registered_file_hash, source_row_number)
-        record_sql.append(
-            f"""
-            insert into processing.record_versions
-              (source_row_id, step_run_id, version_number, record_state, eligibility_status)
-            select sr.id, step.id, {args.version_number}, {params.jsonb(state)},
-              {params.text(state["analysis_eligibility_status"])}
-            from ingestion.source_rows sr, current_step step
-            where sr.raw_record_id = {params.text(raw_id)}
-            ;
-            """
+        record_rows.append(
+            {
+                "raw_record_id": raw_id,
+                "record_state": state,
+                "eligibility_status": state["analysis_eligibility_status"],
+            }
         )
         for event in events:
             event_count += 1
-            event_sql.append(
-                f"""
-                insert into audit.record_events
-                  (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
-                select step.id, sr.id, {params.text(event["field_name"])}, {params.jsonb(event["old_value"])},
-                  {params.jsonb(event["new_value"])}, {params.text(event["action"])},
-                  {params.text(event["reason_code"])}, {params.text(event["rationale"])},
-                  {params.text(args.step_version)}, {params.text(event["review_status"])}
-                from ingestion.source_rows sr, current_step step
-                where sr.raw_record_id = {params.text(raw_id)};
-                """
+            event_rows.append(
+                {
+                    "raw_record_id": raw_id,
+                    "field_name": event["field_name"],
+                    "old_value": event["old_value"],
+                    "new_value": event["new_value"],
+                    "action": event["action"],
+                    "reason_code": event["reason_code"],
+                    "rationale": event["rationale"],
+                    "review_status": event["review_status"],
+                }
             )
 
     output_hash = sha256_json(output_states)
@@ -3754,8 +3750,40 @@ def process_intake(args: argparse.Namespace) -> None:
         and adjudication.decision ->> 'decision_type' = 'source_field_correction'
         and adjudication.consumed_by_step_run_id is null;
 
-      {"".join(record_sql)}
-      {"".join(event_sql)}
+      insert into processing.record_versions
+        (source_row_id, step_run_id, version_number, record_state, eligibility_status)
+      select
+        sr.id,
+        step.id,
+        {args.version_number},
+        planned_record.item -> 'record_state',
+        planned_record.item ->> 'eligibility_status'
+      from jsonb_array_elements({params.jsonb(record_rows)}) with ordinality
+        as planned_record(item, ordinal)
+      join ingestion.source_rows sr
+        on sr.raw_record_id = planned_record.item ->> 'raw_record_id'
+      cross join current_step step
+      order by planned_record.ordinal;
+
+      insert into audit.record_events
+        (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+      select
+        step.id,
+        sr.id,
+        planned_event.item ->> 'field_name',
+        planned_event.item -> 'old_value',
+        planned_event.item -> 'new_value',
+        planned_event.item ->> 'action',
+        planned_event.item ->> 'reason_code',
+        planned_event.item ->> 'rationale',
+        {params.text(args.step_version)},
+        planned_event.item ->> 'review_status'
+      from jsonb_array_elements({params.jsonb(event_rows)}) with ordinality
+        as planned_event(item, ordinal)
+      join ingestion.source_rows sr
+        on sr.raw_record_id = planned_event.item ->> 'raw_record_id'
+      cross join current_step step
+      order by planned_event.ordinal;
     """
     run_sql(sql, params.values)
     print(
