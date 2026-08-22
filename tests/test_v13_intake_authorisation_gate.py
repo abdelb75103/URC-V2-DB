@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import os
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -143,6 +144,9 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
             "ai_reviewed_at": "2026-08-22T17:55:08Z",
             "approved_by": "Abdel Babiker",
             "approved_at": (now - timedelta(minutes=1)).isoformat(),
+            "approval_line_sha256": EXPECTED_AUTHORISATION[
+                "approval_line_sha256"
+            ],
             "approval_ready": True,
             "ingest_ready": True,
             "database_action_authorised": True,
@@ -181,6 +185,7 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
             "ai_reviewed_at",
             "approved_by",
             "approved_at",
+            "approval_line_sha256",
             "unresolved_adjudication_ids",
             "approved_input_sha256s",
             "approval_ready",
@@ -209,6 +214,9 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
             "ingest_ready": True,
             "database_action_authorised": True,
             "authorisation": EXPECTED_AUTHORISATION,
+            "approval_line_sha256": EXPECTED_AUTHORISATION[
+                "approval_line_sha256"
+            ],
         }
         return manifest, self.root / "v13_approved_intake_manifest.json"
 
@@ -338,6 +346,26 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
                     json.dumps({"team_key": team_key}) + "\n"
                 )
 
+        predecessor_outputs = {}
+        for team_key, (_, injury_sha, exposure_sha, manifest_sha) in (
+            V13_REVIEWED_V12_TEAMS.items()
+        ):
+            predecessor_outputs.update(
+                {
+                    f"{team_key}/injury_intake_locator_enriched_v10.csv": injury_sha,
+                    f"{team_key}/exposure_intake_final_clean_v10.csv": exposure_sha,
+                    f"{team_key}/intake_manifest_v12.json": manifest_sha,
+                }
+            )
+        extra_root = self.package_root / "predecessor_extra"
+        extra_root.mkdir(exist_ok=True)
+        for index in range(196 - len(predecessor_outputs)):
+            extra_path = extra_root / f"member_{index:03d}.json"
+            extra_path.write_text(f"fixture predecessor member {index}\n")
+            predecessor_outputs[
+                extra_path.relative_to(self.package_root).as_posix()
+            ] = self.fixture_sha256(extra_path)
+
         signing = {
             "schema": "urc_2025_26_v13_signing_record_v1",
             "approved_by": "Abdel Babiker",
@@ -351,6 +379,13 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
             "v12_root_file_set_sha256": EXPECTED_REVIEW[
                 "v12_root_file_set_sha256"
             ],
+            "predecessor_output_sha256s": predecessor_outputs,
+            "predecessor_output_count": 196,
+            "predecessor_output_file_set_sha256": hashlib.sha256(
+                json.dumps(
+                    predecessor_outputs, sort_keys=True, separators=(",", ":")
+                ).encode()
+            ).hexdigest(),
             "candidate_preservation": {
                 "v12_non_root_file_count": 196,
                 "all_v12_non_root_bytes_preserved": True,
@@ -373,12 +408,41 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
         signing_path = self.package_root / "v13_signing_record.json"
         signing_path.write_text(json.dumps(signing, sort_keys=True) + "\n")
 
+        privacy_relative = "privacy_scan_v13.json"
+        privacy_path = self.package_root / privacy_relative
+        covered_outputs = {
+            path.relative_to(self.package_root).as_posix(): self.fixture_sha256(path)
+            for path in sorted(self.package_root.rglob("*"))
+            if path.is_file()
+            and path.name not in {privacy_relative, "v13_signed_root_manifest.json"}
+        }
+        privacy = {
+            "schema": "urc_2025_26_v13_signing_privacy_evidence_v1",
+            "status": "pass",
+            "scanned_file_count": len(covered_outputs),
+            "direct_identifier_match_count": 0,
+            "forbidden_key_match_count": 0,
+            "covered_output_sha256s": covered_outputs,
+            "covered_file_set_sha256": hashlib.sha256(
+                json.dumps(
+                    covered_outputs, sort_keys=True, separators=(",", ":")
+                ).encode()
+            ).hexdigest(),
+            "excluded_paths": [
+                privacy_relative,
+                "v13_signed_root_manifest.json",
+            ],
+            "final_closed_regular_file_count": len(covered_outputs) + 2,
+        }
+        privacy_path.write_text(json.dumps(privacy, sort_keys=True) + "\n")
+
         output_sha256s = {
             path.relative_to(self.package_root).as_posix(): self.fixture_sha256(path)
             for path in sorted(self.package_root.rglob("*"))
             if path.is_file() and path.name != "v13_signed_root_manifest.json"
         }
         validator_results = []
+        root_candidate_validator_results = []
         for team_key in V13_REVIEWED_V12_TEAMS:
             validator_results.append(
                 {
@@ -393,6 +457,20 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
                     ],
                 }
             )
+            _, injury_sha, exposure_sha, _ = V13_REVIEWED_V12_TEAMS[team_key]
+            for input_kind, filename, digest in (
+                ("injury", "injury_intake_locator_enriched_v10.csv", injury_sha),
+                ("exposure", "exposure_intake_final_clean_v10.csv", exposure_sha),
+            ):
+                root_candidate_validator_results.append(
+                    {
+                        "team_key": team_key,
+                        "input_kind": input_kind,
+                        "path": f"{team_key}/{filename}",
+                        "sha256": digest,
+                        "status": "pass",
+                    }
+                )
         root = {
             "schema": "urc_2025_26_v13_signed_root_manifest_v1",
             "season": "2025-26",
@@ -414,6 +492,13 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
             "ingest_ready": True,
             "database_action_authorised": True,
             "authorisation": EXPECTED_AUTHORISATION,
+            "predecessor_output_count": 196,
+            "predecessor_output_sha256s": predecessor_outputs,
+            "predecessor_output_file_set_sha256": hashlib.sha256(
+                json.dumps(
+                    predecessor_outputs, sort_keys=True, separators=(",", ":")
+                ).encode()
+            ).hexdigest(),
             "output_sha256s": output_sha256s,
             "root_file_set_sha256": hashlib.sha256(
                 json.dumps(
@@ -424,12 +509,21 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
                 "path": signing_path.name,
                 "sha256": output_sha256s[signing_path.name],
             },
+            "privacy_evidence": {
+                "path": privacy_relative,
+                "sha256": output_sha256s[privacy_relative],
+                "status": "pass",
+            },
             "validator_results": validator_results,
+            "root_candidate_validator_results": root_candidate_validator_results,
             "fresh_ai_review_evidence": EXPECTED_REVIEW,
             "harness_provenance": self.profile["harness_provenance"],
         }
         root_path = self.package_root / "v13_signed_root_manifest.json"
         root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+        self.package_root.chmod(0o700)
+        for path in self.package_root.rglob("*"):
+            path.chmod(0o700 if path.is_dir() else 0o600)
         input_path = self.root / "injury_intake_locator_enriched_v10.csv"
         return manifest, manifest_path, input_path, root_path, accepted_sources
 
@@ -448,7 +542,80 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
             "path": "v13_signing_record.json",
             "sha256": output_sha256s["v13_signing_record.json"],
         }
+        if "privacy_evidence" in root and "privacy_scan_v13.json" in output_sha256s:
+            root["privacy_evidence"] = {
+                "path": "privacy_scan_v13.json",
+                "sha256": output_sha256s["privacy_scan_v13.json"],
+                "status": "pass",
+            }
         root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+
+    def fixture_predecessor_map_sha256(self, root_path: Path) -> str:
+        root = json.loads(root_path.read_text())
+        return hashlib.sha256(
+            json.dumps(
+                root["predecessor_output_sha256s"],
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
+    def assert_ingest_root_rejected(
+        self,
+        manifest_path: Path,
+        input_path: Path,
+        root_path: Path,
+        accepted_sources: dict[str, str],
+        error: str,
+        *,
+        predecessor_map_sha256: str | None = None,
+    ) -> None:
+        ledger_path = Path(self.tempdir.name) / "approved_roots_fixture.json"
+        ledger_path.write_text(
+            json.dumps(
+                {
+                    "schema": "urc_2025_26_approved_roots_v1",
+                    "approved_root_sha256s": [self.fixture_sha256(root_path)],
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        with (
+            patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
+            patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                predecessor_map_sha256
+                or self.fixture_predecessor_map_sha256(root_path),
+            ),
+            patch(
+                "pipeline.__main__.accepted_repository_source_sha256s",
+                return_value=accepted_sources,
+            ),
+            patch(
+                "pipeline.__main__.current_repository_source_sha256s",
+                return_value=accepted_sources,
+            ),
+            patch("pipeline.__main__.YEAR2_APPROVED_ROOTS_PATH", ledger_path),
+            patch("pipeline.__main__.repository_file_matches_head", return_value=True),
+            patch("pipeline.__main__.read_rows") as read_rows,
+            patch("pipeline.__main__.run_sql") as run_sql,
+            self.assertRaisesRegex(SystemExit, error),
+        ):
+            ingest(
+                argparse.Namespace(
+                    file=str(input_path),
+                    manifest=str(manifest_path),
+                    signed_root_manifest=str(root_path),
+                    team="Benetton",
+                    season="2025-26",
+                    exclude_source_fields="",
+                    redact_manifest_keys="",
+                    redact_source_values="",
+                )
+            )
+        read_rows.assert_not_called()
+        run_sql.assert_not_called()
 
     def test_accepts_exact_checksum_bound_v13_authorisation(self) -> None:
         manifest, manifest_path = self.manifest()
@@ -510,6 +677,10 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
         with (
             patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
             patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                self.fixture_predecessor_map_sha256(root_path),
+            ),
+            patch(
                 "pipeline.__main__.accepted_repository_source_sha256s",
                 return_value=accepted_sources,
             ),
@@ -535,6 +706,10 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
         )
         with (
             patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
+            patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                self.fixture_predecessor_map_sha256(root_path),
+            ),
             patch(
                 "pipeline.__main__.accepted_repository_source_sha256s",
                 return_value=accepted_sources,
@@ -571,6 +746,10 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
         with (
             patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
             patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                self.fixture_predecessor_map_sha256(root_path),
+            ),
+            patch(
                 "pipeline.__main__.accepted_repository_source_sha256s",
                 return_value=accepted_sources,
             ),
@@ -602,6 +781,10 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
         (self.package_root / "zebre" / "intake_manifest_v12.json").unlink()
         with (
             patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
+            patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                self.fixture_predecessor_map_sha256(root_path),
+            ),
             patch(
                 "pipeline.__main__.accepted_repository_source_sha256s",
                 return_value=accepted_sources,
@@ -638,6 +821,10 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
         self.reclose_root(root_path)
         with (
             patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
+            patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                self.fixture_predecessor_map_sha256(root_path),
+            ),
             patch(
                 "pipeline.__main__.accepted_repository_source_sha256s",
                 return_value=accepted_sources,
@@ -682,6 +869,10 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
         with (
             patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
             patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                self.fixture_predecessor_map_sha256(root_path),
+            ),
+            patch(
                 "pipeline.__main__.accepted_repository_source_sha256s",
                 return_value=accepted_sources,
             ),
@@ -707,6 +898,333 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
                 )
             )
         run_sql.assert_called_once()
+
+    def test_ingest_rejects_unbound_pycache_file_before_sql(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        unbound_dir = self.package_root / "__pycache__"
+        unbound_dir.mkdir()
+        (unbound_dir / "unbound.txt").write_text("not bound by the signed root\n")
+        ledger_path = Path(self.tempdir.name) / "approved_roots_fixture.json"
+        ledger_path.write_text(
+            json.dumps(
+                {
+                    "schema": "urc_2025_26_approved_roots_v1",
+                    "approved_root_sha256s": [self.fixture_sha256(root_path)],
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        with (
+            patch("pipeline.__main__.sha256_file", side_effect=self.fixture_sha256),
+            patch(
+                "pipeline.__main__.V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256",
+                self.fixture_predecessor_map_sha256(root_path),
+            ),
+            patch(
+                "pipeline.__main__.accepted_repository_source_sha256s",
+                return_value=accepted_sources,
+            ),
+            patch(
+                "pipeline.__main__.current_repository_source_sha256s",
+                return_value=accepted_sources,
+            ),
+            patch("pipeline.__main__.YEAR2_APPROVED_ROOTS_PATH", ledger_path),
+            patch("pipeline.__main__.repository_file_matches_head", return_value=True),
+            patch("pipeline.__main__.load_fixture_team_aliases", return_value={}),
+            patch("pipeline.__main__.read_rows") as read_rows,
+            patch("pipeline.__main__.run_sql") as run_sql,
+            self.assertRaisesRegex(SystemExit, "__pycache__"),
+        ):
+            ingest(
+                argparse.Namespace(
+                    file=str(input_path),
+                    manifest=str(manifest_path),
+                    signed_root_manifest=str(root_path),
+                    team="Benetton",
+                    season="2025-26",
+                    exclude_source_fields="",
+                    redact_manifest_keys="",
+                    redact_source_values="",
+                )
+            )
+        read_rows.assert_not_called()
+        run_sql.assert_not_called()
+
+    def test_ingest_rejects_symlink_before_loading_rows(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        (self.package_root / "unbound-link").symlink_to(input_path)
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "must not contain symlinks",
+        )
+
+    def test_ingest_rejects_special_file_before_loading_rows(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        os.mkfifo(self.package_root / "unbound-fifo")
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "only regular files",
+        )
+
+    def test_ingest_rejects_inexact_file_mode_before_loading_rows(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        (self.package_root / "v13_signing_record.json").chmod(0o640)
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "files must have exact mode 0600",
+        )
+
+    def test_ingest_rejects_inexact_root_file_mode_before_loading_rows(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        root_path.chmod(0o640)
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "files must have exact mode 0600",
+        )
+
+    def test_ingest_rejects_inexact_directory_mode_before_loading_rows(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        (self.package_root / "benetton").chmod(0o750)
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "directories must have exact mode 0700",
+        )
+
+    def test_ingest_rejects_inexact_package_root_mode_before_loading_rows(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        self.package_root.chmod(0o750)
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "package root directory must have exact mode 0700",
+        )
+
+    def test_ingest_rejects_reduced_predecessor_map_claiming_196(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        expected_map_sha256 = self.fixture_predecessor_map_sha256(root_path)
+        root = json.loads(root_path.read_text())
+        root["predecessor_output_sha256s"].pop(next(iter(root["predecessor_output_sha256s"])))
+        self.assertEqual(196, root["predecessor_output_count"])
+        root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "must contain exactly 196 safe members",
+            predecessor_map_sha256=expected_map_sha256,
+        )
+
+    def test_ingest_rejects_candidate_validator_result_field_mutation(self) -> None:
+        mutations = {
+            "team_key": "bulls",
+            "input_kind": "exposure",
+            "path": "benetton/unreviewed.csv",
+            "sha256": "0" * 64,
+            "status": "failed",
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                _, manifest_path, input_path, root_path, accepted_sources = (
+                    self.build_signed_root_fixture()
+                )
+                root = json.loads(root_path.read_text())
+                root["root_candidate_validator_results"][0][field] = value
+                root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+
+                self.assert_ingest_root_rejected(
+                    manifest_path,
+                    input_path,
+                    root_path,
+                    accepted_sources,
+                    "candidate-validator result",
+                )
+
+    def test_ingest_rejects_candidate_validator_result_field_removal(self) -> None:
+        for field in ("team_key", "input_kind", "path", "sha256", "status"):
+            with self.subTest(field=field):
+                _, manifest_path, input_path, root_path, accepted_sources = (
+                    self.build_signed_root_fixture()
+                )
+                root = json.loads(root_path.read_text())
+                root["root_candidate_validator_results"][0].pop(field)
+                root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+
+                self.assert_ingest_root_rejected(
+                    manifest_path,
+                    input_path,
+                    root_path,
+                    accepted_sources,
+                    "candidate-validator result is invalid",
+                )
+
+    def test_ingest_rejects_candidate_validator_results_removal(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        root = json.loads(root_path.read_text())
+        root.pop("root_candidate_validator_results")
+        root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "requires 32 final candidate-validator results",
+        )
+
+    def test_ingest_rejects_privacy_binding_field_mutation_and_removal(self) -> None:
+        mutations = {
+            "path": "unexpected.json",
+            "sha256": "0" * 64,
+            "status": "failed",
+        }
+        for field, value in mutations.items():
+            for mutation in ("mutated", "missing"):
+                with self.subTest(field=field, mutation=mutation):
+                    _, manifest_path, input_path, root_path, accepted_sources = (
+                        self.build_signed_root_fixture()
+                    )
+                    root = json.loads(root_path.read_text())
+                    if mutation == "mutated":
+                        root["privacy_evidence"][field] = value
+                    else:
+                        root["privacy_evidence"].pop(field)
+                    root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+
+                    self.assert_ingest_root_rejected(
+                        manifest_path,
+                        input_path,
+                        root_path,
+                        accepted_sources,
+                        "privacy-evidence binding is invalid",
+                    )
+
+    def test_ingest_rejects_privacy_evidence_field_mutation_and_removal(self) -> None:
+        mutations = {
+            "schema": "unexpected_schema",
+            "status": "failed",
+            "scanned_file_count": 0,
+            "direct_identifier_match_count": 1,
+            "forbidden_key_match_count": 1,
+            "covered_output_sha256s": {},
+            "covered_file_set_sha256": "0" * 64,
+            "excluded_paths": [],
+            "final_closed_regular_file_count": 0,
+        }
+        for field, value in mutations.items():
+            for mutation in ("mutated", "missing"):
+                with self.subTest(field=field, mutation=mutation):
+                    _, manifest_path, input_path, root_path, accepted_sources = (
+                        self.build_signed_root_fixture()
+                    )
+                    privacy_path = self.package_root / "privacy_scan_v13.json"
+                    privacy = json.loads(privacy_path.read_text())
+                    if mutation == "mutated":
+                        privacy[field] = value
+                    else:
+                        privacy.pop(field)
+                    privacy_path.write_text(json.dumps(privacy, sort_keys=True) + "\n")
+                    self.reclose_root(root_path)
+
+                    self.assert_ingest_root_rejected(
+                        manifest_path,
+                        input_path,
+                        root_path,
+                        accepted_sources,
+                        "does not cover the complete closed package",
+                    )
+
+    def test_ingest_rejects_privacy_binding_removal(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        root = json.loads(root_path.read_text())
+        root.pop("privacy_evidence")
+        root_path.write_text(json.dumps(root, sort_keys=True) + "\n")
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "privacy-evidence binding is invalid",
+        )
+
+    def test_ingest_rejects_privacy_physical_file_removal(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        (self.package_root / "privacy_scan_v13.json").unlink()
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "does not close the physical package",
+        )
+
+    def test_ingest_rejects_incomplete_privacy_scan_coverage(self) -> None:
+        _, manifest_path, input_path, root_path, accepted_sources = (
+            self.build_signed_root_fixture()
+        )
+        privacy_path = self.package_root / "privacy_scan_v13.json"
+        privacy = json.loads(privacy_path.read_text())
+        privacy["covered_output_sha256s"].pop(next(iter(privacy["covered_output_sha256s"])))
+        privacy["scanned_file_count"] -= 1
+        privacy_path.write_text(json.dumps(privacy, sort_keys=True) + "\n")
+        self.reclose_root(root_path)
+
+        self.assert_ingest_root_rejected(
+            manifest_path,
+            input_path,
+            root_path,
+            accepted_sources,
+            "does not cover the complete closed package",
+        )
 
     def test_rejects_false_profile_database_action_authorisation(self) -> None:
         manifest, manifest_path = self.manifest(
@@ -745,6 +1263,33 @@ class V13IntakeAuthorisationGateTests(unittest.TestCase):
 
                 with self.assertRaisesRegex(SystemExit, "database action authorisation"):
                     self.validate(manifest, manifest_path)
+
+    def test_rejects_mutated_or_missing_approval_line_at_each_boundary(self) -> None:
+        for boundary in ("manifest", "envelope", "profile"):
+            for mutation in ("mutated", "missing"):
+                with self.subTest(boundary=boundary, mutation=mutation):
+                    manifest, manifest_path = self.manifest()
+                    if boundary == "manifest":
+                        target = manifest
+                    elif boundary == "envelope":
+                        target = manifest["intake_profile"]
+                    else:
+                        profile_path = self.root / manifest["intake_profile"]["profile_path"]
+                        target = json.loads(profile_path.read_text())
+                    if mutation == "mutated":
+                        target["approval_line_sha256"] = "0" * 64
+                    else:
+                        target.pop("approval_line_sha256")
+                    if boundary == "profile":
+                        profile_path.write_text(json.dumps(target, sort_keys=True) + "\n")
+                        manifest["intake_profile"]["profile_sha256"] = hashlib.sha256(
+                            profile_path.read_bytes()
+                        ).hexdigest()
+
+                    with self.assertRaisesRegex(
+                        SystemExit, "database action authorisation"
+                    ):
+                        self.validate(manifest, manifest_path)
 
     def test_rejects_review_package_mutation_at_manifest_root(self) -> None:
         mutations = (

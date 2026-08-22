@@ -13,6 +13,7 @@ import platform
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -214,6 +215,7 @@ V13_V12_ROOT_MANIFEST_SHA256 = (
 V13_V12_ROOT_FILE_SET_SHA256 = (
     "5ea322d4e246510ce82075f5690ea2ac5715dace31ead35bff9db3bacc6a7abd"
 )
+V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256 = V13_V12_ROOT_FILE_SET_SHA256
 V13_FRESH_REVIEW_SHA256 = (
     "61caebf232f0422f7bd5340609c113b0e0931ab01f15262f75a1e5da860ae1df"
 )
@@ -4000,6 +4002,12 @@ def validate_intake_profile_manifest(
             or profile.get("authorisation") != V13_DATABASE_AUTHORISATION
             or profile_document.get("authorisation") != V13_DATABASE_AUTHORISATION
             or manifest.get("authorisation") != V13_DATABASE_AUTHORISATION
+            or profile.get("approval_line_sha256")
+            != V13_DATABASE_AUTHORISATION["approval_line_sha256"]
+            or profile_document.get("approval_line_sha256")
+            != V13_DATABASE_AUTHORISATION["approval_line_sha256"]
+            or manifest.get("approval_line_sha256")
+            != V13_DATABASE_AUTHORISATION["approval_line_sha256"]
         ):
             raise SystemExit(
                 "V13 database action authorisation is missing, false, inconsistent, "
@@ -4017,7 +4025,8 @@ def validate_intake_profile_manifest(
     bound_fields = (
         "team", "season", "profile_version", "decision", "mapping_path", "mapping_sha256",
         "mapping_version", "ai_review_status", "ai_reviewed_by", "ai_reviewed_at", "approved_by",
-        "approved_at", "unresolved_adjudication_ids", "approved_input_sha256s",
+        "approved_at", "approval_line_sha256", "unresolved_adjudication_ids",
+        "approved_input_sha256s",
     )
     if not isinstance(profile_document, dict) or any(
         profile_document.get(field) != profile.get(field) for field in bound_fields
@@ -4130,7 +4139,10 @@ def validate_v13_signed_root_candidate(
     """
     if season != "2025-26":
         raise SystemExit("V13 signed-root validation is only defined for 2025-26")
-    root_path = signed_root_manifest_path.resolve()
+    supplied_root_path = signed_root_manifest_path.absolute()
+    if supplied_root_path.is_symlink():
+        raise SystemExit("signed V13 root manifest must not be a symlink")
+    root_path = supplied_root_path.resolve()
     if root_path.name != "v13_signed_root_manifest.json" or not root_path.is_file():
         raise SystemExit("2025-26 ingest requires the physical signed V13 root manifest")
     try:
@@ -4140,13 +4152,29 @@ def validate_v13_signed_root_candidate(
     if not isinstance(root, dict):
         raise SystemExit("signed V13 root manifest must be a JSON object")
     package_root = root_path.parent
-    actual_outputs = {
-        path.relative_to(package_root).as_posix(): sha256_file(path)
-        for path in sorted(package_root.rglob("*"))
-        if path.is_file()
-        and "__pycache__" not in path.parts
-        and path.resolve() != root_path
-    }
+    if (
+        not stat.S_ISDIR(package_root.lstat().st_mode)
+        or stat.S_IMODE(package_root.lstat().st_mode) != 0o700
+    ):
+        raise SystemExit("signed V13 package root directory must have exact mode 0700")
+    actual_outputs: dict[str, str] = {}
+    for path in sorted(package_root.rglob("*")):
+        relative_path = path.relative_to(package_root)
+        if "__pycache__" in relative_path.parts:
+            raise SystemExit("signed V13 package must not contain __pycache__")
+        path_mode = path.lstat().st_mode
+        if stat.S_ISLNK(path_mode):
+            raise SystemExit("signed V13 package must not contain symlinks")
+        if stat.S_ISDIR(path_mode):
+            if stat.S_IMODE(path_mode) != 0o700:
+                raise SystemExit("signed V13 package directories must have exact mode 0700")
+            continue
+        if not stat.S_ISREG(path_mode):
+            raise SystemExit("signed V13 package must contain only regular files")
+        if stat.S_IMODE(path_mode) != 0o600:
+            raise SystemExit("signed V13 package files must have exact mode 0600")
+        if path.resolve() != root_path:
+            actual_outputs[relative_path.as_posix()] = sha256_file(path)
     output_sha256s = root.get("output_sha256s")
     if output_sha256s != actual_outputs:
         raise SystemExit("signed V13 root output map does not close the physical package")
@@ -4174,6 +4202,38 @@ def validate_v13_signed_root_candidate(
         != V13_DATABASE_AUTHORISATION["approval_line_sha256"]
     ):
         raise SystemExit("signed V13 root approval or predecessor binding is invalid")
+    predecessor_outputs = root.get("predecessor_output_sha256s")
+    if (
+        root.get("predecessor_output_count") != 196
+        or not isinstance(predecessor_outputs, dict)
+        or len(predecessor_outputs) != 196
+        or any(
+            not isinstance(path, str)
+            or not path
+            or "\\" in path
+            or Path(path).is_absolute()
+            or any(part in {"", ".", ".."} for part in path.split("/"))
+            or not isinstance(digest, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", digest)
+            for path, digest in predecessor_outputs.items()
+        )
+    ):
+        raise SystemExit("signed V13 root predecessor output map must contain exactly 196 safe members")
+    predecessor_map_sha256 = hashlib.sha256(
+        json.dumps(
+            predecessor_outputs, sort_keys=True, separators=(",", ":")
+        ).encode()
+    ).hexdigest()
+    if (
+        predecessor_map_sha256 != V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256
+        or root.get("predecessor_output_file_set_sha256")
+        != V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256
+        or any(
+            output_sha256s.get(path) != digest
+            for path, digest in predecessor_outputs.items()
+        )
+    ):
+        raise SystemExit("signed V13 root predecessor output map differs from exact V12 membership")
 
     validator_results = root.get("validator_results")
     if not isinstance(validator_results, list) or len(validator_results) != 16:
@@ -4208,6 +4268,37 @@ def validate_v13_signed_root_candidate(
         if any(output_sha256s.get(path) != digest for path, digest in expected_members.items()):
             raise SystemExit("signed V13 root V12 membership differs from the reviewed root")
 
+    expected_candidate_results: dict[tuple[str, str], dict[str, str]] = {}
+    for team_key, (_, injury_sha, exposure_sha, _) in V13_REVIEWED_V12_TEAMS.items():
+        for input_kind, filename, digest in (
+            ("injury", "injury_intake_locator_enriched_v10.csv", injury_sha),
+            ("exposure", "exposure_intake_final_clean_v10.csv", exposure_sha),
+        ):
+            expected_candidate_results[(team_key, input_kind)] = {
+                "team_key": team_key,
+                "input_kind": input_kind,
+                "path": f"{team_key}/{filename}",
+                "sha256": digest,
+                "status": "pass",
+            }
+    candidate_results = root.get("root_candidate_validator_results")
+    if not isinstance(candidate_results, list) or len(candidate_results) != 32:
+        raise SystemExit("signed V13 root requires 32 final candidate-validator results")
+    actual_candidate_results: dict[tuple[str, str], dict[str, Any]] = {}
+    for result in candidate_results:
+        if not isinstance(result, dict) or set(result) != {
+            "team_key", "input_kind", "path", "sha256", "status"
+        }:
+            raise SystemExit("signed V13 root candidate-validator result is invalid")
+        key = (clean_text(result.get("team_key")), clean_text(result.get("input_kind")))
+        if key in actual_candidate_results or result != expected_candidate_results.get(key):
+            raise SystemExit("signed V13 root candidate-validator results do not bind all inputs")
+        if output_sha256s.get(result["path"]) != result["sha256"]:
+            raise SystemExit("signed V13 root candidate-validator input is not a package member")
+        actual_candidate_results[key] = result
+    if actual_candidate_results != expected_candidate_results:
+        raise SystemExit("signed V13 root candidate-validator results do not bind all inputs")
+
     signing_binding = root.get("signing_record")
     if signing_binding != {
         "path": "v13_signing_record.json",
@@ -4228,6 +4319,10 @@ def validate_v13_signed_root_candidate(
         and signing.get("approval_line_sha256") == root.get("approval_line_sha256")
         and signing.get("v12_root_manifest_sha256") == V13_V12_ROOT_MANIFEST_SHA256
         and signing.get("v12_root_file_set_sha256") == V13_V12_ROOT_FILE_SET_SHA256
+        and signing.get("predecessor_output_sha256s") == predecessor_outputs
+        and signing.get("predecessor_output_count") == 196
+        and signing.get("predecessor_output_file_set_sha256")
+        == V13_V12_PREDECESSOR_OUTPUT_MAP_SHA256
         and signing.get("database_action_authorised") is True
         and signing.get("authorisation") == root.get("authorisation")
         and signing.get("fresh_ai_review_evidence")
@@ -4243,6 +4338,44 @@ def validate_v13_signed_root_candidate(
         "coverage_limitations_preserved": True,
     }:
         raise SystemExit("V13 signing record predecessor preservation is invalid")
+
+    privacy_binding = root.get("privacy_evidence")
+    privacy_relative = "privacy_scan_v13.json"
+    if privacy_binding != {
+        "path": privacy_relative,
+        "sha256": output_sha256s.get(privacy_relative),
+        "status": "pass",
+    }:
+        raise SystemExit("signed V13 root privacy-evidence binding is invalid")
+    privacy_path = package_root / privacy_relative
+    try:
+        privacy = json.loads(privacy_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("V13 privacy evidence must be valid JSON") from exc
+    covered_outputs = {
+        path: digest
+        for path, digest in output_sha256s.items()
+        if path != privacy_relative
+    }
+    covered_file_set_sha256 = hashlib.sha256(
+        json.dumps(covered_outputs, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if (
+        not isinstance(privacy, dict)
+        or privacy.get("schema")
+        != "urc_2025_26_v13_signing_privacy_evidence_v1"
+        or privacy.get("status") != "pass"
+        or privacy.get("direct_identifier_match_count") != 0
+        or privacy.get("forbidden_key_match_count") != 0
+        or privacy.get("scanned_file_count") != len(covered_outputs)
+        or privacy.get("covered_output_sha256s") != covered_outputs
+        or privacy.get("covered_file_set_sha256") != covered_file_set_sha256
+        or privacy.get("excluded_paths")
+        != [privacy_relative, "v13_signed_root_manifest.json"]
+        or privacy.get("final_closed_regular_file_count")
+        != len(output_sha256s) + 1
+    ):
+        raise SystemExit("V13 privacy evidence does not cover the complete closed package")
 
     expected_review = {
         "path": "provenance/v12_fresh_ai_review_evidence.json",
@@ -4395,8 +4528,12 @@ def validate_v13_signed_root_candidate(
         != root.get("approval_line_sha256")
         or profile_document.get("approved_by") != root.get("approved_by")
         or profile_document.get("approved_at") != approved_at
+        or profile_document.get("approval_line_sha256")
+        != root.get("approval_line_sha256")
         or envelope.get("approved_by") != root.get("approved_by")
         or envelope.get("approved_at") != approved_at
+        or envelope.get("approval_line_sha256")
+        != root.get("approval_line_sha256")
         or any(
             document.get("database_action_authorised") is not True
             or document.get("authorisation") != root.get("authorisation")
