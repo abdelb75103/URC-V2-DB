@@ -151,6 +151,45 @@ test("2025-26 reader rejects unexpected fields at every public nesting boundary"
   }
 });
 
+test("2025-26 reader preserves unavailable coverage and monthly exposure as null", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const unavailable = validDashboard();
+  unavailable.coverage.hours = null;
+  unavailable.coverage.distance_km = null;
+  unavailable.monthly[0].exposure_hours = null;
+  unavailable.monthly[0].distance_km = null;
+
+  const parsed = parseDashboardReaderRow(unavailable, "2025-26", "team");
+  assert.equal(parsed.coverage.hours, null);
+  assert.equal(parsed.coverage.distance_km, null);
+  assert.equal(parsed.monthly[0].exposure_hours, null);
+  assert.equal(parsed.monthly[0].distance_km, null);
+});
+
+test("2024-25 legacy reader still rejects unavailable coverage", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const unavailable = validDashboard();
+  unavailable.coverage.hours = null;
+  unavailable.coverage.distance_km = null;
+
+  assert.throws(
+    () => parseDashboardReaderRow(unavailable, "2024-25", "team"),
+    /Expected number, received null/,
+  );
+});
+
+test("exposure UI does not add preview figures to unavailable coverage", async () => {
+  const dashboard = await readFile(new URL("../components/dashboard/team-dashboard.tsx", import.meta.url), "utf8");
+
+  assert.match(dashboard, /function addPreviewToKnownValue[\s\S]*?if \(value === null \|\| value === undefined\) return null;/);
+  assert.doesNotMatch(dashboard, /\(row\.exposure_hours \?\? 0\) \+ \(preview\?\.additional_hours \?\? 0\)/);
+  assert.doesNotMatch(dashboard, /\(row\.distance_km \?\? 0\) \+ \(preview\?\.additional_distance_km \?\? 0\)/);
+  assert.match(dashboard, /const totalHours = addPreviewToKnownValue\(\s*coverage\.hours,/);
+  assert.match(dashboard, /const totalDistance = addPreviewToKnownValue\(\s*coverage\.distance_km,/);
+  assert.match(dashboard, /label="Total hours" value=\{fmtHours\(totalHours\)\}/);
+  assert.match(dashboard, /label="Total distance" value=\{fmt\(totalDistance\)\}/);
+});
+
 test("2025-26 reader requires explicit nullable keys and complete ordered nested grids", async () => {
   const { parseDashboardReaderRow } = await loadReportingModule();
   const missingRequiredKeys = [

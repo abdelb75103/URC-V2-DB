@@ -20,10 +20,10 @@ export type Coverage = {
   weeks: number;
   exposure_periods?: number;
   exposure_grain?: string;
-  hours: number;
+  hours: number | null;
   match_hours?: number;
   training_hours?: number;
-  distance_km: number;
+  distance_km: number | null;
   teams_included?: number;
   coverage_windows?: CoverageWindow[];
   included_exposure_status: string;
@@ -36,8 +36,8 @@ export type AnalyticsRow = {
   key?: string;
   label?: string;
   month?: string;
-  exposure_hours?: number;
-  distance_km?: number;
+  exposure_hours?: number | null;
+  distance_km?: number | null;
   time_loss_injuries: number;
   recorded_injuries?: number;
   days_lost: number;
@@ -202,8 +202,8 @@ export type ExposureReviewPreview = {
 export type TeamComparisonRow = {
   comparison_id: string;
   team_alias: string;
-  exposure_hours: number;
-  distance_km: number;
+  exposure_hours: number | null;
+  distance_km: number | null;
   match_hours: number | null;
   training_hours: number | null;
   all: SettingMetricRow | null;

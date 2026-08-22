@@ -81,6 +81,7 @@ EDINBURGH_URC_OPPONENTS = [
 EDINBURGH_EXPOSURE_SCOPE_RULE_VERSION = "edinburgh_exposure_scope_2026-07-07_v2"
 EXPOSURE_CANONICAL_SCHEMA_VERSION = "exposure_core_2026-07-07_v1"
 INJURY_PROCESSING_RULE_VERSION = "injury_processing_2026-07-07_v2"
+YEAR2_INJURY_ELIGIBILITY_BRIDGE_RULE_VERSION = "urc_2025_26_injury_eligibility_bridge_v1"
 INPUT_REPRESENTATION_CORRECTION_RULE_VERSION = "input_representation_correction_2026-07-13_v1"
 EXPOSURE_PROCESSING_RULE_VERSION = "exposure_processing_2026-07-07_v1"
 URC_OPPONENT_FUZZY_CUTOFF = 0.78
@@ -178,6 +179,19 @@ DUPLICATE_SIGNATURE_FIELDS = [
     "Illness Code",
     "Injury Tissue Type/s",
 ]
+
+YEAR2_INJURY_DATE_BASES = frozenset(
+    {
+        "source_date_within_window",
+        "season_attributed_undated",
+        "source_date_unparseable",
+        "source_date_outside_window",
+    }
+)
+YEAR2_INJURY_BRIDGE_ELIGIBILITY = frozenset(
+    {"included_pending_protocol", "review_required"}
+)
+YEAR2_ALLOWED_ANALYSIS_AUDIT_REASONS = frozenset({"explicit_source_exclusion"})
 
 MISSING_VALUES = {"", "na", "n/a", "null", "none", "unknown", "unspecified/crossing"}
 
@@ -2444,6 +2458,7 @@ def reconcile_registered_intake_rows(
 def duplicate_source_row_numbers(
     rows: list[dict[str, str]], columns: list[str], excluded_row_numbers: set[int] | None = None
 ) -> set[int]:
+    """Return the legacy duplicate candidates for frozen processing paths."""
     excluded = excluded_row_numbers or set()
     counts: dict[str, list[int]] = {}
     for row in rows:
@@ -2458,6 +2473,156 @@ def duplicate_source_row_numbers(
         if key and len(row_numbers) > 1
         for row_number in row_numbers
     }
+
+
+def year2_duplicate_source_row_numbers(
+    rows: list[dict[str, str]], columns: list[str], excluded_row_numbers: set[int] | None = None
+) -> set[int]:
+    """Return only sufficiently evidenced Year 2 duplicate candidates.
+
+    A separator-only collection of empty values is not evidence of a duplicate.
+    Neither is an Unknown identity. The caller retains every source row and
+    uses this result as a review flag only, never as an automatic exclusion.
+    """
+    excluded = excluded_row_numbers or set()
+    counts: dict[str, list[int]] = {}
+    for row in rows:
+        row_number = int(row["standardised_row_number"])
+        if row_number in excluded:
+            continue
+        player_uid = clean_text(row.get("player_uid"))
+        injured_at = parse_uk_date(row.get("Date Injured", ""))
+        clinical_values = [
+            clean_text(row.get(column))
+            for column in columns
+            if column not in {"PlayerID", "Date Injured"}
+            and clean_text(row.get(column)).casefold() not in MISSING_VALUES
+        ]
+        if not player_uid or player_uid.casefold() == "unknown" or injured_at is None or not clinical_values:
+            continue
+        key = "|".join([player_uid, injured_at.date().isoformat(), *clinical_values])
+        counts.setdefault(key, []).append(row_number)
+    return {
+        row_number
+        for row_numbers in counts.values()
+        if len(row_numbers) > 1
+        for row_number in row_numbers
+    }
+
+
+def year2_injury_eligibility_vector(rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    """Return the private, deterministic status vector bound to a Year 2 CSV.
+
+    The vector contains only opaque locators, opaque IDs and controlled status
+    values. It is hashed in the protected bridge document and is not logged.
+    """
+    return [
+        {
+            "standardised_row_number": clean_text(row.get("standardised_row_number")),
+            "source_file_sha256": clean_text(row.get("source_file_sha256")),
+            "source_sheet": clean_text(row.get("source_sheet")),
+            "source_row_number": clean_text(row.get("source_row_number")),
+            "injury_uid": clean_text(row.get("injury_uid")),
+            "player_uid": clean_text(row.get("player_uid")),
+            "injury_date_basis": clean_text(row.get("injury_date_basis")),
+            "injury_eligibility_status": clean_text(row.get("injury_eligibility_status")),
+        }
+        for row in rows
+    ]
+
+
+def validate_year2_injury_eligibility_bridge(
+    *, args: argparse.Namespace, rows: list[dict[str, str]], file_hash: str,
+) -> dict[int, dict[str, str]]:
+    """Validate the explicit Year 2 undated-injury bridge without DB access."""
+    bridge_arg = clean_text(getattr(args, "injury_eligibility_bridge_file", ""))
+    if args.season != "2025-26":
+        if bridge_arg:
+            raise SystemExit("the Year 2 injury eligibility bridge is valid only for season 2025-26")
+        return {}
+    if not bridge_arg:
+        raise SystemExit(
+            "process-intake for 2025-26 requires a checksum-bound injury eligibility bridge"
+        )
+    bridge_path = Path(bridge_arg)
+    try:
+        bridge = json.loads(bridge_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("Year 2 injury eligibility bridge must be readable JSON") from exc
+    expected_window = {"start": "2025-09-01", "end": "2026-06-30"}
+    if not isinstance(bridge, dict) or any(
+        bridge.get(key) != value
+        for key, value in {
+            "schema": "urc_2025_26_injury_eligibility_bridge_v1",
+            "rule_version": YEAR2_INJURY_ELIGIBILITY_BRIDGE_RULE_VERSION,
+            "team": args.team,
+            "season": args.season,
+            "injury_file_sha256": file_hash,
+            "row_count": len(rows),
+            "window": expected_window,
+        }.items()
+    ):
+        raise SystemExit("Year 2 injury eligibility bridge does not bind this exact processing input")
+    if args.window_start != expected_window["start"] or args.window_end != expected_window["end"]:
+        raise SystemExit("Year 2 injury eligibility bridge requires the registered 2025-26 reporting window")
+    expected_vector_hash = sha256_json(year2_injury_eligibility_vector(rows))
+    if bridge.get("eligibility_vector_sha256") != expected_vector_hash:
+        raise SystemExit("Year 2 injury eligibility bridge status vector checksum mismatch")
+    audit_path = clean_text(getattr(args, "analysis_audit_file", ""))
+    expected_audit = bridge.get("analysis_audit")
+    if not isinstance(expected_audit, dict) or not audit_path:
+        raise SystemExit("Year 2 injury eligibility bridge requires its checksum-bound analysis audit")
+    try:
+        if (
+            Path(audit_path).resolve() != (bridge_path.parent / clean_text(expected_audit.get("path"))).resolve()
+            or sha256_file(Path(audit_path)) != clean_text(expected_audit.get("sha256"))
+        ):
+            raise ValueError
+    except (OSError, ValueError) as exc:
+        raise SystemExit("Year 2 injury eligibility bridge analysis audit checksum mismatch") from exc
+
+    allowed_audit_reasons = {
+        clean_text(reason)
+        for reason in expected_audit.get("allowed_reason_codes", [])
+        if clean_text(reason)
+    }
+    if not allowed_audit_reasons or not allowed_audit_reasons <= YEAR2_ALLOWED_ANALYSIS_AUDIT_REASONS:
+        raise SystemExit("Year 2 injury eligibility bridge has invalid audit reason permissions")
+    for audit_row in read_rows(Path(audit_path)):
+        if audit_row.get("field") != "analysis_eligibility" or audit_row.get("action") != "exclude":
+            raise SystemExit("Year 2 injury eligibility bridge has an invalid analysis audit action")
+        try:
+            row_number = int(audit_row["standardised_row_number"])
+        except (KeyError, ValueError) as exc:
+            raise SystemExit("Year 2 injury eligibility bridge analysis audit has an invalid row locator") from exc
+        reason = clean_text(audit_row.get("reason"))
+        if row_number not in {int(row["standardised_row_number"]) for row in rows} or reason not in allowed_audit_reasons:
+            raise SystemExit("Year 2 injury eligibility bridge analysis audit is not permitted")
+
+    bridge_rows: dict[int, dict[str, str]] = {}
+    for row in rows:
+        try:
+            row_number = int(row["standardised_row_number"])
+        except (KeyError, ValueError) as exc:
+            raise SystemExit("Year 2 injury eligibility bridge input has an invalid row locator") from exc
+        date_basis = clean_text(row.get("injury_date_basis"))
+        eligibility = clean_text(row.get("injury_eligibility_status"))
+        injured_at = parse_uk_date(row.get("Date Injured", ""))
+        if date_basis not in YEAR2_INJURY_DATE_BASES or eligibility not in YEAR2_INJURY_BRIDGE_ELIGIBILITY:
+            raise SystemExit("Year 2 injury eligibility bridge has an invalid controlled status")
+        valid = (
+            (date_basis == "season_attributed_undated" and injured_at is None and not clean_text(row.get("Date Injured")) and eligibility == "included_pending_protocol")
+            or (date_basis == "source_date_within_window" and injured_at is not None and expected_window["start"] <= injured_at.date().isoformat() <= expected_window["end"] and eligibility == "included_pending_protocol")
+            or (date_basis == "source_date_unparseable" and bool(clean_text(row.get("Date Injured"))) and injured_at is None and eligibility == "review_required")
+            or (date_basis == "source_date_outside_window" and injured_at is not None and not (expected_window["start"] <= injured_at.date().isoformat() <= expected_window["end"]) and eligibility == "review_required")
+        )
+        if not valid or row_number in bridge_rows:
+            raise SystemExit("Year 2 injury eligibility bridge has an invalid row basis")
+        bridge_rows[row_number] = {
+            "date_basis": date_basis,
+            "eligibility_status": eligibility,
+        }
+    return bridge_rows
 
 
 def process_exposure(args: argparse.Namespace) -> None:
@@ -2926,6 +3091,7 @@ def build_processing_state(
     window_end: datetime,
     duplicate_signature_rows: set[int],
     own_team_alias: str | None = None,
+    injury_eligibility_bridge: dict[str, str] | None = None,
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
     source_row_number = int(row["standardised_row_number"])
     injured_at = parse_uk_date(row.get("Date Injured", ""))
@@ -2953,11 +3119,25 @@ def build_processing_state(
     if derived_return_date and is_closed is False:
         return_date_origin = f"{return_date_origin}_unclosed_censored"
 
-    outside_window = injured_at is None or injured_at < window_start or injured_at > window_end
+    if injury_eligibility_bridge is None:
+        outside_window = injured_at is None or injured_at < window_start or injured_at > window_end
+        injury_date_basis = None
+        bridge_eligibility = None
+    else:
+        injury_date_basis = injury_eligibility_bridge["date_basis"]
+        bridge_eligibility = injury_eligibility_bridge["eligibility_status"]
+        outside_window = injury_date_basis in {
+            "source_date_unparseable", "source_date_outside_window"
+        }
     duplicate_flags = {
         "candidate_duplicate_injury_signature": source_row_number in duplicate_signature_rows,
     }
-    review_required = any(duplicate_flags.values()) or outside_window or injured_at is None
+    review_required = (
+        (injury_eligibility_bridge is None and any(duplicate_flags.values()))
+        or outside_window
+        or (injured_at is None and injury_eligibility_bridge is None)
+        or bridge_eligibility == "review_required"
+    )
     state = {
         "player_uid": row["player_uid"],
         "injury_uid": row["injury_uid"],
@@ -2996,7 +3176,11 @@ def build_processing_state(
             "start": window_start.date().isoformat(),
             "end": window_end.date().isoformat(),
         },
-        "season_window_status": "outside_provisional_qc_window" if outside_window else "inside_provisional_qc_window",
+        "season_window_status": (
+            "season_attributed_undated"
+            if injury_date_basis == "season_attributed_undated"
+            else "outside_provisional_qc_window" if outside_window else "inside_provisional_qc_window"
+        ),
         "analysis_eligibility_status": "review_required" if review_required else "included_pending_protocol",
         "duplicate_flags": duplicate_flags,
         "source_locator": {
@@ -3004,8 +3188,22 @@ def build_processing_state(
             for field in LOCATOR_FIELDS
         },
     }
+    if injury_date_basis is not None:
+        state["injury_date_basis"] = injury_date_basis
 
     events: list[dict[str, object]] = list(row.get("_bridge_correction_events", []))
+    if injury_date_basis == "season_attributed_undated":
+        events.append(
+            {
+                "field_name": "injury_date_basis",
+                "old_value": None,
+                "new_value": injury_date_basis,
+                "action": "derive",
+                "reason_code": "season_attributed_undated_injury",
+                "rationale": "The checksum-bound Year 2 package attributes this blank source injury date to the registered season; no date was fabricated.",
+                "review_status": "not_required",
+            }
+        )
     if derived_return_date:
         events.append(
             {
@@ -3110,6 +3308,9 @@ def process_intake(args: argparse.Namespace) -> None:
     window_start = datetime.strptime(args.window_start, "%Y-%m-%d")
     window_end = datetime.strptime(args.window_end, "%Y-%m-%d")
     file_hash = sha256_file(path)
+    year2_eligibility_bridge = validate_year2_injury_eligibility_bridge(
+        args=args, rows=rows, file_hash=file_hash
+    )
     registered_source_file_sha256 = clean_text(
         getattr(args, "registered_source_file_sha256", "")
     )
@@ -3220,8 +3421,24 @@ def process_intake(args: argparse.Namespace) -> None:
     unknown_audit_rows = sorted(set(analysis_exclusions) - known_row_numbers)
     if unknown_audit_rows:
         raise SystemExit(f"analysis audit references unknown rows: {unknown_audit_rows[:20]}")
+    if year2_eligibility_bridge:
+        unexpected_year2_reasons = {
+            clean_text(event.get("reason"))
+            for events in analysis_exclusions.values()
+            for event in events
+        } - YEAR2_ALLOWED_ANALYSIS_AUDIT_REASONS
+        if unexpected_year2_reasons:
+            raise SystemExit(
+                "Year 2 injury eligibility bridge permits only the seeded "
+                "explicit_source_exclusion analysis-audit reason"
+            )
 
-    duplicate_signature_rows = duplicate_source_row_numbers(
+    duplicate_rows_fn = (
+        year2_duplicate_source_row_numbers
+        if year2_eligibility_bridge
+        else duplicate_source_row_numbers
+    )
+    duplicate_signature_rows = duplicate_rows_fn(
         rows, DUPLICATE_SIGNATURE_FIELDS, set(analysis_exclusions)
     )
     standing_adjudications = fetch_standing_eligibility_adjudications(
@@ -3265,6 +3482,17 @@ def process_intake(args: argparse.Namespace) -> None:
             "process-intake requires reason code 'cohort_signal_derivation' to be seeded first; "
             "run the Phase 3.5 cohort-signal-columns migration before rerunning process-intake"
         )
+    if year2_eligibility_bridge:
+        required_year2_reason_codes = query_sql(
+            "select code from audit.reason_codes where code in "
+            "('season_attributed_undated_injury', 'explicit_source_exclusion')"
+        )
+        if {clean_text(item.get("code")) for item in required_year2_reason_codes} != {
+            "season_attributed_undated_injury", "explicit_source_exclusion",
+        }:
+            raise SystemExit(
+                "process-intake requires Year 2 injury eligibility reason codes seeded by migration 20260822030000"
+            )
     cohort_signal_team_key = resolve_team_key(args.team)
     own_team_alias = own_team_alias_for(cohort_signal_team_key, load_fixture_team_aliases())
 
@@ -3289,6 +3517,7 @@ def process_intake(args: argparse.Namespace) -> None:
             window_end=window_end,
             duplicate_signature_rows=duplicate_signature_rows,
             own_team_alias=own_team_alias,
+            injury_eligibility_bridge=year2_eligibility_bridge.get(source_row_number),
         )
         events.extend(source_correction_events)
         events.extend(
@@ -3422,6 +3651,14 @@ def process_intake(args: argparse.Namespace) -> None:
             'profile_manifest_sha256': sha256_file(Path(manifest_arg)) if manifest_arg else None,
             'adapter_qc_file': str(adapter_qc_path) if adapter_qc_path else None,
             'adapter_qc_sha256': adapter_qc_sha256,
+            'injury_eligibility_bridge_file': (
+                str(Path(getattr(args, 'injury_eligibility_bridge_file', '')))
+                if clean_text(getattr(args, 'injury_eligibility_bridge_file', '')) else None
+            ),
+            'injury_eligibility_bridge_sha256': (
+                sha256_file(Path(getattr(args, 'injury_eligibility_bridge_file', '')))
+                if clean_text(getattr(args, 'injury_eligibility_bridge_file', '')) else None
+            ),
           })},
           now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
@@ -4767,6 +5004,16 @@ def year2_release_local_evidence_records(contract: Any) -> list[dict[str, str]]:
             "role": "classification_rule",
             "locator": clean_text(contract.classification_rule_evidence_locator),
             "sha256": clean_text(contract.classification_rule_evidence_sha256),
+        },
+        {
+            "role": "incomplete_exposure_reporting",
+            "locator": clean_text(contract.exposure_coverage_evidence_locator),
+            "sha256": clean_text(contract.exposure_coverage_evidence_sha256),
+        },
+        {
+            "role": "injury_eligibility_bridge",
+            "locator": clean_text(contract.injury_eligibility_evidence_locator),
+            "sha256": clean_text(contract.injury_eligibility_evidence_sha256),
         },
     ]
     if any(not item["locator"] or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]) for item in records):
@@ -13865,6 +14112,14 @@ def main() -> None:
     process_parser.add_argument("--step-version", default=INJURY_PROCESSING_RULE_VERSION)
     process_parser.add_argument("--version-number", type=int, default=1)
     process_parser.add_argument("--analysis-audit-file", default="")
+    process_parser.add_argument(
+        "--injury-eligibility-bridge-file",
+        default="",
+        help=(
+            "2025-26 only: protected checksum-bound status bridge for "
+            "season-attributed undated injuries"
+        ),
+    )
     process_parser.add_argument("--manifest", default="")
     process_parser.add_argument(
         "--registered-source-file-sha256",

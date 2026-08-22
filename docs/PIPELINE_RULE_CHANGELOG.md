@@ -11,6 +11,40 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-22: 2025-26 injury eligibility bridge
+
+| Field | Value |
+|---|---|
+| Status | `applied-not-promoted`: the exact additive migration is registered on the approved live URC database. The protected input successor remains unsigned and ingest-blocked, so no Year 2 intake or release has been promoted. |
+| Rule version | `urc_2025_26_injury_eligibility_bridge_v1` |
+| Carry-forward | `season-specific`: it applies only to the registered 2025-26 V6 tuple. A later season requires a separately reviewed bridge. |
+| Evidence | `docs/evidence/urc_2025_26_injury_eligibility_bridge.json`, SHA-256 `a47d89700b22fdc3c9aa91203aed5227fbf76a2e4e7eab7dd8f18f9e13092ea1` |
+| Migration | `20260822030000_urc_2025_26_injury_eligibility_bridge.sql`, bound through the V6 release contract and combined checksum registration. |
+
+**Rule.** A blank source injury date may be `season_attributed_undated` only when the checksum-bound 2025-26 adapted successor says so. The processing state retains `date_injured = null`, records the controlled date-basis field and audit reason code, includes the row in non-monthly totals, and keeps it out of monthly series. It never fabricates a date. Nonblank unparseable dates and parseable dates outside 1 September 2025 to 30 June 2026 remain `review_required` and excluded from the reporting cohort.
+
+**Exclusions and duplicates.** A non-placeholder explicit source exclusion produces a checksum-bound analysis-audit exclusion using the seeded `explicit_source_exclusion` code. Unknown identities and insufficient signatures cannot form an injury duplicate candidate. Candidate duplicate signatures remain `included_pending_protocol` and audit-visible. V12 has zero duplicate-copy exclusions.
+
+**Cohort guard.** The V6 injury cohort continues to accept dated eligible injuries in the registered window. For a null date it now requires the latest immutable processing state to carry `injury_date_basis = season_attributed_undated` and `included_pending_protocol`. This is a Year 2 V6 view replacement only. Every 2024-25 processing path, view, release, payload and reader remains unchanged.
+
+## 2026-08-22: 2025-26 incomplete-exposure V6 successor
+
+| Field | Value |
+|---|---|
+| Status | `applied-live`: the exact additive migration is registered on the approved live URC database. No source row or Year 2 release was written, and the frozen 2024-25 release remained checksum-equivalent after application. |
+| Rule version | `urc_2025_26_incomplete_exposure_reporting_v6` |
+| Carry-forward | `season-specific`: it applies only to the registered 2025-26 V6 tuple. A later season requires its own evidence-bound successor. |
+| Evidence | `docs/evidence/urc_2025_26_incomplete_exposure_reporting_v6.json`, SHA-256 `b6fae7ce7e4609000337c29d7965e99809da3733b126522a1faabf600fdcc23c` |
+| Migration | `20260822020000_urc_2025_26_incomplete_exposure_reporting_v6.sql`, bound through the V6 release contract and combined checksum registration. |
+
+**Rule.** Every active 2025-26 build produces a V6 candidate. A team denominator is available only when included source-backed exposure hours meet that team's accepted fixture-derived match hours. Otherwise coverage hours, training hours, distance, incidence, burden and their exposure denominators are JSON `null`; injury counts, severity and fixture-derived match hours remain visible. No exposure is imputed.
+
+**Monthly and league behaviour.** A team-month without source-backed included exposure has null exposure and rate values. League exposure values and rates are null unless all 16 team denominators are available, and a league monthly rate also requires source-backed exposure for all 16 teams in that month. Submitted exposure may still be incomplete where a denominator is available, which is stated in the public status and limitations.
+
+**Compatibility.** The V6 public payload keys, formulas, candidate view names, private storage, reader grants and release tuple stay unchanged. Grain uses the sole curated value even when included rows are absent, otherwise public `unknown`. The 2024-25 view families, tuples, payloads and releases are untouched.
+
+---
+
 ## 2026-08-15: 2025-26 reporting and fixture-provenance contract
 
 | Field | Value |

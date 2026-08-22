@@ -1,0 +1,57 @@
+{
+  "schema_version": "urc_2025_26_injury_eligibility_bridge_evidence_v1",
+  "season": "2025-26",
+  "scope": "Aggregate eligibility rule only. It contains no source rows, identifiers, source locators, re-identification data, or protected paths.",
+  "rule_version": "urc_2025_26_injury_eligibility_bridge_v1",
+  "predecessor": {
+    "root_manifest_sha256": "79f27d22e97d400462cf6cf827972e12312b0725b91bdb428d0ef093367d6381",
+    "root_file_set_sha256": "526219617fcd2ed4fbf83ad7d318d39cf5b98778df1245e1e5302f7ad60504f2"
+  },
+  "protected_successor": {
+    "root_manifest_sha256": "01dd17a82ab1835fd84f2c84048b9e15b4072a4f9bca3b3d3a348817a68d7241",
+    "root_file_set_sha256": "5ea322d4e246510ce82075f5690ea2ac5715dace31ead35bff9db3bacc6a7abd",
+    "approval_ready": false,
+    "ingest_ready": false,
+    "database_action_authorised": false
+  },
+  "reporting_window": {
+    "start": "2025-09-01",
+    "end": "2026-06-30",
+    "inclusive": true
+  },
+  "eligibility_rule": {
+    "season_attributed_undated": "A blank source injury date in the checksum-bound 2025-26 adapted successor is included in non-monthly injury totals with date_injured null. No date is fabricated.",
+    "source_date_within_window": "A parseable source date within the registered reporting window is included.",
+    "source_date_unparseable": "A nonblank source date that is not parseable remains review_required and is excluded from the reporting cohort.",
+    "source_date_outside_window": "A parseable source date outside the registered reporting window remains review_required and is excluded from the reporting cohort.",
+    "explicit_source_exclusion": "Only a non-placeholder explicit source exclusion produces a checksum-bound analysis audit exclusion using the seeded reason code explicit_source_exclusion.",
+    "duplicate_rule": "Unknown identities and insufficient signatures are never duplicate evidence. Candidate duplicate signatures remain included_pending_protocol and audit-visible. V12 has zero approved duplicate-copy exclusions."
+  },
+  "aggregate_counts": {
+    "injury_rows": 10786,
+    "date_basis_counts": {
+      "season_attributed_undated": 4917,
+      "source_date_outside_window": 398,
+      "source_date_unparseable": 3902,
+      "source_date_within_window": 1569
+    },
+    "eligibility_status_counts": {
+      "included_pending_protocol": 6486,
+      "review_required": 4300
+    },
+    "explicit_source_exclusion_rows": 0,
+    "candidate_duplicate_injury_signature_rows": 942,
+    "duplicate_copy_exclusion_rows": 0
+  },
+  "audit_provenance": {
+    "record_state_field": "injury_date_basis",
+    "season_attributed_reason_code": "season_attributed_undated_injury",
+    "explicit_exclusion_reason_code": "explicit_source_exclusion"
+  },
+  "compatibility": {
+    "year1": "2024-25 processing paths, reporting views, releases, payloads and readers remain unchanged.",
+    "year2": "The bridge applies only to the registered 2025-26 V6 tuple and only after the protected successor receives separate exact checksum-bound approval.",
+    "no_placeholder_or_average": true,
+    "no_fabricated_date": true
+  }
+}

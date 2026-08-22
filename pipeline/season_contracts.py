@@ -88,6 +88,10 @@ class ReleaseContract:
     cohort_evidence_sha256: str | None = None
     classification_rule_evidence_locator: str | None = None
     classification_rule_evidence_sha256: str | None = None
+    exposure_coverage_evidence_locator: str | None = None
+    exposure_coverage_evidence_sha256: str | None = None
+    injury_eligibility_evidence_locator: str | None = None
+    injury_eligibility_evidence_sha256: str | None = None
 
     @property
     def release_tuple(self) -> ReleaseTuple:
@@ -154,6 +158,8 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260815020000",
         "20260815030000",
         "20260822010000",
+        "20260822020000",
+        "20260822030000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -176,6 +182,16 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             name="urc_2025_26_fixture_team_aliases",
             sha256="d3409ef9ab0546c46690deb21173eddfb1e3d2fde357a3df16f949029c61865f",
         ),
+        MigrationContract(
+            version="20260822020000",
+            name="urc_2025_26_incomplete_exposure_reporting_v6",
+            sha256="2e7d81e2a543e754bbb1f3eb63f750f0a177591a5ec742e7560effa58159c0b8",
+        ),
+        MigrationContract(
+            version="20260822030000",
+            name="urc_2025_26_injury_eligibility_bridge",
+            sha256="4960c284ab6a5257a7f8c64ef83a45c4aaed7c906b6b1843e8536516dbc95e03",
+        ),
     ),
     release_rule_version="league_dashboard_release_2026-08-15_v6",
     release_reason_code="league_dashboard_release_v6",
@@ -185,6 +201,18 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     cohort_evidence_sha256="e8d82b7d5b89c32576b806bb33778601030538ba8fb56fc1a68febc5f56d3fd2",
     classification_rule_evidence_locator="docs/evidence/urc_2025_26_classification_rule.json",
     classification_rule_evidence_sha256="e898320fc5fa8cdfbf4fde4382d1ade62c87fe2dbef820ecf72b557bfb07cd5f",
+    exposure_coverage_evidence_locator=(
+        "docs/evidence/urc_2025_26_incomplete_exposure_reporting_v6.json"
+    ),
+    exposure_coverage_evidence_sha256=(
+        "b6fae7ce7e4609000337c29d7965e99809da3733b126522a1faabf600fdcc23c"
+    ),
+    injury_eligibility_evidence_locator=(
+        "docs/evidence/urc_2025_26_injury_eligibility_bridge.json"
+    ),
+    injury_eligibility_evidence_sha256=(
+        "a47d89700b22fdc3c9aa91203aed5227fbf76a2e4e7eab7dd8f18f9e13092ea1"
+    ),
 )
 
 _FIXTURE_CONTRACTS = {YEAR2_2025_26_FIXTURE_CONTRACT.season: YEAR2_2025_26_FIXTURE_CONTRACT}

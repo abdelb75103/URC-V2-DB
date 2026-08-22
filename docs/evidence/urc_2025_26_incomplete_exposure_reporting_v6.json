@@ -1,0 +1,27 @@
+{
+  "schema_version": "urc_2025_26_incomplete_exposure_reporting_v6_evidence_v1",
+  "season": "2025-26",
+  "scope": "Aggregate reporting rule only. It contains no source rows, identities, source locators, or protected metadata.",
+  "decision": {
+    "rule_version": "urc_2025_26_incomplete_exposure_reporting_v6",
+    "effective_from": "2026-08-22",
+    "status": "accepted_for_v6_successor"
+  },
+  "denominator_rule": {
+    "team_complete_when": "Included source-backed exposure hours are at least the accepted fixture-derived match hours for that team's active 2025-26 build.",
+    "team_incomplete_when": "Included source-backed exposure is absent or falls below that fixture-derived match-hours floor.",
+    "team_incomplete_output": "Keep injury counts and severity. Set coverage hours, training hours, distance, incidence and burden values and denominators to JSON null. Keep fixture-derived match hours. Do not impute exposure.",
+    "team_complete_output": "Keep actual source-backed values and rates. State that submitted exposure may still be incomplete and that no imputation occurred.",
+    "league_output": "Keep injury counts, severity and fixture-derived match hours. Set league exposure hours, training hours, distance, incidence and burden values and denominators to JSON null unless all 16 team denominators are complete."
+  },
+  "monthly_rule": "A monthly incidence or burden rate is JSON null when that team-month lacks source-backed included exposure. A league monthly rate is JSON null unless all 16 active teams have a source-backed denominator for that month and all team denominators are complete.",
+  "grain_rule": "Use the sole curated exposure grain across the active build even when all rows are excluded. Use the public value unknown when that metadata is absent or mixed.",
+  "compatibility": {
+    "public_payload_keys": "unchanged",
+    "v6_formula_text": "unchanged",
+    "candidate_view_names": "unchanged",
+    "reader_grants_and_private_storage": "unchanged",
+    "release_tuple": "v6 / reporting_classification_2026-07-22_v2 / analysis_window_2025-26_2026-08-15_v1",
+    "year1": "The 2024-25 views, tuples, payloads and releases are untouched."
+  }
+}

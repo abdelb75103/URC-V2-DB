@@ -361,8 +361,8 @@ const v6CoverageCommonShape = {
   weeks: z.number(),
   match_hours: z.number().nullable(),
   training_hours: z.number().nullable(),
-  hours: z.number(),
-  distance_km: z.number(),
+  hours: z.number().nullable(),
+  distance_km: z.number().nullable(),
   included_exposure_status: z.string(),
   analysis_window_start: z.string(),
   analysis_window_end: z.string(),
@@ -444,11 +444,26 @@ const v6LeagueMetricsSourceSchema = z.object({
   ]),
 }).strict();
 
+type DashboardReaderRow =
+  | z.infer<typeof dashboardRowSchema>
+  | z.infer<typeof v6TeamDashboardRowSchema>
+  | z.infer<typeof v6LeagueDashboardRowSchema>;
+type ComparisonReaderRow =
+  | z.infer<typeof comparisonSourceRowSchema>
+  | z.infer<typeof v6ComparisonSourceRowSchema>;
+type LeagueMetricsReaderRow =
+  | z.infer<typeof leagueMetricsSourceSchema>
+  | z.infer<typeof v6LeagueMetricsSourceSchema>;
+type ReaderCoverage =
+  | z.infer<typeof coverageSchema>
+  | z.infer<typeof v6TeamCoverageSchema>
+  | z.infer<typeof v6LeagueCoverageSchema>;
+
 export function parseDashboardReaderRow(
   raw: unknown,
   season: string,
   scope: "team" | "league",
-): z.infer<typeof dashboardRowSchema> {
+): DashboardReaderRow {
   if (season !== "2025-26") return dashboardRowSchema.parse(raw);
   return (scope === "team" ? v6TeamDashboardRowSchema : v6LeagueDashboardRowSchema).parse(raw);
 }
@@ -456,7 +471,7 @@ export function parseDashboardReaderRow(
 function parseComparisonReaderRow(
   raw: unknown,
   season: string,
-): z.infer<typeof comparisonSourceRowSchema> {
+): ComparisonReaderRow {
   return season === "2025-26"
     ? v6ComparisonSourceRowSchema.parse(raw)
     : comparisonSourceRowSchema.parse(raw);
@@ -465,7 +480,7 @@ function parseComparisonReaderRow(
 function parseLeagueMetricsReaderRow(
   raw: unknown,
   season: string,
-): z.infer<typeof leagueMetricsSourceSchema> {
+): LeagueMetricsReaderRow {
   return season === "2025-26"
     ? v6LeagueMetricsSourceSchema.parse(raw)
     : leagueMetricsSourceSchema.parse(raw);
@@ -763,7 +778,7 @@ function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"
   const aliases = teamDisplayAliases();
   const comparisonIdByTeamKey = new Map<string, string>();
   const rows = internalRows
-    .sort((a, b) => b.exposure_hours - a.exposure_hours
+    .sort((a, b) => compareNullableNumbersDescending(a.exposure_hours, b.exposure_hours)
       || a.internal_team_key.localeCompare(b.internal_team_key))
     .map(({ internal_team_key, ...row }, index) => {
       const comparisonRow = {
@@ -775,6 +790,12 @@ function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"
       return comparisonRow;
     });
   return { rows, comparisonIdByTeamKey };
+}
+
+function compareNullableNumbersDescending(left: number | null, right: number | null) {
+  if (left === null) return right === null ? 0 : 1;
+  if (right === null) return -1;
+  return right - left;
 }
 
 export type TeamPageData = {
@@ -945,7 +966,7 @@ export async function getLeaguePageData(
 
 function overallSettingMetric(
   headline: z.infer<typeof headlineMetricSchema>[],
-  coverage: z.infer<typeof coverageSchema>
+  coverage: ReaderCoverage
 ): SettingMetricRow | null {
   const metric = (key: string) => headline.find((item) => item.key === key);
   const timeLoss = metric("time_loss_injuries");
@@ -999,7 +1020,7 @@ function normalizeSettingMetrics(items: z.infer<typeof settingMetricSchema>[]): 
 }
 
 function normalizeLeagueMetrics(
-  source: z.infer<typeof leagueMetricsSourceSchema>
+  source: LeagueMetricsReaderRow
 ): SettingMetricRow[] {
   const overall = overallSettingMetric(source.headline, source.coverage);
   return [
@@ -1009,7 +1030,7 @@ function normalizeLeagueMetrics(
 }
 
 function normalizeDashboardRow(
-  row: z.infer<typeof dashboardRowSchema>,
+  row: DashboardReaderRow,
   scope: DashboardData["scope"]
 ): DashboardData {
   const generatedAt =
@@ -1024,7 +1045,11 @@ function normalizeDashboardRow(
     season: row.season,
     analysis_window: row.analysis_window,
     method: row.method,
-    coverage: stripNulls(row.coverage) as Coverage,
+    coverage: {
+      ...stripNulls(row.coverage),
+      hours: row.coverage.hours ?? null,
+      distance_km: row.coverage.distance_km ?? null,
+    } as Coverage,
     headline: row.headline.map(({ value, ...rest }) => ({
       ...(stripNulls(rest) as Omit<HeadlineMetric, "value">),
       value: value ?? null,
@@ -1037,7 +1062,11 @@ function normalizeDashboardRow(
       burden_per_1000h: item.burden_per_1000h ?? null,
       mean_severity_days: item.mean_severity_days ?? null,
     })) as SettingMetricRow[],
-    monthly: row.monthly.map(stripNulls) as AnalyticsRow[],
+    monthly: row.monthly.map((item) => ({
+      ...stripNulls(item),
+      exposure_hours: item.exposure_hours ?? null,
+      distance_km: item.distance_km ?? null,
+    })) as AnalyticsRow[],
     body_locations: row.body_locations.map(stripNulls) as AnalyticsRow[],
     injury_types: row.injury_types.map(stripNulls) as AnalyticsRow[],
     injury_profiles: row.injury_profiles.map((item) => ({

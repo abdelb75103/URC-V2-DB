@@ -171,6 +171,20 @@ function fmtHours(value: number | null | undefined) {
   }).format(value);
 }
 
+function addPreviewToKnownValue(
+  value: number | null | undefined,
+  previewValue: number | undefined,
+) {
+  if (value === null || value === undefined) return null;
+  return value + (previewValue ?? 0);
+}
+
+function hasKnownExposure(
+  row: TeamComparisonRow,
+): row is TeamComparisonRow & { exposure_hours: number } {
+  return typeof row.exposure_hours === 'number' && Number.isFinite(row.exposure_hours);
+}
+
 type ProfileMetricRow = InjuryProfileRow | InjuryTypeFamilyRow;
 
 function metricValue(row: ProfileMetricRow, metric: ProfileMetric) {
@@ -1079,6 +1093,7 @@ function TeamComparisonTab({
       typeof row.match?.incidence_per_1000h === 'number'
       && typeof row.training?.incidence_per_1000h === 'number'
     ))
+    .filter(hasKnownExposure)
     .map((row) => ({
       comparison_id: row.comparison_id,
       label: row.comparison_id === viewerComparisonId ? teamName : row.team_alias,
@@ -1319,29 +1334,37 @@ function ExposureTab({
   const previewTeams = new Map(exposurePreview?.teams.map((row) => [row.team_alias, row]) ?? []);
   const monthlyRows = dashboard.monthly.map((row) => {
     const preview = row.month ? previewMonths.get(row.month) : undefined;
-    const exposureHours = (row.exposure_hours ?? 0) + (preview?.additional_hours ?? 0);
+    const exposureHours = addPreviewToKnownValue(row.exposure_hours, preview?.additional_hours);
     const matchHours = preview?.match_hours ?? 0;
     return {
       ...row,
       exposure_hours: exposureHours,
-      distance_km: (row.distance_km ?? 0) + (preview?.additional_distance_km ?? 0),
+      distance_km: addPreviewToKnownValue(row.distance_km, preview?.additional_distance_km),
       hsr_distance_km: preview?.hsr_distance_km,
       hsr_distance_denominator_km: preview?.hsr_distance_denominator_km,
       match_exposure_hours: exposurePreview ? matchHours : undefined,
-      training_exposure_hours: exposurePreview ? Math.max(exposureHours - matchHours, 0) : undefined,
+      training_exposure_hours: exposurePreview && exposureHours !== null
+        ? Math.max(exposureHours - matchHours, 0)
+        : undefined,
     };
   });
   const comparisonRows = comparisons.map((row) => {
     const preview = previewTeams.get(row.team_alias);
     return {
       ...row,
-      exposure_hours: row.exposure_hours + (preview?.additional_hours ?? 0),
-      distance_km: row.distance_km + (preview?.additional_distance_km ?? 0),
+      exposure_hours: addPreviewToKnownValue(row.exposure_hours, preview?.additional_hours),
+      distance_km: addPreviewToKnownValue(row.distance_km, preview?.additional_distance_km),
       hsr_distance_km: preview?.hsr_distance_km,
     };
   });
-  const additionalHours = exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_hours, 0) ?? 0;
-  const additionalDistance = exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_distance_km, 0) ?? 0;
+  const totalHours = addPreviewToKnownValue(
+    coverage.hours,
+    exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_hours, 0),
+  );
+  const totalDistance = addPreviewToKnownValue(
+    coverage.distance_km,
+    exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_distance_km, 0),
+  );
   const totalHsr = exposurePreview?.monthly.reduce((sum, row) => sum + row.hsr_distance_km, 0) ?? 0;
   const options: Array<{ value: ExposureMeasure; label: string }> = [
     { value: 'hours', label: 'Hours' },
@@ -1354,8 +1377,8 @@ function ExposureTab({
       <section aria-labelledby="total-exposure-heading">
         <h3 id="total-exposure-heading" className="mb-3 text-lg font-semibold text-foreground">Total exposure</h3>
         <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
-          <OverviewStat label="Total hours" value={fmtHours(coverage.hours + additionalHours)} unit="player-hours" />
-          <OverviewStat label="Total distance" value={fmt(coverage.distance_km + additionalDistance)} unit="km" />
+          <OverviewStat label="Total hours" value={fmtHours(totalHours)} unit="player-hours" />
+          <OverviewStat label="Total distance" value={fmt(totalDistance)} unit="km" />
           {exposurePreview && <OverviewStat label="HSR distance" value={fmt(totalHsr)} unit="km" />}
         </div>
       </section>

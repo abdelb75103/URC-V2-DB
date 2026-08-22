@@ -303,6 +303,69 @@ test('team comparison overall setting is a validated projection of released head
   }
 });
 
+test('team comparisons preserve unavailable exposure and place it after known coverage', async () => {
+  const priorUrl = process.env.WEB_READER_DB_URL;
+  const priorAliases = process.env.TEAM_DISPLAY_ALIAS_JSON;
+  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
+  process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ known: 'Known', unavailable: 'Unavailable' });
+  const headline = [
+    { key: 'recorded_injuries', label: 'Recorded injuries', value: 1, unit: 'cases', formula: 'count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)' },
+    { key: 'time_loss_injuries', label: 'Time-loss injuries', value: 1, unit: 'cases', formula: 'count(eligible injury rows where days lost > 0)' },
+    { key: 'incidence_per_1000h', label: 'Incidence', value: null, unit: 'injuries/1000h', numerator: 1, denominator: null, formula: 'pooled time-loss injuries / pooled exposure hours * 1000' },
+    { key: 'severity_mean_days', label: 'Mean severity', value: 2, unit: 'days', numerator: 2, denominator: 1, formula: 'pooled days lost / pooled time-loss injuries' },
+    { key: 'severity_median_days', label: 'Median severity', value: 2, unit: 'days', formula: 'median(days lost) across pooled time-loss injuries' },
+    { key: 'burden_per_1000h', label: 'Burden', value: null, unit: 'days/1000h', numerator: 2, denominator: null, formula: 'pooled days lost / pooled exposure hours * 1000' },
+  ];
+  const settingMetrics = ['all', 'match', 'training', 'unknown'].map((setting) => ({
+    setting,
+    label: setting,
+    time_loss_injuries: 1,
+    days_lost: 2,
+    exposure_hours: null,
+    incidence_per_1000h: null,
+    burden_per_1000h: null,
+    mean_severity_days: 2,
+  }));
+  const row = (team_key, hours, distance_km) => ({
+    team_key,
+    team: `${team_key} source`,
+    coverage: {
+      exposure_rows: hours === null ? 0 : 1,
+      exposed_players: hours === null ? 0 : 1,
+      weeks: hours === null ? 0 : 1,
+      match_hours: 0,
+      training_hours: hours,
+      hours,
+      distance_km,
+      included_exposure_status: hours === null ? 'not_available' : 'included',
+      analysis_window_start: '2025-09-01',
+      analysis_window_end: '2026-06-30',
+      exposure_grain: 'session',
+    },
+    headline,
+    setting_metrics: settingMetrics,
+  });
+  globalThis.__urcWebReaderPool = transactionMockPool(
+    async (sql) => (sql.includes('approved_dashboard_reader_target_v2')
+      ? { rows: [{ target_attested: true }] }
+      : { rows: [row('unavailable', null, null), row('known', 100, 40)] }),
+  );
+
+  try {
+    const { getTeamComparisons } = await loadReportingForFixtureTest();
+    const rows = await getTeamComparisons('2025-26');
+    assert.deepEqual(rows.map((row) => row.exposure_hours), [100, null]);
+    assert.equal(rows[1].exposure_hours, null);
+    assert.equal(rows[1].distance_km, null);
+  } finally {
+    globalThis.__urcWebReaderPool = undefined;
+    if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;
+    else process.env.WEB_READER_DB_URL = priorUrl;
+    if (priorAliases === undefined) delete process.env.TEAM_DISPLAY_ALIAS_JSON;
+    else process.env.TEAM_DISPLAY_ALIAS_JSON = priorAliases;
+  }
+});
+
 test('league and team page metrics include the released overall benchmark', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
   process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';

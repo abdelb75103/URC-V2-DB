@@ -1,4 +1,4 @@
--- Register the four reviewed Year 2 migrations only after their additive
+-- Register the six reviewed Year 2 migrations only after their additive
 -- objects and least-privilege boundary exist. A conflicting historical row is
 -- never overwritten: the final verification fails closed instead.
 
@@ -8,6 +8,9 @@ begin
     or to_regclass('curated.fixture_provenance_v1') is null
     or to_regclass('analysis.analysis_window_injury_cohort_v6') is null
     or to_regclass('analysis.analysis_window_team_exposure_v6') is null
+    or to_regclass('analysis.analysis_window_team_exposure_completeness_v6') is null
+    or to_regclass('analysis.accepted_urc_2025_26_incomplete_exposure_reporting_evidence_v6') is null
+    or to_regclass('analysis.accepted_urc_2025_26_injury_eligibility_bridge_evidence_v6') is null
     or to_regclass('analysis.league_team_dashboard_release_candidates_analysis_window_v6') is null
     or to_regclass('reporting.team_release_payloads_v6') is null
     or to_regclass('reporting.league_release_payloads_v6') is null
@@ -65,6 +68,16 @@ values
     '20260822010000',
     'urc_2025_26_fixture_team_aliases',
     array['migration_sha256=d3409ef9ab0546c46690deb21173eddfb1e3d2fde357a3df16f949029c61865f']
+  ),
+  (
+    '20260822020000',
+    'urc_2025_26_incomplete_exposure_reporting_v6',
+    array['migration_sha256=2e7d81e2a543e754bbb1f3eb63f750f0a177591a5ec742e7560effa58159c0b8']
+  ),
+  (
+    '20260822030000',
+    'urc_2025_26_injury_eligibility_bridge',
+    array['migration_sha256=4960c284ab6a5257a7f8c64ef83a45c4aaed7c906b6b1843e8536516dbc95e03']
   )
 on conflict (version) do nothing;
 
@@ -81,9 +94,13 @@ begin
       ('20260815030000', 'urc_2025_26_team_release_v6',
         array['migration_sha256=013973d8abefc004d80ae11aafa5028da47f563c99d55248fb87b9edd0ef41b7']),
       ('20260822010000', 'urc_2025_26_fixture_team_aliases',
-        array['migration_sha256=d3409ef9ab0546c46690deb21173eddfb1e3d2fde357a3df16f949029c61865f'])
+        array['migration_sha256=d3409ef9ab0546c46690deb21173eddfb1e3d2fde357a3df16f949029c61865f']),
+      ('20260822020000', 'urc_2025_26_incomplete_exposure_reporting_v6',
+        array['migration_sha256=2e7d81e2a543e754bbb1f3eb63f750f0a177591a5ec742e7560effa58159c0b8']),
+      ('20260822030000', 'urc_2025_26_injury_eligibility_bridge',
+        array['migration_sha256=4960c284ab6a5257a7f8c64ef83a45c4aaed7c906b6b1843e8536516dbc95e03'])
     )
-  ) <> 4 then
+  ) <> 6 then
     raise exception 'URC 2025-26 V6 migration registration is absent or checksum-mismatched';
   end if;
 end;
