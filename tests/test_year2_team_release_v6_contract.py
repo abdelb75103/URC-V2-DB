@@ -65,6 +65,17 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         self.assertIn("where release.status = 'approved'", SQL)
         self.assertIn("having count(*) = 16", SQL)
 
+    def test_team_candidate_adds_the_v6_analysis_version_literal(self) -> None:
+        candidate = SQL.split(
+            "create or replace view analysis.team_dashboard_release_candidates_analysis_window_v6",
+            1,
+        )[1].split(
+            "create view analysis.league_team_dashboard_release_candidates_analysis_window_v6",
+            1,
+        )[0]
+        self.assertIn("'v6'::text as analysis_version", candidate)
+        self.assertNotIn("active.analysis_version", candidate)
+
     def test_league_contract_routes_every_v6_member_read(self) -> None:
         source = inspect.getsource(pipeline.release_league)
         self.assertIn("member_view =", source)

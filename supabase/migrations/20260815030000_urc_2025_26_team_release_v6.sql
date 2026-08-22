@@ -169,7 +169,7 @@ from complete;
 create or replace view analysis.team_dashboard_release_candidates_analysis_window_v6
 with (security_invoker = true) as
 select active.team_key, active.season, null::uuid as team_release_id,
-  active.curated_build_id, active.analysis_version,
+  active.curated_build_id, 'v6'::text as analysis_version,
   active.classification_view_version, active.classification_evidence_sha256,
   active.cohort_view_version, active.cohort_evidence_sha256, active.dashboard
 from analysis.team_dashboard_payload_analysis_window_v6_enriched active;
