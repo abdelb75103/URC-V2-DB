@@ -41,6 +41,13 @@ class Year2ReportingV6SqlContractTests(unittest.TestCase):
         self.assertIn("'2024-25'", self.sql)  # frozen prior-season display metadata only
         self.assertNotIn("_v5", self.sql)
 
+    def test_reporting_window_uses_a_non_reserved_alias(self) -> None:
+        self.assertNotRegex(
+            self.sql,
+            r"reporting_season_windows_v3\s+window\b",
+        )
+        self.assertIn("reporting_season_windows_v3 season_window", self.sql)
+
     def test_undated_rows_remain_in_totals_but_not_monthly_series(self) -> None:
         classification = self.sql.split(
             "create view analysis.analysis_window_reporting_classification_v6", 1

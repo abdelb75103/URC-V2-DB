@@ -159,7 +159,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         MigrationContract(
             version="20260815020000",
             name="urc_2025_26_reporting_v6",
-            sha256="9953d18287e8481fc770c7bb401ee6d2a4046dccd8781f62381385e1869cceb1",
+            sha256="f6afa867edf91c4e6a43288fec9fe1411b6c1904c5c73afa822ccb4b08eaa4d6",
         ),
         MigrationContract(
             version="20260815030000",

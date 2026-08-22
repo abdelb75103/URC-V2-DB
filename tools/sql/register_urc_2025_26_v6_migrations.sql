@@ -39,7 +39,7 @@ values
   (
     '20260815020000',
     'urc_2025_26_reporting_v6',
-    array['migration_sha256=9953d18287e8481fc770c7bb401ee6d2a4046dccd8781f62381385e1869cceb1']
+    array['migration_sha256=f6afa867edf91c4e6a43288fec9fe1411b6c1904c5c73afa822ccb4b08eaa4d6']
   ),
   (
     '20260815030000',
@@ -57,7 +57,7 @@ begin
       ('20260815010000', 'urc_2025_26_reporting_contract',
         array['migration_sha256=d150177f144d08346a0ffc5b63821a840a411be5ded07d21a9d4b3f954165cac']),
       ('20260815020000', 'urc_2025_26_reporting_v6',
-        array['migration_sha256=9953d18287e8481fc770c7bb401ee6d2a4046dccd8781f62381385e1869cceb1']),
+        array['migration_sha256=f6afa867edf91c4e6a43288fec9fe1411b6c1904c5c73afa822ccb4b08eaa4d6']),
       ('20260815030000', 'urc_2025_26_team_release_v6',
         array['migration_sha256=6a66b67e514be5cdba25f78438caad5b7ce8fc7bfb7dc83ee114a37efe9f990f'])
     )
