@@ -106,7 +106,10 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         self.assertEqual(contract.injury_cohort_view, "analysis.analysis_window_injury_cohort_v6")
         self.assertEqual(contract.league_monthly_view, "analysis.analysis_window_league_monthly_v6")
         self.assertEqual(contract.league_summary_view, "analysis.analysis_window_league_summary_v6")
-        self.assertEqual(contract.required_migrations, ("20260815010000", "20260815020000", "20260815030000"))
+        self.assertEqual(
+            contract.required_migrations,
+            ("20260815010000", "20260815020000", "20260815030000", "20260822010000"),
+        )
         self.assertEqual(contract.cohort_adjudication_ref, "ANALYSIS-WINDOW-2025-26-01")
         self.assertEqual(
             contract.cohort_evidence_locator,
@@ -328,25 +331,36 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         rows = fixture_rows()
         args = SimpleNamespace(season="2025-26", file="private/fixtures.csv")
         contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
-        migration = contract.required_migration_contracts[0]
+        fixture_migrations = tuple(
+            migration for migration in contract.required_migration_contracts
+            if migration.version in {
+                pipeline.YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION,
+                pipeline.YEAR2_FIXTURE_ALIAS_MIGRATION_VERSION,
+            }
+        )
         fixture_contract = fixture_contract_for("2025-26")
 
         def expected_sha(path):
-            if path.name == f"{migration.version}_{migration.name}.sql":
-                return migration.sha256
+            for migration in fixture_migrations:
+                if path.name == f"{migration.version}_{migration.name}.sql":
+                    return migration.sha256
             if path.name == "urc_2025_26_fixture_preparation.json":
                 return fixture_contract.evidence_sha256
             return fixture_contract.prepared_file_sha256
 
+        exact = [
+            {"version": migration.version, "name": migration.name, "statements": [migration.statement]}
+            for migration in fixture_migrations
+        ]
         for registered in (
-            {"version": migration.version, "name": "wrong_name", "statements": [migration.statement]},
-            {"version": migration.version, "name": migration.name, "statements": ["migration_sha256=" + "0" * 64]},
+            [{**exact[0], "name": "wrong_name"}, exact[1]],
+            [{**exact[0], "statements": ["migration_sha256=" + "0" * 64]}, exact[1]],
         ):
             with self.subTest(registered=registered):
                 with (
                     patch.object(pipeline, "read_rows", return_value=rows),
                     patch.object(pipeline, "sha256_file", side_effect=expected_sha),
-                    patch.object(pipeline, "query_sql", return_value=[registered]),
+                    patch.object(pipeline, "query_sql", return_value=registered),
                     patch.object(pipeline, "run_sql") as run_sql,
                 ):
                     with self.assertRaisesRegex(SystemExit, "exact registered migration checksums"):
@@ -354,6 +368,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
                     run_sql.assert_not_called()
 
         def wrong_migration_sha(path):
+            migration = fixture_migrations[0]
             if path.name == f"{migration.version}_{migration.name}.sql":
                 return "0" * 64
             return expected_sha(path)

@@ -149,7 +149,12 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     injury_cohort_view="analysis.analysis_window_injury_cohort_v6",
     league_monthly_view="analysis.analysis_window_league_monthly_v6",
     league_summary_view="analysis.analysis_window_league_summary_v6",
-    required_migrations=("20260815010000", "20260815020000", "20260815030000"),
+    required_migrations=(
+        "20260815010000",
+        "20260815020000",
+        "20260815030000",
+        "20260822010000",
+    ),
     required_migration_contracts=(
         MigrationContract(
             version="20260815010000",
@@ -165,6 +170,11 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             version="20260815030000",
             name="urc_2025_26_team_release_v6",
             sha256="013973d8abefc004d80ae11aafa5028da47f563c99d55248fb87b9edd0ef41b7",
+        ),
+        MigrationContract(
+            version="20260822010000",
+            name="urc_2025_26_fixture_team_aliases",
+            sha256="d3409ef9ab0546c46690deb21173eddfb1e3d2fde357a3df16f949029c61865f",
         ),
     ),
     release_rule_version="league_dashboard_release_2026-08-15_v6",

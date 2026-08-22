@@ -10002,6 +10002,7 @@ PLAYER_HOURS_PER_TEAM_MATCH = 20.0
 URC_FIXTURES_2024_25_CORRECTED_PATH = "data/intake/2024-25/fixtures/urc_fixtures_2024_25.corrected.csv"
 URC_FIXTURES_2024_25_CORRECTED_SHA256 = "9608ff7e932cf76743eeb6de7d3bce6f5746ab1dfa4cec80a01f001ec2e9c39c"
 YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION = "20260815010000"
+YEAR2_FIXTURE_ALIAS_MIGRATION_VERSION = "20260822010000"
 
 
 def resolve_team_key(team: str) -> str:
@@ -10426,12 +10427,17 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         year2_contract = release_contract_for(
             "2025-26", YEAR2_2025_26_RELEASE_TUPLE,
         )
-        fixture_migration = next(
+        fixture_migrations = tuple(
             item for item in year2_contract.required_migration_contracts
-            if item.version == YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION
+            if item.version in {
+                YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION,
+                YEAR2_FIXTURE_ALIAS_MIGRATION_VERSION,
+            }
         )
+        if len(fixture_migrations) != 2:
+            raise SystemExit("Year 2 fixture load migration contract is incomplete")
         assert_checksum_bound_migrations(
-            (fixture_migration,), "Year 2 fixture load",
+            fixture_migrations, "Year 2 fixture load",
         )
 
     existing_params = SqlParams()
@@ -10622,16 +10628,19 @@ def load_curated_fixtures(args: argparse.Namespace) -> None:
         if fixture_provenance else ""
     )
     year2_fixture_migration_guard = (
-        f"""
+        "\n".join(
+            f"""
         if not exists (
           select 1 from supabase_migrations.schema_migrations
-          where version = {params.text(fixture_migration.version)}
-            and name = {params.text(fixture_migration.name)}
-            and statements = array[{params.text(fixture_migration.statement)}]::text[]
+          where version = {params.text(migration.version)}
+            and name = {params.text(migration.name)}
+            and statements = array[{params.text(migration.statement)}]::text[]
         ) then
-          raise exception 'load-curated-fixtures requires the exact checksum-bound Year 2 provenance migration';
+          raise exception 'load-curated-fixtures requires every exact checksum-bound Year 2 fixture migration';
         end if;
         """
+            for migration in fixture_migrations
+        )
         if fixture_provenance else ""
     )
     fixture_evidence_record = (

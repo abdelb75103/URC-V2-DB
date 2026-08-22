@@ -1,4 +1,4 @@
--- Register the three reviewed Year 2 migrations only after their additive
+-- Register the four reviewed Year 2 migrations only after their additive
 -- objects and least-privilege boundary exist. A conflicting historical row is
 -- never overwritten: the final verification fails closed instead.
 
@@ -26,6 +26,21 @@ begin
   then
     raise exception 'URC 2025-26 V6 private release storage is not least-privilege';
   end if;
+
+  if (
+    select count(*)
+    from reporting.team_key_aliases alias
+    join reporting.teams team on team.team_key = alias.team_key and team.active
+    where (alias.alias, alias.team_key, alias.excluded) in (
+      ('Benetton Rugby', 'benetton', false),
+      ('Connacht Rugby', 'connacht', false),
+      ('Leinster Rugby', 'leinster', false),
+      ('Munster Rugby', 'munster', false),
+      ('Ulster Rugby', 'ulster', false)
+    )
+  ) <> 5 then
+    raise exception 'URC 2025-26 official fixture aliases are absent, inactive, or conflict with canonical team keys';
+  end if;
 end;
 $$;
 
@@ -45,6 +60,11 @@ values
     '20260815030000',
     'urc_2025_26_team_release_v6',
     array['migration_sha256=013973d8abefc004d80ae11aafa5028da47f563c99d55248fb87b9edd0ef41b7']
+  ),
+  (
+    '20260822010000',
+    'urc_2025_26_fixture_team_aliases',
+    array['migration_sha256=d3409ef9ab0546c46690deb21173eddfb1e3d2fde357a3df16f949029c61865f']
   )
 on conflict (version) do nothing;
 
@@ -59,9 +79,11 @@ begin
       ('20260815020000', 'urc_2025_26_reporting_v6',
         array['migration_sha256=48380753d7ece51221fe64f0345366e72232401247ef0397ca1f33354f710dd2']),
       ('20260815030000', 'urc_2025_26_team_release_v6',
-        array['migration_sha256=013973d8abefc004d80ae11aafa5028da47f563c99d55248fb87b9edd0ef41b7'])
+        array['migration_sha256=013973d8abefc004d80ae11aafa5028da47f563c99d55248fb87b9edd0ef41b7']),
+      ('20260822010000', 'urc_2025_26_fixture_team_aliases',
+        array['migration_sha256=d3409ef9ab0546c46690deb21173eddfb1e3d2fde357a3df16f949029c61865f'])
     )
-  ) <> 3 then
+  ) <> 4 then
     raise exception 'URC 2025-26 V6 migration registration is absent or checksum-mismatched';
   end if;
 end;
