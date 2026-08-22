@@ -197,7 +197,7 @@ join reporting.team_release_payloads_v6 payload
 -- binds the immutable payload selected above back to the current active build.
 create or replace view analysis.league_dashboard_release_candidates_analysis_window_v6
 with (security_invoker = true) as
-select candidate.season, candidate.analysis_version,
+select candidate.season, 'v6'::text as analysis_version,
   candidate.classification_view_version, candidate.classification_evidence_sha256,
   candidate.cohort_view_version, candidate.cohort_evidence_sha256,
   candidate.dashboard

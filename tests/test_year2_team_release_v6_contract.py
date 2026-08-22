@@ -76,6 +76,17 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         self.assertIn("'v6'::text as analysis_version", candidate)
         self.assertNotIn("active.analysis_version", candidate)
 
+    def test_league_candidate_adds_the_v6_analysis_version_literal(self) -> None:
+        candidate = SQL.split(
+            "create or replace view analysis.league_dashboard_release_candidates_analysis_window_v6",
+            1,
+        )[1].split(
+            "create or replace function reporting.validate_league_dashboard_v2_candidate",
+            1,
+        )[0]
+        self.assertIn("'v6'::text as analysis_version", candidate)
+        self.assertNotIn("candidate.analysis_version", candidate)
+
     def test_league_contract_routes_every_v6_member_read(self) -> None:
         source = inspect.getsource(pipeline.release_league)
         self.assertIn("member_view =", source)
