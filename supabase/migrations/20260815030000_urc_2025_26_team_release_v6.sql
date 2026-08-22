@@ -523,7 +523,7 @@ from reporting.latest_team_dashboard_v5
 where season <> '2025-26'
 union all
 select payload.team_key,
-  payload.dashboard_payload ->> 'team' as team, payload.season,
+  payload.dashboard_payload ->> 'team' as team, bundle.season,
   (payload.dashboard_payload ->> 'generated_at')::timestamptz as generated_at,
   payload.dashboard_payload -> 'analysis_window' as analysis_window,
   payload.dashboard_payload -> 'method' as method,

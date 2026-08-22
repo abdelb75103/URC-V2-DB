@@ -44,7 +44,7 @@ values
   (
     '20260815030000',
     'urc_2025_26_team_release_v6',
-    array['migration_sha256=2149f3461a520765dfc3f676d4c96bf0623610f5e30feb2173fd7fe5b95d7e2c']
+    array['migration_sha256=013973d8abefc004d80ae11aafa5028da47f563c99d55248fb87b9edd0ef41b7']
   )
 on conflict (version) do nothing;
 
@@ -59,7 +59,7 @@ begin
       ('20260815020000', 'urc_2025_26_reporting_v6',
         array['migration_sha256=48380753d7ece51221fe64f0345366e72232401247ef0397ca1f33354f710dd2']),
       ('20260815030000', 'urc_2025_26_team_release_v6',
-        array['migration_sha256=2149f3461a520765dfc3f676d4c96bf0623610f5e30feb2173fd7fe5b95d7e2c'])
+        array['migration_sha256=013973d8abefc004d80ae11aafa5028da47f563c99d55248fb87b9edd0ef41b7'])
     )
   ) <> 3 then
     raise exception 'URC 2025-26 V6 migration registration is absent or checksum-mismatched';

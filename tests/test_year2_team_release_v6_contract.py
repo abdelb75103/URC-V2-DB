@@ -93,6 +93,13 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         self.assertEqual(source.count("{member_view}"), 3)
         self.assertEqual(release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE).member_view, "analysis.league_member_releases_v6")
 
+    def test_year2_team_reader_gets_season_from_the_completed_bundle(self) -> None:
+        reader = SQL.split("create view reporting.latest_team_dashboard_v6", 1)[1].split(
+            "create view reporting.latest_league_dashboard_v6", 1
+        )[0]
+        self.assertIn("bundle.season", reader)
+        self.assertNotIn("payload.season", reader)
+
     def test_league_promotion_locks_every_reviewed_build_before_rechecking_member_identities(self) -> None:
         source = inspect.getsource(pipeline.release_league).lower()
         lock = "from curated.builds build\n          join reviewed_league_members member on member.curated_build_id = build.id"
