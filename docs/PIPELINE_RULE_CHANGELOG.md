@@ -11,6 +11,21 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-22: Year 2 V6 candidate view query optimisation
+
+| Field | Value |
+|---|---|
+| Status | `implemented-not-executed`: additive migration and focused SQL-contract tests only. No database query, migration or release ran. |
+| Rule version | `urc_2025_26_v6_candidate_view_optimisation` |
+| Carry-forward | `season-specific` implementation for the existing 2025-26 V6 candidate views. |
+| Migration | `20260822220611_urc_2025_26_v6_candidate_view_optimisation.sql` |
+
+**Execution only.** The enriched team payload now filters its four repeated V6 aggregate sources to one base team row, then evaluates each source once through a `MATERIALIZED` CTE. The league payload applies the same pattern once per selected season. The downstream team and league candidate relations keep their existing names and column contracts.
+
+**No reporting rule change.** The view replacements retain `security_invoker`, every output column, JSON key, value expression and ordering from the predecessor definitions. They do not change source data, classification, cohort membership, exposure completeness, denominators, fixture rules, payload semantics or any 2024-25 relation.
+
+---
+
 ## 2026-08-22: Curated exposure scope projection compatibility
 
 | Field | Value |

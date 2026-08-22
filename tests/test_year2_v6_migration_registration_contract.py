@@ -20,6 +20,20 @@ REGISTRATION = (
 
 
 class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
+    def test_candidate_optimisation_is_checksum_bound_before_release(self) -> None:
+        contract = next(
+            item
+            for item in YEAR2_2025_26_RELEASE_CONTRACT.required_migration_contracts
+            if item.version == "20260822220611"
+        )
+        self.assertEqual(contract.name, "urc_2025_26_v6_candidate_view_optimisation")
+        self.assertEqual(
+            contract.sha256,
+            "5e5c734a0d4b14337a6cf0a12f5891fbdd9b4ef7ea71fadc97c1a1d85a4cd8d6",
+        )
+        self.assertIn(contract.version, YEAR2_2025_26_RELEASE_CONTRACT.required_migrations)
+        self.assertEqual(REGISTRATION.count(contract.statement), 2)
+
     def test_release_contract_binds_each_local_migration_to_one_registered_checksum(self) -> None:
         contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
         self.assertEqual(contract, YEAR2_2025_26_RELEASE_CONTRACT)

@@ -111,6 +111,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             (
                 "20260815010000", "20260815020000", "20260815030000",
                 "20260822010000", "20260822020000", "20260822030000",
+                "20260822220611",
             ),
         )
         self.assertEqual(contract.cohort_adjudication_ref, "ANALYSIS-WINDOW-2025-26-01")

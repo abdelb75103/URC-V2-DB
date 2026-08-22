@@ -160,6 +160,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260822010000",
         "20260822020000",
         "20260822030000",
+        "20260822220611",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -191,6 +192,11 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             version="20260822030000",
             name="urc_2025_26_injury_eligibility_bridge",
             sha256="4960c284ab6a5257a7f8c64ef83a45c4aaed7c906b6b1843e8536516dbc95e03",
+        ),
+        MigrationContract(
+            version="20260822220611",
+            name="urc_2025_26_v6_candidate_view_optimisation",
+            sha256="5e5c734a0d4b14337a6cf0a12f5891fbdd9b4ef7ea71fadc97c1a1d85a4cd8d6",
         ),
     ),
     release_rule_version="league_dashboard_release_2026-08-15_v6",
