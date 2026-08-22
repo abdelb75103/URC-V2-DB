@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -69,6 +70,21 @@ def dashboard() -> dict[str, object]:
 
 
 class V6PublicPayloadContractTests(unittest.TestCase):
+    def test_v6_scalar_equality_allows_scale_only_and_keeps_year1_tolerance(self) -> None:
+        self.assertTrue(pipeline.v6_public_scalars_equal(12, 12.0))
+        self.assertTrue(pipeline.v6_public_scalars_equal(12, Decimal("12.000")))
+        self.assertFalse(pipeline.v6_public_scalars_equal(12, 12.0000000005))
+        self.assertFalse(
+            pipeline.v6_public_scalars_equal(
+                12,
+                Decimal("12.0000000000000001"),
+            )
+        )
+        self.assertTrue(pipeline.v6_public_scalars_equal(True, True))
+        self.assertFalse(pipeline.v6_public_scalars_equal(True, 1))
+        self.assertFalse(pipeline.v6_public_scalars_equal(False, 0))
+        self.assertTrue(pipeline.parity_values_equal(12, 12.0000000005))
+
     def test_accepts_the_exact_public_payload_shape(self) -> None:
         assert_v6_public_dashboard_contract(dashboard(), "fixture")
 
@@ -122,7 +138,7 @@ class V6PublicPayloadContractTests(unittest.TestCase):
 
 
 class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
-    def test_verify_analysis_parity_compares_the_exact_v6_candidate_and_database_hash(self) -> None:
+    def test_scale_normalised_reviewed_payload_uses_the_manifest_bound_candidate_hash(self) -> None:
         reviewed = dashboard()
         reviewed["team"] = "Example"
         reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
@@ -143,17 +159,23 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
             }
             for item in contract.required_migration_contracts
         ]
+        candidate_dashboard_json = json.dumps(reviewed).replace(
+            '"value": 12',
+            '"value": 12.0',
+            1,
+        )
         candidate = {
             "team_key": "example",
             "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
             "analysis_version": "v6",
             "classification_view_version": contract.classification_view_version,
             "classification_evidence_sha256": classification_evidence_sha256,
             "cohort_view_version": contract.cohort_view_version,
             "cohort_evidence_sha256": cohort_evidence_sha256,
-            "dashboard": reviewed,
-            "candidate_payload_sha256": candidate_hash,
-            "reviewed_payload_sha256": candidate_hash,
+            "dashboard_json": candidate_dashboard_json,
+            "payload_sha256": candidate_hash,
+            "approved_predecessors": [],
         }
         queries: list[str] = []
 
@@ -171,9 +193,30 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             preflight = Path(directory) / "example-v6-preflight.json"
             preflight.write_text(json.dumps(reviewed, sort_keys=True) + "\n", encoding="utf-8")
+            provenance = {
+                "code_version": "a" * 40,
+                "dependency_lock_hash": "b" * 64,
+                "operator": "tester",
+            }
+            manifest = pipeline.v6_team_preflight_manifest(
+                team_key="example",
+                contract=contract,
+                candidate=candidate,
+                predecessor=None,
+                preflight_file_sha256=pipeline.sha256_file(preflight),
+                provenance=provenance,
+            )
+            Path(f"{preflight}.manifest.json").write_text(
+                json.dumps(manifest, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
             output = io.StringIO()
             try:
-                with patch.object(pipeline, "query_sql", side_effect=query), redirect_stdout(output):
+                with (
+                    patch.object(pipeline, "query_sql", side_effect=query),
+                    patch.object(pipeline, "run_provenance", return_value=provenance) as provenance_call,
+                    redirect_stdout(output),
+                ):
                     pipeline.verify_analysis_parity(
                         SimpleNamespace(
                             team="Example",
@@ -187,6 +230,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
                 log_path.unlink(missing_ok=True)
 
         self.assertEqual(result["overall"], "PARITY")
+        provenance_call.assert_called_once_with()
         self.assertEqual(result["canonical_payload_sha256"], candidate_hash)
         self.assertEqual(
             result["classification_evidence_sha256"],
@@ -205,8 +249,136 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         )
         self.assertEqual(evidence["diffs"], [])
         self.assertTrue(any(contract.team_candidate_view in sql for sql in queries))
+        candidate_query = next(sql for sql in queries if contract.team_candidate_view in sql)
+        self.assertIn("candidate.dashboard::text as dashboard_json", candidate_query)
+        self.assertEqual(candidate_query.count("canonical_jsonb_sha256_v1"), 1)
+        self.assertNotIn("reviewed_payload_sha256", candidate_query)
+        self.assertIn("jsonb_agg", candidate_query)
+        self.assertIn("reporting.team_release_payloads_v6", candidate_query)
+        self.assertEqual(
+            sum(contract.team_candidate_view in sql for sql in queries),
+            1,
+        )
         self.assertFalse(any("analysis.headline_metrics_v1" in sql for sql in queries))
         self.assertFalse(any("analysis.coverage_v1" in sql for sql in queries))
+
+    def test_verify_analysis_parity_uses_only_the_reviewed_buffer_returned_by_the_manifest_reader(self) -> None:
+        reviewed = dashboard()
+        reviewed["team"] = "Example"
+        reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del reviewed["coverage"]["teams_included"]  # type: ignore[index]
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+        candidate = {
+            "team_key": "example",
+            "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+            "cohort_view_version": contract.cohort_view_version,
+            "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+            "dashboard_json": json.dumps(reviewed),
+            "payload_sha256": "a" * 64,
+            "approved_predecessors": [],
+        }
+        reviewed_sha256 = "e" * 64
+        manifest_sha256 = "f" * 64
+        log_path = Path("data/reporting/example_analysis_parity_2025-26.json")
+        with tempfile.TemporaryDirectory() as directory:
+            preflight = Path(directory) / "not-opened-directly.json"
+            try:
+                with (
+                    patch.object(pipeline, "resolve_team_key", return_value="example"),
+                    patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                    patch.object(pipeline, "query_sql", return_value=[candidate]),
+                    patch.object(
+                        pipeline,
+                        "read_v6_team_reviewed_preflight",
+                        return_value=(reviewed, reviewed, reviewed_sha256, manifest_sha256),
+                    ) as reader,
+                    patch.object(Path, "read_bytes", side_effect=AssertionError("unexpected reopen")),
+                    patch.object(Path, "read_text", side_effect=AssertionError("unexpected reopen")),
+                    redirect_stdout(io.StringIO()),
+                ):
+                    pipeline.verify_analysis_parity(
+                        SimpleNamespace(
+                            team="Example",
+                            season="2025-26",
+                            dashboard_file=str(preflight),
+                        )
+                    )
+                evidence = json.loads(log_path.read_text(encoding="utf-8"))
+            finally:
+                log_path.unlink(missing_ok=True)
+
+        reader.assert_called_once()
+        self.assertEqual(evidence["reviewed_file_sha256"], reviewed_sha256)
+        self.assertEqual(
+            evidence["reviewed_preflight_manifest_sha256"],
+            manifest_sha256,
+        )
+
+    def test_verify_analysis_parity_fails_on_the_first_dirty_provenance_snapshot(self) -> None:
+        reviewed = dashboard()
+        reviewed["team"] = "Example"
+        reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del reviewed["coverage"]["teams_included"]  # type: ignore[index]
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+        candidate = {
+            "team_key": "example",
+            "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+            "cohort_view_version": contract.cohort_view_version,
+            "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+            "dashboard_json": json.dumps(reviewed),
+            "payload_sha256": "a" * 64,
+            "approved_predecessors": [],
+        }
+        clean = {
+            "code_version": "a" * 40,
+            "dependency_lock_hash": "b" * 64,
+            "operator": "tester",
+        }
+        dirty = {**clean, "code_version": f"{'a' * 40}-dirty"}
+        with tempfile.TemporaryDirectory() as directory:
+            preflight = Path(directory) / "reviewed-v6-preflight.json"
+            preflight.write_text(json.dumps(reviewed) + "\n", encoding="utf-8")
+            manifest = pipeline.v6_team_preflight_manifest(
+                team_key="example",
+                contract=contract,
+                candidate=candidate,
+                predecessor=None,
+                preflight_file_sha256=pipeline.sha256_file(preflight),
+                provenance=clean,
+            )
+            Path(f"{preflight}.manifest.json").write_text(
+                json.dumps(manifest) + "\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(pipeline, "resolve_team_key", return_value="example"),
+                patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                patch.object(pipeline, "query_sql", return_value=[candidate]),
+                patch.object(
+                    pipeline,
+                    "run_provenance",
+                    side_effect=[dirty, clean],
+                ) as provenance_call,
+                redirect_stdout(io.StringIO()),
+            ):
+                with self.assertRaisesRegex(SystemExit, "manifest does not bind"):
+                    pipeline.verify_analysis_parity(
+                        SimpleNamespace(
+                            team="Example",
+                            season="2025-26",
+                            dashboard_file=str(preflight),
+                        )
+                    )
+
+        provenance_call.assert_called_once_with()
 
     def test_verify_analysis_parity_keeps_the_frozen_year1_route(self) -> None:
         with (
@@ -240,7 +412,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
             "classification_evidence_sha256": "c" * 64,
             "cohort_view_version": contract.cohort_view_version,
             "cohort_evidence_sha256": "d" * 64,
-            "dashboard": reviewed,
+            "dashboard_json": json.dumps(reviewed),
             "candidate_payload_sha256": "a" * 64,
             "reviewed_payload_sha256": "a" * 64,
         }
@@ -310,7 +482,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         )
         query.assert_not_called()
 
-    def test_verify_analysis_parity_fails_closed_on_a_database_hash_mismatch(self) -> None:
+    def test_verify_analysis_parity_requires_the_adjacent_preflight_manifest(self) -> None:
         reviewed = dashboard()
         reviewed["team"] = "Example"
         reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
@@ -319,43 +491,248 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         candidate = {
             "team_key": "example",
             "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
             "analysis_version": "v6",
             "classification_view_version": contract.classification_view_version,
             "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
             "cohort_view_version": contract.cohort_view_version,
             "cohort_evidence_sha256": contract.cohort_evidence_sha256,
-            "dashboard": reviewed,
-            "candidate_payload_sha256": "a" * 64,
-            "reviewed_payload_sha256": "b" * 64,
+            "dashboard_json": json.dumps(reviewed),
+            "payload_sha256": "a" * 64,
+            "approved_predecessors": [],
         }
+
+        def query(sql: str, params: list[object] | None = None) -> list[dict[str, object]]:
+            if contract.team_candidate_view in sql:
+                return [candidate]
+            self.fail(f"unexpected query: {sql}")
+
+        with tempfile.TemporaryDirectory() as directory:
+            preflight = Path(directory) / "reviewed-v6-preflight.json"
+            preflight.write_text(json.dumps(reviewed) + "\n", encoding="utf-8")
+            with (
+                patch.object(pipeline, "resolve_team_key", return_value="example"),
+                patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                patch.object(pipeline, "query_sql", side_effect=query),
+                redirect_stdout(io.StringIO()),
+            ):
+                with self.assertRaisesRegex(SystemExit, "preflight and its manifest are required"):
+                    pipeline.verify_analysis_parity(
+                        SimpleNamespace(
+                            team="Example",
+                            season="2025-26",
+                            dashboard_file=str(preflight),
+                        )
+                    )
+
+    def test_verify_analysis_parity_rejects_multiple_approved_predecessors_from_the_candidate_snapshot(self) -> None:
+        reviewed = dashboard()
+        reviewed["team"] = "Example"
+        reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del reviewed["coverage"]["teams_included"]  # type: ignore[index]
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+        candidate = {
+            "team_key": "example",
+            "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+            "cohort_view_version": contract.cohort_view_version,
+            "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+            "dashboard_json": json.dumps(reviewed),
+            "payload_sha256": "a" * 64,
+            "approved_predecessors": [
+                {"release_id": "00000000-0000-0000-0000-000000000002"},
+                {"release_id": "00000000-0000-0000-0000-000000000003"},
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            preflight = Path(directory) / "reviewed-v6-preflight.json"
+            preflight.write_text(json.dumps(reviewed) + "\n", encoding="utf-8")
+            with (
+                patch.object(pipeline, "resolve_team_key", return_value="example"),
+                patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                patch.object(pipeline, "query_sql", return_value=[candidate]) as query,
+                redirect_stdout(io.StringIO()),
+            ):
+                with self.assertRaisesRegex(SystemExit, "at most one approved predecessor"):
+                    pipeline.verify_analysis_parity(
+                        SimpleNamespace(
+                            team="Example",
+                            season="2025-26",
+                            dashboard_file=str(preflight),
+                        )
+                    )
+
+        query.assert_called_once()
+
+    def test_verify_analysis_parity_rejects_each_manifest_identity_tamper(self) -> None:
+        reviewed = dashboard()
+        reviewed["team"] = "Example"
+        reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del reviewed["coverage"]["teams_included"]  # type: ignore[index]
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+        candidate = {
+            "team_key": "example",
+            "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+            "cohort_view_version": contract.cohort_view_version,
+            "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+            "dashboard_json": json.dumps(reviewed),
+            "payload_sha256": "a" * 64,
+        }
+        predecessor = {
+            "release_id": "00000000-0000-0000-0000-000000000002",
+            "release_label": "retained-predecessor",
+            "payload_sha256": "b" * 64,
+        }
+        candidate["approved_predecessors"] = [predecessor]
+
+        def query(sql: str, params: list[object] | None = None) -> list[dict[str, object]]:
+            if contract.team_candidate_view in sql:
+                return [candidate]
+            self.fail(f"unexpected query: {sql}")
+
+        with tempfile.TemporaryDirectory() as directory:
+            preflight = Path(directory) / "reviewed-v6-preflight.json"
+            preflight.write_text(json.dumps(reviewed) + "\n", encoding="utf-8")
+            manifest = pipeline.v6_team_preflight_manifest(
+                team_key="example",
+                contract=contract,
+                candidate=candidate,
+                predecessor=predecessor,
+                preflight_file_sha256=pipeline.sha256_file(preflight),
+                provenance=pipeline.run_provenance(),
+            )
+            manifest_path = Path(f"{preflight}.manifest.json")
+            cases = (
+                ("payload_sha256", "c" * 64),
+                ("preflight_file_sha256", "d" * 64),
+                ("curated_build_id", "00000000-0000-0000-0000-000000000003"),
+                ("release_tuple", {}),
+                ("classification_evidence_sha256", "e" * 64),
+                ("cohort_evidence_sha256", "f" * 64),
+                ("local_evidence_files", []),
+                ("provenance", {}),
+                ("predecessor_release_id", None),
+            )
+            for key, replacement in cases:
+                with self.subTest(key=key):
+                    manifest_path.write_text(
+                        json.dumps({**manifest, key: replacement}) + "\n",
+                        encoding="utf-8",
+                    )
+                    with (
+                        patch.object(pipeline, "resolve_team_key", return_value="example"),
+                        patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                        patch.object(pipeline, "query_sql", side_effect=query),
+                        redirect_stdout(io.StringIO()),
+                    ):
+                        with self.assertRaisesRegex(SystemExit, "manifest does not bind"):
+                            pipeline.verify_analysis_parity(
+                                SimpleNamespace(
+                                    team="Example",
+                                    season="2025-26",
+                                    dashboard_file=str(preflight),
+                                )
+                            )
+
+    def test_verify_analysis_parity_rejects_coordinated_public_scalar_tampering(self) -> None:
+        candidate_dashboard = dashboard()
+        candidate_dashboard["team"] = "Example"
+        candidate_dashboard["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del candidate_dashboard["coverage"]["teams_included"]  # type: ignore[index]
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+        candidate = {
+            "team_key": "example",
+            "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+            "cohort_view_version": contract.cohort_view_version,
+            "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+            "dashboard_json": json.dumps(candidate_dashboard),
+            "payload_sha256": "a" * 64,
+            "approved_predecessors": [],
+        }
+
+        def query(sql: str, params: list[object] | None = None) -> list[dict[str, object]]:
+            if contract.team_candidate_view in sql:
+                return [candidate]
+            self.fail(f"unexpected query: {sql}")
+
         log_path = Path("data/reporting/example_analysis_parity_2025-26.json")
         with tempfile.TemporaryDirectory() as directory:
             preflight = Path(directory) / "changed-v6-preflight.json"
-            preflight.write_text(json.dumps(reviewed) + "\n", encoding="utf-8")
-            try:
-                with (
-                    patch.object(pipeline, "resolve_team_key", return_value="example"),
-                    patch.object(pipeline, "assert_checksum_bound_release_migrations"),
-                    patch.object(pipeline, "query_sql", return_value=[candidate]),
-                    redirect_stdout(io.StringIO()),
-                ):
-                    with self.assertRaises(SystemExit):
-                        pipeline.verify_analysis_parity(
-                            SimpleNamespace(
-                                team="Example",
-                                season="2025-26",
-                                dashboard_file=str(preflight),
-                            )
+            cases = (
+                ("integer_delta", 13, None, None),
+                ("small_float_delta", 12.0000000005, None, None),
+                ("bool_for_number", True, None, None),
+                ("reviewed_beyond_binary_float_precision", 12, "12.0000000000000001", None),
+                ("candidate_beyond_binary_float_precision", 12, None, "12.0000000000000001"),
+            )
+            for label, reviewed_value, reviewed_exact_number, candidate_exact_number in cases:
+                with self.subTest(label=label):
+                    candidate_json = json.dumps(candidate_dashboard)
+                    if candidate_exact_number is not None:
+                        candidate_json = candidate_json.replace(
+                            '"value": 12',
+                            f'"value": {candidate_exact_number}',
+                            1,
                         )
-                evidence = json.loads(log_path.read_text(encoding="utf-8"))
-            finally:
-                log_path.unlink(missing_ok=True)
+                    candidate["dashboard_json"] = candidate_json
+                    reviewed = copy.deepcopy(candidate_dashboard)
+                    reviewed["headline"][0]["value"] = reviewed_value  # type: ignore[index]
+                    reviewed_json = json.dumps(reviewed)
+                    if reviewed_exact_number is not None:
+                        reviewed_json = reviewed_json.replace(
+                            '"value": 12',
+                            f'"value": {reviewed_exact_number}',
+                            1,
+                        )
+                    preflight.write_text(reviewed_json + "\n", encoding="utf-8")
+                    manifest = pipeline.v6_team_preflight_manifest(
+                        team_key="example",
+                        contract=contract,
+                        candidate=candidate,
+                        predecessor=None,
+                        preflight_file_sha256=pipeline.sha256_file(preflight),
+                        provenance=pipeline.run_provenance(),
+                    )
+                    Path(f"{preflight}.manifest.json").write_text(
+                        json.dumps(manifest) + "\n",
+                        encoding="utf-8",
+                    )
+                    try:
+                        with (
+                            patch.object(pipeline, "resolve_team_key", return_value="example"),
+                            patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                            patch.object(pipeline, "query_sql", side_effect=query),
+                            redirect_stdout(io.StringIO()),
+                        ):
+                            with self.assertRaises(SystemExit):
+                                pipeline.verify_analysis_parity(
+                                    SimpleNamespace(
+                                        team="Example",
+                                        season="2025-26",
+                                        dashboard_file=str(preflight),
+                                    )
+                                )
+                        evidence = json.loads(log_path.read_text(encoding="utf-8"))
+                    finally:
+                        log_path.unlink(missing_ok=True)
 
-        self.assertEqual(evidence["summary"]["overall"], "DIFFS")
-        self.assertEqual(
-            evidence["diffs"][0]["kind"],
-            "canonical_hash_mismatch",
-        )
+                    self.assertEqual(evidence["summary"]["overall"], "DIFFS")
+                    self.assertEqual(
+                        evidence["diffs"][0]["path"],
+                        "headline[0].value",
+                    )
 
 
 if __name__ == "__main__":

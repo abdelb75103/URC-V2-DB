@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+import io
 import inspect
 import json
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pipeline.__main__ as pipeline
 from pipeline.season_contracts import YEAR2_2025_26_RELEASE_TUPLE, release_contract_for
+from tests.test_v6_public_payload_contract import dashboard as public_dashboard
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -120,8 +125,149 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
             "active V6 candidate changed after review",
             "status = 'approved'",
             "assert_v6_public_dashboard_contract(dashboard, \"team dashboard\")",
+            "compare_complete_public_payloads(",
+            "reviewed_exact",
+            "reviewed_display=reviewed",
         ):
             self.assertIn(token, source)
+
+    def test_team_preflight_and_promotion_share_one_candidate_predecessor_snapshot(self) -> None:
+        contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
+        payload = public_dashboard()
+        payload["team"] = "Example"
+        payload["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del payload["coverage"]["teams_included"]  # type: ignore[index]
+        candidate_dashboard_json = json.dumps(payload).replace(
+            '"value": 12',
+            '"value": 12.0000000000000001',
+            1,
+        )
+        candidate = {
+            "team_key": "example",
+            "season": "2025-26",
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+            "cohort_view_version": contract.cohort_view_version,
+            "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+            "dashboard_json": candidate_dashboard_json,
+            "payload_sha256": "a" * 64,
+            "approved_predecessors": [],
+        }
+        provenance = {
+            "code_version": "a" * 40,
+            "dependency_lock_hash": "b" * 64,
+            "operator": "tester",
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            reviewed_path = Path(directory) / "reviewed.json"
+            preflight_args = SimpleNamespace(
+                team="Example",
+                season="2025-26",
+                preflight=True,
+                preflight_file="",
+                preflight_reviewer="",
+                previous_dashboard_file="",
+                restatement_file="",
+                output=str(reviewed_path),
+            )
+            with (
+                patch.object(pipeline, "run_provenance", return_value=provenance) as provenance_call,
+                patch.object(pipeline, "resolve_team_key", return_value="example"),
+                patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                patch.object(pipeline, "query_sql", return_value=[candidate]) as query,
+                redirect_stdout(io.StringIO()),
+            ):
+                pipeline.release_team_v6(preflight_args)
+
+            provenance_call.assert_called_once_with()
+            query.assert_called_once()
+            snapshot_sql = query.call_args.args[0]
+            self.assertIn("candidate.dashboard::text as dashboard_json", snapshot_sql)
+            self.assertIn("jsonb_agg", snapshot_sql)
+            self.assertIn("reporting.team_release_payloads_v6", snapshot_sql)
+            self.assertNotIn(" limit 1", snapshot_sql.lower())
+            self.assertEqual(
+                reviewed_path.read_bytes(),
+                candidate_dashboard_json.encode("utf-8") + b"\n",
+            )
+
+            promotion_args = SimpleNamespace(
+                team="Example",
+                season="2025-26",
+                preflight=False,
+                preflight_file=str(reviewed_path),
+                preflight_reviewer="Abdel Babiker",
+                previous_dashboard_file="",
+                restatement_file="",
+                output="",
+            )
+            with (
+                patch.object(pipeline, "run_provenance", return_value=provenance) as provenance_call,
+                patch.object(pipeline, "resolve_team_key", return_value="example"),
+                patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                patch.object(pipeline, "query_sql", return_value=[candidate]) as query,
+                patch.object(pipeline, "run_sql") as write,
+                redirect_stdout(io.StringIO()),
+            ):
+                pipeline.release_team_v6(promotion_args)
+
+            provenance_call.assert_called_once_with()
+            query.assert_called_once()
+            self.assertIn("jsonb_agg", query.call_args.args[0])
+            write.assert_called_once()
+            self.assertIn(
+                "approved V6 team predecessor set changed after review",
+                write.call_args.args[0],
+            )
+            self.assertEqual(
+                write.call_args.args[1].count(candidate_dashboard_json),
+                2,
+            )
+
+            candidate["approved_predecessors"] = [
+                {"release_id": "00000000-0000-0000-0000-000000000002"},
+                {"release_id": "00000000-0000-0000-0000-000000000003"},
+            ]
+            with (
+                patch.object(pipeline, "run_provenance", return_value=provenance),
+                patch.object(pipeline, "resolve_team_key", return_value="example"),
+                patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                patch.object(pipeline, "query_sql", return_value=[candidate]) as query,
+                redirect_stdout(io.StringIO()),
+            ):
+                with self.assertRaisesRegex(SystemExit, "at most one approved predecessor"):
+                    pipeline.release_team_v6(preflight_args)
+            query.assert_called_once()
+
+    def test_dirty_team_preflight_fails_on_the_first_provenance_snapshot(self) -> None:
+        dirty = {
+            "code_version": f"{'a' * 40}-dirty",
+            "dependency_lock_hash": "b" * 64,
+            "operator": "tester",
+        }
+        clean = {**dirty, "code_version": "a" * 40}
+        args = SimpleNamespace(
+            team="Example",
+            season="2025-26",
+            preflight=True,
+            preflight_file="",
+            preflight_reviewer="",
+            previous_dashboard_file="",
+            restatement_file="",
+            output="",
+        )
+        with (
+            patch.object(pipeline, "run_provenance", side_effect=[dirty, clean]) as provenance_call,
+            patch.object(pipeline, "query_sql") as query,
+        ):
+            with self.assertRaisesRegex(SystemExit, "uncommitted working tree"):
+                pipeline.release_team_v6(args)
+
+        provenance_call.assert_called_once_with()
+        query.assert_not_called()
 
     def test_identical_payload_can_receive_append_only_successors_for_new_builds(self) -> None:
         self.assertNotIn("unique (team_key, season, payload_sha256)", SQL)
@@ -157,22 +303,29 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         }
         dashboard = {"team": "Example", "season": "2025-26"}
         predecessor = {"release_id": "00000000-0000-0000-0000-000000000002"}
+        provenance = {
+            "code_version": "a" * 40,
+            "dependency_lock_hash": "b" * 64,
+            "operator": "tester",
+        }
         with tempfile.TemporaryDirectory() as temporary_directory:
             reviewed_path = Path(temporary_directory) / "reviewed.json"
             reviewed_path.write_text(json.dumps(dashboard, sort_keys=True) + "\n", encoding="utf-8")
             manifest = pipeline.v6_team_preflight_manifest(
                 team_key="example", contract=contract, candidate=candidate,
                 predecessor=predecessor, preflight_file_sha256=pipeline.sha256_file(reviewed_path),
+                provenance=provenance,
             )
             manifest_path = Path(f"{reviewed_path}.manifest.json")
             manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
-            self.assertEqual(
-                pipeline.read_v6_team_reviewed_preflight(
-                    reviewed_path=reviewed_path, team_key="example", contract=contract,
-                    candidate=candidate, predecessor=predecessor,
-                ),
-                dashboard,
+            reviewed, reviewed_exact, reviewed_sha256, manifest_sha256 = pipeline.read_v6_team_reviewed_preflight(
+                reviewed_path=reviewed_path, team_key="example", contract=contract,
+                candidate=candidate, predecessor=predecessor, provenance=provenance,
             )
+            self.assertEqual(reviewed, dashboard)
+            self.assertEqual(reviewed_exact, dashboard)
+            self.assertEqual(reviewed_sha256, pipeline.sha256_file(reviewed_path))
+            self.assertEqual(manifest_sha256, pipeline.sha256_file(manifest_path))
             for key, replacement in (
                 ("schema_version", "wrong"), ("season", "2024-25"),
                 ("candidate_view", "analysis.wrong"), ("payload_sha256", "b" * 64),
@@ -188,28 +341,80 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "manifest"):
                     pipeline.read_v6_team_reviewed_preflight(
                         reviewed_path=reviewed_path, team_key="example", contract=contract,
-                        candidate=candidate, predecessor=predecessor,
+                        candidate=candidate, predecessor=predecessor, provenance=provenance,
                     )
             manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
             reviewed_path.write_text(json.dumps({"team": "altered"}) + "\n", encoding="utf-8")
             with self.assertRaisesRegex(SystemExit, "manifest"):
                 pipeline.read_v6_team_reviewed_preflight(
                     reviewed_path=reviewed_path, team_key="example", contract=contract,
-                    candidate=candidate, predecessor=predecessor,
+                    candidate=candidate, predecessor=predecessor, provenance=provenance,
                 )
+
+    def test_reviewed_preflight_hashes_the_single_buffer_it_parses(self) -> None:
+        contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
+        candidate = {
+            "curated_build_id": "00000000-0000-0000-0000-000000000001",
+            "payload_sha256": "a" * 64,
+            "classification_evidence_sha256": "c" * 64,
+            "cohort_evidence_sha256": "d" * 64,
+        }
+        original = {"team": "Example", "season": "2025-26"}
+        replacement = {"team": "Replaced", "season": "2025-26"}
+        provenance = {
+            "code_version": "a" * 40,
+            "dependency_lock_hash": "b" * 64,
+            "operator": "tester",
+        }
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            reviewed_path = Path(temporary_directory) / "reviewed.json"
+            reviewed_path.write_text(json.dumps(original) + "\n", encoding="utf-8")
+            original_bytes = reviewed_path.read_bytes()
+            manifest = pipeline.v6_team_preflight_manifest(
+                team_key="example", contract=contract, candidate=candidate,
+                predecessor=None,
+                preflight_file_sha256=pipeline.hashlib.sha256(original_bytes).hexdigest(),
+                provenance=provenance,
+            )
+            manifest_path = Path(f"{reviewed_path}.manifest.json")
+            manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+            real_read_bytes = Path.read_bytes
+            reviewed_reads = 0
+
+            def read_then_replace(path: Path) -> bytes:
+                nonlocal reviewed_reads
+                value = real_read_bytes(path)
+                if path == reviewed_path:
+                    reviewed_reads += 1
+                    reviewed_path.write_text(json.dumps(replacement) + "\n", encoding="utf-8")
+                return value
+
+            with patch.object(Path, "read_bytes", read_then_replace):
+                reviewed, reviewed_exact, reviewed_sha256, _ = pipeline.read_v6_team_reviewed_preflight(
+                    reviewed_path=reviewed_path, team_key="example", contract=contract,
+                    candidate=candidate, predecessor=None, provenance=provenance,
+                )
+
+            self.assertEqual(reviewed, original)
+            self.assertEqual(reviewed_exact, original)
+            self.assertEqual(reviewed_sha256, pipeline.hashlib.sha256(original_bytes).hexdigest())
+            self.assertEqual(reviewed_reads, 1)
+            self.assertEqual(json.loads(reviewed_path.read_text(encoding="utf-8")), replacement)
 
     def test_team_successor_rechecks_locked_db_candidate_and_retires_only_the_predecessor(self) -> None:
         source = inspect.getsource(pipeline.release_team_v6)
         for token in (
             "reporting.canonical_jsonb_sha256_v1(dashboard)",
             "for update",
-            "dashboard = {params.jsonb(dashboard)}",
+            "dashboard = {params.text(candidate_dashboard_json)}::jsonb",
+            "{params.text(candidate_dashboard_json)}::jsonb, {params.text(payload_sha256)}",
             "approved V6 team predecessor set changed after review",
             "set status = 'retired'",
             "classification_evidence_sha256",
             "cohort_evidence_sha256",
         ):
             self.assertIn(token, source)
+        self.assertNotIn("params.jsonb(dashboard)", source)
         self.assertIn("then 0\n          else 1", source)
         self.assertIn("select count(*)", source)
         self.assertLess(
@@ -221,7 +426,12 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         source = inspect.getsource(pipeline.release_team_v6)
         self.assertIn('build_path_token = clean_text(candidate["curated_build_id"])', source)
         self.assertIn("reviewed_preflight_manifest_sha256", source)
-        self.assertIn('sha256_file(Path(f"{reviewed_path}.manifest.json"))', source)
+        self.assertIn(
+            "reviewed, reviewed_exact, reviewed_sha256, reviewed_manifest_sha256 =",
+            source,
+        )
+        self.assertNotIn('sha256_file(Path(f"{reviewed_path}.manifest.json"))', source)
+        self.assertNotIn("sha256_file(reviewed_path)", source)
 
     def test_v6_promotion_checks_only_the_completed_v6_public_readers(self) -> None:
         source = inspect.getsource(pipeline.release_league)

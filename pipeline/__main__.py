@@ -5822,9 +5822,9 @@ def assert_local_evidence_bytes(records: list[dict[str, str]], operation: str) -
 def v6_team_preflight_manifest(
     *, team_key: str, contract: Any, candidate: dict[str, Any],
     predecessor: dict[str, Any] | None, preflight_file_sha256: str,
+    provenance: dict[str, str],
 ) -> dict[str, object]:
     """Build the exact, checksum-bound local review record for one V6 team."""
-    provenance = run_provenance()
     return {
         "schema_version": "urc_team_release_v6_preflight_v1",
         "season": "2025-26",
@@ -5860,28 +5860,47 @@ def v6_team_preflight_manifest(
 def read_v6_team_reviewed_preflight(
     *, reviewed_path: Path, team_key: str, contract: Any,
     candidate: dict[str, Any], predecessor: dict[str, Any] | None,
-) -> dict[str, Any]:
+    provenance: dict[str, str],
+) -> tuple[dict[str, Any], dict[str, Any], str, str]:
     """Read only a full, exact manifest bound to the reviewed payload bytes."""
     manifest_path = Path(f"{reviewed_path}.manifest.json")
     if not reviewed_path.is_file() or not manifest_path.is_file():
         raise SystemExit("reviewed V6 preflight and its manifest are required")
     try:
-        reviewed = json.loads(reviewed_path.read_bytes())
-        manifest = json.loads(manifest_path.read_bytes())
-    except json.JSONDecodeError as error:
+        reviewed_bytes = reviewed_path.read_bytes()
+        manifest_bytes = manifest_path.read_bytes()
+        reviewed = json.loads(reviewed_bytes)
+        reviewed_exact = json.loads(
+            reviewed_bytes,
+            parse_float=Decimal,
+            parse_int=Decimal,
+        )
+        manifest = json.loads(manifest_bytes)
+    except (OSError, json.JSONDecodeError) as error:
         raise SystemExit("reviewed V6 preflight artefacts must be valid JSON") from error
-    if not isinstance(reviewed, dict) or not isinstance(manifest, dict):
+    if (
+        not isinstance(reviewed, dict)
+        or not isinstance(reviewed_exact, dict)
+        or not isinstance(manifest, dict)
+    ):
         raise SystemExit("reviewed V6 preflight manifest and payload must be JSON objects")
+    reviewed_sha256 = hashlib.sha256(reviewed_bytes).hexdigest()
     expected_manifest = v6_team_preflight_manifest(
         team_key=team_key,
         contract=contract,
         candidate=candidate,
         predecessor=predecessor,
-        preflight_file_sha256=sha256_file(reviewed_path),
+        preflight_file_sha256=reviewed_sha256,
+        provenance=provenance,
     )
     if manifest != expected_manifest:
         raise SystemExit("reviewed V6 preflight manifest does not bind the exact active candidate")
-    return reviewed
+    return (
+        reviewed,
+        reviewed_exact,
+        reviewed_sha256,
+        hashlib.sha256(manifest_bytes).hexdigest(),
+    )
 
 
 def v6_team_release_label(
@@ -5931,6 +5950,9 @@ def release_team_v6(args: argparse.Namespace) -> None:
         raise SystemExit("V6 team promotion requires --preflight-reviewer 'Abdel Babiker'")
     if not preflight and not preflight_file:
         raise SystemExit("V6 team release requires --preflight or a reviewed --preflight-file")
+    provenance = run_provenance()
+    if provenance["code_version"].endswith("-dirty"):
+        raise SystemExit("V6 team release refuses an uncommitted working tree")
 
     team_key = resolve_team_key(team)
     contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
@@ -5941,19 +5963,38 @@ def release_team_v6(args: argparse.Namespace) -> None:
     candidate_params = SqlParams()
     rows = query_sql(
         f"""
-        select team_key, season, curated_build_id::text, analysis_version,
-          classification_view_version, classification_evidence_sha256,
-          cohort_view_version, cohort_evidence_sha256, dashboard,
-          reporting.canonical_jsonb_sha256_v1(dashboard) as payload_sha256
-        from {contract.team_candidate_view}
-        where team_key = {candidate_params.text(team_key)}
-          and season = '2025-26' and analysis_version = 'v6'
-          and classification_view_version = 'reporting_classification_2026-07-22_v2'
-          and cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+        select candidate.team_key, candidate.season,
+          candidate.curated_build_id::text, candidate.analysis_version,
+          candidate.classification_view_version,
+          candidate.classification_evidence_sha256,
+          candidate.cohort_view_version, candidate.cohort_evidence_sha256,
+          candidate.dashboard::text as dashboard_json,
+          reporting.canonical_jsonb_sha256_v1(candidate.dashboard) as payload_sha256,
+          coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'release_id', payload.release_id::text,
+                'release_label', release.release_label,
+                'payload_sha256', payload.payload_sha256
+              )
+              order by release.approved_at desc nulls last,
+                release.created_at desc, payload.release_id desc
+            )
+            from reporting.team_release_payloads_v6 payload
+            join reporting.aggregate_releases release on release.id = payload.release_id
+            where payload.team_key = candidate.team_key
+              and payload.season = candidate.season
+              and release.status = 'approved'
+          ), '[]'::jsonb) as approved_predecessors
+        from {contract.team_candidate_view} candidate
+        where candidate.team_key = {candidate_params.text(team_key)}
+          and candidate.season = '2025-26' and candidate.analysis_version = 'v6'
+          and candidate.classification_view_version = 'reporting_classification_2026-07-22_v2'
+          and candidate.cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
         """,
         candidate_params.values,
     )
-    if len(rows) != 1 or not isinstance(rows[0].get("dashboard"), dict):
+    if len(rows) != 1 or not isinstance(rows[0].get("dashboard_json"), str):
         raise SystemExit("V6 team release requires exactly one complete active-build candidate")
     candidate = rows[0]
     if not all(
@@ -5962,7 +6003,18 @@ def release_team_v6(args: argparse.Namespace) -> None:
         for field in ("classification_evidence_sha256", "cohort_evidence_sha256")
     ):
         raise SystemExit("V6 team candidate lacks exact classification or cohort evidence")
-    dashboard = candidate["dashboard"]
+    candidate_dashboard_json = candidate["dashboard_json"]
+    try:
+        dashboard = json.loads(candidate_dashboard_json)
+        dashboard_exact = json.loads(
+            candidate_dashboard_json,
+            parse_float=Decimal,
+            parse_int=Decimal,
+        )
+    except json.JSONDecodeError as error:
+        raise SystemExit("V6 team candidate dashboard is not valid PostgreSQL JSON text") from error
+    if not isinstance(dashboard, dict) or not isinstance(dashboard_exact, dict):
+        raise SystemExit("V6 team candidate dashboard must be a JSON object")
     assert_v6_public_dashboard_contract(dashboard, "team dashboard")
     payload_sha256 = clean_text(candidate.get("payload_sha256"))
     if not re.fullmatch(r"[0-9a-f]{64}", payload_sha256):
@@ -5973,22 +6025,15 @@ def release_team_v6(args: argparse.Namespace) -> None:
         payload_sha256=payload_sha256,
     )
 
-    predecessor_params = SqlParams()
-    predecessors = query_sql(
-        f"""
-        select payload.release_id::text, release.release_label, payload.payload_sha256
-        from reporting.team_release_payloads_v6 payload
-        join reporting.aggregate_releases release on release.id = payload.release_id
-        where payload.team_key = {predecessor_params.text(team_key)} and payload.season = '2025-26'
-          and release.status = 'approved'
-        order by release.approved_at desc nulls last, release.created_at desc, payload.release_id desc
-        """, predecessor_params.values,
-    )
+    predecessors = candidate.get("approved_predecessors")
+    if not isinstance(predecessors, list) or any(
+        not isinstance(predecessor, dict) for predecessor in predecessors
+    ):
+        raise SystemExit("V6 team candidate has an invalid approved predecessor set")
     if len(predecessors) > 1:
         raise SystemExit("V6 team successor requires at most one approved predecessor")
     predecessor = predecessors[0] if predecessors else None
 
-    canonical = json.dumps(dashboard, indent=2, sort_keys=True) + "\n"
     if preflight:
         build_path_token = clean_text(candidate["curated_build_id"]).replace("-", "")
         output = Path(clean_text(getattr(args, "output", "") or "") or (
@@ -5996,27 +6041,31 @@ def release_team_v6(args: argparse.Namespace) -> None:
         ))
         if Path("content/reporting").resolve() in output.resolve().parents:
             raise SystemExit("V6 team preflight output must stay outside content/reporting")
-        write_text_atomic(output, canonical)
+        write_text_atomic(output, candidate_dashboard_json + "\n")
         manifest = v6_team_preflight_manifest(
             team_key=team_key, contract=contract, candidate=candidate,
             predecessor=predecessor, preflight_file_sha256=sha256_file(output),
+            provenance=provenance,
         )
         write_text_atomic(Path(f"{output}.manifest.json"), json.dumps(manifest, indent=2, sort_keys=True) + "\n")
         print(json.dumps({"status": "preflight", "output_path": str(output), "payload_sha256": payload_sha256}, indent=2))
         return
 
     reviewed_path = Path(preflight_file)
-    reviewed = read_v6_team_reviewed_preflight(
+    reviewed, reviewed_exact, reviewed_sha256, reviewed_manifest_sha256 = read_v6_team_reviewed_preflight(
         reviewed_path=reviewed_path, team_key=team_key, contract=contract,
-        candidate=candidate, predecessor=predecessor,
+        candidate=candidate, predecessor=predecessor, provenance=provenance,
     )
-    if reviewed != dashboard:
+    assert_v6_public_dashboard_contract(reviewed, "reviewed team dashboard")
+    _, reviewed_diffs = compare_complete_public_payloads(
+        reviewed_exact,
+        dashboard_exact,
+        reviewed_display=reviewed,
+        candidate_display=dashboard,
+    )
+    if reviewed_diffs:
         raise SystemExit("reviewed V6 preflight does not match the exact active-build candidate")
-    reviewed_manifest_sha256 = sha256_file(Path(f"{reviewed_path}.manifest.json"))
 
-    provenance = run_provenance()
-    if provenance["code_version"].endswith("-dirty"):
-        raise SystemExit("V6 team release refuses an uncommitted working tree")
     params = SqlParams()
     sql = f"""
       do $$ begin
@@ -6046,7 +6095,7 @@ def release_team_v6(args: argparse.Namespace) -> None:
             and classification_evidence_sha256 = {params.text(candidate['classification_evidence_sha256'])}
             and cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
             and cohort_evidence_sha256 = {params.text(candidate['cohort_evidence_sha256'])}
-            and dashboard = {params.jsonb(dashboard)}
+            and dashboard = {params.text(candidate_dashboard_json)}::jsonb
             and reporting.canonical_jsonb_sha256_v1(dashboard) = {params.text(payload_sha256)}
         ) then raise exception 'active V6 candidate changed after review'; end if;
         if (
@@ -6075,7 +6124,7 @@ def release_team_v6(args: argparse.Namespace) -> None:
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
         values ('release_team_v6', {params.text(team)}, '2025-26', 'started', {params.text(candidate['curated_build_id'])}, {params.text(payload_sha256)},
-          {params.jsonb({'team_key': team_key, 'release_tuple': contract.release_tuple, 'reviewer': reviewer, 'preflight_sha256': sha256_file(reviewed_path), 'reviewed_preflight_manifest_sha256': reviewed_manifest_sha256, 'predecessor_release_id': predecessor['release_id'] if predecessor else None, 'payload_hash_algorithm': 'postgres_jsonb_text_sha256'})}, null,
+          {params.jsonb({'team_key': team_key, 'release_tuple': contract.release_tuple, 'reviewer': reviewer, 'preflight_sha256': reviewed_sha256, 'reviewed_preflight_manifest_sha256': reviewed_manifest_sha256, 'predecessor_release_id': predecessor['release_id'] if predecessor else None, 'payload_hash_algorithm': 'postgres_jsonb_text_sha256'})}, null,
           {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}) returning id
       ), step as (
         insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team)
@@ -6093,7 +6142,7 @@ def release_team_v6(args: argparse.Namespace) -> None:
       select current.id, {params.text(team_key)}, '2025-26', {params.text(candidate['curated_build_id'])}::uuid, 'v6',
         'reporting_classification_2026-07-22_v2', {params.text(candidate['classification_evidence_sha256'])},
         'analysis_window_2025-26_2026-08-15_v1', {params.text(candidate['cohort_evidence_sha256'])},
-        {params.jsonb(dashboard)}, {params.text(payload_sha256)}
+        {params.text(candidate_dashboard_json)}::jsonb, {params.text(payload_sha256)}
       from current_v6_team_release current;
       update reporting.aggregate_releases release set status = 'retired'
       where release.id = {params.text(predecessor['release_id'] if predecessor else None)}::uuid
@@ -12425,6 +12474,25 @@ def parity_values_equal(committed: object, rendered: object) -> bool:
     return committed == rendered
 
 
+def v6_public_scalars_equal(reviewed: object, candidate: object) -> bool:
+    """Compare V6 scalar values exactly, allowing numeric scale alone."""
+    if isinstance(reviewed, bool) or isinstance(candidate, bool):
+        return (
+            isinstance(reviewed, bool)
+            and isinstance(candidate, bool)
+            and reviewed == candidate
+        )
+    reviewed_numeric = isinstance(reviewed, (int, float, Decimal))
+    candidate_numeric = isinstance(candidate, (int, float, Decimal))
+    if reviewed_numeric or candidate_numeric:
+        return (
+            reviewed_numeric
+            and candidate_numeric
+            and Decimal(str(reviewed)) == Decimal(str(candidate))
+        )
+    return reviewed == candidate
+
+
 def diff_dashboard_sections(committed: dict[str, Any], rendered: dict[str, Any]) -> list[dict[str, Any]]:
     """Field-by-field diff of the seven dashboard parity sections. Returns
     one result row per compared field: status PASS or DIFF, with a `kind`
@@ -12483,7 +12551,11 @@ def diff_dashboard_sections(committed: dict[str, Any], rendered: dict[str, Any])
 
 
 def compare_complete_public_payloads(
-    reviewed: object, candidate: object,
+    reviewed: object,
+    candidate: object,
+    *,
+    reviewed_display: object | None = None,
+    candidate_display: object | None = None,
 ) -> tuple[int, list[dict[str, Any]]]:
     """Compare every public JSON leaf without inventing a projection.
 
@@ -12494,6 +12566,8 @@ def compare_complete_public_payloads(
     """
     compared = 0
     diffs: list[dict[str, Any]] = []
+    reviewed_display = reviewed if reviewed_display is None else reviewed_display
+    candidate_display = candidate if candidate_display is None else candidate_display
 
     def record(path: str, reviewed_value: object, candidate_value: object, kind: str) -> None:
         diffs.append({
@@ -12503,17 +12577,39 @@ def compare_complete_public_payloads(
             "candidate": candidate_value,
         })
 
-    def walk(path: str, reviewed_value: object, candidate_value: object) -> None:
+    def walk(
+        path: str,
+        reviewed_value: object,
+        candidate_value: object,
+        reviewed_display_value: object,
+        candidate_display_value: object,
+    ) -> None:
         nonlocal compared
         if isinstance(reviewed_value, dict) and isinstance(candidate_value, dict):
             for key in sorted(set(reviewed_value) | set(candidate_value)):
                 child = f"{path}.{key}" if path else key
                 if key not in candidate_value:
-                    record(child, reviewed_value[key], None, "missing_in_candidate")
+                    display = (
+                        reviewed_display_value.get(key)
+                        if isinstance(reviewed_display_value, dict)
+                        else reviewed_value[key]
+                    )
+                    record(child, display, None, "missing_in_candidate")
                 elif key not in reviewed_value:
-                    record(child, None, candidate_value[key], "extra_in_candidate")
+                    display = (
+                        candidate_display_value.get(key)
+                        if isinstance(candidate_display_value, dict)
+                        else candidate_value[key]
+                    )
+                    record(child, None, display, "extra_in_candidate")
                 else:
-                    walk(child, reviewed_value[key], candidate_value[key])
+                    walk(
+                        child,
+                        reviewed_value[key],
+                        candidate_value[key],
+                        reviewed_display_value[key],
+                        candidate_display_value[key],
+                    )
             return
         if isinstance(reviewed_value, list) and isinstance(candidate_value, list):
             if len(reviewed_value) != len(candidate_value):
@@ -12524,70 +12620,119 @@ def compare_complete_public_payloads(
             for index in range(max(len(reviewed_value), len(candidate_value))):
                 child = f"{path}[{index}]"
                 if index >= len(candidate_value):
-                    record(child, reviewed_value[index], None, "missing_in_candidate")
+                    record(
+                        child,
+                        reviewed_display_value[index],
+                        None,
+                        "missing_in_candidate",
+                    )
                 elif index >= len(reviewed_value):
-                    record(child, None, candidate_value[index], "extra_in_candidate")
+                    record(
+                        child,
+                        None,
+                        candidate_display_value[index],
+                        "extra_in_candidate",
+                    )
                 else:
-                    walk(child, reviewed_value[index], candidate_value[index])
+                    walk(
+                        child,
+                        reviewed_value[index],
+                        candidate_value[index],
+                        reviewed_display_value[index],
+                        candidate_display_value[index],
+                    )
             return
         compared += 1
         if isinstance(reviewed_value, (dict, list)) != isinstance(candidate_value, (dict, list)):
-            record(path, reviewed_value, candidate_value, "type_mismatch")
-        elif not parity_values_equal(reviewed_value, candidate_value):
-            record(path, reviewed_value, candidate_value, "value_mismatch")
+            record(
+                path,
+                reviewed_display_value,
+                candidate_display_value,
+                "type_mismatch",
+            )
+        elif not v6_public_scalars_equal(reviewed_value, candidate_value):
+            record(
+                path,
+                reviewed_display_value,
+                candidate_display_value,
+                "value_mismatch",
+            )
 
-    walk("", reviewed, candidate)
+    walk("", reviewed, candidate, reviewed_display, candidate_display)
     return compared, diffs
 
 
 def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
     """Compare a reviewed Year 2 preflight with its exact V6 DB candidate.
 
-    The database computes canonical hashes for both JSON values in the same
-    read-only query. This prevents local serialisation differences from
-    weakening the equality gate and keeps the legacy ``analysis.*_v1`` path
-    entirely out of Year 2 verification.
+    The reviewed preflight manifest binds its exact bytes to the database
+    candidate's canonical hash and release identity. Every public field is
+    also compared, while the legacy ``analysis.*_v1`` path stays entirely out
+    of Year 2 verification.
     """
     team = clean_text(args.team)
     team_key = resolve_team_key(team)
     contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
     if not contract.team_candidate_view:
         raise SystemExit("V6 analysis parity contract lacks a team candidate view")
+    provenance = run_provenance()
 
     reviewed_path = dashboard_file_for_gate(args, team_key, "2025-26")
-    if not reviewed_path.is_file():
-        raise SystemExit(f"no dashboard JSON at {reviewed_path}")
-    try:
-        reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise SystemExit("reviewed V6 dashboard is not valid JSON") from error
-    assert_v6_public_dashboard_contract(reviewed, "reviewed team dashboard")
-
     assert_checksum_bound_release_migrations(contract, "V6 analysis parity")
     params = SqlParams()
     rows = query_sql(
         f"""
-        select team_key, season, analysis_version,
-          classification_view_version, classification_evidence_sha256,
-          cohort_view_version, cohort_evidence_sha256, dashboard,
-          reporting.canonical_jsonb_sha256_v1(dashboard) as candidate_payload_sha256,
-          reporting.canonical_jsonb_sha256_v1({params.jsonb(reviewed)})
-            as reviewed_payload_sha256
-        from {contract.team_candidate_view}
-        where team_key = {params.text(team_key)}
-          and season = '2025-26'
-          and analysis_version = 'v6'
-          and classification_view_version = 'reporting_classification_2026-07-22_v2'
-          and cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+        select candidate.team_key, candidate.season,
+          candidate.curated_build_id::text, candidate.analysis_version,
+          candidate.classification_view_version,
+          candidate.classification_evidence_sha256,
+          candidate.cohort_view_version, candidate.cohort_evidence_sha256,
+          candidate.dashboard::text as dashboard_json,
+          reporting.canonical_jsonb_sha256_v1(candidate.dashboard) as payload_sha256,
+          coalesce((
+            select jsonb_agg(
+              jsonb_build_object(
+                'release_id', payload.release_id::text,
+                'release_label', release.release_label,
+                'payload_sha256', payload.payload_sha256
+              )
+              order by release.approved_at desc nulls last,
+                release.created_at desc, payload.release_id desc
+            )
+            from reporting.team_release_payloads_v6 payload
+            join reporting.aggregate_releases release on release.id = payload.release_id
+            where payload.team_key = candidate.team_key
+              and payload.season = candidate.season
+              and release.status = 'approved'
+          ), '[]'::jsonb) as approved_predecessors
+        from {contract.team_candidate_view} candidate
+        where candidate.team_key = {params.text(team_key)}
+          and candidate.season = '2025-26'
+          and candidate.analysis_version = 'v6'
+          and candidate.classification_view_version = 'reporting_classification_2026-07-22_v2'
+          and candidate.cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
         """,
         params.values,
     )
-    if len(rows) != 1 or not isinstance(rows[0].get("dashboard"), dict):
+    if len(rows) != 1 or not isinstance(rows[0].get("dashboard_json"), str):
         raise SystemExit(
             "V6 analysis parity requires exactly one complete active-build candidate"
         )
     candidate = rows[0]
-    candidate_dashboard = candidate["dashboard"]
+    candidate_dashboard_json = candidate["dashboard_json"]
+    try:
+        candidate_dashboard = json.loads(candidate_dashboard_json)
+        candidate_dashboard_exact = json.loads(
+            candidate_dashboard_json,
+            parse_float=Decimal,
+            parse_int=Decimal,
+        )
+    except json.JSONDecodeError as error:
+        raise SystemExit(
+            "V6 analysis parity candidate dashboard is not valid PostgreSQL JSON text"
+        ) from error
+    if not isinstance(candidate_dashboard, dict) or not isinstance(candidate_dashboard_exact, dict):
+        raise SystemExit("V6 analysis parity candidate dashboard must be a JSON object")
     assert_v6_public_dashboard_contract(candidate_dashboard, "candidate team dashboard")
 
     exact_fields = {
@@ -12612,23 +12757,34 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
     ]
     cohort_evidence_sha256 = database_evidence_hashes["cohort_evidence_sha256"]
 
-    candidate_hash = clean_text(candidate.get("candidate_payload_sha256"))
-    reviewed_hash = clean_text(candidate.get("reviewed_payload_sha256"))
-    if not re.fullmatch(r"[0-9a-f]{64}", candidate_hash) or not re.fullmatch(
-        r"[0-9a-f]{64}", reviewed_hash
+    candidate_hash = clean_text(candidate.get("payload_sha256"))
+    if not re.fullmatch(r"[0-9a-f]{64}", candidate_hash):
+        raise SystemExit("V6 analysis parity lacks its canonical database payload hash")
+
+    predecessors = candidate.get("approved_predecessors")
+    if not isinstance(predecessors, list) or any(
+        not isinstance(predecessor, dict) for predecessor in predecessors
     ):
-        raise SystemExit("V6 analysis parity lacks canonical database payload hashes")
+        raise SystemExit("V6 analysis parity candidate has an invalid approved predecessor set")
+    if len(predecessors) > 1:
+        raise SystemExit("V6 analysis parity requires at most one approved predecessor")
+    predecessor = predecessors[0] if predecessors else None
+    reviewed, reviewed_exact, reviewed_sha256, reviewed_manifest_sha256 = read_v6_team_reviewed_preflight(
+        reviewed_path=reviewed_path,
+        team_key=team_key,
+        contract=contract,
+        candidate=candidate,
+        predecessor=predecessor,
+        provenance=provenance,
+    )
+    assert_v6_public_dashboard_contract(reviewed, "reviewed team dashboard")
 
     fields_compared, diffs = compare_complete_public_payloads(
-        reviewed, candidate_dashboard,
+        reviewed_exact,
+        candidate_dashboard_exact,
+        reviewed_display=reviewed,
+        candidate_display=candidate_dashboard,
     )
-    if reviewed_hash != candidate_hash:
-        diffs.insert(0, {
-            "path": "$canonical_payload_sha256",
-            "kind": "canonical_hash_mismatch",
-            "reviewed": reviewed_hash,
-            "candidate": candidate_hash,
-        })
 
     log = {
         "schema_version": "urc_v6_analysis_parity_v1",
@@ -12642,7 +12798,8 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
             if reviewed_path.is_relative_to(REPO_ROOT)
             else str(reviewed_path)
         ),
-        "reviewed_file_sha256": sha256_file(reviewed_path),
+        "reviewed_file_sha256": reviewed_sha256,
+        "reviewed_preflight_manifest_sha256": reviewed_manifest_sha256,
         "candidate_view": contract.team_candidate_view,
         "canonical_payload_sha256": candidate_hash,
         "classification_evidence_sha256": classification_evidence_sha256,
