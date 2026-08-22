@@ -10993,7 +10993,7 @@ def retire_releases(args: argparse.Namespace) -> None:
 
 
 CURATED_LAYER_MIGRATION_VERSION = "20260709233356"
-CURATED_BUILD_RULE_VERSION = "curated_build_2026-07-10_v1"
+CURATED_BUILD_RULE_VERSION = "curated_build_2026-08-22_v2"
 CURATED_FIXTURE_LOAD_RULE_VERSION = "curated_fixture_load_2026-07-10_v1"
 ANALYSIS_VIEWS_MIGRATION_VERSION = "20260710100000"
 ANALYSIS_VIEW_VERSION_SUFFIX = "v1"
@@ -11007,6 +11007,26 @@ URC_FIXTURES_2024_25_CORRECTED_PATH = "data/intake/2024-25/fixtures/urc_fixtures
 URC_FIXTURES_2024_25_CORRECTED_SHA256 = "9608ff7e932cf76743eeb6de7d3bce6f5746ab1dfa4cec80a01f001ec2e9c39c"
 YEAR2_FIXTURE_PROVENANCE_MIGRATION_VERSION = "20260815010000"
 YEAR2_FIXTURE_ALIAS_MIGRATION_VERSION = "20260822010000"
+
+CURATED_EXPOSURE_SCOPE_PROJECTION = {
+    "excluded": "scope_unknown_included",
+    "outside_protocol_window": "scope_unknown_included",
+    "within_protocol_window_scope_unknown": "scope_unknown_included",
+}
+CURATED_EXPOSURE_SCOPE_STATUSES = frozenset(
+    {"in_scope_explicit", "scope_unknown_included", "out_of_scope_explicit"}
+)
+
+
+def canonical_curated_exposure_scope_status(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    if value in CURATED_EXPOSURE_SCOPE_STATUSES:
+        return value
+    projected = CURATED_EXPOSURE_SCOPE_PROJECTION.get(value)
+    if projected is None:
+        raise ValueError(f"unsupported exposure scope_status for curated projection: {value!r}")
+    return projected
 
 
 def resolve_team_key(team: str) -> str:
@@ -11161,6 +11181,23 @@ def build_curated(args: argparse.Namespace) -> None:
             and exists (select 1 from ingestion.source_rows sr join processing.record_versions rv on rv.source_row_id = sr.id where sr.source_file_id = sf.id)) <> 1 then
           raise exception 'build-curated requires exactly one processed exposure source file for team=% season=%', {team_p}, {season_p};
         end if;
+        if exists (
+          select 1
+          from processing.record_versions rv
+          join ingestion.source_rows sr on sr.id = rv.source_row_id
+          join ingestion.source_files sf on sf.id = sr.source_file_id
+          where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}
+            and rv.version_number = (
+              select max(rv2.version_number) from processing.record_versions rv2 where rv2.source_row_id = rv.source_row_id
+            )
+            and nullif(btrim(rv.record_state ->> 'scope_status'), '') is not null
+            and rv.record_state ->> 'scope_status' not in (
+              'in_scope_explicit', 'scope_unknown_included', 'out_of_scope_explicit',
+              'excluded', 'outside_protocol_window', 'within_protocol_window_scope_unknown'
+            )
+        ) then
+          raise exception 'build-curated found unsupported exposure scope_status in latest processed exposure rows';
+        end if;
         if not exists (select 1 from curated.fixtures where season = {season_p}) then
           raise exception 'curated.fixtures has no rows for season=%; run load-curated-fixtures first', {season_p};
         end if;
@@ -11275,7 +11312,13 @@ def build_curated(args: argparse.Namespace) -> None:
         nullif(rv.record_state ->> 'week_start_date', '')::date,
         nullif(rv.record_state ->> 'minutes_total_clean', '')::numeric,
         nullif(rv.record_state ->> 'distance_total_m_clean', '')::numeric,
-        rv.record_state ->> 'scope_status',
+        case
+          when nullif(btrim(rv.record_state ->> 'scope_status'), '') is null then null
+          when rv.record_state ->> 'scope_status' = 'excluded' then 'scope_unknown_included'
+          when rv.record_state ->> 'scope_status' = 'outside_protocol_window' then 'scope_unknown_included'
+          when rv.record_state ->> 'scope_status' = 'within_protocol_window_scope_unknown' then 'scope_unknown_included'
+          else rv.record_state ->> 'scope_status'
+        end,
         coalesce(
           (select array_agg(x) from jsonb_array_elements_text(coalesce(rv.record_state -> 'exclusion_reasons', '[]'::jsonb)) x),
           '{{}}'::text[]

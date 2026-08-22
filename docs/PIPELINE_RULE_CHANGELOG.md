@@ -11,6 +11,22 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-22: Curated exposure scope projection compatibility
+
+| Field | Value |
+|---|---|
+| Status | `implemented-not-executed`: the code and focused tests are ready for the failed Year 2 curated-build retry. This entry records no database build, release, or published change. |
+| Rule version | `curated_build_2026-08-22_v2` |
+| Carry-forward | `carries-forward` at the curated-build boundary, but only for the six named input statuses. Any other nonblank status fails the build. |
+| Decision provenance | Transactional Year 2 build failure against the existing `curated.exposure.scope_status` constraint, 22 August 2026. |
+| Code | `pipeline/__main__.py`; contract tests in `tests/test_curated_exposure_scope_projection.py`. |
+
+**Projection.** The curated layer retains `in_scope_explicit`, `scope_unknown_included`, and `out_of_scope_explicit`. It maps the processed intake statuses `excluded`, `outside_protocol_window`, and `within_protocol_window_scope_unknown` to `scope_unknown_included`. Null and blank status values remain null. The build rejects every other nonblank value before it writes a curated row.
+
+**Boundary.** This compatibility projection changes only `curated.exposure.scope_status`. The build copies source and record-version lineage, exposure eligibility, exclusion reasons, dates, minutes, distance, and grain as before. It does not add exposure, make an excluded row eligible, impute a value, or alter the signed intake package.
+
+---
+
 ## 2026-08-22: 2025-26 injury eligibility bridge
 
 | Field | Value |
