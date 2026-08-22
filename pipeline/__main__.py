@@ -208,6 +208,43 @@ V13_DATABASE_AUTHORISATION = {
         "49cd90905a27faf74b0f1d53d80ea2084964ca1b6e36bd7e4b795ee2e69eb542"
     ),
 }
+V13_V12_ROOT_MANIFEST_SHA256 = (
+    "01dd17a82ab1835fd84f2c84048b9e15b4072a4f9bca3b3d3a348817a68d7241"
+)
+V13_V12_ROOT_FILE_SET_SHA256 = (
+    "5ea322d4e246510ce82075f5690ea2ac5715dace31ead35bff9db3bacc6a7abd"
+)
+V13_FRESH_REVIEW_SHA256 = (
+    "61caebf232f0422f7bd5340609c113b0e0931ab01f15262f75a1e5da860ae1df"
+)
+V13_FRESH_REVIEWER = {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "xhigh",
+    "task": "/root/v13_signer_acceptance",
+    "completed_at": "2026-08-22T17:55:08Z",
+}
+# Non-circular membership proof for the accepted V12 root above. Each tuple is
+# display team, injury SHA, exposure SHA and team-manifest SHA, independently
+# reconciled to the exact fresh review and V12 root output map.
+V13_REVIEWED_V12_TEAMS = {
+    "benetton": ("Benetton", "58602000b171e29d0db271eec95b4357508a484602a1e80d95b20d1d1cde4d9b", "6d9fdd02873a2b69c81cd2ce1e6bfe1bd4c82812ae710e52f1809c3ebcb40c61", "61ea454fb28bb98db8f6c6df2ddfef95873ed145c19a7542b442af88b73ee408"),
+    "bulls": ("Bulls", "f2a069c5f235d5b82b135de03c38fb96cba645b34b7622853a19d1fef5f53717", "eb6a5f0e67b3b4d074bff58250849d29f88c52d2d5837a79b50aa4b2b737333c", "87278acd651ebd75099b8deade3a4ab761b36b77742ae9d11a96cd87a658a156"),
+    "cardiff": ("Cardiff", "011e8c7c6cf84ab34e7425eb4e8d018b88717e9251410d5cffb9c2a438b5e0a7", "17f65d2bc16dca0401f8ff8cee602fa8cd65669ab32158b6d81e13f1a99879c3", "36553787fbe144c6ea002f86443274e70d344f7e4fa5cd97bad2e6225d60223b"),
+    "connacht": ("Connacht", "6da2bbcfce008ecc7ccff30bfcc7d1b23fc262865f976d784ced4236bebd4d0d", "65baa074f67f0ce97e9b415079e7f9411831940d2a9dc825c1e1446cd5676cd3", "8870387f076ba9dc1ec95fd833187da7acbb270d19078b5d0fc310b7c8760474"),
+    "dragons": ("Dragons", "2c9ee7fe0860f3d7a7063b860f7c5d60e5c088d8504e8d9d58d8c9bb7f410b22", "c71c2065db1b0d93b636e4ba75b4b6ade211e6fd393a9ebae7cefb11dfba089e", "b61f57377151ac6a19c59d96455c47ece140d43a644a59eda4d0b4e8f23d3365"),
+    "edinburgh": ("Edinburgh", "214e0eec95972245363f9fd61e3f3cb04b335e1c6243091e2c3b7562ae91ad17", "dce20b6194f1d2500950f642a942cccbc88809b4d029d4644027cc2527c3d189", "8a06d569f722677cc6411e4313b8ad0cd298a03ea379be6f4c97736802f8e572"),
+    "glasgow": ("Glasgow", "e1a63d8f7a896c09e7d555f1b9cf9faa704b011af0f50eb49223baf050177f1f", "a0b75e0af48fde6324fee98808ead2368740a7054884ae48e205a740e5f41c56", "3e9a7d08dab191c136032835f0fb595da4a0941e17ce855dd6745738081bd493"),
+    "leinster": ("Leinster", "11e0aaba4abc77259d76008909cdd0b42bf2c121a75fd8ba622d5f8b0fc8fa52", "e1e8b4296e3cde67fd820ae36823a01213a73732f62a9a37a9692a2f13c9328a", "2934f73cd087a7f5104c624429e4e43956afb8b1de50945f1ad357207c5f385c"),
+    "lions": ("Lions", "21a9288bed1767cd9f25044b166111d8759c5daf845fcc7a3a1e435f85c2acff", "c9b2fc02bdaeb395f04e2a72d2d5b66db9a7585227ec05753473c1ff2ef16a3f", "a6934738df0d63f0411eab05acbe54cbcb05d5be29a2d4bd1cb8a9e1a4ae02bd"),
+    "munster": ("Munster", "b7206d5c75ff7a9cd2f15ae82bfe788d47a88ef4602d8ce21cb5255003d71c79", "acd8f2e153d35d985509c73b7fd3af822f875140d3dcfbedf83cd97e35edf43e", "977aead02b09881093f9bd239216a2c8ba8bcc1f604ba7ecdec0e41be3573fa3"),
+    "ospreys": ("Ospreys", "870216b1d3570f869d684694c3256116bb31c5ad20ad50b1aa8035415ec529a4", "9d95f1538751a2d9fb9b4430c484c2c83889146c09b602a26fe837a257bcd756", "ce60d08da4f833bb9fd1a409dfc65712e1287008d0a1a5889f5d0ea62c2b2b42"),
+    "scarlets": ("Scarlets", "eb21acd209a662782f7c9e1f3b92e77cf8b2fe418758c6e23ff44b59f81fa14b", "6c6ea646c8355f53b50916504a9d72cd3de129d91250757d6e2cab2834c32777", "acc660de0b0805d1255ec754575e63628f35060410e581c122879a4ef7c94005"),
+    "sharks": ("Sharks", "5cc526aa901cd3eb167caeaf8c424070e50ff243f6c0c30b7d5e3c4ea8ec9cf8", "3d47447729164800bd776c28127b19b39b59067e90ba6c7dc84eda531f371bbb", "35212d97bafcdf0d5ca74dee188189c359e9976638e0e3d42a64030862b16c43"),
+    "stormers": ("Stormers", "4f598ec18e230dae104b2b08e6fb19826629e77673169ac791665a0547bfd1dd", "db087678787e6431f9dbf2bcd78d6dc1913c84a144a35ba7113226f74c0b0df4", "bd96b786545ccddf57ea5f769031dda07d568d4e879dfbe1ab527595bdc417eb"),
+    "ulster": ("Ulster", "cbb18d92e8253414ed3abfcf02161e11b80259b258fbb8572827ae40b97c6dc9", "e17efcd5732d1853ce9f2e00c71498748a0d98f4e2ca45433d779441edafde34", "03c221fcf0c26f4fda33065fa42b49b91aba9ea08a2291f564c0e75819565a63"),
+    "zebre": ("Zebre", "318bd3303fe5c91e9480ab204f938fa17de77dc7fe4757e3a353e398cfaed95a", "deceea12ad1ab587ae17ba3a669b78d3bff20f07021dee7a266d8f256cacef7f", "53cacfd494f5713de228f3ec071908b5e01998343c428d6505c2d194a7829920"),
+}
+YEAR2_APPROVED_ROOTS_PATH = Path(__file__).with_name("approved_year2_roots.json")
 
 MISSING_VALUES = {"", "na", "n/a", "null", "none", "unknown", "unspecified/crossing"}
 
@@ -3756,8 +3793,128 @@ def trace_row(args: argparse.Namespace) -> None:
     print(json.dumps(result, indent=2))
 
 
+def validate_v13_reviewed_package_binding(
+    manifest: dict[str, Any],
+    manifest_path: Path,
+    profile: dict[str, Any],
+    profile_document: dict[str, Any],
+    input_sha256: str,
+    team: str,
+    input_path: Path | None,
+) -> None:
+    team_key = clean_text(manifest.get("team_key"))
+    reviewed_team = V13_REVIEWED_V12_TEAMS.get(team_key)
+    if reviewed_team is None:
+        raise SystemExit("V13 reviewed V12 package binding is missing or inconsistent")
+    expected_team, injury_sha256, exposure_sha256, team_manifest_sha256 = reviewed_team
+    expected_inputs = {
+        "injury": {
+            "path": "injury_intake_locator_enriched_v10.csv",
+            "sha256": injury_sha256,
+        },
+        "exposure": {
+            "path": "exposure_intake_final_clean_v10.csv",
+            "sha256": exposure_sha256,
+        },
+    }
+    expected_team_manifest = {
+        "path": "intake_manifest_v12.json",
+        "sha256": team_manifest_sha256,
+    }
+    expected_review = {
+        "path": "provenance/v12_fresh_ai_review_evidence.json",
+        "sha256": V13_FRESH_REVIEW_SHA256,
+        "reviewer": V13_FRESH_REVIEWER,
+        "decision": "COMPLETED_WITH_RECORDED_LIMITATIONS",
+        "v12_root_manifest_sha256": V13_V12_ROOT_MANIFEST_SHA256,
+        "v12_root_file_set_sha256": V13_V12_ROOT_FILE_SET_SHA256,
+    }
+    expected_ai_reviewer = (
+        "gpt-5.6-sol/xhigh /root/v13_signer_acceptance"
+    )
+    if (
+        team != expected_team
+        or manifest.get("team") != expected_team
+        or profile_document.get("team") != expected_team
+        or profile_document.get("team_key") != team_key
+        or manifest.get("season") != "2025-26"
+        or profile_document.get("season") != "2025-26"
+        or profile.get("decision") != "adapter_required"
+        or profile_document.get("decision") != "adapter_required"
+        or profile.get("ai_reviewed_by") != expected_ai_reviewer
+        or profile_document.get("ai_reviewed_by") != expected_ai_reviewer
+        or profile.get("ai_reviewed_at") != V13_FRESH_REVIEWER["completed_at"]
+        or profile_document.get("ai_reviewed_at") != V13_FRESH_REVIEWER["completed_at"]
+        or profile.get("approved_input_sha256s") != [injury_sha256, exposure_sha256]
+        or profile_document.get("approved_input_sha256s") != [injury_sha256, exposure_sha256]
+        or manifest.get("v12_input_bindings") != expected_inputs
+        or profile_document.get("v12_input_bindings") != expected_inputs
+        or manifest.get("source_v12_manifest") != expected_team_manifest
+        or profile_document.get("v12_manifest") != expected_team_manifest
+        or manifest.get("fresh_ai_review_evidence") != expected_review
+        or profile_document.get("fresh_ai_review_evidence") != expected_review
+        or input_sha256 not in {injury_sha256, exposure_sha256}
+    ):
+        raise SystemExit("V13 reviewed V12 package binding is missing or inconsistent")
+
+    current_binding = next(
+        binding for binding in expected_inputs.values()
+        if binding["sha256"] == input_sha256
+    )
+    if input_path is not None and input_path.name != current_binding["path"]:
+        raise SystemExit("V13 current input does not match its reviewed V12 binding")
+
+    harness_provenance = manifest.get("harness_provenance")
+    if (
+        not isinstance(harness_provenance, dict)
+        or profile_document.get("harness_provenance") != harness_provenance
+        or set(harness_provenance) != {
+            "script", "config", "fresh_ai_review_evidence"
+        }
+    ):
+        raise SystemExit("V13 package provenance is missing or inconsistent")
+    expected_provenance_paths = {
+        "script": "provenance/v13_signing_harness.py",
+        "config": "provenance/v13_signing_harness_config.json",
+        "fresh_ai_review_evidence": (
+            "provenance/v12_fresh_ai_review_evidence.json"
+        ),
+    }
+    package_root = manifest_path.parent.parent
+    for key, expected_path in expected_provenance_paths.items():
+        binding = harness_provenance.get(key)
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"path", "sha256"}
+            or binding.get("path") != expected_path
+            or not isinstance(binding.get("sha256"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", binding["sha256"])
+            or (
+                key == "fresh_ai_review_evidence"
+                and binding["sha256"] != V13_FRESH_REVIEW_SHA256
+            )
+        ):
+            raise SystemExit("V13 package provenance is missing or inconsistent")
+        evidence_path = package_root / expected_path
+        if not evidence_path.is_file() or sha256_file(evidence_path) != binding["sha256"]:
+            raise SystemExit("V13 package provenance checksum mismatch")
+
+    source_manifest_path = manifest_path.parent / expected_team_manifest["path"]
+    if (
+        manifest_path.parent.name != team_key
+        or not source_manifest_path.is_file()
+        or sha256_file(source_manifest_path) != team_manifest_sha256
+    ):
+        raise SystemExit("V13 source V12 team-manifest checksum mismatch")
+
+
 def validate_intake_profile_manifest(
-    manifest: dict[str, Any], manifest_path: Path, input_sha256: str, team: str, season: str
+    manifest: dict[str, Any],
+    manifest_path: Path,
+    input_sha256: str,
+    team: str,
+    season: str,
+    input_path: Path | None = None,
 ) -> None:
     if not isinstance(manifest, dict):
         raise SystemExit("ingest manifest must be a JSON object")
@@ -3848,6 +4005,15 @@ def validate_intake_profile_manifest(
                 "V13 database action authorisation is missing, false, inconsistent, "
                 "or outside the approved target/action scope"
             )
+        validate_v13_reviewed_package_binding(
+            manifest,
+            manifest_path,
+            profile,
+            profile_document,
+            input_sha256,
+            team,
+            input_path,
+        )
     bound_fields = (
         "team", "season", "profile_version", "decision", "mapping_path", "mapping_sha256",
         "mapping_version", "ai_review_status", "ai_reviewed_by", "ai_reviewed_at", "approved_by",
@@ -3907,12 +4073,425 @@ def validate_intake_profile_manifest(
         raise SystemExit("adapter_required intake profile requires a versioned mapping file")
 
 
+def accepted_repository_source_sha256s(
+    acceptance_commit: str, relative_paths: set[str]
+) -> dict[str, str]:
+    repository = Path(__file__).resolve().parent.parent
+    result: dict[str, str] = {}
+    for relative_path in sorted(relative_paths):
+        try:
+            content = subprocess.run(
+                ["git", "show", f"{acceptance_commit}:{relative_path}"],
+                cwd=repository,
+                check=True,
+                capture_output=True,
+            ).stdout
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise SystemExit("V13 accepted repository validator source is unavailable") from exc
+        result[relative_path] = hashlib.sha256(content).hexdigest()
+    return result
+
+
+def current_repository_source_sha256s(relative_paths: set[str]) -> dict[str, str]:
+    repository = Path(__file__).resolve().parent.parent
+    return {
+        relative_path: sha256_file(repository / relative_path)
+        for relative_path in sorted(relative_paths)
+    }
+
+
+def repository_file_matches_head(path: Path) -> bool:
+    repository = Path(__file__).resolve().parent.parent
+    try:
+        relative_path = path.resolve().relative_to(repository).as_posix()
+        committed = subprocess.run(
+            ["git", "show", f"HEAD:{relative_path}"],
+            cwd=repository,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return False
+    return path.is_file() and path.read_bytes() == committed
+
+
+def validate_v13_signed_root_candidate(
+    signed_root_manifest_path: Path,
+    manifest_path: Path,
+    input_path: Path,
+    input_sha256: str,
+    team: str,
+    season: str,
+) -> str:
+    """Validate a complete signed candidate without consulting the release ledger.
+
+    This is the protected signer's post-finalisation check. It has no CLI flag or
+    production-ingest route; ingest calls the allow-listed wrapper below.
+    """
+    if season != "2025-26":
+        raise SystemExit("V13 signed-root validation is only defined for 2025-26")
+    root_path = signed_root_manifest_path.resolve()
+    if root_path.name != "v13_signed_root_manifest.json" or not root_path.is_file():
+        raise SystemExit("2025-26 ingest requires the physical signed V13 root manifest")
+    try:
+        root = json.loads(root_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("signed V13 root manifest must be valid JSON") from exc
+    if not isinstance(root, dict):
+        raise SystemExit("signed V13 root manifest must be a JSON object")
+    package_root = root_path.parent
+    actual_outputs = {
+        path.relative_to(package_root).as_posix(): sha256_file(path)
+        for path in sorted(package_root.rglob("*"))
+        if path.is_file()
+        and "__pycache__" not in path.parts
+        and path.resolve() != root_path
+    }
+    output_sha256s = root.get("output_sha256s")
+    if output_sha256s != actual_outputs:
+        raise SystemExit("signed V13 root output map does not close the physical package")
+    actual_file_set_sha256 = hashlib.sha256(
+        json.dumps(actual_outputs, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if root.get("root_file_set_sha256") != actual_file_set_sha256:
+        raise SystemExit("signed V13 root file-set checksum mismatch")
+
+    expected_predecessor = {
+        "package": "all_16_intake_envelopes_20260822_v12_duplicate_safe_candidate",
+        "root_manifest_sha256": V13_V12_ROOT_MANIFEST_SHA256,
+        "root_file_set_sha256": V13_V12_ROOT_FILE_SET_SHA256,
+    }
+    if (
+        root.get("schema") != "urc_2025_26_v13_signed_root_manifest_v1"
+        or root.get("season") != "2025-26"
+        or root.get("predecessor") != expected_predecessor
+        or root.get("approved_by") != "Abdel Babiker"
+        or root.get("approval_ready") is not True
+        or root.get("ingest_ready") is not True
+        or root.get("database_action_authorised") is not True
+        or root.get("authorisation") != V13_DATABASE_AUTHORISATION
+        or root.get("approval_line_sha256")
+        != V13_DATABASE_AUTHORISATION["approval_line_sha256"]
+    ):
+        raise SystemExit("signed V13 root approval or predecessor binding is invalid")
+
+    validator_results = root.get("validator_results")
+    if not isinstance(validator_results, list) or len(validator_results) != 16:
+        raise SystemExit("signed V13 root requires 16 validator results")
+    results_by_team: dict[str, dict[str, Any]] = {}
+    for result in validator_results:
+        if not isinstance(result, dict):
+            raise SystemExit("signed V13 root validator result is invalid")
+        result_team_key = clean_text(result.get("team_key"))
+        if result_team_key in results_by_team or result_team_key not in V13_REVIEWED_V12_TEAMS:
+            raise SystemExit("signed V13 root validator team membership is invalid")
+        expected_profile_path = f"{result_team_key}/v13_approved_intake_profile.json"
+        expected_manifest_path = f"{result_team_key}/v13_approved_intake_manifest.json"
+        if (
+            result.get("status") != "pass"
+            or result.get("validated_inputs") != ["injury", "exposure"]
+            or result.get("profile_sha256") != output_sha256s.get(expected_profile_path)
+            or result.get("manifest_sha256") != output_sha256s.get(expected_manifest_path)
+        ):
+            raise SystemExit("signed V13 root validator result does not bind team outputs")
+        results_by_team[result_team_key] = result
+    if set(results_by_team) != set(V13_REVIEWED_V12_TEAMS):
+        raise SystemExit("signed V13 root does not cover all 16 reviewed teams")
+    for team_key, (_, injury_sha, exposure_sha, team_manifest_sha) in (
+        V13_REVIEWED_V12_TEAMS.items()
+    ):
+        expected_members = {
+            f"{team_key}/injury_intake_locator_enriched_v10.csv": injury_sha,
+            f"{team_key}/exposure_intake_final_clean_v10.csv": exposure_sha,
+            f"{team_key}/intake_manifest_v12.json": team_manifest_sha,
+        }
+        if any(output_sha256s.get(path) != digest for path, digest in expected_members.items()):
+            raise SystemExit("signed V13 root V12 membership differs from the reviewed root")
+
+    signing_binding = root.get("signing_record")
+    if signing_binding != {
+        "path": "v13_signing_record.json",
+        "sha256": output_sha256s.get("v13_signing_record.json"),
+    }:
+        raise SystemExit("signed V13 root signing-record binding is invalid")
+    signing_path = package_root / "v13_signing_record.json"
+    try:
+        signing = json.loads(signing_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("V13 signing record must be valid JSON") from exc
+    if not isinstance(signing, dict):
+        raise SystemExit("V13 signing record must be a JSON object")
+    common_signing_fields = (
+        signing.get("schema") == "urc_2025_26_v13_signing_record_v1"
+        and signing.get("approved_by") == root.get("approved_by")
+        and signing.get("approved_at") == root.get("approved_at")
+        and signing.get("approval_line_sha256") == root.get("approval_line_sha256")
+        and signing.get("v12_root_manifest_sha256") == V13_V12_ROOT_MANIFEST_SHA256
+        and signing.get("v12_root_file_set_sha256") == V13_V12_ROOT_FILE_SET_SHA256
+        and signing.get("database_action_authorised") is True
+        and signing.get("authorisation") == root.get("authorisation")
+        and signing.get("fresh_ai_review_evidence")
+        == root.get("fresh_ai_review_evidence")
+        and signing.get("harness_provenance") == root.get("harness_provenance")
+    )
+    if not common_signing_fields:
+        raise SystemExit("V13 signing record differs from the signed root")
+    if signing.get("candidate_preservation") != {
+        "v12_non_root_file_count": 196,
+        "all_v12_non_root_bytes_preserved": True,
+        "physical_v12_root_manifest_copied": False,
+        "coverage_limitations_preserved": True,
+    }:
+        raise SystemExit("V13 signing record predecessor preservation is invalid")
+
+    expected_review = {
+        "path": "provenance/v12_fresh_ai_review_evidence.json",
+        "sha256": V13_FRESH_REVIEW_SHA256,
+        "reviewer": V13_FRESH_REVIEWER,
+        "decision": "COMPLETED_WITH_RECORDED_LIMITATIONS",
+        "v12_root_manifest_sha256": V13_V12_ROOT_MANIFEST_SHA256,
+        "v12_root_file_set_sha256": V13_V12_ROOT_FILE_SET_SHA256,
+    }
+    if root.get("fresh_ai_review_evidence") != expected_review:
+        raise SystemExit("signed V13 root fresh-review binding is invalid")
+    harness_provenance = root.get("harness_provenance")
+    expected_provenance_paths = {
+        "script": "provenance/v13_signing_harness.py",
+        "config": "provenance/v13_signing_harness_config.json",
+        "fresh_ai_review_evidence": "provenance/v12_fresh_ai_review_evidence.json",
+    }
+    if not isinstance(harness_provenance, dict) or set(harness_provenance) != set(
+        expected_provenance_paths
+    ):
+        raise SystemExit("signed V13 root package provenance is invalid")
+    for key, relative_path in expected_provenance_paths.items():
+        binding = harness_provenance.get(key)
+        if (
+            not isinstance(binding, dict)
+            or binding.get("path") != relative_path
+            or binding.get("sha256") != output_sha256s.get(relative_path)
+            or (
+                key == "fresh_ai_review_evidence"
+                and binding.get("sha256") != V13_FRESH_REVIEW_SHA256
+            )
+        ):
+            raise SystemExit("signed V13 root package provenance is invalid")
+
+    config_path = package_root / expected_provenance_paths["config"]
+    try:
+        config = json.loads(config_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("signed V13 harness config must be valid JSON") from exc
+    repository_validator = signing.get("repository_validator")
+    source_sha256s = (
+        repository_validator.get("source_sha256s")
+        if isinstance(repository_validator, dict)
+        else None
+    )
+    acceptance_commit = (
+        clean_text(repository_validator.get("acceptance_commit"))
+        if isinstance(repository_validator, dict)
+        else ""
+    )
+    expected_source_paths = {
+        "pipeline/__init__.py", "pipeline/__main__.py", "pipeline/season_contracts.py"
+    }
+    if (
+        not isinstance(config, dict)
+        or config.get("schema") != "urc_2025_26_v13_signing_harness_config_v3"
+        or config.get("source_package") != expected_predecessor["package"]
+        or config.get("source_root_manifest") != "v12_duplicate_safe_root_manifest.json"
+        or config.get("successor_package") != package_root.name
+        or config.get("successor_root_manifest") != root_path.name
+        or config.get("expected_v12_root_manifest_sha256")
+        != V13_V12_ROOT_MANIFEST_SHA256
+        or config.get("expected_v12_root_file_set_sha256")
+        != V13_V12_ROOT_FILE_SET_SHA256
+        or config.get("expected_v12_non_root_file_count") != 196
+        or config.get("required_team_count") != 16
+        or config.get("required_approver") != "Abdel Babiker"
+        or config.get("approval_bearing_files")
+        != {
+            "profile": "v13_approved_intake_profile.json",
+            "manifest": "v13_approved_intake_manifest.json",
+        }
+        or Path(clean_text(config.get("repository_root"))).resolve()
+        != Path(__file__).resolve().parent.parent
+        or hashlib.sha256(clean_text(config.get("required_approval_line")).encode()).hexdigest()
+        != root.get("approval_line_sha256")
+        or config.get("fresh_ai_review")
+        != {
+            "filename": "v12_fresh_ai_review_evidence.json",
+            "sha256": V13_FRESH_REVIEW_SHA256,
+            **V13_FRESH_REVIEWER,
+        }
+        or config.get("database_authorisation")
+        != {
+            "project_ref": "eukkvswaxweenovqqgzr",
+            "database": "postgres",
+            "actions": ["ingestion", "processing", "build", "release"],
+        }
+        or not re.fullmatch(r"[0-9a-f]{40}", acceptance_commit)
+        or config.get("repository_acceptance_commit") != acceptance_commit
+        or not isinstance(source_sha256s, dict)
+        or set(source_sha256s) != expected_source_paths
+        or config.get("repository_validator_main_sha256")
+        != source_sha256s.get("pipeline/__main__.py")
+        or repository_validator.get("entry_point")
+        != "pipeline.__main__.validate_intake_profile_manifest"
+        or repository_validator.get("passed_team_count") != 16
+        or repository_validator.get("validated_input_count") != 32
+        or repository_validator.get("status") != "pass"
+    ):
+        raise SystemExit("signed V13 config or repository-validator binding is invalid")
+    accepted_source_sha256s = accepted_repository_source_sha256s(
+        acceptance_commit, expected_source_paths
+    )
+    if (
+        accepted_source_sha256s != source_sha256s
+        or current_repository_source_sha256s(expected_source_paths) != source_sha256s
+    ):
+        raise SystemExit("signed V13 repository-validator checksums do not match the accepted commit")
+
+    manifest_resolved = manifest_path.resolve()
+    input_resolved = input_path.resolve()
+    if (
+        manifest_resolved.parent.parent != package_root
+        or input_resolved.parent != manifest_resolved.parent
+    ):
+        raise SystemExit("current V13 team inputs must be inside the signed package")
+    try:
+        current_manifest = json.loads(manifest_resolved.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("current V13 team manifest must be valid JSON") from exc
+    if not isinstance(current_manifest, dict):
+        raise SystemExit("current V13 team manifest must be a JSON object")
+    team_key = clean_text(current_manifest.get("team_key"))
+    envelope = current_manifest.get("intake_profile")
+    if not isinstance(envelope, dict):
+        raise SystemExit("current V13 team manifest lacks its profile envelope")
+    profile_relative = f"{team_key}/{clean_text(envelope.get('profile_path'))}"
+    manifest_relative = manifest_resolved.relative_to(package_root).as_posix()
+    input_relative = input_resolved.relative_to(package_root).as_posix()
+    if (
+        manifest_relative != f"{team_key}/v13_approved_intake_manifest.json"
+        or output_sha256s.get(manifest_relative) != sha256_file(manifest_resolved)
+        or output_sha256s.get(profile_relative) != envelope.get("profile_sha256")
+        or output_sha256s.get(input_relative) != input_sha256
+    ):
+        raise SystemExit("current team is not an exact member of the signed V13 root")
+    profile_path = package_root / profile_relative
+    try:
+        profile_document = json.loads(profile_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("current V13 profile must be valid JSON") from exc
+    if not isinstance(profile_document, dict):
+        raise SystemExit("current V13 profile must be a JSON object")
+    approved_at = clean_text(root.get("approved_at"))
+    if (
+        current_manifest.get("approved_by") != root.get("approved_by")
+        or current_manifest.get("approved_at") != approved_at
+        or current_manifest.get("approval_line_sha256")
+        != root.get("approval_line_sha256")
+        or profile_document.get("approved_by") != root.get("approved_by")
+        or profile_document.get("approved_at") != approved_at
+        or envelope.get("approved_by") != root.get("approved_by")
+        or envelope.get("approved_at") != approved_at
+        or any(
+            document.get("database_action_authorised") is not True
+            or document.get("authorisation") != root.get("authorisation")
+            for document in (current_manifest, profile_document, envelope)
+        )
+        or any(
+            document.get("approval_ready") is not True
+            or document.get("ingest_ready") is not True
+            for document in (current_manifest, profile_document, envelope)
+        )
+        or current_manifest.get("fresh_ai_review_evidence")
+        != root.get("fresh_ai_review_evidence")
+        or profile_document.get("fresh_ai_review_evidence")
+        != root.get("fresh_ai_review_evidence")
+        or current_manifest.get("harness_provenance") != root.get("harness_provenance")
+        or profile_document.get("harness_provenance") != root.get("harness_provenance")
+    ):
+        raise SystemExit("V13 root, signing record and team approval fields differ")
+    validate_intake_profile_manifest(
+        current_manifest,
+        manifest_resolved,
+        input_sha256,
+        team,
+        season,
+        input_path=input_resolved,
+    )
+    return sha256_file(root_path)
+
+
+def validate_v13_signed_root_for_ingest(
+    signed_root_manifest_path: Path,
+    manifest_path: Path,
+    input_path: Path,
+    input_sha256: str,
+    team: str,
+    season: str,
+) -> str:
+    root_sha256 = validate_v13_signed_root_candidate(
+        signed_root_manifest_path,
+        manifest_path,
+        input_path,
+        input_sha256,
+        team,
+        season,
+    )
+    if not repository_file_matches_head(YEAR2_APPROVED_ROOTS_PATH):
+        raise SystemExit("approved Year2 root ledger must match its tracked HEAD bytes")
+    try:
+        ledger = json.loads(YEAR2_APPROVED_ROOTS_PATH.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("approved Year2 root ledger is unavailable or invalid") from exc
+    approved_roots = ledger.get("approved_root_sha256s") if isinstance(ledger, dict) else None
+    if (
+        not isinstance(ledger, dict)
+        or ledger.get("schema") != "urc_2025_26_approved_roots_v1"
+        or not isinstance(approved_roots, list)
+        or any(
+            not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+            for value in approved_roots
+        )
+        or len(set(approved_roots)) != len(approved_roots)
+    ):
+        raise SystemExit("approved Year2 root ledger is unavailable or invalid")
+    if root_sha256 not in approved_roots:
+        raise SystemExit("signed V13 root is not present in the approved Year2 root ledger")
+    return root_sha256
+
+
 def ingest(args: argparse.Namespace) -> None:
     path = Path(args.file)
     file_hash = sha256_file(path)
     manifest_path = Path(args.manifest)
     source_manifest = json.loads(manifest_path.read_text())
-    validate_intake_profile_manifest(source_manifest, manifest_path, file_hash, args.team, args.season)
+    if args.season == "2025-26":
+        signed_root_manifest = clean_text(
+            getattr(args, "signed_root_manifest", "")
+        )
+        if not signed_root_manifest:
+            raise SystemExit("--signed-root-manifest is required for 2025-26 ingest")
+        validate_v13_signed_root_for_ingest(
+            Path(signed_root_manifest),
+            manifest_path,
+            path,
+            file_hash,
+            args.team,
+            args.season,
+        )
+    validate_intake_profile_manifest(
+        source_manifest,
+        manifest_path,
+        file_hash,
+        args.team,
+        args.season,
+        input_path=path,
+    )
     rows = read_rows(path)
     excluded_source_fields = {
         clean_text(field)
@@ -14067,6 +14646,7 @@ def main() -> None:
     ingest_parser.add_argument("--season", required=True)
     ingest_parser.add_argument("--file", required=True)
     ingest_parser.add_argument("--manifest", required=True)
+    ingest_parser.add_argument("--signed-root-manifest", default="")
     ingest_parser.add_argument("--exclude-source-fields", default="")
     ingest_parser.add_argument("--redact-manifest-keys", default="")
     ingest_parser.add_argument("--redact-source-values", default="")
