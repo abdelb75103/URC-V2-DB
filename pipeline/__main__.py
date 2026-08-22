@@ -193,6 +193,22 @@ YEAR2_INJURY_BRIDGE_ELIGIBILITY = frozenset(
 )
 YEAR2_ALLOWED_ANALYSIS_AUDIT_REASONS = frozenset({"explicit_source_exclusion"})
 
+V13_INTAKE_PROFILE_SCHEMA = "urc_2025_26_v13_signed_intake_profile_v1"
+V13_INTAKE_MANIFEST_SCHEMA = "urc_2025_26_v13_signed_intake_manifest_v1"
+V13_DATABASE_AUTHORISATION = {
+    "database_action_authorised": True,
+    "basis": (
+        "the exact approval line names the project, database, ingestion, "
+        "processing, build and release"
+    ),
+    "project_ref": "eukkvswaxweenovqqgzr",
+    "database": "postgres",
+    "actions": ["ingestion", "processing", "build", "release"],
+    "approval_line_sha256": (
+        "49cd90905a27faf74b0f1d53d80ea2084964ca1b6e36bd7e4b795ee2e69eb542"
+    ),
+}
+
 MISSING_VALUES = {"", "na", "n/a", "null", "none", "unknown", "unspecified/crossing"}
 
 BODY_LOCATION_MAP = {
@@ -3807,6 +3823,31 @@ def validate_intake_profile_manifest(
         profile_document = json.loads(profile_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit("intake profile evidence must be valid JSON") from exc
+    v13_authorisation_required = (
+        season == "2025-26"
+        or profile.get("profile_version") == "urc_2025_26_v13_signed_profile_v1"
+        or manifest.get("schema") == V13_INTAKE_MANIFEST_SCHEMA
+        or (
+            isinstance(profile_document, dict)
+            and profile_document.get("schema") == V13_INTAKE_PROFILE_SCHEMA
+        )
+    )
+    if v13_authorisation_required:
+        if (
+            not isinstance(profile_document, dict)
+            or manifest.get("schema") != V13_INTAKE_MANIFEST_SCHEMA
+            or profile_document.get("schema") != V13_INTAKE_PROFILE_SCHEMA
+            or profile.get("database_action_authorised") is not True
+            or profile_document.get("database_action_authorised") is not True
+            or manifest.get("database_action_authorised") is not True
+            or profile.get("authorisation") != V13_DATABASE_AUTHORISATION
+            or profile_document.get("authorisation") != V13_DATABASE_AUTHORISATION
+            or manifest.get("authorisation") != V13_DATABASE_AUTHORISATION
+        ):
+            raise SystemExit(
+                "V13 database action authorisation is missing, false, inconsistent, "
+                "or outside the approved target/action scope"
+            )
     bound_fields = (
         "team", "season", "profile_version", "decision", "mapping_path", "mapping_sha256",
         "mapping_version", "ai_review_status", "ai_reviewed_by", "ai_reviewed_at", "approved_by",
