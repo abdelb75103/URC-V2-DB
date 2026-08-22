@@ -128,6 +128,12 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
         del reviewed["coverage"]["teams_included"]  # type: ignore[index]
         candidate_hash = "a" * 64
+        classification_evidence_sha256 = (
+            "b470d6816364cde0dc3025438e85b0ab099fa88002e818ebae83118f1578cffa"
+        )
+        cohort_evidence_sha256 = (
+            "604a9775f8e23f1a01235ae412b7814ec9797babd503ef2fb48c2c5a4db0763e"
+        )
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         registered_migrations = [
             {
@@ -142,9 +148,9 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
             "season": "2025-26",
             "analysis_version": "v6",
             "classification_view_version": contract.classification_view_version,
-            "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
+            "classification_evidence_sha256": classification_evidence_sha256,
             "cohort_view_version": contract.cohort_view_version,
-            "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+            "cohort_evidence_sha256": cohort_evidence_sha256,
             "dashboard": reviewed,
             "candidate_payload_sha256": candidate_hash,
             "reviewed_payload_sha256": candidate_hash,
@@ -182,8 +188,21 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
 
         self.assertEqual(result["overall"], "PARITY")
         self.assertEqual(result["canonical_payload_sha256"], candidate_hash)
+        self.assertEqual(
+            result["classification_evidence_sha256"],
+            classification_evidence_sha256,
+        )
+        self.assertEqual(result["cohort_evidence_sha256"], cohort_evidence_sha256)
         self.assertEqual(evidence["candidate_view"], contract.team_candidate_view)
         self.assertEqual(evidence["canonical_payload_sha256"], candidate_hash)
+        self.assertEqual(
+            evidence["classification_evidence_sha256"],
+            classification_evidence_sha256,
+        )
+        self.assertEqual(
+            evidence["cohort_evidence_sha256"],
+            cohort_evidence_sha256,
+        )
         self.assertEqual(evidence["diffs"], [])
         self.assertTrue(any(contract.team_candidate_view in sql for sql in queries))
         self.assertFalse(any("analysis.headline_metrics_v1" in sql for sql in queries))
@@ -206,6 +225,90 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
 
         v6.assert_not_called()
         self.assertIn("supabase_migrations.schema_migrations", query.call_args.args[0])
+
+    def test_verify_analysis_parity_rejects_missing_or_invalid_database_evidence_hashes(self) -> None:
+        reviewed = dashboard()
+        reviewed["team"] = "Example"
+        reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del reviewed["coverage"]["teams_included"]  # type: ignore[index]
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+        base_candidate = {
+            "team_key": "example",
+            "season": "2025-26",
+            "analysis_version": "v6",
+            "classification_view_version": contract.classification_view_version,
+            "classification_evidence_sha256": "c" * 64,
+            "cohort_view_version": contract.cohort_view_version,
+            "cohort_evidence_sha256": "d" * 64,
+            "dashboard": reviewed,
+            "candidate_payload_sha256": "a" * 64,
+            "reviewed_payload_sha256": "a" * 64,
+        }
+        cases = (
+            ("classification_evidence_sha256", None),
+            ("classification_evidence_sha256", "not-a-sha256"),
+            ("cohort_evidence_sha256", None),
+            ("cohort_evidence_sha256", "D" * 64),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            preflight = Path(directory) / "example-v6-preflight.json"
+            preflight.write_text(json.dumps(reviewed) + "\n", encoding="utf-8")
+            for field, value in cases:
+                with self.subTest(field=field, value=value):
+                    candidate = dict(base_candidate)
+                    if value is None:
+                        candidate.pop(field)
+                    else:
+                        candidate[field] = value
+                    with (
+                        patch.object(pipeline, "resolve_team_key", return_value="example"),
+                        patch.object(pipeline, "assert_checksum_bound_release_migrations"),
+                        patch.object(pipeline, "query_sql", return_value=[candidate]),
+                        redirect_stdout(io.StringIO()),
+                    ):
+                        with self.assertRaisesRegex(SystemExit, f"invalid {field}"):
+                            pipeline.verify_analysis_parity(
+                                SimpleNamespace(
+                                    team="Example",
+                                    season="2025-26",
+                                    dashboard_file=str(preflight),
+                                )
+                            )
+
+    def test_verify_analysis_parity_enforces_the_local_evidence_contract_before_querying_candidate(self) -> None:
+        reviewed = dashboard()
+        reviewed["team"] = "Example"
+        reviewed["coverage"]["exposure_grain"] = "session"  # type: ignore[index]
+        del reviewed["coverage"]["teams_included"]  # type: ignore[index]
+        contract = YEAR2_2025_26_RELEASE_CONTRACT
+
+        with tempfile.TemporaryDirectory() as directory:
+            preflight = Path(directory) / "example-v6-preflight.json"
+            preflight.write_text(json.dumps(reviewed) + "\n", encoding="utf-8")
+            with (
+                patch.object(pipeline, "resolve_team_key", return_value="example"),
+                patch.object(
+                    pipeline,
+                    "assert_local_evidence_bytes",
+                    side_effect=SystemExit("local evidence rejected"),
+                ) as evidence_check,
+                patch.object(pipeline, "query_sql") as query,
+            ):
+                with self.assertRaisesRegex(SystemExit, "local evidence rejected"):
+                    pipeline.verify_analysis_parity(
+                        SimpleNamespace(
+                            team="Example",
+                            season="2025-26",
+                            dashboard_file=str(preflight),
+                        )
+                    )
+
+        evidence_check.assert_called_once_with(
+            pipeline.year2_release_local_evidence_records(contract),
+            "V6 analysis parity",
+        )
+        query.assert_not_called()
 
     def test_verify_analysis_parity_fails_closed_on_a_database_hash_mismatch(self) -> None:
         reviewed = dashboard()

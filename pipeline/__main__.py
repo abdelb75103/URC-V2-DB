@@ -12594,13 +12594,23 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
         "season": contract.season,
         "analysis_version": contract.analysis_version,
         "classification_view_version": contract.classification_view_version,
-        "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
         "cohort_view_version": contract.cohort_view_version,
-        "cohort_evidence_sha256": contract.cohort_evidence_sha256,
     }
     for field, expected in exact_fields.items():
         if clean_text(candidate.get(field)) != expected:
             raise SystemExit(f"V6 analysis parity candidate has invalid {field}")
+
+    database_evidence_hashes = {
+        field: candidate.get(field)
+        for field in ("classification_evidence_sha256", "cohort_evidence_sha256")
+    }
+    for field, value in database_evidence_hashes.items():
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+            raise SystemExit(f"V6 analysis parity candidate has invalid {field}")
+    classification_evidence_sha256 = database_evidence_hashes[
+        "classification_evidence_sha256"
+    ]
+    cohort_evidence_sha256 = database_evidence_hashes["cohort_evidence_sha256"]
 
     candidate_hash = clean_text(candidate.get("candidate_payload_sha256"))
     reviewed_hash = clean_text(candidate.get("reviewed_payload_sha256"))
@@ -12635,8 +12645,8 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
         "reviewed_file_sha256": sha256_file(reviewed_path),
         "candidate_view": contract.team_candidate_view,
         "canonical_payload_sha256": candidate_hash,
-        "classification_evidence_sha256": contract.classification_rule_evidence_sha256,
-        "cohort_evidence_sha256": contract.cohort_evidence_sha256,
+        "classification_evidence_sha256": classification_evidence_sha256,
+        "cohort_evidence_sha256": cohort_evidence_sha256,
         "required_migrations": [
             {"version": item.version, "name": item.name, "sha256": item.sha256}
             for item in contract.required_migration_contracts
@@ -12658,6 +12668,8 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
         "fields_compared": fields_compared,
         "diff": len(diffs),
         "canonical_payload_sha256": candidate_hash,
+        "classification_evidence_sha256": classification_evidence_sha256,
+        "cohort_evidence_sha256": cohort_evidence_sha256,
         "diff_log": str(log_path.relative_to(REPO_ROOT)),
     }, indent=2))
     if diffs:
