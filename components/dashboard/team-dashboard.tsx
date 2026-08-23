@@ -1122,14 +1122,6 @@ function TeamComparisonTab({
       </div>
       <div className="space-y-4">
         <Panel title={`Ranked by ${settingLabel} ${metricLabel} (${metricUnit})`}>
-          {typeof leagueMean === 'number' && Number.isFinite(leagueMean) && (
-            <div className="mb-3 flex justify-end text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-2">
-                <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
-                League mean
-              </span>
-            </div>
-          )}
           <div ref={ladderRef} className="min-w-0">
             {ranked.map((row, index) => (
               <ComparisonBarRow
@@ -1151,6 +1143,14 @@ function TeamComparisonTab({
               />
             ))}
           </div>
+          {typeof leagueMean === 'number' && Number.isFinite(leagueMean) && (
+            <div className="mt-4 flex justify-end border-t border-border/60 pt-3" aria-label="Chart legend">
+              <span className="inline-flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
+                <span><strong className="font-semibold text-foreground">League mean</strong> (dotted line)</span>
+              </span>
+            </div>
+          )}
         </Panel>
         <Panel title="Match and training values against the league average">
           <div className="overflow-x-auto">
@@ -1467,12 +1467,6 @@ function ExposureComparison({
         <EmptyState>{measureLabel} is not available in the approved team comparison contract.</EmptyState>
       ) : (
         <div className="space-y-1" aria-label={`Team comparison by ${measureLabel.toLowerCase()}, league mean ${measure === 'hours' ? fmtHours(leagueMean) : fmt(leagueMean)} ${label}`}>
-          <div className="mb-2 flex justify-end text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-2">
-              <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
-              League mean
-            </span>
-          </div>
           <div className="mb-2 grid grid-cols-[minmax(72px,8rem)_minmax(0,1fr)_4.5rem] gap-3 px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:grid-cols-[minmax(100px,10rem)_minmax(0,1fr)_6rem]">
             <span>Team</span><span>Total</span><span className="text-right">{label}</span>
           </div>
@@ -1501,6 +1495,12 @@ function ExposureComparison({
               </div>
             );
           })}
+          <div className="mt-4 flex justify-end border-t border-border/60 pt-3" aria-label="Chart legend">
+            <span className="inline-flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
+              <span><strong className="font-semibold text-foreground">League mean</strong> (dotted line)</span>
+            </span>
+          </div>
         </div>
       )}
     </Panel>
