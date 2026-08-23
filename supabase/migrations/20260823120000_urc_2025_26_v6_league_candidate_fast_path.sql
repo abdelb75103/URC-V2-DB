@@ -76,17 +76,106 @@ from analysis.analysis_window_league_summary_v6 summary
 where summary.season = '2025-26';
 analyze _v6_league_summary;
 
-create temporary table _v6_league_monthly on commit drop as
-select monthly.*
-from analysis.analysis_window_league_monthly_v6 monthly
-where monthly.season = '2025-26';
-analyze _v6_league_monthly;
-
 create temporary table _v6_team_hours on commit drop as
 select hours.*
 from analysis.analysis_window_team_hours_v6 hours
 where hours.season = '2025-26';
 analyze _v6_team_hours;
+
+-- The established league-monthly view expands the same team-monthly view
+-- twice. Materialise its constituent aggregates once here so this one-time
+-- snapshot build stays bounded while preserving the accepted expressions.
+create temporary table _v6_league_monthly on commit drop as
+with exposure as materialized (
+  select curated_build_id, team_key, season,
+    date_trunc('month', period_start)::date as month_start,
+    sum(minutes_clean) / 60 as exposure_hours,
+    sum(distance_m_clean) / 1000 as distance_km
+  from analysis.analysis_window_team_exposure_v6
+  group by curated_build_id, team_key, season,
+    date_trunc('month', period_start)
+), injuries as materialized (
+  select curated_build_id, team_key, season,
+    date_trunc('month', date_injured)::date as month_start,
+    count(*) filter (where is_time_loss) as time_loss_injuries,
+    coalesce(sum(days_lost) filter (where is_time_loss), 0) as days_lost
+  from analysis.analysis_window_injury_cohort_v6
+  where cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+    and date_injured is not null
+  group by curated_build_id, team_key, season,
+    date_trunc('month', date_injured)
+), months as materialized (
+  select curated_build_id, team_key, season, month_start from exposure
+  union
+  select curated_build_id, team_key, season, month_start from injuries
+), team_monthly as materialized (
+  select months.curated_build_id, months.team_key, months.season,
+    months.month_start,
+    case when hours.total_hours is not null
+        and exposure.exposure_hours is not null
+      then exposure.exposure_hours else null::numeric end as exposure_hours,
+    case when hours.total_hours is not null
+        and exposure.exposure_hours is not null
+      then exposure.distance_km else null::numeric end as distance_km,
+    coalesce(injuries.time_loss_injuries, 0) as time_loss_injuries,
+    coalesce(injuries.days_lost, 0) as days_lost
+  from months
+  join _v6_team_hours hours
+    using (curated_build_id, team_key, season)
+  left join exposure
+    using (curated_build_id, team_key, season, month_start)
+  left join injuries
+    using (curated_build_id, team_key, season, month_start)
+), month_domain as materialized (
+  select distinct season, month_start from team_monthly
+), team_months as materialized (
+  select hours.curated_build_id, hours.team_key, hours.season,
+    month_domain.month_start,
+    hours.total_hours is not null as team_denominator_available,
+    monthly.exposure_hours, monthly.distance_km,
+    coalesce(monthly.time_loss_injuries, 0) as time_loss_injuries,
+    coalesce(monthly.days_lost, 0) as days_lost
+  from _v6_team_hours hours
+  join month_domain on month_domain.season = hours.season
+  left join team_monthly monthly
+    on monthly.curated_build_id = hours.curated_build_id
+   and monthly.team_key = hours.team_key
+   and monthly.season = hours.season
+   and monthly.month_start = month_domain.month_start
+), aggregated as materialized (
+  select season, month_start,
+    count(*) filter (where exposure_hours is not null)
+      as source_backed_team_months,
+    bool_and(team_denominator_available) as all_team_denominators_available,
+    sum(exposure_hours) as source_backed_exposure_hours,
+    sum(distance_km) as source_backed_distance_km,
+    sum(time_loss_injuries) as time_loss_injuries,
+    sum(days_lost) as days_lost
+  from team_months
+  group by season, month_start
+)
+select season, month_start, to_char(month_start, 'Mon YYYY') as month_label,
+  case when all_team_denominators_available
+      and source_backed_team_months = 16
+    then source_backed_exposure_hours else null::numeric end
+    as exposure_hours,
+  case when all_team_denominators_available
+      and source_backed_team_months = 16
+    then source_backed_distance_km else null::numeric end as distance_km,
+  time_loss_injuries, days_lost,
+  case when all_team_denominators_available
+      and source_backed_team_months = 16
+    then analysis.rate_per_1000_v1(
+      time_loss_injuries, source_backed_exposure_hours
+    ) else null::numeric end as incidence_per_1000h,
+  case when all_team_denominators_available
+      and source_backed_team_months = 16
+    then analysis.rate_per_1000_v1(
+      days_lost, source_backed_exposure_hours
+    ) else null::numeric end as burden_per_1000h
+from aggregated
+where season = '2025-26';
+analyze _v6_league_monthly;
 
 create temporary table _v6_exposure_stats on commit drop as
 select count(*) as exposure_rows,

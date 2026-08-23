@@ -202,7 +202,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         MigrationContract(
             version="20260823120000",
             name="urc_2025_26_v6_league_candidate_fast_path",
-            sha256="b7414b9ade8dd6eb5bc225e3fd25aab6bf6711147afdbe7511a451e6b7555dfc",
+            sha256="5ba51feeb153625457a68df548f083651d49d15e4c76a759afaff6084a837d7c",
         ),
     ),
     release_rule_version="league_dashboard_release_2026-08-15_v6",

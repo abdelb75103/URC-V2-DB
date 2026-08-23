@@ -49,7 +49,6 @@ class V6LeagueCandidateFastPathTests(unittest.TestCase):
         for relation in (
             "analysis.league_member_releases_v6",
             "analysis.analysis_window_league_summary_v6",
-            "analysis.analysis_window_league_monthly_v6",
             "analysis.analysis_window_team_hours_v6",
             "analysis.analysis_window_team_exposure_v6",
             "analysis.analysis_window_active_builds_v6",
@@ -71,6 +70,35 @@ class V6LeagueCandidateFastPathTests(unittest.TestCase):
         self.assertNotIn(
             "analysis.league_dashboard_payload_analysis_window_v6_enriched",
             pre_replacement,
+        )
+        self.assertNotIn("analysis.analysis_window_monthly_v6", pre_replacement)
+        self.assertNotIn(
+            "analysis.analysis_window_league_monthly_v6",
+            pre_replacement,
+        )
+
+    def test_monthly_stage_materialises_exact_constituents_once(self) -> None:
+        monthly = SQL.split(
+            "create temporary table _v6_league_monthly on commit drop as",
+            1,
+        )[1].split("analyze _v6_league_monthly", 1)[0]
+
+        for token in (
+            "exposure as materialized",
+            "injuries as materialized",
+            "months as materialized",
+            "team_monthly as materialized",
+            "month_domain as materialized",
+            "team_months as materialized",
+            "aggregated as materialized",
+            "source_backed_team_months = 16",
+            "bool_and(team_denominator_available)",
+            "analysis.rate_per_1000_v1(",
+        ):
+            self.assertIn(token, monthly)
+        self.assertLess(
+            SQL.index("create temporary table _v6_team_hours"),
+            SQL.index("create temporary table _v6_league_monthly"),
         )
 
     def test_member_hash_binds_all_sixteen_release_and_build_identities(self) -> None:
