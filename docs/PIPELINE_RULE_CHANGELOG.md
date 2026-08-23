@@ -15,12 +15,14 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `implemented-not-executed`: additive migration, exact checksum contract and focused tests only. No database query, migration or release ran in this task. |
+| Status | `applied-not-promoted`: the exact additive migration is registered on the approved live URC database. The sealed candidate is attested and the league release has not yet been promoted. |
 | Rule version | `urc_2025_26_v6_league_candidate_fast_path` |
 | Carry-forward | `season-specific`: the sealed snapshot is valid only for the exact current 2025-26 sixteen-member release/build set. |
 | Migration | `20260823120000_urc_2025_26_v6_league_candidate_fast_path.sql` |
 
-**Execution only.** The migration evaluates the eleven established league constituent relations in separate bounded temporary-table statements under one repeatable-read transaction. It then uses the existing base and enriched JSON expressions and ordering to assemble one canonical candidate and stores those exact JSONB bytes in a private, immutable snapshot. The existing candidate view reads the snapshot only while a deterministic hash of all sixteen current team release and curated-build identities still matches the sealed member set. A member or active-build change returns no league candidate until a separately reviewed versioned successor is installed.
+**Execution only.** The migration selects the exact sixteen immutable, approved team release payloads, verifies their stored canonical hashes and release tuple, and reconstructs the established league aggregates in eleven bounded temporary stages under one repeatable-read transaction. Global exposure counts and median severity remain direct analytical reads. It then uses the existing base and enriched JSON expressions and ordering to assemble one canonical candidate and stores those exact JSONB bytes in a private, immutable snapshot. The existing candidate view reads the snapshot only while a deterministic hash of all sixteen current team release and curated-build identities still matches the sealed member set. A member or active-build change returns no league candidate until a separately reviewed versioned successor is installed.
+
+**Live attestation.** Migration SHA-256 `ad8ed2146569c81020f2d8425a84d053045a1bf727f767949eff0cee97f715eb` is registered on project `eukkvswaxweenovqqgzr`, database `postgres`. The transactional apply completed in 5.6 seconds. Post-apply proof found exactly one sealed row and one candidate, matching sixteen current release/build identities and the canonical payload hash; row-level security is enabled and `web_reader` has no direct snapshot access. Two predecessor implementations exceeded their statement timeout and rolled back fully before this accepted version, leaving no partial object or registration.
 
 **No reporting rule change.** Candidate columns, payload bytes, formulas, classification and cohort evidence, release validation triggers, immutable bundle storage and public readers are unchanged. The snapshot has row-level security, no public or web-reader grant, and rejects update or delete. The migration does not reference a 2024-25 relation and applies no imputation.
 
