@@ -355,6 +355,33 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             ("headline.incidence_per_1000h.denominator", 99, 100),
         )
 
+    def test_unavailable_denominators_reconcile_as_null_not_zero(self) -> None:
+        dashboard = {
+            "headline": [
+                {"key": "recorded_injuries", "value": 10},
+                {"key": "time_loss_injuries", "value": 4},
+                {"key": "incidence_per_1000h", "denominator": None},
+                {"key": "burden_per_1000h", "denominator": None},
+            ],
+            "coverage": {"hours": None},
+        }
+        semantic = {
+            "recorded_injuries": 10,
+            "time_loss_injuries": 4,
+            "monthly_time_loss_injuries": 4,
+            "dated_time_loss_injuries": 4,
+            "monthly_exposure_hours": None,
+            "exposure_hours": None,
+        }
+
+        self.assertIsNone(
+            pipeline.first_release_payload_mismatch(dashboard, semantic)
+        )
+        self.assertIn(
+            "select sum(exposure_hours) as exposure_hours",
+            self.source,
+        )
+
     def test_preflight_and_promotion_write_workflow_manifests(self) -> None:
         self.assertIn("urc_league_release_preflight_manifest_v1", self.source)
         self.assertIn("reviewed_preflight_manifest_sha256", self.source)

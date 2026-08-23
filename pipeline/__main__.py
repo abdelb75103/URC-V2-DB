@@ -501,6 +501,8 @@ def query_sql(sql: str, params: list[object] | None = None) -> list[dict[str, An
 
 
 def decimal_values_close(left: object, right: object) -> bool:
+    if left is None or right is None:
+        return left is None and right is None
     try:
         return abs(Decimal(str(left)) - Decimal(str(right))) <= Decimal("0.000000001")
     except InvalidOperation:
@@ -8434,7 +8436,7 @@ def release_league(args: argparse.Namespace) -> None:
                 using (curated_build_id, team_key, season)
               where c.season = {semantic_params.text(season)}
             ), monthly as (
-              select coalesce(sum(exposure_hours), 0) as exposure_hours,
+              select sum(exposure_hours) as exposure_hours,
                      coalesce(sum(time_loss_injuries), 0) as time_loss_injuries
               from {semantic_monthly_view}
               where season = {semantic_params.text(season)}
