@@ -1,0 +1,251 @@
+{
+  "team": "Munster",
+  "method": [
+    "Incidence = pooled time-loss injuries / pooled exposure hours \u00d7 1,000.",
+    "Burden = pooled days lost / pooled exposure hours \u00d7 1,000.",
+    "Season-attributed undated injuries are included in totals but excluded from monthly series.",
+    "Curated IOC categories are carried forward; unsupported mappings remain Unknown."
+  ],
+  "season": "2025-26",
+  "monthly": [],
+  "coverage": {
+    "hours": null,
+    "weeks": 0,
+    "distance_km": null,
+    "match_hours": 380,
+    "exposure_rows": 0,
+    "exposure_grain": "weekly",
+    "training_hours": null,
+    "exposed_players": 0,
+    "analysis_window_end": "2026-06-30",
+    "analysis_window_start": "2025-09-01",
+    "included_exposure_status": "source_backed_denominator_unavailable_no_imputation"
+  },
+  "headline": [
+    {
+      "key": "recorded_injuries",
+      "unit": "injuries",
+      "label": "Recorded injuries",
+      "value": 0,
+      "formula": "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"
+    },
+    {
+      "key": "time_loss_injuries",
+      "unit": "injuries",
+      "label": "Time-loss injuries",
+      "value": 0,
+      "formula": "count(eligible injury rows where days lost > 0)"
+    },
+    {
+      "key": "incidence_per_1000h",
+      "unit": "per 1,000 player-hours",
+      "label": "Incidence",
+      "value": null,
+      "formula": "pooled time-loss injuries / pooled exposure hours * 1000",
+      "numerator": 0,
+      "denominator": null
+    },
+    {
+      "key": "severity_mean_days",
+      "unit": "days lost per injury",
+      "label": "Mean severity",
+      "value": null,
+      "formula": "pooled days lost / pooled time-loss injuries",
+      "numerator": 0,
+      "denominator": 0
+    },
+    {
+      "key": "severity_median_days",
+      "unit": "days lost per injury",
+      "label": "Median severity",
+      "value": null,
+      "formula": "median(days lost) across pooled time-loss injuries"
+    },
+    {
+      "key": "burden_per_1000h",
+      "unit": "days lost per 1,000 player-hours",
+      "label": "Burden",
+      "value": null,
+      "formula": "pooled days lost / pooled exposure hours * 1000",
+      "numerator": 0,
+      "denominator": null
+    }
+  ],
+  "limitations": [
+    "Source-backed exposure denominator is unavailable. Exposure hours, distance, incidence and burden are null. No imputation was applied."
+  ],
+  "generated_at": "2026-08-22T21:49:45.183493+00:00",
+  "injury_types": [],
+  "prior_season": {
+    "note": "Prior season remains frozen and is not recomputed by V6.",
+    "season": "2024-25",
+    "status": "frozen"
+  },
+  "setting_split": [
+    {
+      "key": "all",
+      "label": "All",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "match",
+      "label": "Match",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "training",
+      "label": "Training",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "time_loss_injuries": 0
+    }
+  ],
+  "body_locations": [],
+  "analysis_window": {
+    "end": "2026-06-30",
+    "basis": "Registered Year 2 reporting window.",
+    "start": "2025-09-01"
+  },
+  "injury_profiles": [],
+  "setting_metrics": [
+    {
+      "label": "All",
+      "setting": "all",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "burden_per_1000h": null,
+      "mean_severity_days": null,
+      "time_loss_injuries": 0,
+      "incidence_per_1000h": null
+    },
+    {
+      "label": "Match",
+      "setting": "match",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "burden_per_1000h": null,
+      "mean_severity_days": null,
+      "time_loss_injuries": 0,
+      "incidence_per_1000h": null
+    },
+    {
+      "label": "Training",
+      "setting": "training",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "burden_per_1000h": null,
+      "mean_severity_days": null,
+      "time_loss_injuries": 0,
+      "incidence_per_1000h": null
+    },
+    {
+      "label": "Unknown",
+      "setting": "unknown",
+      "days_lost": 0,
+      "exposure_hours": null,
+      "burden_per_1000h": null,
+      "mean_severity_days": null,
+      "time_loss_injuries": 0,
+      "incidence_per_1000h": null
+    }
+  ],
+  "contact_distribution": [
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "all",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "all",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "all",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "match",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "match",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "match",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "training",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "training",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "training",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "contact",
+      "label": "Contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "non_contact",
+      "label": "Non-contact",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    },
+    {
+      "key": "unknown",
+      "label": "Unknown",
+      "setting": "unknown",
+      "recorded_injuries": 0,
+      "time_loss_injuries": 0
+    }
+  ],
+  "injury_type_families": [],
+  "severity_distribution": []
+}

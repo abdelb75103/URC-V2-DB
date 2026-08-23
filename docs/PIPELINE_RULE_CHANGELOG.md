@@ -15,7 +15,7 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `applied-not-promoted`: the exact additive migration is registered on the approved live URC database. The sealed candidate is attested and the league release has not yet been promoted. |
+| Status | `applied-and-promoted`: the exact additive migration is registered and the complete 16-team V6 bundle is approved on the live URC database. |
 | Rule version | `urc_2025_26_v6_league_candidate_fast_path` |
 | Carry-forward | `season-specific`: the sealed snapshot is valid only for the exact current 2025-26 sixteen-member release/build set. |
 | Migration | `20260823120000_urc_2025_26_v6_league_candidate_fast_path.sql` |
@@ -23,6 +23,8 @@ Every change that alters a derived value, classification, cohort, denominator, o
 **Execution only.** The migration selects the exact sixteen immutable, approved team release payloads, verifies their stored canonical hashes and release tuple, and reconstructs the established league aggregates in eleven bounded temporary stages under one repeatable-read transaction. Global exposure counts and median severity remain direct analytical reads. It then uses the existing base and enriched JSON expressions and ordering to assemble one canonical candidate and stores those exact JSONB bytes in a private, immutable snapshot. The existing candidate view reads the snapshot only while a deterministic hash of all sixteen current team release and curated-build identities still matches the sealed member set. A member or active-build change returns no league candidate until a separately reviewed versioned successor is installed.
 
 **Live attestation.** Migration SHA-256 `ad8ed2146569c81020f2d8425a84d053045a1bf727f767949eff0cee97f715eb` is registered on project `eukkvswaxweenovqqgzr`, database `postgres`. The transactional apply completed in 5.6 seconds. Post-apply proof found exactly one sealed row and one candidate, matching sixteen current release/build identities and the canonical payload hash; row-level security is enabled and `web_reader` has no direct snapshot access. Two predecessor implementations exceeded their statement timeout and rolled back fully before this accepted version, leaving no partial object or registration.
+
+**Release.** `urc-2025-26-v6-1287c2a447f5-a1` was promoted with reviewer `Abdel Babiker`. The league payload SHA-256 is `165fa8ac3cd59de726d66f9af1da9115bb0ff2518717ff76b7a7849adb551a02`; the complete bundle SHA-256 is `1287c2a447f5ae1da74a24cf09c30a2d419585415233a1b136ad6f7135130191`; the 16-team parity export-set SHA-256 is `d8d44587070013c9f8833b1da6b6d9ce9def3a0318c993b10a30ec9ea77a5ea5`. Post-promotion proof found exactly one approved V6 bundle, one league reader and sixteen distinct team readers with the expected hashes, an attested reader target and no open pipeline runs.
 
 **No reporting rule change.** Candidate columns, payload bytes, formulas, classification and cohort evidence, release validation triggers, immutable bundle storage and public readers are unchanged. The snapshot has row-level security, no public or web-reader grant, and rejects update or delete. The migration does not reference a 2024-25 relation and applies no imputation.
 
