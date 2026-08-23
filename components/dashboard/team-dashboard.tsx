@@ -1122,6 +1122,14 @@ function TeamComparisonTab({
       </div>
       <div className="space-y-4">
         <Panel title={`Ranked by ${settingLabel} ${metricLabel} (${metricUnit})`}>
+          {typeof leagueMean === 'number' && Number.isFinite(leagueMean) && (
+            <div className="mb-3 flex justify-end text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-2">
+                <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
+                League mean
+              </span>
+            </div>
+          )}
           <div ref={ladderRef} className="min-w-0">
             {ranked.map((row, index) => (
               <ComparisonBarRow
@@ -1442,7 +1450,11 @@ function ExposureComparison({
   const ranked = [...rows]
     .filter((row) => typeof metric(row) === 'number' && Number.isFinite(metric(row)))
     .sort((a, b) => (metric(b) ?? 0) - (metric(a) ?? 0));
+  const leagueMean = ranked.length
+    ? ranked.reduce((sum, row) => sum + (metric(row) ?? 0), 0) / ranked.length
+    : 0;
   const max = Math.max(...ranked.map((row) => metric(row) ?? 0), 1);
+  const leagueMeanPosition = Math.min((leagueMean / max) * 100, 100);
   const label = measure === 'hours' ? 'player-hours' : 'km';
   const measureLabel = measure === 'hours' ? 'Hours' : measure === 'distance' ? 'Distance' : 'HSR';
   return (
@@ -1454,7 +1466,13 @@ function ExposureComparison({
       {!ranked.length ? (
         <EmptyState>{measureLabel} is not available in the approved team comparison contract.</EmptyState>
       ) : (
-        <div className="space-y-1" aria-label={`Team comparison by ${measureLabel.toLowerCase()}`}>
+        <div className="space-y-1" aria-label={`Team comparison by ${measureLabel.toLowerCase()}, league mean ${measure === 'hours' ? fmtHours(leagueMean) : fmt(leagueMean)} ${label}`}>
+          <div className="mb-2 flex justify-end text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-2">
+              <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
+              League mean
+            </span>
+          </div>
           <div className="mb-2 grid grid-cols-[minmax(72px,8rem)_minmax(0,1fr)_4.5rem] gap-3 px-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:grid-cols-[minmax(100px,10rem)_minmax(0,1fr)_6rem]">
             <span>Team</span><span>Total</span><span className="text-right">{label}</span>
           </div>
@@ -1472,6 +1490,11 @@ function ExposureComparison({
                   <span
                     className={`block h-full rounded-sm ${isViewer && teamColor ? '' : 'bg-primary'}`}
                     style={{ width: `${width}%`, background: isViewer ? teamColor?.mark : undefined }}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute -bottom-4 -top-4 z-10 border-l-2 border-dotted border-orange-400 sm:-bottom-[10px] sm:-top-[10px]"
+                    style={{ left: `calc(${leagueMeanPosition}% - 1px)` }}
                   />
                 </span>
                 <span className="text-right font-semibold tabular-nums text-foreground">{displayValue}</span>

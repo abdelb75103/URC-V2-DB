@@ -667,6 +667,8 @@ test('timeline bars are cyan and ranked team comparisons mark the active league 
   assert.match(comparison, /const leagueMean = benchmark\?\.\[metric\]/);
   assert.match(comparison, /leagueMean=\{leagueMean\}/);
   assert.match(comparison, /border-dotted border-orange-400/);
+  assert.match(comparison, /League mean/);
+  assert.match(comparison, /h-4 border-l-2 border-dotted border-orange-400/);
   assert.match(comparison, /league mean \$\{fmtRanked\(leagueMean, metric\)\}/);
 });
 
@@ -697,7 +699,10 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   assert.match(dashboard, /Total hours[\s\S]*Total distance/);
   assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);
   assert.match(dashboard, /HSR distance/);
-  assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab')), /League mean|const mean\b/);
+  const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));
+  assert.match(exposureComparison, /League mean/);
+  assert.match(exposureComparison, /border-dotted border-orange-400/);
+  assert.match(exposureComparison, /ranked\.reduce\(\(sum, row\) => sum \+ \(metric\(row\) \?\? 0\), 0\) \/ ranked\.length/);
   assert.match(dashboard, /monthlyMeasure[\s\S]*comparisonMeasure/);
   assert.match(dashboard, /label="Choose monthly exposure measure"/);
   assert.match(dashboard, /label="Choose team comparison exposure measure"/);
