@@ -44,19 +44,14 @@ class V6LeagueCandidateFastPathTests(unittest.TestCase):
             SQL,
         )
 
-    def test_eleven_constituent_relations_are_materialised_separately(self) -> None:
+    def test_eleven_snapshot_stages_use_accepted_team_payloads(self) -> None:
         self.assertEqual(SQL.count("create temporary table _v6_"), 11)
         for relation in (
             "analysis.league_member_releases_v6",
-            "analysis.analysis_window_league_summary_v6",
-            "analysis.analysis_window_team_hours_v6",
+            "reporting.team_release_payloads_v6",
             "analysis.analysis_window_team_exposure_v6",
-            "analysis.analysis_window_active_builds_v6",
+            "analysis.analysis_window_injury_cohort_v6",
             "analysis.accepted_analysis_window_cohort_rules_v6",
-            "analysis.analysis_window_league_profiles_v6",
-            "analysis.analysis_window_league_severity_v6",
-            "analysis.analysis_window_league_setting_metrics_v6",
-            "analysis.analysis_window_league_contact_distribution_v6",
         ):
             self.assertIn(relation, SQL)
         pre_replacement = SQL.split(
@@ -76,21 +71,30 @@ class V6LeagueCandidateFastPathTests(unittest.TestCase):
             "analysis.analysis_window_league_monthly_v6",
             pre_replacement,
         )
+        for relation in (
+            "analysis.analysis_window_league_summary_v6",
+            "analysis.analysis_window_team_hours_v6",
+            "analysis.analysis_window_active_builds_v6",
+            "analysis.analysis_window_league_profiles_v6",
+            "analysis.analysis_window_league_severity_v6",
+            "analysis.analysis_window_league_setting_metrics_v6",
+            "analysis.analysis_window_league_contact_distribution_v6",
+        ):
+            self.assertNotIn(relation, pre_replacement)
 
-    def test_monthly_stage_materialises_exact_constituents_once(self) -> None:
+    def test_monthly_stage_aggregates_the_exact_accepted_team_cells(self) -> None:
         monthly = SQL.split(
             "create temporary table _v6_league_monthly on commit drop as",
             1,
         )[1].split("analyze _v6_league_monthly", 1)[0]
 
         for token in (
-            "exposure as materialized",
-            "injuries as materialized",
-            "months as materialized",
-            "team_monthly as materialized",
             "month_domain as materialized",
+            "monthly as materialized",
             "team_months as materialized",
             "aggregated as materialized",
+            "jsonb_array_elements(member.dashboard -> 'monthly')",
+            "select distinct to_date(item ->> 'month', 'mon yyyy')",
             "source_backed_team_months = 16",
             "bool_and(team_denominator_available)",
             "analysis.rate_per_1000_v1(",
@@ -99,6 +103,28 @@ class V6LeagueCandidateFastPathTests(unittest.TestCase):
         self.assertLess(
             SQL.index("create temporary table _v6_team_hours"),
             SQL.index("create temporary table _v6_league_monthly"),
+        )
+
+    def test_summary_and_sections_are_derived_from_immutable_team_bytes(self) -> None:
+        for token in (
+            "payload.dashboard_payload as dashboard",
+            "member.dashboard -> 'headline'",
+            "member.dashboard #>> '{coverage,hours}'",
+            "member.dashboard -> 'injury_profiles'",
+            "member.dashboard -> 'severity_distribution'",
+            "member.dashboard -> 'setting_metrics'",
+            "member.dashboard -> 'contact_distribution'",
+            "percentile_cont(0.5) within group (order by cohort.days_lost)",
+            "payload.payload_sha256 =",
+            "reporting.canonical_jsonb_sha256_v1(payload.dashboard_payload)",
+            "max(member.dashboard ->> 'generated_at') as generated_at",
+            ") <> 64",
+            ") <> 192",
+        ):
+            self.assertIn(token, SQL)
+        self.assertNotIn(
+            "(member.dashboard ->> 'generated_at')::timestamptz",
+            SQL,
         )
 
     def test_member_hash_binds_all_sixteen_release_and_build_identities(self) -> None:
@@ -127,6 +153,8 @@ class V6LeagueCandidateFastPathTests(unittest.TestCase):
             "time_loss_injuries = 107",
             "days_lost = 1950",
             "exposure_rows = 56769",
+            "exposed_players = 141",
+            "weeks = 44",
             "count(*) from _v6_league_profiles) <> 213",
             "count(*) from _v6_league_severity) <> 7",
             "count(*) from _v6_league_setting_metrics) <> 4",

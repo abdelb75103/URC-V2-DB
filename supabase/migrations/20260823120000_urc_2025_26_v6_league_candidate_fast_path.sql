@@ -1,7 +1,8 @@
--- Materialise the accepted V6 constituent relations in bounded statements,
--- assemble the established league JSON once, then seal those exact JSONB
--- bytes. The snapshot remains valid only while the same sixteen approved team
--- release/build identities are current. Member drift returns zero candidates.
+-- Materialise the sixteen accepted immutable V6 team payloads and the two
+-- bounded global aggregates, assemble the established league JSON once, then
+-- seal those exact JSONB bytes. The snapshot remains valid only while the same
+-- approved team release/build identities are current. Member drift returns no
+-- candidate.
 
 do $$
 begin
@@ -65,69 +66,104 @@ for each row execute function
 
 create temporary table _v6_current_members on commit drop as
 select member.team_key, member.season, member.team_release_id,
-  member.curated_build_id
+  member.curated_build_id, payload.dashboard_payload as dashboard
 from analysis.league_member_releases_v6 member
-where member.season = '2025-26';
+join reporting.team_release_payloads_v6 payload
+  on payload.release_id = member.team_release_id
+ and payload.team_key = member.team_key
+ and payload.season = member.season
+ and payload.curated_build_id = member.curated_build_id
+where member.season = '2025-26'
+  and payload.analysis_version = 'v6'
+  and payload.classification_view_version =
+    'reporting_classification_2026-07-22_v2'
+  and payload.cohort_view_version =
+    'analysis_window_2025-26_2026-08-15_v1'
+  and payload.payload_sha256 =
+    reporting.canonical_jsonb_sha256_v1(payload.dashboard_payload);
 analyze _v6_current_members;
 
 create temporary table _v6_league_summary on commit drop as
-select summary.*
-from analysis.analysis_window_league_summary_v6 summary
-where summary.season = '2025-26';
+with team_values as materialized (
+  select member.season,
+    (select (item ->> 'value')::bigint
+     from jsonb_array_elements(member.dashboard -> 'headline') item
+     where item ->> 'key' = 'recorded_injuries') as recorded_injuries,
+    (select (item ->> 'value')::bigint
+     from jsonb_array_elements(member.dashboard -> 'headline') item
+     where item ->> 'key' = 'time_loss_injuries') as time_loss_injuries,
+    (select (item ->> 'numerator')::numeric
+     from jsonb_array_elements(member.dashboard -> 'headline') item
+     where item ->> 'key' = 'severity_mean_days') as days_lost,
+    (member.dashboard #>> '{coverage,hours}')::numeric as total_hours,
+    (member.dashboard #>> '{coverage,match_hours}')::numeric as match_hours,
+    (member.dashboard #>> '{coverage,training_hours}')::numeric
+      as training_hours
+  from _v6_current_members member
+), aggregated as (
+  select season,
+    sum(recorded_injuries) as recorded_injuries,
+    sum(time_loss_injuries) as time_loss_injuries,
+    sum(days_lost) as days_lost,
+    count(*) filter (where total_hours is not null) as complete_team_count,
+    sum(total_hours) as source_backed_exposure_hours,
+    sum(match_hours) as match_exposure_hours,
+    sum(training_hours) as source_backed_training_hours
+  from team_values
+  group by season
+), median as (
+  select cohort.season,
+    percentile_cont(0.5) within group (order by cohort.days_lost)
+      as median_severity_days
+  from analysis.analysis_window_injury_cohort_v6 cohort
+  where cohort.season = '2025-26' and cohort.is_time_loss
+  group by cohort.season
+)
+select aggregated.season, aggregated.recorded_injuries,
+  aggregated.time_loss_injuries, aggregated.days_lost,
+  aggregated.days_lost / nullif(aggregated.time_loss_injuries, 0)
+    as mean_severity_days,
+  median.median_severity_days,
+  case when aggregated.complete_team_count = 16
+    then aggregated.source_backed_exposure_hours else null::numeric end
+    as exposure_hours,
+  aggregated.match_exposure_hours,
+  case when aggregated.complete_team_count = 16
+    then aggregated.source_backed_training_hours else null::numeric end
+    as training_exposure_hours
+from aggregated
+join median using (season);
 analyze _v6_league_summary;
 
 create temporary table _v6_team_hours on commit drop as
-select hours.*
-from analysis.analysis_window_team_hours_v6 hours
-where hours.season = '2025-26';
+select member.curated_build_id, member.team_key, member.season,
+  (member.dashboard #>> '{coverage,hours}')::numeric as total_hours,
+  (member.dashboard #>> '{coverage,match_hours}')::numeric as match_hours,
+  (member.dashboard #>> '{coverage,training_hours}')::numeric
+    as training_hours,
+  (member.dashboard #>> '{coverage,distance_km}')::numeric as distance_km,
+  member.dashboard #>> '{coverage,exposure_grain}' as exposure_grain
+from _v6_current_members member;
 analyze _v6_team_hours;
 
--- The established league-monthly view expands the same team-monthly view
--- twice. Materialise its constituent aggregates once here so this one-time
--- snapshot build stays bounded while preserving the accepted expressions.
+-- Aggregate the exact monthly values already accepted in the sixteen
+-- immutable team snapshots. Missing team/month cells remain explicit zero
+-- injury cells, and league denominators remain null unless every team has a
+-- source-backed denominator for that month.
 create temporary table _v6_league_monthly on commit drop as
-with exposure as materialized (
-  select curated_build_id, team_key, season,
-    date_trunc('month', period_start)::date as month_start,
-    sum(minutes_clean) / 60 as exposure_hours,
-    sum(distance_m_clean) / 1000 as distance_km
-  from analysis.analysis_window_team_exposure_v6
-  group by curated_build_id, team_key, season,
-    date_trunc('month', period_start)
-), injuries as materialized (
-  select curated_build_id, team_key, season,
-    date_trunc('month', date_injured)::date as month_start,
-    count(*) filter (where is_time_loss) as time_loss_injuries,
-    coalesce(sum(days_lost) filter (where is_time_loss), 0) as days_lost
-  from analysis.analysis_window_injury_cohort_v6
-  where cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
-    and date_injured is not null
-  group by curated_build_id, team_key, season,
-    date_trunc('month', date_injured)
-), months as materialized (
-  select curated_build_id, team_key, season, month_start from exposure
-  union
-  select curated_build_id, team_key, season, month_start from injuries
-), team_monthly as materialized (
-  select months.curated_build_id, months.team_key, months.season,
-    months.month_start,
-    case when hours.total_hours is not null
-        and exposure.exposure_hours is not null
-      then exposure.exposure_hours else null::numeric end as exposure_hours,
-    case when hours.total_hours is not null
-        and exposure.exposure_hours is not null
-      then exposure.distance_km else null::numeric end as distance_km,
-    coalesce(injuries.time_loss_injuries, 0) as time_loss_injuries,
-    coalesce(injuries.days_lost, 0) as days_lost
-  from months
-  join _v6_team_hours hours
-    using (curated_build_id, team_key, season)
-  left join exposure
-    using (curated_build_id, team_key, season, month_start)
-  left join injuries
-    using (curated_build_id, team_key, season, month_start)
-), month_domain as materialized (
-  select distinct season, month_start from team_monthly
+with month_domain as materialized (
+  select distinct to_date(item ->> 'month', 'Mon YYYY') as month_start
+  from _v6_current_members member
+  cross join lateral jsonb_array_elements(member.dashboard -> 'monthly') item
+), monthly as materialized (
+  select member.team_key, member.season,
+    to_date(item ->> 'month', 'Mon YYYY') as month_start,
+    (item ->> 'exposure_hours')::numeric as exposure_hours,
+    (item ->> 'distance_km')::numeric as distance_km,
+    (item ->> 'time_loss_injuries')::bigint as time_loss_injuries,
+    (item ->> 'days_lost')::numeric as days_lost
+  from _v6_current_members member
+  cross join lateral jsonb_array_elements(member.dashboard -> 'monthly') item
 ), team_months as materialized (
   select hours.curated_build_id, hours.team_key, hours.season,
     month_domain.month_start,
@@ -136,10 +172,9 @@ with exposure as materialized (
     coalesce(monthly.time_loss_injuries, 0) as time_loss_injuries,
     coalesce(monthly.days_lost, 0) as days_lost
   from _v6_team_hours hours
-  join month_domain on month_domain.season = hours.season
-  left join team_monthly monthly
-    on monthly.curated_build_id = hours.curated_build_id
-   and monthly.team_key = hours.team_key
+  cross join month_domain
+  left join monthly
+    on monthly.team_key = hours.team_key
    and monthly.season = hours.season
    and monthly.month_start = month_domain.month_start
 ), aggregated as materialized (
@@ -173,8 +208,7 @@ select season, month_start, to_char(month_start, 'Mon YYYY') as month_label,
     then analysis.rate_per_1000_v1(
       days_lost, source_backed_exposure_hours
     ) else null::numeric end as burden_per_1000h
-from aggregated
-where season = '2025-26';
+from aggregated;
 analyze _v6_league_monthly;
 
 create temporary table _v6_exposure_stats on commit drop as
@@ -185,8 +219,8 @@ from analysis.analysis_window_team_exposure_v6 exposure;
 analyze _v6_exposure_stats;
 
 create temporary table _v6_active_build_stats on commit drop as
-select max(member.generated_at) as generated_at
-from analysis.analysis_window_active_builds_v6 member;
+select max(member.dashboard ->> 'generated_at') as generated_at
+from _v6_current_members member;
 analyze _v6_active_build_stats;
 
 create temporary table _v6_release_evidence on commit drop as
@@ -211,27 +245,90 @@ where rules.classification_view_version =
 analyze _v6_release_evidence;
 
 create temporary table _v6_league_profiles on commit drop as
-select profile.*
-from analysis.analysis_window_league_profiles_v6 profile
-where profile.season = '2025-26';
+with grouped as (
+  select member.season, item ->> 'setting' as setting_code,
+    item ->> 'dimension' as dimension, item ->> 'code' as code,
+    item ->> 'label' as label,
+    sum((item ->> 'time_loss_injuries')::bigint) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost
+  from _v6_current_members member
+  cross join lateral
+    jsonb_array_elements(member.dashboard -> 'injury_profiles') item
+  group by member.season, item ->> 'setting', item ->> 'dimension',
+    item ->> 'code', item ->> 'label'
+)
+select grouped.season, grouped.setting_code, grouped.dimension, grouped.code,
+  grouped.label, grouped.time_loss_injuries, grouped.days_lost,
+  case when summary.exposure_hours is null then null::numeric
+    when grouped.setting_code = 'all' then summary.exposure_hours
+    when grouped.setting_code = 'match' then summary.match_exposure_hours
+    when grouped.setting_code = 'training' then summary.training_exposure_hours
+    else null::numeric end as exposure_hours,
+  case when summary.exposure_hours is null then null::numeric
+    else analysis.rate_per_1000_v1(
+      grouped.time_loss_injuries,
+      case grouped.setting_code
+        when 'all' then summary.exposure_hours
+        when 'match' then summary.match_exposure_hours
+        when 'training' then summary.training_exposure_hours
+        else null::numeric end
+    ) end as incidence_per_1000h,
+  case when summary.exposure_hours is null then null::numeric
+    else analysis.rate_per_1000_v1(
+      grouped.days_lost,
+      case grouped.setting_code
+        when 'all' then summary.exposure_hours
+        when 'match' then summary.match_exposure_hours
+        when 'training' then summary.training_exposure_hours
+        else null::numeric end
+    ) end as burden_per_1000h,
+  grouped.days_lost / nullif(grouped.time_loss_injuries, 0)
+    as mean_severity_days
+from grouped
+join _v6_league_summary summary using (season);
 analyze _v6_league_profiles;
 
 create temporary table _v6_league_severity on commit drop as
-select severity.*
-from analysis.analysis_window_league_severity_v6 severity
-where severity.season = '2025-26';
+select member.season, item ->> 'key' as severity_code,
+  sum((item ->> 'recorded_injuries')::bigint) as recorded_injuries,
+  sum((item ->> 'time_loss_injuries')::bigint) as time_loss_injuries,
+  sum((item ->> 'days_lost')::numeric) as days_lost
+from _v6_current_members member
+cross join lateral
+  jsonb_array_elements(member.dashboard -> 'severity_distribution') item
+group by member.season, item ->> 'key';
 analyze _v6_league_severity;
 
 create temporary table _v6_league_setting_metrics on commit drop as
-select setting.*
-from analysis.analysis_window_league_setting_metrics_v6 setting
-where setting.season = '2025-26';
+with grouped as (
+  select member.season, item ->> 'setting' as setting_code,
+    sum((item ->> 'time_loss_injuries')::bigint) as time_loss_injuries,
+    sum((item ->> 'days_lost')::numeric) as days_lost
+  from _v6_current_members member
+  cross join lateral
+    jsonb_array_elements(member.dashboard -> 'setting_metrics') item
+  group by member.season, item ->> 'setting'
+)
+select grouped.season, grouped.setting_code, grouped.time_loss_injuries,
+  grouped.days_lost,
+  case when summary.exposure_hours is null then null::numeric
+    when grouped.setting_code = 'all' then summary.exposure_hours
+    when grouped.setting_code = 'match' then summary.match_exposure_hours
+    when grouped.setting_code = 'training' then summary.training_exposure_hours
+    else null::numeric end as exposure_hours
+from grouped
+join _v6_league_summary summary using (season);
 analyze _v6_league_setting_metrics;
 
 create temporary table _v6_league_contact_distribution on commit drop as
-select contact.*
-from analysis.analysis_window_league_contact_distribution_v6 contact
-where contact.season = '2025-26';
+select member.season, item ->> 'setting' as setting_code,
+  item ->> 'key' as contact_context, item ->> 'label' as contact_label,
+  sum((item ->> 'recorded_injuries')::bigint) as recorded_injuries,
+  sum((item ->> 'time_loss_injuries')::bigint) as time_loss_injuries
+from _v6_current_members member
+cross join lateral
+  jsonb_array_elements(member.dashboard -> 'contact_distribution') item
+group by member.season, item ->> 'setting', item ->> 'key', item ->> 'label';
 analyze _v6_league_contact_distribution;
 
 do $$
@@ -242,6 +339,31 @@ begin
     or (select count(distinct curated_build_id) from _v6_current_members) <> 16
   then
     raise exception 'V6 staged member set must contain sixteen distinct release/build identities';
+  end if;
+
+  if exists (
+    select 1
+    from _v6_current_members member
+    cross join lateral jsonb_array_elements(member.dashboard -> 'headline') item
+    group by member.team_key
+    having count(*) filter (
+      where item ->> 'key' = 'recorded_injuries'
+    ) <> 1
+      or count(*) filter (
+        where item ->> 'key' = 'time_loss_injuries'
+      ) <> 1
+      or count(*) filter (
+        where item ->> 'key' = 'severity_mean_days'
+      ) <> 1
+  ) or exists (
+    select 1
+    from _v6_current_members member
+    cross join lateral jsonb_array_elements(member.dashboard -> 'monthly') item
+    group by member.team_key, item ->> 'month'
+    having count(*) <> 1
+  )
+  then
+    raise exception 'V6 accepted team payload keys are absent or duplicate';
   end if;
 
   if (select count(*) from _v6_league_summary) <> 1
@@ -272,7 +394,8 @@ begin
 
   if (select count(*) from _v6_exposure_stats) <> 1
     or not exists (
-      select 1 from _v6_exposure_stats where exposure_rows = 56769
+      select 1 from _v6_exposure_stats
+      where exposure_rows = 56769 and exposed_players = 141 and weeks = 44
     )
     or (select count(*) from _v6_active_build_stats) <> 1
     or (select generated_at from _v6_active_build_stats) is null
@@ -301,6 +424,10 @@ begin
   end if;
 
   if (select count(*) from _v6_league_setting_metrics) <> 4
+    or (
+      select sum(jsonb_array_length(member.dashboard -> 'setting_metrics'))
+      from _v6_current_members member
+    ) <> 64
     or (select array_agg(setting_code order by setting_code)
         from _v6_league_setting_metrics)
       is distinct from array['all', 'match', 'training', 'unknown']::text[]
@@ -309,6 +436,12 @@ begin
   end if;
 
   if (select count(*) from _v6_league_contact_distribution) <> 12
+    or (
+      select sum(jsonb_array_length(
+        member.dashboard -> 'contact_distribution'
+      ))
+      from _v6_current_members member
+    ) <> 192
     or (
       select count(*) from (
         select setting_code, contact_context
