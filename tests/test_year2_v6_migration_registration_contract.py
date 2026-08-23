@@ -34,6 +34,20 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
         self.assertIn(contract.version, YEAR2_2025_26_RELEASE_CONTRACT.required_migrations)
         self.assertEqual(REGISTRATION.count(contract.statement), 2)
 
+    def test_league_candidate_fast_path_is_checksum_bound_before_release(self) -> None:
+        contract = next(
+            item
+            for item in YEAR2_2025_26_RELEASE_CONTRACT.required_migration_contracts
+            if item.version == "20260823120000"
+        )
+        self.assertEqual(contract.name, "urc_2025_26_v6_league_candidate_fast_path")
+        self.assertEqual(
+            contract.sha256,
+            "7f8876ce427129c7e2c2033ef4f53073badfd30e2dd53084fd9d9fb012c9ef9d",
+        )
+        self.assertIn(contract.version, YEAR2_2025_26_RELEASE_CONTRACT.required_migrations)
+        self.assertEqual(REGISTRATION.count(contract.statement), 2)
+
     def test_release_contract_binds_each_local_migration_to_one_registered_checksum(self) -> None:
         contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
         self.assertEqual(contract, YEAR2_2025_26_RELEASE_CONTRACT)
@@ -55,6 +69,7 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
             "URC 2025-26 V6 migration registration is absent or checksum-mismatched",
             "on conflict (version) do nothing",
             "relrowsecurity",
+            "analysis.league_dashboard_release_candidate_snapshot_v6_20260823",
         ):
             self.assertIn(token, REGISTRATION)
 

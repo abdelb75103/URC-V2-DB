@@ -11,6 +11,21 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-23: Year 2 V6 league candidate sealed snapshot
+
+| Field | Value |
+|---|---|
+| Status | `implemented-not-executed`: additive migration, exact checksum contract and focused tests only. No database query, migration or release ran in this task. |
+| Rule version | `urc_2025_26_v6_league_candidate_fast_path` |
+| Carry-forward | `season-specific`: the sealed snapshot is valid only for the exact current 2025-26 sixteen-member release/build set. |
+| Migration | `20260823120000_urc_2025_26_v6_league_candidate_fast_path.sql` |
+
+**Execution only.** The migration evaluates the established build-derived league candidate once and stores its exact JSONB bytes and canonical payload hash in a private, immutable snapshot. The existing candidate view then reads those bytes only while a deterministic hash of all sixteen current team release and curated-build identities still matches the sealed member set. A member or active-build change returns no league candidate until a separately reviewed versioned successor is installed.
+
+**No reporting rule change.** Candidate columns, payload bytes, formulas, classification and cohort evidence, release validation triggers, immutable bundle storage and public readers are unchanged. The snapshot has row-level security, no public or web-reader grant, and rejects update or delete. The migration does not reference a 2024-25 relation and applies no imputation.
+
+---
+
 ## 2026-08-22: Year 2 V6 candidate view query optimisation
 
 | Field | Value |
