@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import subprocess
 import unittest
 
@@ -77,6 +78,30 @@ class ApprovedTargetTests(unittest.TestCase):
             self.assertGreater(caller_sql, final_proof, relative_path)
             between = source[final_proof:caller_sql]
             self.assertEqual(0, between.count("client.query("), relative_path)
+
+    def test_read_only_client_applies_its_validated_timeout_inside_postgres(self) -> None:
+        source = (ROOT / "pipeline/sql_query.mjs").read_text(encoding="utf-8")
+        self.assertIn("const queryTimeoutMillis = (() => {", source)
+        self.assertIn("PIPELINE_QUERY_TIMEOUT_MS must be a positive integer", source)
+        self.assertIn("query_timeout: queryTimeoutMillis", source)
+        self.assertIn(
+            "await client.query(`set local statement_timeout = ${queryTimeoutMillis}`);",
+            source,
+        )
+
+    def test_read_only_client_rejects_a_timeout_above_node_timer_range(self) -> None:
+        environment = os.environ.copy()
+        environment["PIPELINE_QUERY_TIMEOUT_MS"] = "2147483648"
+        result = subprocess.run(
+            ["node", "pipeline/sql_query.mjs", "/tmp/not-read.sql"],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(2, result.returncode)
+        self.assertIn("no greater than 2147483647", result.stderr)
 
 
 if __name__ == "__main__":

@@ -34,6 +34,18 @@ const connectionTimeoutMillis = (() => {
   return parsed;
 })();
 
+const queryTimeoutMillis = (() => {
+  const raw = process.env.PIPELINE_QUERY_TIMEOUT_MS || "900000";
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 2147483647) {
+    console.error(
+      "PIPELINE_QUERY_TIMEOUT_MS must be a positive integer no greater than 2147483647"
+    );
+    process.exit(2);
+  }
+  return parsed;
+})();
+
 const connectionString = process.env.SUPABASE_DB_URL;
 try {
   assertApprovedConnectionString(connectionString);
@@ -46,7 +58,7 @@ const client = new Client({
   connectionString,
   connectionTimeoutMillis,
   keepAlive: true,
-  query_timeout: Number(process.env.PIPELINE_QUERY_TIMEOUT_MS || 900000)
+  query_timeout: queryTimeoutMillis
 });
 
 try {
@@ -68,6 +80,9 @@ try {
     );
   }
   await client.query("begin transaction read only");
+  // Match the client-side bound inside PostgreSQL. The approved 16-team
+  // release candidate legitimately exceeds the database's two-minute default.
+  await client.query(`set local statement_timeout = ${queryTimeoutMillis}`);
   await proveApprovedLiveTarget(client);
   const result = await client.query(fs.readFileSync(sqlPath, "utf8"));
   const rows = Array.isArray(result) ? result[result.length - 1].rows : result.rows;
