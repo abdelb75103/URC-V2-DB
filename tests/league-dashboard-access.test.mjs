@@ -629,6 +629,19 @@ test('impact chart formats floating point axis ticks for presentation', async ()
   assert.doesNotMatch(charts, /unit=" \/1,000h"|unit=" days"/);
 });
 
+test('timeline bars are cyan and ranked team comparisons mark the active league mean', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+  const timeline = charts.slice(charts.indexOf('export function SeasonTimelineChart'), charts.indexOf('export function SeverityArc'));
+  const comparison = dashboard.slice(dashboard.indexOf('function TeamComparisonTab'), dashboard.indexOf('function BenchmarkCell'));
+
+  assert.match(timeline, /fill=\{SETTING_COLORS\.all\}[\s\S]*?fillOpacity=\{1\}/);
+  assert.match(comparison, /const leagueMean = benchmark\?\.\[metric\]/);
+  assert.match(comparison, /leagueMean=\{leagueMean\}/);
+  assert.match(comparison, /border-dotted border-orange-400/);
+  assert.match(comparison, /league mean \$\{fmtRanked\(leagueMean, metric\)\}/);
+});
+
 test('monthly production fallback never fabricates a duplicate recorded-case series', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');

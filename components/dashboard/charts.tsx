@@ -619,7 +619,7 @@ export function SeasonTimelineChart({
               dataKey="time_loss_injuries"
               name="Time-loss cases"
               fill={SETTING_COLORS.all}
-              fillOpacity={0.45}
+              fillOpacity={1}
               radius={[3, 3, 0, 0]}
               maxBarSize={34}
               isAnimationActive={false}

@@ -1052,7 +1052,12 @@ function TeamComparisonTab({
   const ranked = [...rows]
     .filter((row) => row[activeSetting]?.[metric] != null)
     .sort((a, b) => (b[activeSetting]?.[metric] ?? 0) - (a[activeSetting]?.[metric] ?? 0));
-  const max = Math.max(...ranked.map((row) => row[activeSetting]?.[metric] ?? 0), 1);
+  const leagueMean = benchmark?.[metric];
+  const max = Math.max(
+    ...ranked.map((row) => row[activeSetting]?.[metric] ?? 0),
+    typeof leagueMean === 'number' && Number.isFinite(leagueMean) ? leagueMean : 0,
+    1,
+  );
   const activeId = hoveredId ?? selectedId;
   const ladderRef = useRef<HTMLDivElement>(null);
   const ladderPositions = useRef(new Map<string, number>());
@@ -1128,6 +1133,7 @@ function TeamComparisonTab({
                 metric={metric}
                 metricLabel={metricLabel}
                 setting={activeSetting}
+                leagueMean={leagueMean}
                 active={activeId === row.comparison_id}
                 isViewer={row.comparison_id === viewerComparisonId}
                 viewerColor={teamColor?.mark}
@@ -1246,6 +1252,7 @@ function ComparisonBarRow({
   metric,
   metricLabel,
   setting,
+  leagueMean,
   active,
   isViewer = false,
   viewerColor,
@@ -1260,6 +1267,7 @@ function ComparisonBarRow({
   metric: ComparisonMetric;
   metricLabel: string;
   setting: ComparisonSetting;
+  leagueMean?: number | null;
   active: boolean;
   isViewer?: boolean;
   viewerColor?: string;
@@ -1270,11 +1278,13 @@ function ComparisonBarRow({
   const animatedValue = useAnimatedNumber(value);
   const metricRow = row[setting];
   const label = isViewer && viewerName ? viewerName : row.team_alias;
+  const hasLeagueMean = typeof leagueMean === 'number' && Number.isFinite(leagueMean);
+  const leagueMeanPosition = hasLeagueMean ? Math.min((leagueMean / max) * 100, 100) : 0;
   return (
     <button
       data-row-id={row.comparison_id}
       type="button"
-      aria-label={`${label}${isViewer ? ', this team' : ''}, ${setting} ${metricLabel}: ${fmtRanked(value, metric)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
+      aria-label={`${label}${isViewer ? ', this team' : ''}, ${setting} ${metricLabel}: ${fmtRanked(value, metric)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${hasLeagueMean ? `, league mean ${fmtRanked(leagueMean, metric)}` : ''}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
       onMouseEnter={() => onHover(row.comparison_id)}
       onMouseLeave={() => onHover(undefined)}
       onFocus={() => onHover(row.comparison_id)}
@@ -1286,11 +1296,18 @@ function ComparisonBarRow({
       <span className="flex min-w-0 items-center gap-1.5">
         <span className="truncate font-semibold text-foreground sm:text-base">{label}</span>
       </span>
-      <span className="h-4 overflow-hidden rounded-full bg-muted sm:h-5">
+      <span className="relative h-4 rounded-full bg-muted sm:h-5">
         <span
           className={`block h-full rounded-full transition-[width,filter] ease-[cubic-bezier(0.22,1,0.36,1)] duration-[900ms] ${isViewer && viewerColor ? '' : 'bg-primary'} ${active ? 'brightness-125' : ''}`}
           style={{ width: `${(value / max) * 100}%`, background: isViewer ? viewerColor : undefined }}
         />
+        {hasLeagueMean && (
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-4 -top-4 z-10 border-l-2 border-dotted border-orange-400 sm:-bottom-[18px] sm:-top-[18px] lg:-bottom-[10px] lg:-top-[10px]"
+            style={{ left: `calc(${leagueMeanPosition}% - 1px)` }}
+          />
+        )}
       </span>
       <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmtRanked(animatedValue, metric)}</span>
     </button>
