@@ -43,7 +43,7 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
         self.assertEqual(contract.name, "urc_2025_26_v6_league_candidate_fast_path")
         self.assertEqual(
             contract.sha256,
-            "7f8876ce427129c7e2c2033ef4f53073badfd30e2dd53084fd9d9fb012c9ef9d",
+            "b7414b9ade8dd6eb5bc225e3fd25aab6bf6711147afdbe7511a451e6b7555dfc",
         )
         self.assertIn(contract.version, YEAR2_2025_26_RELEASE_CONTRACT.required_migrations)
         self.assertEqual(REGISTRATION.count(contract.statement), 2)

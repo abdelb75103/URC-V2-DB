@@ -55,6 +55,19 @@ const statementTimeoutMs = (() => {
   return parsed;
 })();
 
+// Multi-statement snapshot builds must see one database state throughout the
+// transaction. Keep the default unchanged and accept one fixed, non-injectable
+// override for those migrations only.
+const transactionIsolation = (() => {
+  const raw = process.env.PIPELINE_TRANSACTION_ISOLATION || "";
+  if (raw === "") return "";
+  if (raw === "repeatable_read") return "repeatable read";
+  console.error(
+    "PIPELINE_TRANSACTION_ISOLATION must be empty or repeatable_read"
+  );
+  process.exit(2);
+})();
+
 try {
   await client.connect();
   const proof = await proveApprovedLiveTarget(client);
@@ -62,6 +75,11 @@ try {
     `URC target proof passed: project_ref=${proof.projectRef} database=${proof.database} evidence=${proof.evidence}`
   );
   await client.query("begin");
+  if (transactionIsolation) {
+    await client.query(
+      `set transaction isolation level ${transactionIsolation}`
+    );
+  }
   // The target's default statement_timeout is 2 minutes, which is shorter than
   // a legitimate promotion transaction: release-league re-derives the league
   // payload and all 16 team payloads twice for its inserts and twice more in
