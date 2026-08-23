@@ -133,7 +133,7 @@ test('injury type dossier links ranked selection to exact subtype evidence', asy
 
 test('reader preserves versioned family totals and exact subtype evidence', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
-  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
+  process.env.WEB_READER_DB_URL = 'postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   let queryText = '';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
@@ -253,7 +253,7 @@ test('team comparisons cross the client boundary with display aliases only', asy
 test('team comparison overall setting is a validated projection of released headline fields', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
   const priorAliases = process.env.TEAM_DISPLAY_ALIAS_JSON;
-  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
+  process.env.WEB_READER_DB_URL = 'postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => ({
@@ -306,7 +306,7 @@ test('team comparison overall setting is a validated projection of released head
 test('team comparisons preserve unavailable exposure and place it after known coverage', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
   const priorAliases = process.env.TEAM_DISPLAY_ALIAS_JSON;
-  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
+  process.env.WEB_READER_DB_URL = 'postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ known: 'Known', unavailable: 'Unavailable' });
   const headline = [
     { key: 'recorded_injuries', label: 'Recorded injuries', value: 1, unit: 'cases', formula: 'count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)' },
@@ -368,7 +368,7 @@ test('team comparisons preserve unavailable exposure and place it after known co
 
 test('league and team page metrics include the released overall benchmark', async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
-  process.env.WEB_READER_DB_URL = 'postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
+  process.env.WEB_READER_DB_URL = 'postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   const coverage = {
     exposure_rows: 1,
     exposed_players: 1,
@@ -461,6 +461,34 @@ test('league and team page metrics include the released overall benchmark', asyn
     assert.deepEqual(teamPageData.leagueMetrics.map((row) => row.setting), ['all', 'match']);
     assert.equal(teamPageData.leagueMetrics[0].incidence_per_1000h, 7.5);
     assert.equal(teamPageData.leagueMetrics[0].burden_per_1000h, 93.75);
+  } finally {
+    globalThis.__urcWebReaderPool = undefined;
+    if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;
+    else process.env.WEB_READER_DB_URL = priorUrl;
+  }
+});
+
+test('Year 2 league page derives benchmarks from the complete released dashboard', async () => {
+  const priorUrl = process.env.WEB_READER_DB_URL;
+  process.env.WEB_READER_DB_URL = 'postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
+  const dashboard = JSON.parse(await readFile(new URL('../content/reporting/urc_dashboard_2025-26.json', import.meta.url), 'utf8'));
+  globalThis.__urcWebReaderPool = transactionMockPool(
+    async (sql) => {
+      if (sql.includes('approved_dashboard_reader_target_v2')) {
+        return { rows: [{ target_attested: true }] };
+      }
+      if (sql.includes('latest_dashboard_cache_token_v2')) {
+        return { rows: [{ cache_token: 'year-2-release' }] };
+      }
+      return { rows: [{ dashboard, comparisons: [] }] };
+    },
+  );
+
+  try {
+    const { getLeaguePageData } = await loadReportingForFixtureTest();
+    const pageData = await getLeaguePageData('2025-26');
+    assert.equal(pageData.dashboard?.season, '2025-26');
+    assert.deepEqual(pageData.leagueMetrics.map((row) => row.setting), ['all', 'match', 'training', 'unknown']);
   } finally {
     globalThis.__urcWebReaderPool = undefined;
     if (priorUrl === undefined) delete process.env.WEB_READER_DB_URL;

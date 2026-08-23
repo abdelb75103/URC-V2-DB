@@ -21,15 +21,21 @@ async function loadTargetModule() {
   return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
 }
 
-test("web reader target proof accepts only the approved URC project reference", async () => {
+test("web reader target proof accepts only the approved project and least-privilege role", async () => {
   const { assertApprovedWebReaderConnectionString } = await loadTargetModule();
   const proof = assertApprovedWebReaderConnectionString(
-    "postgresql://postgres.eukkvswaxweenovqqgzr:ignored@aws-0-eu-west-3.pooler.supabase.com:5432/postgres",
+    "postgresql://web_reader.eukkvswaxweenovqqgzr:ignored@aws-0-eu-west-3.pooler.supabase.com:5432/postgres",
   );
   assert.equal(proof.projectRef, "eukkvswaxweenovqqgzr");
   assert.throws(
     () => assertApprovedWebReaderConnectionString(
-      "postgresql://postgres.aaaaaaaaaaaaaaaaaaaa:ignored@aws-0-eu-west-3.pooler.supabase.com:5432/postgres",
+      "postgresql://web_reader.aaaaaaaaaaaaaaaaaaaa:ignored@aws-0-eu-west-3.pooler.supabase.com:5432/postgres",
+    ),
+    /approved URC project/,
+  );
+  assert.throws(
+    () => assertApprovedWebReaderConnectionString(
+      "postgresql://postgres.eukkvswaxweenovqqgzr:ignored@aws-0-eu-west-3.pooler.supabase.com:5432/postgres",
     ),
     /approved URC project/,
   );
@@ -47,7 +53,7 @@ test("reporting queries obtain database attestation before each reader SQL state
 test("attestation and dashboard SQL run on one read-only database session", async () => {
   const priorUrl = process.env.WEB_READER_DB_URL;
   process.env.WEB_READER_DB_URL =
-    "postgresql://postgres.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres";
+    "postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres";
   const statements = [];
   let released = false;
   globalThis.__urcWebReaderPool = {

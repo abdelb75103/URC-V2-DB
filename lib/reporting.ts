@@ -38,10 +38,12 @@ export function assertApprovedWebReaderConnectionString(connectionString: string
     throw new Error("web reader database name is not postgres; approved URC project proof failed");
   }
   const directMatch = url.hostname.match(/^db\.([a-z0-9]{20})\.supabase\.co$/);
-  const poolerMatch = url.username.match(/^postgres\.([a-z0-9]{20})$/);
+  const poolerMatch = url.username.match(/^web_reader\.([a-z0-9]{20})$/);
   const projectRef = directMatch?.[1] ?? poolerMatch?.[1];
-  const approvedHost = directMatch !== null || url.hostname.endsWith(".pooler.supabase.com");
-  if (!approvedHost || projectRef !== APPROVED_URC_PROJECT_REF) {
+  const approvedEndpoint = directMatch !== null
+    ? url.username === "web_reader"
+    : poolerMatch !== null && url.hostname.endsWith(".pooler.supabase.com");
+  if (!approvedEndpoint || projectRef !== APPROVED_URC_PROJECT_REF) {
     throw new Error("web reader database URL does not resolve to the approved URC project");
   }
   return { projectRef, hostname: url.hostname, database: "postgres" };
@@ -481,9 +483,17 @@ function parseLeagueMetricsReaderRow(
   raw: unknown,
   season: string,
 ): LeagueMetricsReaderRow {
+  const row = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  const metrics = {
+    coverage: row.coverage,
+    headline: row.headline,
+    setting_metrics: row.setting_metrics,
+  };
   return season === "2025-26"
-    ? v6LeagueMetricsSourceSchema.parse(raw)
-    : leagueMetricsSourceSchema.parse(raw);
+    ? v6LeagueMetricsSourceSchema.parse(metrics)
+    : leagueMetricsSourceSchema.parse(metrics);
 }
 
 function stripNulls<T extends Record<string, unknown>>(row: T): T {
@@ -1022,10 +1032,12 @@ function normalizeSettingMetrics(items: z.infer<typeof settingMetricSchema>[]): 
 function normalizeLeagueMetrics(
   source: LeagueMetricsReaderRow
 ): SettingMetricRow[] {
+  const settings = normalizeSettingMetrics(source.setting_metrics);
+  if (settings.some((row) => row.setting === "all")) return settings;
   const overall = overallSettingMetric(source.headline, source.coverage);
   return [
     ...(overall ? [overall] : []),
-    ...normalizeSettingMetrics(source.setting_metrics),
+    ...settings,
   ];
 }
 
