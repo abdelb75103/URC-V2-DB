@@ -51,15 +51,15 @@ export function SiteHeader() {
         {/* Left: desktop URC logo */}
         <div className="flex items-center">
           <Link href="/" className="hidden shrink-0 items-center lg:flex" aria-label="Home">
-            <Image src={StaticImages.urcLogo} alt="URC Logo" width={32} height={32} />
+            <Image src={StaticImages.urcLogo} alt="URC Logo" width={31} height={32} />
           </Link>
         </div>
 
         {/* Center: mobile logos / desktop nav */}
         <div className="flex flex-1 items-center justify-center">
           <div className="flex items-center space-x-6 lg:hidden">
-            <Image src={StaticImages.urcLogo} alt="URC Logo" width={32} height={32} />
-            <Image src={StaticImages.ucdLogo} alt="UCD Logo" width={32} height={32} />
+            <Image src={StaticImages.urcLogo} alt="URC Logo" width={31} height={32} />
+            <Image src={StaticImages.ucdLogo} alt="UCD Logo" width={22} height={32} />
           </div>
           <nav className="hidden items-center gap-0.5 lg:flex">
             {navLinks.map((link) => {
@@ -86,7 +86,7 @@ export function SiteHeader() {
         {/* Right: desktop UCD logo / mobile burger */}
         <div className="flex items-center">
           <div className="hidden shrink-0 items-center lg:flex">
-            <Image src={StaticImages.ucdLogo} alt="UCD Logo" width={32} height={32} />
+            <Image src={StaticImages.ucdLogo} alt="UCD Logo" width={22} height={32} />
           </div>
           <div className="lg:hidden">
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>

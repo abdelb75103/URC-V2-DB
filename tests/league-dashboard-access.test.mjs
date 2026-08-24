@@ -515,14 +515,14 @@ test('body map regions keep a reliable touch and pointer hit area', async () => 
   assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
 });
 
-test('injury impact uses a fixed log severity scale without changing burden bubbles or hiding singleton profiles', async () => {
+test('injury impact uses a data-fitted log severity scale, fixed dots, and direct labels', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
-  const impact = charts.slice(charts.indexOf('const IMPACT_LOG_SEVERITY_BASE_DOMAIN'));
+  const impact = charts.slice(charts.indexOf('function isPlottableLogSeverity'), charts.indexOf('export type RankSlopePoint'));
 
-  assert.match(impact, /const IMPACT_LOG_SEVERITY_BASE_DOMAIN = \[1, 400\] as const/);
-  assert.match(impact, /const IMPACT_LOG_SEVERITY_BASE_TICKS = \[1, 2, 5, 10, 20, 50, 100, 200, 400\]/);
-  assert.match(impact, /Math\.max\(IMPACT_LOG_SEVERITY_BASE_DOMAIN\[1\], 10 \*\* Math\.ceil\(Math\.log10\(maximum\)\)\)/);
+  assert.match(impact, /function logSeverityDomain\(values: number\[\]\)/);
+  assert.match(impact, /minimum \/ 1\.15/);
+  assert.match(impact, /maximum \* 1\.15/);
   assert.match(impact, /domain=\{severityDomain\}/);
   assert.match(impact, /scale="log"/);
   assert.match(impact, /ticks=\{severityTicks\}/);
@@ -530,32 +530,29 @@ test('injury impact uses a fixed log severity scale without changing burden bubb
   assert.match(impact, /isPlottableLogSeverity\(row\.mean_severity_days\)/);
   assert.match(impact, /Number\.isFinite\(value\) && value > 0/);
   assert.match(impact, /non-positive mean severity.*not shown because a logarithmic scale cannot represent those values/s);
-  assert.match(impact, /bubble_burden: Math\.max\(row\.burden_per_1000h \?\? 0, 0\.01\)/);
-  // The burden bubble range is unchanged; it is a named constant so the label
-  // collision placement can size a label against the bubble it must clear.
-  assert.match(impact, /const IMPACT_BUBBLE_SIZE = \[160, 1_100\] as const/);
-  assert.match(impact, /<ZAxis type="number" dataKey="bubble_burden" range=\{\[IMPACT_BUBBLE_SIZE\[0\], IMPACT_BUBBLE_SIZE\[1\]\]\} name="Burden" \/>/);
+  assert.match(impact, /const IMPACT_DOT_RADIUS = 5\.5/);
+  assert.match(impact, /r=\{IMPACT_DOT_RADIUS\}/);
+  assert.doesNotMatch(impact, /bubble_burden|IMPACT_BUBBLE_SIZE|dataKey="bubble_burden"/);
+  assert.match(impact, /displayLabel: row\.label/);
+  assert.match(impact, /labelAnchor: placements\.get/);
+  assert.match(impact, /Dots and already placed labels are\s+\/\/ obstacles/s);
   assert.doesNotMatch(impact, /time_loss_injuries\s*[<>]/);
-  // The shared chart keeps its established peer-relative quadrant overlay for
-  // both seasons. The split is derived from the full cohort, not just the
-  // highest-burden rows currently drawn.
-  assert.match(impact, /incidence: median\(cohortRows\.map/);
-  assert.match(impact, /severity: median\(cohortRows\.map/);
-  assert.match(impact, /<ReferenceArea/);
-  assert.match(impact, /<ReferenceLine x=\{quadrantSplit\.incidence\}/);
-  assert.match(impact, /<ReferenceLine y=\{quadrantSplit\.severity\}/);
+  assert.doesNotMatch(impact, /quadrantSplit|IMPACT_QUADRANTS|<ReferenceArea/);
   assert.doesNotMatch(impact, /aboveLogDomainRows|pending chart-domain review/);
   assert.doesNotMatch(dashboard, /View injury impact data|function AccessibleDataTable/);
+  assert.match(dashboard, /Injury Impact/);
+  assert.doesNotMatch(dashboard, /Each dot represents one profile/);
 });
 
-test('injury impact tooltip prioritises burden, gives exact small-sample cautions, and supports pinning', async () => {
+test('injury impact tooltip prioritises the plotted axes, gives exact small-sample cautions, and supports pinning', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const tooltip = charts.slice(charts.indexOf('function ImpactTooltip'), charts.indexOf('function formatAxisTick'));
-  const interaction = charts.slice(charts.indexOf('function ImpactBubble'), charts.indexOf('export function ImpactBubbleChart'));
-  const chart = charts.slice(charts.indexOf('export function ImpactBubbleChart'));
+  const interaction = charts.slice(charts.indexOf('function ImpactDot'), charts.indexOf('export function ImpactScatterChart'));
+  const chart = charts.slice(charts.indexOf('export function ImpactScatterChart'));
 
   assert.match(tooltip, /\{row\.label\}.*settingLabel\(row\.setting\)/s);
-  assert.ok(tooltip.indexOf('>Burden<') < tooltip.indexOf('>Incidence<'), 'burden must be the primary tooltip metric');
+  assert.ok(tooltip.indexOf('>Incidence<') < tooltip.indexOf('>Mean severity<'), 'incidence must lead the plotted metrics');
+  assert.ok(tooltip.indexOf('>Mean severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
   assert.match(tooltip, /n = \{count\(row\.time_loss_injuries\)\} time-loss .*\{count\(row\.days_lost\)\} total days lost/s);
   assert.doesNotMatch(tooltip, /Time-loss cases/);
   assert.match(tooltip, /Caution: based on 1 injury/);
@@ -569,10 +566,13 @@ test('injury impact tooltip prioritises burden, gives exact small-sample caution
   assert.match(interaction, /onPointerDown=\{\(event\) => \{.*event\.stopPropagation\(\);.*onPin\(point\);/s);
   assert.match(interaction, /aria-pressed=\{selected\}/);
   assert.match(interaction, /aria-describedby=\{tooltipId\}/);
-  assert.match(interaction, /radius \+ 5/);
+  assert.match(interaction, /IMPACT_DOT_RADIUS \+ 4/);
   assert.match(interaction, /onPosition\(\{ row: payload, x: cx, y: cy \}\)/);
   assert.match(chart, /const syncPointPosition = useCallback/);
   assert.match(chart, /current\.x !== point\.x \|\| current\.y !== point\.y/);
+  assert.match(chart, /const leaderStartX = centreX \+ \(leaderDx \/ leaderLength\) \* \(IMPACT_DOT_RADIUS \+ 1\.5\)/);
+  assert.match(chart, /x2=\{leaderTargetX\}[\s\S]*y2=\{leaderTargetY\}/);
+  assert.match(chart, /strokeLinecap="round"/);
   assert.match(chart, /document\.addEventListener\('pointerdown', dismissIfOutside\)/);
   assert.match(chart, /document\.addEventListener\('keydown', dismissOnEscape\)/);
   assert.match(chart, /setPinned\(undefined\)/);
@@ -699,6 +699,10 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
 
   assert.match(dashboard, /Total hours[\s\S]*Total distance/);
+  assert.match(dashboard, /No approved exposure data is available for this season/);
+  assert.match(dashboard, /No approved exposure totals are available for this season/);
+  const tabs = dashboard.slice(dashboard.indexOf('const TABS'), dashboard.indexOf('const METRICS'));
+  assert.ok(tabs.indexOf("['types', 'Injury Types']") < tabs.indexOf("['exposure', 'Exposure']"), 'Exposure must remain the final dashboard tab');
   assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);
   assert.match(dashboard, /HSR distance/);
   const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));

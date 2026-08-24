@@ -26,7 +26,7 @@ import { withoutFrontFacingUnknown } from '@/lib/dashboard-visibility';
 import {
   ComparisonScatterChart,
   ExposureTrendChart,
-  ImpactBubbleChart,
+  ImpactScatterChart,
   SETTING_COLORS,
   SEVERITY_BAND_COLORS,
   SeasonTimelineChart,
@@ -49,10 +49,10 @@ type Setting = InjuryProfileRow['setting'];
 const TABS = [
   ['overview', 'Overview'],
   ['comparison', 'Team Comparison'],
-  ['exposure', 'Exposure'],
   ['common', 'Common Injuries'],
   ['location', 'Injury Location'],
   ['types', 'Injury Types'],
+  ['exposure', 'Exposure'],
 ] as const;
 
 const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; longUnit: string }> = [
@@ -753,8 +753,8 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
   const impactSource = impactDimension === 'diagnosis'
     ? source
     : profiles.filter((row) => row.dimension === (impactDimension === 'location' ? 'body_location' : 'injury_type'));
-  // The chart draws the highest-burden slice but splits its quadrants on the whole
-  // cohort, so both are passed rather than the slice alone.
+  // Keep the chart focused on the twelve profiles with the greatest overall
+  // impact; every displayed profile receives the same dot size and a direct label.
   const impactCohort = impactSource.filter((row) => row.setting === setting);
   const impactRows = [...impactCohort]
     .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0))
@@ -773,7 +773,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
           <CommonInjuryRankings rows={rows} totalInjuries={totalInjuries} injuryColors={injuryColors} />
           <section aria-labelledby="common-injuries-impact" className="mt-8">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h3 id="common-injuries-impact" className="text-lg font-semibold text-foreground">Injury Impact</h3>
+              <h3 id="common-injuries-impact" className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Injury Impact</h3>
               <Segmented
                 value={impactDimension}
                 options={[
@@ -786,7 +786,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
               />
             </div>
             <Panel>
-              <ImpactBubbleChart rows={impactRows} cohort={impactCohort} />
+              <ImpactScatterChart rows={impactRows} />
             </Panel>
           </section>
         </>
@@ -1204,10 +1204,7 @@ function TeamComparisonTab({
           </div>
         </Panel>
         <Panel contentClassName="p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <h3 className="text-lg font-semibold text-foreground">Match against training incidence</h3>
-            <ScopeChip show label="Match & training" />
-          </div>
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Match and training incidence</h3>
           <ComparisonScatterChart
             rows={scatterRows}
             leagueMatchIncidence={matchBenchmark?.incidence_per_1000h}
@@ -1396,16 +1393,34 @@ function ExposureTab({
     { value: 'distance', label: 'Distance' },
     ...(exposurePreview ? [{ value: 'hsr' as const, label: 'HSR' }] : []),
   ];
+  const hasExposureData = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value))
+    || monthlyRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)))
+    || comparisonRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)));
+  const hasExposureTotals = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value));
+
+  if (!hasExposureData) {
+    return (
+      <div className="space-y-5 sm:space-y-6">
+        <SectionHeading title="Exposure" />
+        <EmptyState>No approved exposure data is available for this season.</EmptyState>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 sm:space-y-6">
       <SectionHeading title="Exposure" />
       <section aria-labelledby="total-exposure-heading">
         <h3 id="total-exposure-heading" className="mb-3 text-lg font-semibold text-foreground">Total exposure</h3>
-        <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
-          <OverviewStat label="Total hours" value={fmtHours(totalHours)} unit="player-hours" />
-          <OverviewStat label="Total distance" value={fmt(totalDistance)} unit="km" />
-          {exposurePreview && <OverviewStat label="HSR distance" value={fmt(totalHsr)} unit="km" />}
-        </div>
+        {hasExposureTotals ? (
+          <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+            <OverviewStat label="Total hours" value={fmtHours(totalHours)} unit="player-hours" />
+            <OverviewStat label="Total distance" value={fmt(totalDistance)} unit="km" />
+            {exposurePreview && <OverviewStat label="HSR distance" value={fmt(totalHsr)} unit="km" />}
+          </div>
+        ) : (
+          <EmptyState>No approved exposure totals are available for this season.</EmptyState>
+        )}
       </section>
       <Panel contentClassName="p-4 sm:p-5">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1912,6 +1927,9 @@ export function TeamDashboard({
             teamColor={teamColor}
           />
         </TabsContent>
+        <TabsContent value="common"><CommonInjuriesTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
+        <TabsContent value="location"><LocationTab profiles={profiles} /></TabsContent>
+        <TabsContent value="types"><InjuryTypesTab families={injuryTypeFamilies} /></TabsContent>
         <TabsContent value="exposure">
           <ExposureTab
             dashboard={dashboard}
@@ -1922,9 +1940,6 @@ export function TeamDashboard({
             teamName={teamName}
           />
         </TabsContent>
-        <TabsContent value="common"><CommonInjuriesTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
-        <TabsContent value="location"><LocationTab profiles={profiles} /></TabsContent>
-        <TabsContent value="types"><InjuryTypesTab families={injuryTypeFamilies} /></TabsContent>
       </Tabs>
     </div>
   );

@@ -847,6 +847,18 @@ function ComparisonScatterTooltip({
   );
 }
 
+function comparisonMarkerLabel(label: string) {
+  const alias = label.match(/^Team\s+(.+)$/i)?.[1];
+  if (alias) return alias;
+  return label
+    .trim()
+    .split(/\s+/)
+    .map((word) => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 /**
  * Match against training incidence, one dot per club. Every value is read from
  * the approved comparison payload: positions are the released rates, dot area is
@@ -863,8 +875,9 @@ export function ComparisonScatterChart({
   leagueTrainingIncidence?: number | null;
   viewerColor?: string;
 }) {
-  const others = rows.filter((row) => !row.is_viewer);
-  const viewer = rows.filter((row) => row.is_viewer);
+  const labelledRows = rows.map((row) => ({ ...row, marker_label: comparisonMarkerLabel(row.label) }));
+  const others = labelledRows.filter((row) => !row.is_viewer);
+  const viewer = labelledRows.filter((row) => row.is_viewer);
   const boxRef = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
   useLayoutEffect(() => {
@@ -880,6 +893,9 @@ export function ComparisonScatterChart({
     return <ChartEmpty reason="No club has both a match and a training incidence in the approved comparison payload." />;
   }
   const pad = (values: number[]) => [0, Math.max(...values) * 1.15 || 1] as [number, number];
+  const matchDomain = pad(rows.map((row) => row.match_incidence));
+  const trainingDomain = pad(rows.map((row) => row.training_incidence));
+  const showIncidenceZones = typeof leagueMatchIncidence === 'number' && typeof leagueTrainingIncidence === 'number';
   // The training mean is labelled at the right-hand end of its line in both
   // layouts. Wide puts it outside the plot, which costs a right margin big enough
   // to hold the whole string (~102px at fontSize 10, plus the 5px offset). On a
@@ -890,17 +906,39 @@ export function ComparisonScatterChart({
     : { value: 'League training mean', position: 'right' as const, fill: SETTING_COLORS.training, fontSize: 10 };
 
   return (
-    <section aria-label="Match against training incidence for every club. Horizontal position is match incidence, vertical position is training incidence, and dot area is reported exposure.">
+    <section aria-label="Match against training incidence for every club. Horizontal position is match incidence, vertical position is training incidence, and circle area is player-hours. The green zone is below both league means and the red zone is above both league means.">
       <div className="pb-2" ref={boxRef}>
         <div className="h-[360px] sm:min-w-[620px]">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart accessibilityLayer margin={{ top: 34, right: narrow ? 16 : 116, bottom: 32, left: 14 }}>
+              {showIncidenceZones && (
+                <>
+                  <ReferenceArea
+                    x1={matchDomain[0]}
+                    x2={leagueMatchIncidence}
+                    y1={trainingDomain[0]}
+                    y2={leagueTrainingIncidence}
+                    fill="#22c55e"
+                    fillOpacity={0.09}
+                    stroke="none"
+                  />
+                  <ReferenceArea
+                    x1={leagueMatchIncidence}
+                    x2={matchDomain[1]}
+                    y1={leagueTrainingIncidence}
+                    y2={trainingDomain[1]}
+                    fill="#ef4444"
+                    fillOpacity={0.09}
+                    stroke="none"
+                  />
+                </>
+              )}
               <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
               <XAxis
                 type="number"
                 dataKey="match_incidence"
                 name="Match incidence"
-                domain={pad(rows.map((row) => row.match_incidence))}
+                domain={matchDomain}
                 tickFormatter={formatAxisTick}
                 tick={{ fill: AXIS, fontSize: 11 }}
                 tickLine={false}
@@ -911,7 +949,7 @@ export function ComparisonScatterChart({
                 type="number"
                 dataKey="training_incidence"
                 name="Training incidence"
-                domain={pad(rows.map((row) => row.training_incidence))}
+                domain={trainingDomain}
                 tickFormatter={formatAxisTick}
                 width={50}
                 tick={{ fill: AXIS, fontSize: 11 }}
@@ -948,7 +986,9 @@ export function ComparisonScatterChart({
                 stroke="hsl(0 0% 96%)"
                 strokeOpacity={0.55}
                 isAnimationActive={false}
-              />
+              >
+                <LabelList dataKey="marker_label" position="center" fill="hsl(0 0% 100%)" fontSize={9} fontWeight={700} />
+              </Scatter>
               {viewer.length > 0 && (
                 <Scatter
                   data={viewer}
@@ -958,11 +998,26 @@ export function ComparisonScatterChart({
                   strokeWidth={2}
                   isAnimationActive={false}
                 >
-                  <LabelList dataKey="label" position="top" fill="hsl(0 0% 96%)" fontSize={11} />
+                  <LabelList dataKey="marker_label" position="center" fill="hsl(0 0% 100%)" fontSize={9} fontWeight={700} />
                 </Scatter>
               )}
             </ScatterChart>
           </ResponsiveContainer>
+        </div>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 rounded-md border border-border/70 bg-background/25 px-3 py-2 text-[11px] text-muted-foreground">
+          <span>Circle area = player-hours</span>
+          {showIncidenceZones && (
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-sm bg-green-500/70" aria-hidden="true" />
+                Below both league means
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-sm bg-red-500/70" aria-hidden="true" />
+                Above both league means
+              </span>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -989,7 +1044,7 @@ function ImpactTooltip({
       ? 'Small sample: interpret 2 injuries cautiously'
       : '';
 
-  const color = profileColor(row.code);
+  const color = SETTING_COLORS.all;
   return (
     <div
       id={id}
@@ -1001,16 +1056,16 @@ function ImpactTooltip({
       <p className="font-semibold text-white">{row.label}</p>
       <dl className="mt-1.5 space-y-1">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt style={{ color }}>Burden</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color }}>{number(row.burden_per_1000h)} days /1,000 h</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
           <dt style={{ color }}>Incidence</dt>
           <dd className="text-right font-semibold tabular-nums" style={{ color }}>{number(row.incidence_per_1000h)} /1,000 h</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
           <dt style={{ color }}>Mean severity</dt>
           <dd className="text-right font-semibold tabular-nums" style={{ color }}>{number(row.mean_severity_days)} days</dd>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
+          <dt>Burden</dt>
+          <dd className="text-right font-semibold tabular-nums">{number(row.burden_per_1000h)} days /1,000 h</dd>
         </div>
       </dl>
       <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{settingLabel(row.setting)} · n = {count(row.time_loss_injuries)} time-loss {row.time_loss_injuries === 1 ? 'injury' : 'injuries'} · {count(row.days_lost)} total days lost{caution && ` · ${caution}`}{pinned && ' · Pinned, press Escape to dismiss'}</p>
@@ -1022,104 +1077,54 @@ function formatAxisTick(value: number) {
   return number(value);
 }
 
-const IMPACT_LOG_SEVERITY_BASE_DOMAIN = [1, 400] as const;
-const IMPACT_LOG_SEVERITY_BASE_TICKS = [1, 2, 5, 10, 20, 50, 100, 200, 400];
-
 function isPlottableLogSeverity(value: number | null): value is number {
   return value !== null && Number.isFinite(value) && value > 0;
 }
 
-function logSeverityDomain(maximum: number): [number, number] {
-  return [IMPACT_LOG_SEVERITY_BASE_DOMAIN[0], Math.max(IMPACT_LOG_SEVERITY_BASE_DOMAIN[1], 10 ** Math.ceil(Math.log10(maximum)))];
+function logSeverityTickCandidates(maximum: number) {
+  const topExponent = Math.max(1, Math.ceil(Math.log10(Math.max(maximum, 1))));
+  return Array.from({ length: topExponent + 1 }, (_, exponent) => [1, 2, 5].map((multiple) => multiple * 10 ** exponent)).flat();
 }
 
-function logSeverityTicks(domainMaximum: number) {
-  if (domainMaximum === IMPACT_LOG_SEVERITY_BASE_DOMAIN[1]) return IMPACT_LOG_SEVERITY_BASE_TICKS;
-  const ticks = Array.from({ length: Math.ceil(Math.log10(domainMaximum)) + 1 }, (_, exponent) => [1, 2, 5].map((multiple) => multiple * 10 ** exponent))
-    .flat()
-    .filter((tick) => tick <= domainMaximum);
-  return ticks.at(-1) === domainMaximum ? ticks : [...ticks, domainMaximum];
+function logSeverityDomain(values: number[]): [number, number] {
+  if (!values.length) return [1, 10];
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const candidates = logSeverityTickCandidates(maximum * 2);
+  const lower = candidates.filter((tick) => tick <= minimum / 1.15).at(-1) ?? 1;
+  const upper = candidates.find((tick) => tick >= maximum * 1.15) ?? 10 ** Math.ceil(Math.log10(maximum * 1.15));
+  return [lower, Math.max(upper, lower * 2)];
+}
+
+function logSeverityTicks(domain: [number, number]) {
+  return logSeverityTickCandidates(domain[1]).filter((tick) => tick >= domain[0] && tick <= domain[1]);
 }
 
 type ImpactChartRow = InjuryProfileRow & {
-  bubble_burden: number;
   displayLabel: string;
+  labelDx: number;
   labelDy: number;
+  labelAnchor: 'start' | 'middle' | 'end';
   impactKey: string;
 };
 
 /**
- * The bubble chart's inner plot box in its own pixel space. Tied to the
- * `h-[430px]` container and the `{ top: 30, right: 30, bottom: 34, left: 24 }`
+ * The scatter plot's inner plot box in its own pixel space. Tied to the
+ * `h-[520px]` container and the `{ top: 30, right: 30, bottom: 34, left: 24 }`
  * margins plus the 62px y-axis width below: change either and this must change
  * with it, or the labels drift off their dots. The width is measured at runtime
  * from the container, because the chart is `min-w-[680px]` but stretches, and a
  * fixed width would misjudge every horizontal collision above that size.
  */
-const IMPACT_LABEL_BOX = { left: 86, right: 30, top: 30, minWidth: 564, height: 366 };
-/** Matches the chart's ZAxis range, so a label clears its own bubble. */
-const IMPACT_BUBBLE_SIZE = [160, 1_100] as const;
+const IMPACT_LABEL_BOX = { left: 86, right: 30, top: 30, minWidth: 564, height: 456 };
+const IMPACT_DOT_RADIUS = 5.5;
 
 /** A profile the log-scaled bubble chart can place at all. */
 function isPlottableImpactRow(row: InjuryProfileRow) {
   return row.incidence_per_1000h !== null
     && Number.isFinite(row.incidence_per_1000h)
-    && row.burden_per_1000h !== null
-    && Number.isFinite(row.burden_per_1000h)
     && isPlottableLogSeverity(row.mean_severity_days);
 }
-
-const QUADRANT_DIVIDER = 'hsl(0 0% 100% / 0.28)';
-/**
- * Read as a traffic light on the two plotted axes: red where both are above the
- * split, green where both are below, amber for the mixed corners. The labels are
- * comparative ("more frequent", "shorter absences") because the split is a median
- * of the plotted profiles, not an absolute threshold: a profile just below the
- * line is not low, only lower than its peers. Fills stay faint enough that a
- * bubble sitting on one is still the strongest thing in the cell.
- */
-const IMPACT_QUADRANTS = [
-  {
-    key: 'high-low',
-    top: true,
-    right: false,
-    label: 'Longer absences · Less frequent',
-    fill: 'hsl(43 92% 58% / 0.16)',
-    swatch: 'hsl(43 92% 58% / 0.7)',
-    labelFill: 'hsl(43 90% 76%)',
-    labelPosition: 'insideTopLeft' as const,
-  },
-  {
-    key: 'high-high',
-    top: true,
-    right: true,
-    label: 'Longer absences · More frequent',
-    fill: 'hsl(0 74% 54% / 0.22)',
-    swatch: 'hsl(0 74% 54% / 0.75)',
-    labelFill: 'hsl(0 84% 80%)',
-    labelPosition: 'insideTopRight' as const,
-  },
-  {
-    key: 'low-low',
-    top: false,
-    right: false,
-    label: 'Shorter absences · Less frequent',
-    fill: 'hsl(150 62% 45% / 0.2)',
-    swatch: 'hsl(150 62% 48% / 0.75)',
-    labelFill: 'hsl(150 62% 74%)',
-    labelPosition: 'insideBottomLeft' as const,
-  },
-  {
-    key: 'low-high',
-    top: false,
-    right: true,
-    label: 'Shorter absences · More frequent',
-    fill: 'hsl(43 92% 58% / 0.16)',
-    swatch: 'hsl(43 92% 58% / 0.7)',
-    labelFill: 'hsl(43 90% 76%)',
-    labelPosition: 'insideBottomRight' as const,
-  },
-];
 
 type ImpactPointPosition = {
   row: ImpactChartRow;
@@ -1127,17 +1132,15 @@ type ImpactPointPosition = {
   y: number;
 };
 
-type ImpactBubbleShapeProps = {
+type ImpactDotShapeProps = {
   cx?: number;
   cy?: number;
-  size?: number;
   payload?: ImpactChartRow;
 };
 
-function ImpactBubble({
+function ImpactDot({
   cx,
   cy,
-  size,
   payload,
   pinnedKey,
   onPreview,
@@ -1148,7 +1151,7 @@ function ImpactBubble({
   onDismiss,
   onPosition,
   tooltipId,
-}: ImpactBubbleShapeProps & {
+}: ImpactDotShapeProps & {
   pinnedKey?: string;
   onPreview: (point: ImpactPointPosition) => void;
   onFocusPreview: (point: ImpactPointPosition) => void;
@@ -1164,15 +1167,14 @@ function ImpactBubble({
   }, [cx, cy, onPosition, payload]);
 
   if (cx === undefined || cy === undefined || !payload) return null;
-  const radius = Math.sqrt(Math.max(size ?? 0, 0) / Math.PI);
   const point = { row: payload, x: cx, y: cy };
   const selected = pinnedKey === payload.impactKey;
-  const accessibleLabel = `${payload.label}, ${settingLabel(payload.setting)}. Burden ${number(payload.burden_per_1000h)} days per 1,000 hours. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
+  const accessibleLabel = `${payload.label}, ${settingLabel(payload.setting)}. Incidence ${number(payload.incidence_per_1000h)} injuries per 1,000 hours. Mean severity ${number(payload.mean_severity_days)} days. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
 
   return (
     <g>
-      {selected && <circle cx={cx} cy={cy} r={radius + 5} fill="none" stroke="hsl(var(--foreground))" strokeWidth={2} strokeOpacity={0.9} pointerEvents="none" />}
-      <circle cx={cx} cy={cy} r={radius} fill={profileColor(payload.code)} fillOpacity={0.72} stroke="hsl(0 0% 96%)" strokeWidth={1.5} strokeOpacity={0.9} pointerEvents="none" />
+      {selected && <circle cx={cx} cy={cy} r={IMPACT_DOT_RADIUS + 4} fill="none" stroke="hsl(var(--foreground))" strokeWidth={2} strokeOpacity={0.9} pointerEvents="none" />}
+      <circle cx={cx} cy={cy} r={IMPACT_DOT_RADIUS} fill={SETTING_COLORS.all} stroke="hsl(0 0% 100%)" strokeWidth={1.5} strokeOpacity={0.95} pointerEvents="none" />
       <circle
         cx={cx}
         cy={cy}
@@ -1207,13 +1209,8 @@ function ImpactBubble({
   );
 }
 
-/**
- * `rows` are the bubbles drawn; `cohort` is every profile in the same setting and
- * grouping, before the caller truncates to its highest-burden slice. The quadrant
- * split reads the cohort, so "more frequent" compares a profile with all of that
- * club's profiles rather than with the truncated tail on screen.
- */
-export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; cohort?: InjuryProfileRow[] }) {
+/** Incidence and mean severity define position; every displayed profile is a fixed-size dot. */
+export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const focusedImpactKeyRef = useRef<string | undefined>(undefined);
   const dismissedImpactKeyRef = useRef<string | undefined>(undefined);
@@ -1263,9 +1260,12 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
   const data = useMemo(
     () => rows
       .filter(isPlottableImpactRow)
-      .map((row) => ({ ...row, bubble_burden: Math.max(row.burden_per_1000h ?? 0, 0.01), impactKey: `${row.setting}-${row.code}` })),
+      .map((row) => ({ ...row, impactKey: `${row.setting}-${row.code}` })),
     [rows]
   );
+  const maxIncidence = Math.max(...data.map((row) => row.incidence_per_1000h ?? 0), 0) * 1.12 || 1;
+  const severityDomain = logSeverityDomain(data.map((row) => row.mean_severity_days ?? 1));
+  const severityTicks = logSeverityTicks(severityDomain);
 
   // Label collision is resolved in the chart's own pixel space, so it needs the
   // width the chart actually rendered at rather than its minimum width.
@@ -1295,34 +1295,6 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
     };
   }, [dismissTooltip, pinned]);
 
-  /**
-   * The quadrant split is descriptive, not a released threshold: the median
-   * incidence and median severity of every profile in this setting and grouping,
-   * not of the highest-burden slice actually drawn. A median over the drawn slice
-   * would call a corner "less frequent" while every point in it is among the
-   * club's worst problems. Too few profiles and a median says nothing, so the
-   * shading stays off.
-   */
-  /**
-   * Below this the four corner labels collide across the split, so they move out
-   * to a legend under the plot rather than shrinking into an unreadable overlap.
-   */
-  const compactQuadrants = plotWidth < 420;
-
-  const quadrantSplit = useMemo(() => {
-    const cohortRows = (cohort ?? rows).filter(isPlottableImpactRow);
-    if (cohortRows.length < 4 || data.length < 4) return undefined;
-    const median = (values: number[]) => {
-      const sorted = [...values].sort((a, b) => a - b);
-      const middle = sorted.length / 2;
-      return sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
-    };
-    return {
-      incidence: median(cohortRows.map((row) => row.incidence_per_1000h ?? 0)),
-      severity: median(cohortRows.map((row) => row.mean_severity_days ?? 1)),
-    };
-  }, [cohort, data.length, rows]);
-
   const rowSliceKey = useMemo(
     () => data.map((row) => `${row.impactKey}-${row.incidence_per_1000h}-${row.mean_severity_days}-${row.burden_per_1000h}`).join('|'),
     [data]
@@ -1340,8 +1312,8 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
     if (target && document.activeElement !== target) target.focus();
   }, [preview]);
 
-  const renderImpactBubble = useCallback((shapeProps: ImpactBubbleShapeProps) => (
-    <ImpactBubble
+  const renderImpactDot = useCallback((shapeProps: ImpactDotShapeProps) => (
+    <ImpactDot
       {...shapeProps}
       pinnedKey={pinned?.row.impactKey}
       onPreview={previewPoint}
@@ -1356,32 +1328,18 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
   ), [clearFocusPreview, clearPreview, dismissTooltip, pin, pinned?.row.impactKey, previewFromFocus, previewPoint, syncPointPosition]);
 
   const chartData: ImpactChartRow[] = useMemo(() => {
-    const labelled = [...data]
-      .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0))
-      .slice(0, 4);
-    const labels = new Set(labelled.map((row) => row.code));
-
-    // Labels are placed by box collision, not by axis proximity: two profiles can
-    // sit close in both incidence and severity, and alternating above/below alone
-    // still overlapped them. Positions are resolved in the chart's own pixel box,
-    // trying progressively larger offsets above then below each dot until the
-    // label clears every bubble and every label already placed. The bubbles are
-    // seeded into the obstacle set first, so a label can never sit on a dot.
+    // Every displayed profile is labelled. Dots and already placed labels are
+    // obstacles; each new label tries the close positions first, then moves out
+    // in small vertical steps until it finds clear space.
     const placed: Array<{ left: number; right: number; top: number; bottom: number }> = [];
-    const offsets = new Map<string, number>();
-    const domain = logSeverityDomain(Math.max(...data.map((row) => row.mean_severity_days ?? IMPACT_LOG_SEVERITY_BASE_DOMAIN[0])));
-    const logMin = Math.log10(domain[0]);
-    const logMax = Math.log10(domain[1]);
-    const xMax = (Math.max(...data.map((row) => row.incidence_per_1000h ?? 0)) * 1.12) || 1;
-    const zMin = Math.min(...data.map((row) => row.bubble_burden));
-    const zMax = Math.max(...data.map((row) => row.bubble_burden));
-    const bubbleRadius = (burden: number) => {
-      const ratio = zMax > zMin ? (burden - zMin) / (zMax - zMin) : 1;
-      return Math.sqrt((IMPACT_BUBBLE_SIZE[0] + ratio * (IMPACT_BUBBLE_SIZE[1] - IMPACT_BUBBLE_SIZE[0])) / Math.PI);
-    };
+    const placements = new Map<string, Pick<ImpactChartRow, 'labelDx' | 'labelDy' | 'labelAnchor'>>();
+    const logMin = Math.log10(severityDomain[0]);
+    const logMax = Math.log10(severityDomain[1]);
+    const plotRight = IMPACT_LABEL_BOX.left + plotWidth;
+    const plotBottom = IMPACT_LABEL_BOX.top + IMPACT_LABEL_BOX.height;
 
-    type Plottable = { incidence_per_1000h: number | null; mean_severity_days: number | null; bubble_burden: number };
-    const pointX = (row: Plottable) => IMPACT_LABEL_BOX.left + ((row.incidence_per_1000h ?? 0) / xMax) * plotWidth;
+    type Plottable = { incidence_per_1000h: number | null; mean_severity_days: number | null };
+    const pointX = (row: Plottable) => IMPACT_LABEL_BOX.left + ((row.incidence_per_1000h ?? 0) / maxIncidence) * plotWidth;
     const pointY = (row: Plottable) => {
       const ratio = logMax > logMin
         ? (Math.log10(Math.max(row.mean_severity_days ?? 1, 1)) - logMin) / (logMax - logMin)
@@ -1392,44 +1350,69 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
     for (const row of data) {
       const px = pointX(row);
       const py = pointY(row);
-      const radius = bubbleRadius(row.bubble_burden);
-      placed.push({ left: px - radius, right: px + radius, top: py - radius, bottom: py + radius });
+      const clearance = IMPACT_DOT_RADIUS + 2;
+      placed.push({ left: px - clearance, right: px + clearance, top: py - clearance, bottom: py + clearance });
     }
 
-    labelled.forEach((row) => {
+    [...data].sort((a, b) => b.label.length - a.label.length).forEach((row) => {
       const px = pointX(row);
       const py = pointY(row);
-      const radius = bubbleRadius(row.bubble_burden);
-      const halfWidth = (row.label.length * 5.4) / 2;
-      let chosen = -(radius + 8);
-      for (let step = 0; step < 12; step += 1) {
-        const above = step % 2 === 0;
-        const rung = Math.floor(step / 2);
-        const candidate = above
-          ? -(radius + 8 + rung * 14)
-          : radius + 18 + rung * 14;
-        const top = py + candidate - 11;
-        const box = { left: px - halfWidth, right: px + halfWidth, top, bottom: top + 13 };
-        const clashes = placed.some((other) => (
+      const width = Math.max(row.label.length * 5.35, 24);
+      const centreBelow = row.label.toLowerCase() === 'synovitis/capsulitis';
+      const candidates: Array<Pick<ImpactChartRow, 'labelDx' | 'labelDy' | 'labelAnchor'>> = [
+        ...(centreBelow ? [{ labelDx: 8, labelDy: 18, labelAnchor: 'middle' as const }] : []),
+        { labelDx: 10, labelDy: 4, labelAnchor: 'start' },
+        { labelDx: -10, labelDy: 4, labelAnchor: 'end' },
+        { labelDx: 0, labelDy: -11, labelAnchor: 'middle' },
+        { labelDx: 0, labelDy: 18, labelAnchor: 'middle' },
+      ];
+      for (let rung = 1; rung <= 8; rung += 1) {
+        const distance = 4 + rung * 14;
+        candidates.push(
+          { labelDx: 10, labelDy: distance, labelAnchor: 'start' },
+          { labelDx: 10, labelDy: -distance, labelAnchor: 'start' },
+          { labelDx: -10, labelDy: distance, labelAnchor: 'end' },
+          { labelDx: -10, labelDy: -distance, labelAnchor: 'end' },
+        );
+      }
+
+      const boxFor = (candidate: Pick<ImpactChartRow, 'labelDx' | 'labelDy' | 'labelAnchor'>) => {
+        const textX = px + candidate.labelDx;
+        const baseline = py + candidate.labelDy;
+        const left = candidate.labelAnchor === 'start'
+          ? textX
+          : candidate.labelAnchor === 'end'
+            ? textX - width
+            : textX - width / 2;
+        return { left, right: left + width, top: baseline - 10, bottom: baseline + 3 };
+      };
+      const inBounds = (box: { left: number; right: number; top: number; bottom: number }) => (
+        box.left >= IMPACT_LABEL_BOX.left - (centreBelow ? 10 : 0)
+        && box.right <= plotRight
+        && box.top >= IMPACT_LABEL_BOX.top
+        && box.bottom <= plotBottom
+      );
+      const collisionCount = (box: { left: number; right: number; top: number; bottom: number }) => placed.filter((other) => (
           box.left < other.right && box.right > other.left
           && box.top < other.bottom && box.bottom > other.top
-        ));
-        if (!clashes) {
-          chosen = candidate;
-          placed.push(box);
-          break;
-        }
-        if (step === 11) placed.push(box);
-      }
-      offsets.set(row.impactKey, chosen);
+        )).length;
+
+      const bounded = candidates.map((candidate) => ({ candidate, box: boxFor(candidate) })).filter(({ box }) => inBounds(box));
+      const chosen = bounded.find(({ box }) => collisionCount(box) === 0)
+        ?? bounded.sort((a, b) => collisionCount(a.box) - collisionCount(b.box))[0]
+        ?? { candidate: candidates[0], box: boxFor(candidates[0]) };
+      placed.push(chosen.box);
+      placements.set(row.impactKey, chosen.candidate);
     });
 
     return data.map((row) => ({
       ...row,
-      displayLabel: labels.has(row.code) ? row.label : '',
-      labelDy: offsets.get(row.impactKey) ?? 0,
+      displayLabel: row.label,
+      labelDx: placements.get(row.impactKey)?.labelDx ?? 10,
+      labelDy: placements.get(row.impactKey)?.labelDy ?? 4,
+      labelAnchor: placements.get(row.impactKey)?.labelAnchor ?? 'start',
     }));
-  }, [data, plotWidth]);
+  }, [data, maxIncidence, plotWidth, severityDomain]);
 
   /**
    * Recharts hands a scatter label the bubble's top-left corner, not its centre,
@@ -1455,64 +1438,56 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
     const centreX = num(cx) ?? (num(x) === undefined ? undefined : num(x)! + (num(width) ?? 0) / 2);
     const centreY = num(cy) ?? (num(y) === undefined ? undefined : num(y)! + (num(height) ?? 0) / 2);
     if (!row?.displayLabel || centreX === undefined || centreY === undefined) return null;
-    // Keep the whole string inside the drawn surface at narrow widths.
-    const halfWidth = (row.displayLabel.length * 5.4) / 2;
-    const surfaceWidth = IMPACT_LABEL_BOX.left + plotWidth + IMPACT_LABEL_BOX.right;
-    const clampedX = Math.min(Math.max(centreX, halfWidth + 2), surfaceWidth - halfWidth - 2);
+    const textX = centreX + row.labelDx;
+    const textY = centreY + row.labelDy;
+    const displaced = Math.abs(row.labelDy) > 20;
+    const leaderTargetX = row.labelAnchor === 'start' ? textX - 3 : row.labelAnchor === 'end' ? textX + 3 : textX;
+    const leaderTargetY = textY - 4;
+    const leaderDx = leaderTargetX - centreX;
+    const leaderDy = leaderTargetY - centreY;
+    const leaderLength = Math.hypot(leaderDx, leaderDy) || 1;
+    const leaderStartX = centreX + (leaderDx / leaderLength) * (IMPACT_DOT_RADIUS + 1.5);
+    const leaderStartY = centreY + (leaderDy / leaderLength) * (IMPACT_DOT_RADIUS + 1.5);
     return (
-      <text x={clampedX} y={centreY} dy={row.labelDy} textAnchor="middle" fill="hsl(0 0% 90%)" fontSize={11}>
-        {row.displayLabel}
-      </text>
+      <g pointerEvents="none">
+        {displaced && (
+          <line
+            x1={leaderStartX}
+            y1={leaderStartY}
+            x2={leaderTargetX}
+            y2={leaderTargetY}
+            stroke="hsl(0 0% 72% / 0.55)"
+            strokeWidth={1}
+            strokeLinecap="round"
+          />
+        )}
+        <text x={textX} y={textY} textAnchor={row.labelAnchor} fill="hsl(0 0% 92%)" fontSize={10}>
+          {row.displayLabel}
+        </text>
+      </g>
     );
-  }, [chartData, plotWidth]);
+  }, [chartData]);
 
   if (!data.length) {
-    return <ChartEmpty reason="No injury profiles have finite rate and burden values plus a positive mean severity needed for this logarithmic chart." />;
+    return <ChartEmpty reason="No injury profiles have a finite incidence and positive mean severity needed for this logarithmic chart." />;
   }
 
-  const maxIncidence = Math.max(...data.map((row) => row.incidence_per_1000h ?? 0)) * 1.12 || 1;
-  const severityDomain = logSeverityDomain(Math.max(...data.map((row) => row.mean_severity_days ?? IMPACT_LOG_SEVERITY_BASE_DOMAIN[0])));
-  const severityTicks = logSeverityTicks(severityDomain[1]);
   const activePoint = pinned ?? preview;
   const tooltipTop = activePoint && activePoint.y < 190 ? activePoint.y + 16 : (activePoint?.y ?? 0) - 148;
   const visiblePointX = (activePoint?.x ?? 0) - scrollLeft;
   const tooltipLeft = visiblePointX > 430 ? visiblePointX - 296 : visiblePointX + 16;
 
   return (
-    <section aria-label={`Injury impact chart. Horizontal position is incidence, vertical position is logarithmic mean severity from 1 to ${number(severityDomain[1])} days, and bubble area is burden.${quadrantSplit ? ' The plot is split into four quadrants at the median incidence and median severity of every profile in this setting and grouping: red where absences are longer and more frequent than the median, amber for the two mixed corners, green where they are shorter and less frequent.' : ''} Focus a bubble to preview its values, then press Enter or Space to pin it.`}>
+    <section aria-label={`Injury incidence and severity chart. Each fixed-size dot represents one displayed injury profile and has a direct label. Horizontal position is incidence. Vertical position is logarithmic mean severity from ${number(severityDomain[0])} to ${number(severityDomain[1])} days. Focus a dot to preview its values, then press Enter or Space to pin it.`}>
       <div className="relative">
         <div
           onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
           className="overflow-x-auto pb-2"
         >
-          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[430px] sm:min-w-[680px]">
+          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[520px] sm:min-w-[680px]">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart accessibilityLayer margin={{ top: 30, right: 30, bottom: 34, left: 24 }}>
                 <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
-                {quadrantSplit && IMPACT_QUADRANTS.map((quadrant) => (
-                  <ReferenceArea
-                    key={quadrant.key}
-                    x1={quadrant.right ? quadrantSplit.incidence : 0}
-                    x2={quadrant.right ? maxIncidence : quadrantSplit.incidence}
-                    y1={quadrant.top ? quadrantSplit.severity : severityDomain[0]}
-                    y2={quadrant.top ? severityDomain[1] : quadrantSplit.severity}
-                    fill={quadrant.fill}
-                    fillOpacity={1}
-                    stroke="none"
-                    label={compactQuadrants ? undefined : {
-                      value: quadrant.label,
-                      position: quadrant.labelPosition,
-                      fill: quadrant.labelFill,
-                      fontSize: 10,
-                    }}
-                  />
-                ))}
-                {quadrantSplit && (
-                  <ReferenceLine x={quadrantSplit.incidence} stroke={QUADRANT_DIVIDER} strokeDasharray="4 4" />
-                )}
-                {quadrantSplit && (
-                  <ReferenceLine y={quadrantSplit.severity} stroke={QUADRANT_DIVIDER} strokeDasharray="4 4" />
-                )}
                 <XAxis
                   type="number"
                   dataKey="incidence_per_1000h"
@@ -1538,11 +1513,10 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
                   axisLine={AXIS_LINE}
                   label={{ value: 'Mean severity, days (logarithmic scale)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 0, style: Y_TITLE_STYLE }}
                 />
-                <ZAxis type="number" dataKey="bubble_burden" range={[IMPACT_BUBBLE_SIZE[0], IMPACT_BUBBLE_SIZE[1]]} name="Burden" />
                 <Scatter
                   data={chartData}
                   isAnimationActive={false}
-                  shape={renderImpactBubble}
+                  shape={renderImpactDot}
                 >
                   <LabelList dataKey="displayLabel" content={renderImpactLabel} />
                 </Scatter>
@@ -1562,16 +1536,6 @@ export function ImpactBubbleChart({ rows, cohort }: { rows: InjuryProfileRow[]; 
           </div>
         )}
       </div>
-      {quadrantSplit && compactQuadrants && (
-        <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] leading-tight text-muted-foreground">
-          {IMPACT_QUADRANTS.map((quadrant) => (
-            <li key={quadrant.key} className="flex items-start gap-1.5">
-              <span className="mt-[3px] h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: quadrant.swatch }} />
-              <span>{quadrant.label}</span>
-            </li>
-          ))}
-        </ul>
-      )}
       {/* Not decoration: this is the only place the chart admits it is hiding rows. */}
       {nonPositiveSeverityRows.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
