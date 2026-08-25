@@ -702,7 +702,10 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   assert.match(dashboard, /No approved exposure data is available for this season/);
   assert.match(dashboard, /No approved exposure totals are available for this season/);
   const tabs = dashboard.slice(dashboard.indexOf('const TABS'), dashboard.indexOf('const METRICS'));
-  assert.ok(tabs.indexOf("['types', 'Injury Types']") < tabs.indexOf("['exposure', 'Exposure']"), 'Exposure must remain the final dashboard tab');
+  assert.ok(tabs.indexOf("['types', 'Injury Types']") < tabs.indexOf("['exposure', 'Exposure']"));
+  assert.ok(tabs.indexOf("['exposure', 'Exposure']") < tabs.indexOf("['reports', 'Reports']"), 'Reports must follow Exposure');
+  assert.match(dashboard, /function ReportsTab[\s\S]*?PDF reports are coming soon\.[\s\S]*?League and team reports will be available to export from here\./);
+  assert.match(dashboard, /<TabsContent value="reports"><ReportsTab \/><\/TabsContent>/);
   assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);
   assert.match(dashboard, /HSR distance/);
   const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));

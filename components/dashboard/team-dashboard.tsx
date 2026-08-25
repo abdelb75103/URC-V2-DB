@@ -53,6 +53,7 @@ const TABS = [
   ['location', 'Injury Location'],
   ['types', 'Injury Types'],
   ['exposure', 'Exposure'],
+  ['reports', 'Reports'],
 ] as const;
 
 const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; longUnit: string }> = [
@@ -1442,6 +1443,20 @@ function ExposureTab({
   );
 }
 
+function ReportsTab() {
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      <SectionHeading title="Reports" />
+      <EmptyState>
+        <div>
+          <p className="font-medium text-foreground">PDF reports are coming soon.</p>
+          <p className="mt-1">League and team reports will be available to export from here.</p>
+        </div>
+      </EmptyState>
+    </div>
+  );
+}
+
 function ExposureComparison({
   rows,
   measure,
@@ -1940,6 +1955,7 @@ export function TeamDashboard({
             teamName={teamName}
           />
         </TabsContent>
+        <TabsContent value="reports"><ReportsTab /></TabsContent>
       </Tabs>
     </div>
   );
