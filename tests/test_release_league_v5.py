@@ -257,6 +257,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             "analysis.urc_2024_25_classification_evidence_v1",
         ):
             self.assertIn(value, self.source)
+        self.assertIn("semantic_monthly_is_fixed_season = True", self.source)
 
     def test_v5_manifest_hash_matches_the_release_gate(self) -> None:
         manifest = (

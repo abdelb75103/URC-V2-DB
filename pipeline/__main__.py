@@ -8399,6 +8399,7 @@ def release_league(args: argparse.Namespace) -> None:
     if cohort_view_version != "v2" and not cohort_evidence_sha256:
         raise SystemExit("accepted cohort evidence is missing")
     if analysis_version in {"v3", "v4", "v5", "v6"} and not rollback_of_release_id:
+        semantic_monthly_is_fixed_season = False
         if analysis_version == "v6" and year2_release_contract is not None:
             semantic_cohort_view = year2_release_contract.injury_cohort_view
             semantic_monthly_view = year2_release_contract.league_monthly_view
@@ -8414,6 +8415,7 @@ def release_league(args: argparse.Namespace) -> None:
                 semantic_cohort_view = "analysis.urc_2024_25_final_injury_classification_v1"
                 semantic_monthly_view = "analysis.urc_2024_25_league_monthly_v1"
                 semantic_summary_view = "analysis.urc_2024_25_league_metrics_v1"
+                semantic_monthly_is_fixed_season = True
             else:
                 semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
                 semantic_monthly_view = "analysis.analysis_window_league_monthly_v5"
@@ -8439,6 +8441,11 @@ def release_league(args: argparse.Namespace) -> None:
                 "season-bound cohort, headline, or monthly reconciliation failed"
             )
         semantic_params = SqlParams()
+        semantic_monthly_filter = (
+            "true"
+            if semantic_monthly_is_fixed_season
+            else f"season = {semantic_params.text(season)}"
+        )
         semantic_rows = query_sql(
             f"""
             with cohort as (
@@ -8451,7 +8458,7 @@ def release_league(args: argparse.Namespace) -> None:
               select sum(exposure_hours) as exposure_hours,
                      coalesce(sum(time_loss_injuries), 0) as time_loss_injuries
               from {semantic_monthly_view}
-              where season = {semantic_params.text(season)}
+              where {semantic_monthly_filter}
             ), denominator as (
               select exposure_hours
               from {semantic_summary_view}
