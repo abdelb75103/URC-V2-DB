@@ -8414,7 +8414,7 @@ def release_league(args: argparse.Namespace) -> None:
             if classification_view_version == "reporting_classification_2024-25_2026-08-27_v1":
                 semantic_cohort_view = "analysis.urc_2024_25_final_injury_classification_v1"
                 semantic_monthly_view = "analysis.urc_2024_25_league_monthly_v1"
-                semantic_summary_view = "analysis.urc_2024_25_league_metrics_v1"
+                semantic_summary_view = "analysis.analysis_window_league_summary_v5"
                 semantic_monthly_is_fixed_season = True
             else:
                 semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
