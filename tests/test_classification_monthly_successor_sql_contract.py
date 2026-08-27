@@ -119,6 +119,12 @@ def _row_value_sha(headers: list[str], rows: dict[int, list[str]], source_row: i
 
 
 class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
+    def test_adjudication_values_end_before_the_evidence_view(self) -> None:
+        boundary = self.sql.split(
+            "create view analysis.urc_2024_25_classification_evidence_v1", 1
+        )[0]
+        self.assertTrue(boundary.rstrip().endswith(");"))
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.evidence = json.loads(EVIDENCE.read_text())
