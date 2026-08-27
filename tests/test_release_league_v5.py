@@ -252,6 +252,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             SUCCESSOR_V5_TUPLE[1],
             "URC_2024_25_CLASSIFICATION_MONTHLY_SUCCESSOR_MIGRATION_VERSION",
             "URC_2024_25_SUCCESSOR_RELEASE_CONTEXT_MIGRATION_VERSION",
+            "URC_2024_25_SUCCESSOR_CORRECTION_GUARD_MIGRATION_VERSION",
             "analysis.urc_2024_25_final_injury_classification_v1",
             "analysis.urc_2024_25_league_monthly_v1",
             "analysis.analysis_window_league_summary_v5",
