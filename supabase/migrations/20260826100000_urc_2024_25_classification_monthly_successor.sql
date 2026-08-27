@@ -2406,8 +2406,7 @@ select month_start,
 from analysis.urc_2024_25_team_monthly_v1
 group by month_start;
 
-create view analysis.urc_2024_25_team_dashboard_candidate_v1
-with (security_invoker = true) as
+create materialized view analysis.urc_2024_25_team_dashboard_candidate_v1 as
 with predecessor as (
   select p.*
   from reporting.dashboard_bundle_team_payloads_v1 p
@@ -2616,8 +2615,7 @@ join analysis.accepted_analysis_window_cohort_rules_v5 cohort
   on cohort.season = m.season
  and cohort.cohort_view_version = 'analysis_window_2024-25_2026-07-25_v1';
 
-create view analysis.urc_2024_25_league_dashboard_candidate_v1
-with (security_invoker = true) as
+create materialized view analysis.urc_2024_25_league_dashboard_candidate_v1 as
 with predecessor as (
   select p.*
   from reporting.dashboard_bundle_league_payloads_v1 p

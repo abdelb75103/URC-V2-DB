@@ -378,6 +378,7 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
         self.assertIn("active_correction_set_sha256", lower_sql)
         self.assertIn(SPECIFIC_DIAGNOSIS_EVIDENCE_SHA256, self.sql + self.registration)
         self.assertIn(SPECIFIC_DIAGNOSIS_ROWS_SHA256, self.sql + self.registration)
+        self.assertEqual(lower_sql.count("create materialized view analysis.urc_2024_25_"), 2)
         self.assertIn("'01 ' || (item ->> 'month')", self.sql)
         self.assertNotIn("'01 ' || item ->> 'month'", self.sql)
         self.assertNotIn("min(source_item)", lower_sql)
