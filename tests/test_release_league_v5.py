@@ -298,6 +298,32 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
 
         with (
             patch.object(pipeline, "release_league") as release,
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "pipeline",
+                    "release-league",
+                    "--preflight",
+                    "--analysis-version",
+                    SUCCESSOR_V5_TUPLE[0],
+                    "--classification-view-version",
+                    SUCCESSOR_V5_TUPLE[1],
+                    "--cohort-view-version",
+                    SUCCESSOR_V5_TUPLE[2],
+                ],
+            ),
+        ):
+            pipeline.main()
+        successor = release.call_args.args[0]
+        self.assertEqual(SUCCESSOR_V5_TUPLE, (
+            successor.analysis_version,
+            successor.classification_view_version,
+            successor.cohort_view_version,
+        ))
+
+        with (
+            patch.object(pipeline, "release_league") as release,
             patch.object(sys, "argv", ["pipeline", "release-league", "--preflight"]),
         ):
             pipeline.main()

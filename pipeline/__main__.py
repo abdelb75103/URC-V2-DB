@@ -15240,6 +15240,7 @@ def main() -> None:
             "v2",
             "reporting_classification_2026-07-20_v1",
             "reporting_classification_2026-07-22_v2",
+            "reporting_classification_2024-25_2026-08-27_v1",
         ],
     )
     league_release_parser.add_argument(
