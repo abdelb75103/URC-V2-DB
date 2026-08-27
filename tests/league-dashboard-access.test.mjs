@@ -518,7 +518,7 @@ test('body map regions keep a reliable touch and pointer hit area', async () => 
   assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
 });
 
-test('injury impact uses a data-fitted log severity scale, numbered dots, and a risk heat map', async () => {
+test('risk matrix uses a data-fitted log severity scale, numbered dots, and a smooth heat map', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const impact = charts.slice(charts.indexOf('function isPlottableLogSeverity'), charts.indexOf('export type RankSlopePoint'));
@@ -537,7 +537,7 @@ test('injury impact uses a data-fitted log severity scale, numbered dots, and a 
   assert.match(impact, /r=\{IMPACT_DOT_RADIUS\}/);
   assert.doesNotMatch(impact, /bubble_burden|IMPACT_BUBBLE_SIZE|dataKey="bubble_burden"/);
   assert.match(impact, /displayIndex: index \+ 1/);
-  assert.match(impact, /Diagnoses shown on the impact chart/);
+  assert.match(impact, /Diagnoses shown on the Risk Matrix/);
   assert.match(impact, /<linearGradient id="impact-risk-gradient"/);
   assert.match(impact, /fill="url\(#impact-risk-gradient\)"/);
   assert.match(impact, /<ReferenceArea/);
@@ -546,17 +546,17 @@ test('injury impact uses a data-fitted log severity scale, numbered dots, and a 
   assert.doesNotMatch(impact, /time_loss_injuries\s*[<>]/);
   assert.doesNotMatch(impact, /aboveLogDomainRows|pending chart-domain review/);
   assert.doesNotMatch(dashboard, /View injury impact data|function AccessibleDataTable/);
-  assert.match(dashboard, /Injury Impact/);
+  assert.match(dashboard, /Risk Matrix/);
+  assert.doesNotMatch(dashboard, /Shows \{impactDimension/);
   assert.doesNotMatch(dashboard, /Each dot represents one profile/);
 });
 
-test('injury impact selects prevalent recorded diagnoses instead of the highest burden rows', async () => {
+test('risk matrix selects prevalent TL diagnoses instead of recorded or burden-ranked rows', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const tab = dashboard.slice(dashboard.indexOf('function CommonInjuriesTab'), dashboard.indexOf('function rankedForMetric'));
 
-  assert.match(tab, /row\.recorded_injuries/);
-  assert.match(tab, /count \/ impactSelectionTotal >= 0\.013/);
-  assert.match(tab, /at least 1\.3% of \{impactSelectionLabel\}/);
+  assert.match(tab, /row\.time_loss_injuries \/ totalInjuries >= 0\.013/);
+  assert.doesNotMatch(tab, /impactSelectionTotal|hasRecordedCounts|totalRecordedInjuries/);
   assert.doesNotMatch(tab, /impactRanked\.slice\(0, 12\)/);
   assert.match(tab, /row\.time_loss_injuries > 0 && isKneeLigamentDiagnosis\(row\)/);
 });
@@ -570,7 +570,7 @@ test('injury impact tooltip prioritises the plotted axes, gives exact small-samp
   assert.match(tooltip, /\{row\.label\}.*settingLabel\(row\.setting\)/s);
   assert.ok(tooltip.indexOf('>TL incidence<') < tooltip.indexOf('>Mean severity<'), 'TL incidence must lead the plotted metrics');
   assert.ok(tooltip.indexOf('>Mean severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
-  assert.match(tooltip, />Recorded injuries</);
+  assert.doesNotMatch(tooltip, />Recorded injuries</);
   assert.match(tooltip, />TL injuries</);
   assert.match(tooltip, />Total days lost</);
   assert.doesNotMatch(tooltip, /Time-loss cases/);

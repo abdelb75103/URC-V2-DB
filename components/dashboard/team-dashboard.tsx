@@ -796,16 +796,11 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
   const rows = source.filter((row) => row.setting === setting);
   const injuryColors = commonInjuryColorMap(source);
-  const activeSettingMetrics = supplement?.rate_setting_metrics.find((row) => row.setting === setting)
-    ?? dashboard.setting_metrics.find((row) => row.setting === setting);
   const totalInjuries = supplement?.rate_setting_metrics
     .find((row) => row.setting === setting)?.time_loss_injuries
     ?? (setting === 'all'
       ? dashboard.headline.find((row) => row.key === 'time_loss_injuries')?.value
       : dashboard.setting_metrics.find((row) => row.setting === setting)?.time_loss_injuries)
-    ?? 0;
-  const totalRecordedInjuries = activeSettingMetrics?.recorded_injuries
-    ?? (setting === 'all' ? dashboard.headline.find((row) => row.key === 'recorded_injuries')?.value : undefined)
     ?? 0;
   const settingTitle = setting === 'all' ? '' : `${setting[0].toUpperCase()}${setting.slice(1)} `;
   // The tab's own setting control already filtered these rows, so the impact panel
@@ -814,26 +809,15 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
     ? source
     : profiles.filter((row) => row.dimension === (impactDimension === 'location' ? 'body_location' : 'injury_type'));
   const impactCohort = impactSource.filter((row) => row.setting === setting);
-  const hasRecordedCounts = totalRecordedInjuries > 0 && impactCohort.some((row) => row.recorded_injuries !== undefined);
-  const impactSelectionTotal = hasRecordedCounts ? totalRecordedInjuries : totalInjuries;
   const impactRows = impactCohort
-    .filter((row) => {
-      const count = hasRecordedCounts ? row.recorded_injuries ?? 0 : row.time_loss_injuries;
-      return impactSelectionTotal > 0 && count / impactSelectionTotal >= 0.013;
-    })
-    .sort((a, b) => {
-      const countA = hasRecordedCounts ? a.recorded_injuries ?? 0 : a.time_loss_injuries;
-      const countB = hasRecordedCounts ? b.recorded_injuries ?? 0 : b.time_loss_injuries;
-      return countB - countA || (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0);
-    });
+    .filter((row) => totalInjuries > 0 && row.time_loss_injuries / totalInjuries >= 0.013)
+    .sort((a, b) => b.time_loss_injuries - a.time_loss_injuries || (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0));
   if (impactDimension === 'diagnosis') {
     const included = new Set(impactRows.map((row) => row.code));
     impactCohort
       .filter((row) => row.time_loss_injuries > 0 && isKneeLigamentDiagnosis(row) && !included.has(row.code))
       .forEach((row) => impactRows.push(row));
   }
-  const impactSelectionLabel = hasRecordedCounts ? 'recorded injuries' : 'TL injuries';
-
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
@@ -845,14 +829,9 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
       {rows.length ? (
         <>
           <CommonInjuryRankings rows={rows} totalInjuries={totalInjuries} injuryColors={injuryColors} />
-          <section aria-labelledby="common-injuries-impact" className="mt-8">
+          <section aria-labelledby="common-injuries-risk-matrix" className="mt-8">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h3 id="common-injuries-impact" className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Injury Impact</h3>
-                <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                  Shows {impactDimension === 'diagnosis' ? 'diagnoses' : impactDimension === 'location' ? 'locations' : 'injury types'} representing at least 1.3% of {impactSelectionLabel} in this setting. Position shows TL incidence and mean severity.
-                </p>
-              </div>
+              <h3 id="common-injuries-risk-matrix" className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Risk Matrix</h3>
               <Segmented
                 value={impactDimension}
                 options={[
@@ -865,7 +844,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
               />
             </div>
             <Panel>
-              <ImpactScatterChart rows={impactRows} totalRecordedInjuries={hasRecordedCounts ? totalRecordedInjuries : undefined} />
+              <ImpactScatterChart rows={impactRows} />
             </Panel>
           </section>
         </>

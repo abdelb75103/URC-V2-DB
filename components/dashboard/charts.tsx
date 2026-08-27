@@ -1072,12 +1072,10 @@ function ImpactTooltip({
   row,
   pinned,
   id,
-  totalRecordedInjuries,
 }: {
   row?: InjuryProfileRow;
   pinned: boolean;
   id: string;
-  totalRecordedInjuries?: number;
 }) {
   if (!row) return null;
   const caution = row.time_loss_injuries === 1
@@ -1087,9 +1085,6 @@ function ImpactTooltip({
       : '';
 
   const color = SETTING_COLORS.all;
-  const recordedShare = row.recorded_injuries !== undefined && totalRecordedInjuries
-    ? row.recorded_injuries / totalRecordedInjuries * 100
-    : undefined;
   return (
     <div
       id={id}
@@ -1113,13 +1108,6 @@ function ImpactTooltip({
           <dd className="text-right font-semibold tabular-nums">{number(row.burden_per_1000h)} days /1,000 h</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t border-white/10 pt-1">
-          <dt>Recorded injuries</dt>
-          <dd className="text-right font-semibold tabular-nums">
-            {row.recorded_injuries === undefined ? 'Not available' : count(row.recorded_injuries)}
-            {recordedShare !== undefined && ` (${number(recordedShare)}%)`}
-          </dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
           <dt>TL injuries</dt>
           <dd className="text-right font-semibold tabular-nums">{count(row.time_loss_injuries)}</dd>
         </div>
@@ -1263,7 +1251,7 @@ function ImpactDot({
 }
 
 /** TL incidence and mean severity define position; every displayed profile is a numbered fixed-size dot. */
-export function ImpactScatterChart({ rows, totalRecordedInjuries }: { rows: InjuryProfileRow[]; totalRecordedInjuries?: number }) {
+export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const focusedImpactKeyRef = useRef<string | undefined>(undefined);
   const dismissedImpactKeyRef = useRef<string | undefined>(undefined);
@@ -1378,7 +1366,7 @@ export function ImpactScatterChart({ rows, totalRecordedInjuries }: { rows: Inju
   const tooltipLeft = visiblePointX > 430 ? visiblePointX - 296 : visiblePointX + 16;
 
   return (
-    <section aria-label={`Injury TL incidence and severity chart. Each numbered dot matches the diagnosis key below. Horizontal position is TL incidence. Vertical position is logarithmic mean severity from ${number(severityDomain[0])} to ${number(severityDomain[1])} days. Focus a dot to preview its values, then press Enter or Space to pin it.`}>
+    <section aria-label={`Risk Matrix of TL incidence and severity. Each numbered dot matches the diagnosis key below. Horizontal position is TL incidence. Vertical position is logarithmic mean severity from ${number(severityDomain[0])} to ${number(severityDomain[1])} days. Focus a dot to preview its values, then press Enter or Space to pin it.`}>
       <div className="relative">
         <div
           onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
@@ -1448,17 +1436,17 @@ export function ImpactScatterChart({ rows, totalRecordedInjuries }: { rows: Inju
               top: `clamp(0.75rem, ${tooltipTop}px, calc(100% - 9rem))`,
             }}
           >
-            <ImpactTooltip id="impact-tooltip" row={activePoint.row} pinned={Boolean(pinned)} totalRecordedInjuries={totalRecordedInjuries} />
+            <ImpactTooltip id="impact-tooltip" row={activePoint.row} pinned={Boolean(pinned)} />
           </div>
         )}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground" aria-label="Impact heat map key">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground" aria-label="Risk Matrix key">
         <span className="font-medium text-foreground">Impact zone</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#2fbf83]/60" />Lower incidence and severity</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#e5bd45]/70" />One measure elevated</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#df4f52]/70" />Higher incidence and severity</span>
       </div>
-      <ol className="mt-4 grid gap-x-6 gap-y-2 border-t border-border/60 pt-4 text-sm sm:grid-cols-2" aria-label="Diagnoses shown on the impact chart">
+      <ol className="mt-4 grid gap-x-6 gap-y-2 border-t border-border/60 pt-4 text-sm sm:grid-cols-2" aria-label="Diagnoses shown on the Risk Matrix">
         {data.map((row) => (
           <li key={row.impactKey} className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2">
             <span className="grid h-5 w-5 place-items-center rounded-full bg-[#173f52] text-[10px] font-bold text-white">{row.displayIndex}</span>

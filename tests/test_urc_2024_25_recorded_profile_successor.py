@@ -53,12 +53,13 @@ class RecordedProfileSuccessorTests(unittest.TestCase):
         self.assertIn("'recorded_injuries', source.recorded_injuries", self.migration)
 
     def test_chart_uses_prevalence_heat_map_and_numbered_key(self):
-        self.assertIn("count / impactSelectionTotal >= 0.013", self.ui)
+        self.assertIn("row.time_loss_injuries / totalInjuries >= 0.013", self.ui)
         self.assertNotIn("impactRanked.slice(0, 12)", self.ui)
         self.assertIn('<linearGradient id="impact-risk-gradient"', self.charts)
         self.assertIn('fill="url(#impact-risk-gradient)"', self.charts)
         self.assertIn("displayIndex: index + 1", self.charts)
-        self.assertIn("Recorded injuries", self.charts)
+        tooltip = self.charts.split("function ImpactTooltip", 1)[1].split("function formatAxisTick", 1)[0]
+        self.assertNotIn("Recorded injuries", tooltip)
         self.assertIn("Total days lost", self.charts)
         self.assertIn("recharts-wrapper:focus", self.charts)
 
