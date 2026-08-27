@@ -518,7 +518,7 @@ test('body map regions keep a reliable touch and pointer hit area', async () => 
   assert.match(bodyMap, /min-h-11|tabIndex:\s*0/);
 });
 
-test('injury impact uses a data-fitted log severity scale, fixed dots, and direct labels', async () => {
+test('injury impact uses a data-fitted log severity scale, numbered dots, and a risk heat map', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const impact = charts.slice(charts.indexOf('function isPlottableLogSeverity'), charts.indexOf('export type RankSlopePoint'));
@@ -533,18 +533,32 @@ test('injury impact uses a data-fitted log severity scale, fixed dots, and direc
   assert.match(impact, /isPlottableLogSeverity\(row\.mean_severity_days\)/);
   assert.match(impact, /Number\.isFinite\(value\) && value > 0/);
   assert.match(impact, /non-positive mean severity.*not shown because a logarithmic scale cannot represent those values/s);
-  assert.match(impact, /const IMPACT_DOT_RADIUS = 5\.5/);
+  assert.match(impact, /const IMPACT_DOT_RADIUS = 9/);
   assert.match(impact, /r=\{IMPACT_DOT_RADIUS\}/);
   assert.doesNotMatch(impact, /bubble_burden|IMPACT_BUBBLE_SIZE|dataKey="bubble_burden"/);
-  assert.match(impact, /displayLabel: row\.label/);
-  assert.match(impact, /labelAnchor: placements\.get/);
-  assert.match(impact, /Dots and already placed labels are\s+\/\/ obstacles/s);
+  assert.match(impact, /displayIndex: index \+ 1/);
+  assert.match(impact, /Diagnoses shown on the impact chart/);
+  assert.match(impact, /<linearGradient id="impact-risk-gradient"/);
+  assert.match(impact, /fill="url\(#impact-risk-gradient\)"/);
+  assert.match(impact, /<ReferenceArea/);
+  assert.match(impact, /Lower incidence and severity/);
+  assert.match(impact, /Higher incidence and severity/);
   assert.doesNotMatch(impact, /time_loss_injuries\s*[<>]/);
-  assert.doesNotMatch(impact, /quadrantSplit|IMPACT_QUADRANTS|<ReferenceArea/);
   assert.doesNotMatch(impact, /aboveLogDomainRows|pending chart-domain review/);
   assert.doesNotMatch(dashboard, /View injury impact data|function AccessibleDataTable/);
   assert.match(dashboard, /Injury Impact/);
   assert.doesNotMatch(dashboard, /Each dot represents one profile/);
+});
+
+test('injury impact selects prevalent recorded diagnoses instead of the highest burden rows', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const tab = dashboard.slice(dashboard.indexOf('function CommonInjuriesTab'), dashboard.indexOf('function rankedForMetric'));
+
+  assert.match(tab, /row\.recorded_injuries/);
+  assert.match(tab, /count \/ impactSelectionTotal >= 0\.013/);
+  assert.match(tab, /at least 1\.3% of \{impactSelectionLabel\}/);
+  assert.doesNotMatch(tab, /impactRanked\.slice\(0, 12\)/);
+  assert.match(tab, /row\.time_loss_injuries > 0 && isKneeLigamentDiagnosis\(row\)/);
 });
 
 test('injury impact tooltip prioritises the plotted axes, gives exact small-sample cautions, and supports pinning', async () => {
@@ -556,7 +570,9 @@ test('injury impact tooltip prioritises the plotted axes, gives exact small-samp
   assert.match(tooltip, /\{row\.label\}.*settingLabel\(row\.setting\)/s);
   assert.ok(tooltip.indexOf('>TL incidence<') < tooltip.indexOf('>Mean severity<'), 'TL incidence must lead the plotted metrics');
   assert.ok(tooltip.indexOf('>Mean severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
-  assert.match(tooltip, /n = \{count\(row\.time_loss_injuries\)\} time-loss .*\{count\(row\.days_lost\)\} total days lost/s);
+  assert.match(tooltip, />Recorded injuries</);
+  assert.match(tooltip, />TL injuries</);
+  assert.match(tooltip, />Total days lost</);
   assert.doesNotMatch(tooltip, /Time-loss cases/);
   assert.match(tooltip, /Caution: based on 1 injury/);
   assert.match(tooltip, /Small sample: interpret 2 injuries cautiously/);
@@ -573,9 +589,8 @@ test('injury impact tooltip prioritises the plotted axes, gives exact small-samp
   assert.match(interaction, /onPosition\(\{ row: payload, x: cx, y: cy \}\)/);
   assert.match(chart, /const syncPointPosition = useCallback/);
   assert.match(chart, /current\.x !== point\.x \|\| current\.y !== point\.y/);
-  assert.match(chart, /const leaderStartX = centreX \+ \(leaderDx \/ leaderLength\) \* \(IMPACT_DOT_RADIUS \+ 1\.5\)/);
-  assert.match(chart, /x2=\{leaderTargetX\}[\s\S]*y2=\{leaderTargetY\}/);
-  assert.match(chart, /strokeLinecap="round"/);
+  assert.match(chart, /\[&_\.recharts-wrapper:focus\]:outline-none/);
+  assert.match(chart, /activeKey=\{\(pinned \?\? preview\)\?\.row\.impactKey\}/);
   assert.match(chart, /document\.addEventListener\('pointerdown', dismissIfOutside\)/);
   assert.match(chart, /document\.addEventListener\('keydown', dismissOnEscape\)/);
   assert.match(chart, /setPinned\(undefined\)/);

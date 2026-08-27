@@ -81,6 +81,7 @@ export type InjuryProfileRow = {
   code: string;
   label: string;
   setting: 'all' | 'match' | 'training' | 'unknown';
+  recorded_injuries?: number;
   time_loss_injuries: number;
   days_lost: number;
   exposure_hours: number | null;

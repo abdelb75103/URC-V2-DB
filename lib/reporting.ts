@@ -108,6 +108,7 @@ const injuryProfileSchema = z.object({
   code: z.string(),
   label: z.string(),
   setting: z.enum(["all", "match", "training", "unknown"]),
+  recorded_injuries: z.number().optional(),
   time_loss_injuries: z.number(),
   days_lost: z.number(),
   exposure_hours: z.number().nullish(),

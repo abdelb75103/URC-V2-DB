@@ -11,6 +11,21 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-27: Recorded-diagnosis prevalence for Injury Impact
+
+| Field | Value |
+|---|---|
+| Status | `applied-pending-promotion`: the additive migration is registered on the approved live URC database and its candidate reconciliation passes. The currently approved bundle remains unchanged until the governed promotion. |
+| Rule version | `reporting_classification_2024-25_2026-08-27_v1`, recorded-profile successor migration `20260827172000` |
+| Carry-forward | The recorded prevalence rows are `season-specific` to 2024-25. The shared Injury Impact presentation carries across season tabs and falls back to the available TL profile share when a season does not publish recorded profile counts. |
+| Migration | `20260827172000`, SHA-256 `885a713f85f22bb8e68cbb1bed7f1540c6f81897e95ad3e71522aaf7aa9400b2` |
+
+**Selection rule.** For the specific-diagnosis view, the Injury Impact chart shows injury diagnoses representing at least 1.3% of recorded injuries in the selected setting. Illness remains excluded. The separately requested knee-ligament diagnoses remain visible when they have at least one TL injury. The x-axis remains TL incidence and the y-axis remains mean TL severity, so prevalence selects the landscape while the plotted position describes time-loss impact.
+
+**Presentation.** Numbered dots link to a compact diagnosis key below the chart, replacing colliding permanent labels. The background is one smooth green-to-yellow-to-orange-to-red gradient from low incidence and severity to high incidence and severity. The tooltip labels recorded injuries, recorded share, TL injuries and total days lost. Clicking a point highlights only that point and does not draw a focus border around the chart.
+
+**Integrity and scope.** Recorded counts are rebuilt from the final injury-only 2024-25 classification at Overall, Match, Training and Unknown setting grain. The migration pins 1,662 recorded injuries, 913 TL injuries and 17,575 observed days, and pins the reviewed overall counts for Hamstring injury (120), Lumbar spine pain (41), Acromioclavicular joint injury (39) and Groin and adductor injury (37). It changes no source row, diagnosis mapping, cohort, denominator, monthly value or headline total.
+
 ## 2026-08-27: 2024-25 setting-profile reporting successor
 
 | Field | Value |

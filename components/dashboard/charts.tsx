@@ -1072,10 +1072,12 @@ function ImpactTooltip({
   row,
   pinned,
   id,
+  totalRecordedInjuries,
 }: {
   row?: InjuryProfileRow;
   pinned: boolean;
   id: string;
+  totalRecordedInjuries?: number;
 }) {
   if (!row) return null;
   const caution = row.time_loss_injuries === 1
@@ -1085,6 +1087,9 @@ function ImpactTooltip({
       : '';
 
   const color = SETTING_COLORS.all;
+  const recordedShare = row.recorded_injuries !== undefined && totalRecordedInjuries
+    ? row.recorded_injuries / totalRecordedInjuries * 100
+    : undefined;
   return (
     <div
       id={id}
@@ -1107,8 +1112,23 @@ function ImpactTooltip({
           <dt>Burden</dt>
           <dd className="text-right font-semibold tabular-nums">{number(row.burden_per_1000h)} days /1,000 h</dd>
         </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t border-white/10 pt-1">
+          <dt>Recorded injuries</dt>
+          <dd className="text-right font-semibold tabular-nums">
+            {row.recorded_injuries === undefined ? 'Not available' : count(row.recorded_injuries)}
+            {recordedShare !== undefined && ` (${number(recordedShare)}%)`}
+          </dd>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
+          <dt>TL injuries</dt>
+          <dd className="text-right font-semibold tabular-nums">{count(row.time_loss_injuries)}</dd>
+        </div>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
+          <dt>Total days lost</dt>
+          <dd className="text-right font-semibold tabular-nums">{count(row.days_lost)}</dd>
+        </div>
       </dl>
-      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{settingLabel(row.setting)} · n = {count(row.time_loss_injuries)} time-loss {row.time_loss_injuries === 1 ? 'injury' : 'injuries'} · {count(row.days_lost)} total days lost{caution && ` · ${caution}`}{pinned && ' · Pinned, press Escape to dismiss'}</p>
+      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{settingLabel(row.setting)}{caution && ` · ${caution}`}{pinned && ' · Pinned, press Escape to dismiss'}</p>
     </div>
   );
 }
@@ -1141,23 +1161,11 @@ function logSeverityTicks(domain: [number, number]) {
 }
 
 type ImpactChartRow = InjuryProfileRow & {
-  displayLabel: string;
-  labelDx: number;
-  labelDy: number;
-  labelAnchor: 'start' | 'middle' | 'end';
+  displayIndex: number;
   impactKey: string;
 };
 
-/**
- * The scatter plot's inner plot box in its own pixel space. Tied to the
- * `h-[520px]` container and the `{ top: 30, right: 30, bottom: 34, left: 24 }`
- * margins plus the 62px y-axis width below: change either and this must change
- * with it, or the labels drift off their dots. The width is measured at runtime
- * from the container, because the chart is `min-w-[680px]` but stretches, and a
- * fixed width would misjudge every horizontal collision above that size.
- */
-const IMPACT_LABEL_BOX = { left: 86, right: 30, top: 30, minWidth: 564, height: 456 };
-const IMPACT_DOT_RADIUS = 5.5;
+const IMPACT_DOT_RADIUS = 9;
 
 /** A profile the log-scaled bubble chart can place at all. */
 function isPlottableImpactRow(row: InjuryProfileRow) {
@@ -1183,6 +1191,7 @@ function ImpactDot({
   cy,
   payload,
   pinnedKey,
+  activeKey,
   onPreview,
   onFocusPreview,
   onLeave,
@@ -1193,6 +1202,7 @@ function ImpactDot({
   tooltipId,
 }: ImpactDotShapeProps & {
   pinnedKey?: string;
+  activeKey?: string;
   onPreview: (point: ImpactPointPosition) => void;
   onFocusPreview: (point: ImpactPointPosition) => void;
   onLeave: () => void;
@@ -1209,12 +1219,14 @@ function ImpactDot({
   if (cx === undefined || cy === undefined || !payload) return null;
   const point = { row: payload, x: cx, y: cy };
   const selected = pinnedKey === payload.impactKey;
+  const active = activeKey === payload.impactKey;
   const accessibleLabel = `${payload.label}, ${settingLabel(payload.setting)}. TL incidence ${number(payload.incidence_per_1000h)} injuries per 1,000 hours. Mean severity ${number(payload.mean_severity_days)} days. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
 
   return (
     <g>
-      {selected && <circle cx={cx} cy={cy} r={IMPACT_DOT_RADIUS + 4} fill="none" stroke="hsl(var(--foreground))" strokeWidth={2} strokeOpacity={0.9} pointerEvents="none" />}
-      <circle cx={cx} cy={cy} r={IMPACT_DOT_RADIUS} fill={SETTING_COLORS.all} stroke="hsl(0 0% 100%)" strokeWidth={1.5} strokeOpacity={0.95} pointerEvents="none" />
+      {active && <circle cx={cx} cy={cy} r={IMPACT_DOT_RADIUS + 4} fill="none" stroke="hsl(var(--foreground))" strokeWidth={selected ? 2 : 1.5} strokeOpacity={0.9} pointerEvents="none" />}
+      <circle cx={cx} cy={cy} r={IMPACT_DOT_RADIUS} fill="hsl(202 58% 20%)" stroke="hsl(0 0% 100%)" strokeWidth={1.5} strokeOpacity={0.98} pointerEvents="none" />
+      <text x={cx} y={cy + 3} textAnchor="middle" fill="white" fontSize={8} fontWeight={700} pointerEvents="none">{payload.displayIndex}</text>
       <circle
         cx={cx}
         cy={cy}
@@ -1226,6 +1238,7 @@ function ImpactDot({
         aria-describedby={tooltipId}
         aria-pressed={selected}
         data-impact-key={payload.impactKey}
+        className="outline-none"
         onMouseEnter={() => onPreview(point)}
         onMouseLeave={onLeave}
         onFocus={() => onFocusPreview(point)}
@@ -1249,8 +1262,8 @@ function ImpactDot({
   );
 }
 
-/** TL incidence and mean severity define position; every displayed profile is a fixed-size dot. */
-export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
+/** TL incidence and mean severity define position; every displayed profile is a numbered fixed-size dot. */
+export function ImpactScatterChart({ rows, totalRecordedInjuries }: { rows: InjuryProfileRow[]; totalRecordedInjuries?: number }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const focusedImpactKeyRef = useRef<string | undefined>(undefined);
   const dismissedImpactKeyRef = useRef<string | undefined>(undefined);
@@ -1258,7 +1271,6 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   const [preview, setPreview] = useState<ImpactPointPosition>();
   const [pinned, setPinned] = useState<ImpactPointPosition>();
   const [scrollLeft, setScrollLeft] = useState(0);
-  const [plotWidth, setPlotWidth] = useState(IMPACT_LABEL_BOX.minWidth);
   activeImpactKeyRef.current = (pinned ?? preview)?.row.impactKey;
   const previewPoint = useCallback((point: ImpactPointPosition) => {
     if (dismissedImpactKeyRef.current === point.row.impactKey) return;
@@ -1300,24 +1312,12 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   const data = useMemo(
     () => rows
       .filter(isPlottableImpactRow)
-      .map((row) => ({ ...row, impactKey: `${row.setting}-${row.code}` })),
+      .map((row, index) => ({ ...row, displayIndex: index + 1, impactKey: `${row.setting}-${row.code}` })),
     [rows]
   );
   const maxIncidence = Math.max(...data.map((row) => row.incidence_per_1000h ?? 0), 0) * 1.12 || 1;
   const severityDomain = logSeverityDomain(data.map((row) => row.mean_severity_days ?? 1));
   const severityTicks = logSeverityTicks(severityDomain);
-
-  // Label collision is resolved in the chart's own pixel space, so it needs the
-  // width the chart actually rendered at rather than its minimum width.
-  useEffect(() => {
-    const node = chartRef.current;
-    if (!node) return;
-    const measure = () => setPlotWidth(Math.max(node.clientWidth - IMPACT_LABEL_BOX.left - IMPACT_LABEL_BOX.right, 160));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (!pinned) return;
@@ -1356,6 +1356,7 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
     <ImpactDot
       {...shapeProps}
       pinnedKey={pinned?.row.impactKey}
+      activeKey={(pinned ?? preview)?.row.impactKey}
       onPreview={previewPoint}
       onFocusPreview={previewFromFocus}
       onLeave={clearPreview}
@@ -1365,154 +1366,7 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
       onPosition={syncPointPosition}
       tooltipId="impact-tooltip"
     />
-  ), [clearFocusPreview, clearPreview, dismissTooltip, pin, pinned?.row.impactKey, previewFromFocus, previewPoint, syncPointPosition]);
-
-  const chartData: ImpactChartRow[] = useMemo(() => {
-    // Every displayed profile is labelled. Dots and already placed labels are
-    // obstacles; each new label tries the close positions first, then moves out
-    // in small vertical steps until it finds clear space.
-    const placed: Array<{ left: number; right: number; top: number; bottom: number }> = [];
-    const placements = new Map<string, Pick<ImpactChartRow, 'labelDx' | 'labelDy' | 'labelAnchor'>>();
-    const logMin = Math.log10(severityDomain[0]);
-    const logMax = Math.log10(severityDomain[1]);
-    const plotRight = IMPACT_LABEL_BOX.left + plotWidth;
-    const plotBottom = IMPACT_LABEL_BOX.top + IMPACT_LABEL_BOX.height;
-
-    type Plottable = { incidence_per_1000h: number | null; mean_severity_days: number | null };
-    const pointX = (row: Plottable) => IMPACT_LABEL_BOX.left + ((row.incidence_per_1000h ?? 0) / maxIncidence) * plotWidth;
-    const pointY = (row: Plottable) => {
-      const ratio = logMax > logMin
-        ? (Math.log10(Math.max(row.mean_severity_days ?? 1, 1)) - logMin) / (logMax - logMin)
-        : 0.5;
-      return IMPACT_LABEL_BOX.top + (1 - ratio) * IMPACT_LABEL_BOX.height;
-    };
-
-    for (const row of data) {
-      const px = pointX(row);
-      const py = pointY(row);
-      const clearance = IMPACT_DOT_RADIUS + 2;
-      placed.push({ left: px - clearance, right: px + clearance, top: py - clearance, bottom: py + clearance });
-    }
-
-    [...data].sort((a, b) => b.label.length - a.label.length).forEach((row) => {
-      const px = pointX(row);
-      const py = pointY(row);
-      const width = Math.max(row.label.length * 5.35, 24);
-      const centreBelow = row.label.toLowerCase() === 'synovitis/capsulitis';
-      const namedSeparation = row.label.toLowerCase() === 'posterior malleolus fracture'
-        ? [{ labelDx: -10, labelDy: -28, labelAnchor: 'end' as const }]
-        : row.label.toLowerCase() === 'rectus femoris tendon rupture'
-          ? [{ labelDx: 10, labelDy: 28, labelAnchor: 'start' as const }]
-          : [];
-      const candidates: Array<Pick<ImpactChartRow, 'labelDx' | 'labelDy' | 'labelAnchor'>> = [
-        ...namedSeparation,
-        ...(centreBelow ? [{ labelDx: 8, labelDy: 18, labelAnchor: 'middle' as const }] : []),
-        { labelDx: 10, labelDy: 4, labelAnchor: 'start' },
-        { labelDx: -10, labelDy: 4, labelAnchor: 'end' },
-        { labelDx: 0, labelDy: -11, labelAnchor: 'middle' },
-        { labelDx: 0, labelDy: 18, labelAnchor: 'middle' },
-      ];
-      for (let rung = 1; rung <= 8; rung += 1) {
-        const distance = 4 + rung * 14;
-        candidates.push(
-          { labelDx: 10, labelDy: distance, labelAnchor: 'start' },
-          { labelDx: 10, labelDy: -distance, labelAnchor: 'start' },
-          { labelDx: -10, labelDy: distance, labelAnchor: 'end' },
-          { labelDx: -10, labelDy: -distance, labelAnchor: 'end' },
-        );
-      }
-
-      const boxFor = (candidate: Pick<ImpactChartRow, 'labelDx' | 'labelDy' | 'labelAnchor'>) => {
-        const textX = px + candidate.labelDx;
-        const baseline = py + candidate.labelDy;
-        const left = candidate.labelAnchor === 'start'
-          ? textX
-          : candidate.labelAnchor === 'end'
-            ? textX - width
-            : textX - width / 2;
-        return { left, right: left + width, top: baseline - 10, bottom: baseline + 3 };
-      };
-      const inBounds = (box: { left: number; right: number; top: number; bottom: number }) => (
-        box.left >= IMPACT_LABEL_BOX.left - (centreBelow ? 10 : 0)
-        && box.right <= plotRight
-        && box.top >= IMPACT_LABEL_BOX.top
-        && box.bottom <= plotBottom
-      );
-      const collisionCount = (box: { left: number; right: number; top: number; bottom: number }) => placed.filter((other) => (
-          box.left < other.right && box.right > other.left
-          && box.top < other.bottom && box.bottom > other.top
-        )).length;
-
-      const bounded = candidates.map((candidate) => ({ candidate, box: boxFor(candidate) })).filter(({ box }) => inBounds(box));
-      const chosen = bounded.find(({ box }) => collisionCount(box) === 0)
-        ?? bounded.sort((a, b) => collisionCount(a.box) - collisionCount(b.box))[0]
-        ?? { candidate: candidates[0], box: boxFor(candidates[0]) };
-      placed.push(chosen.box);
-      placements.set(row.impactKey, chosen.candidate);
-    });
-
-    return data.map((row) => ({
-      ...row,
-      displayLabel: row.label,
-      labelDx: placements.get(row.impactKey)?.labelDx ?? 10,
-      labelDy: placements.get(row.impactKey)?.labelDy ?? 4,
-      labelAnchor: placements.get(row.impactKey)?.labelAnchor ?? 'start',
-    }));
-  }, [data, maxIncidence, plotWidth, severityDomain]);
-
-  /**
-   * Recharts hands a scatter label the bubble's top-left corner, not its centre,
-   * so anchoring straight on `x`/`y` shifts a label left by one radius and, for a
-   * label placed below its dot, two radii up into the bubble itself. Every offset
-   * is measured from the centre, which is what `cx`/`cy` carry.
-   */
-  const renderImpactLabel = useCallback((props: {
-    x?: string | number;
-    y?: string | number;
-    cx?: string | number;
-    cy?: string | number;
-    width?: string | number;
-    height?: string | number;
-    index?: number;
-  }) => {
-    const { x, y, cx, cy, width, height, index } = props;
-    const num = (value: string | number | undefined) => {
-      const parsed = typeof value === 'string' ? Number(value) : value;
-      return typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : undefined;
-    };
-    const row = index === undefined ? undefined : chartData[index];
-    const centreX = num(cx) ?? (num(x) === undefined ? undefined : num(x)! + (num(width) ?? 0) / 2);
-    const centreY = num(cy) ?? (num(y) === undefined ? undefined : num(y)! + (num(height) ?? 0) / 2);
-    if (!row?.displayLabel || centreX === undefined || centreY === undefined) return null;
-    const textX = centreX + row.labelDx;
-    const textY = centreY + row.labelDy;
-    const displaced = Math.abs(row.labelDy) > 20;
-    const leaderTargetX = row.labelAnchor === 'start' ? textX - 3 : row.labelAnchor === 'end' ? textX + 3 : textX;
-    const leaderTargetY = textY - 4;
-    const leaderDx = leaderTargetX - centreX;
-    const leaderDy = leaderTargetY - centreY;
-    const leaderLength = Math.hypot(leaderDx, leaderDy) || 1;
-    const leaderStartX = centreX + (leaderDx / leaderLength) * (IMPACT_DOT_RADIUS + 1.5);
-    const leaderStartY = centreY + (leaderDy / leaderLength) * (IMPACT_DOT_RADIUS + 1.5);
-    return (
-      <g pointerEvents="none">
-        {displaced && (
-          <line
-            x1={leaderStartX}
-            y1={leaderStartY}
-            x2={leaderTargetX}
-            y2={leaderTargetY}
-            stroke="hsl(0 0% 72% / 0.55)"
-            strokeWidth={1}
-            strokeLinecap="round"
-          />
-        )}
-        <text x={textX} y={textY} textAnchor={row.labelAnchor} fill="hsl(0 0% 92%)" fontSize={10}>
-          {row.displayLabel}
-        </text>
-      </g>
-    );
-  }, [chartData]);
+  ), [clearFocusPreview, clearPreview, dismissTooltip, pin, pinned, preview, previewFromFocus, previewPoint, syncPointPosition]);
 
   if (!data.length) {
     return <ChartEmpty reason="No injury profiles have a finite TL incidence and positive mean severity needed for this logarithmic chart." />;
@@ -1524,15 +1378,33 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   const tooltipLeft = visiblePointX > 430 ? visiblePointX - 296 : visiblePointX + 16;
 
   return (
-    <section aria-label={`Injury TL incidence and severity chart. Each fixed-size dot represents one displayed injury profile and has a direct label. Horizontal position is TL incidence. Vertical position is logarithmic mean severity from ${number(severityDomain[0])} to ${number(severityDomain[1])} days. Focus a dot to preview its values, then press Enter or Space to pin it.`}>
+    <section aria-label={`Injury TL incidence and severity chart. Each numbered dot matches the diagnosis key below. Horizontal position is TL incidence. Vertical position is logarithmic mean severity from ${number(severityDomain[0])} to ${number(severityDomain[1])} days. Focus a dot to preview its values, then press Enter or Space to pin it.`}>
       <div className="relative">
         <div
           onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
           className="overflow-x-auto pb-2"
         >
-          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[520px] sm:min-w-[680px]">
+          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[520px] sm:min-w-[680px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart accessibilityLayer margin={{ top: 30, right: 30, bottom: 34, left: 24 }}>
+                <defs>
+                  <linearGradient id="impact-risk-gradient" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#2fbf83" />
+                    <stop offset="45%" stopColor="#d8cc55" />
+                    <stop offset="72%" stopColor="#ed8b43" />
+                    <stop offset="100%" stopColor="#df4f52" />
+                  </linearGradient>
+                </defs>
+                <ReferenceArea
+                  x1={0}
+                  x2={maxIncidence}
+                  y1={severityDomain[0]}
+                  y2={severityDomain[1]}
+                  fill="url(#impact-risk-gradient)"
+                  fillOpacity={0.25}
+                  stroke="none"
+                  ifOverflow="hidden"
+                />
                 <CartesianGrid stroke={GRID} strokeDasharray="3 5" />
                 <XAxis
                   type="number"
@@ -1560,12 +1432,10 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
                   label={{ value: 'Mean severity, days (logarithmic scale)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 0, style: Y_TITLE_STYLE }}
                 />
                 <Scatter
-                  data={chartData}
+                  data={data}
                   isAnimationActive={false}
                   shape={renderImpactDot}
-                >
-                  <LabelList dataKey="displayLabel" content={renderImpactLabel} />
-                </Scatter>
+                />
               </ScatterChart>
             </ResponsiveContainer>
           </div>
@@ -1578,10 +1448,27 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
               top: `clamp(0.75rem, ${tooltipTop}px, calc(100% - 9rem))`,
             }}
           >
-            <ImpactTooltip id="impact-tooltip" row={activePoint.row} pinned={Boolean(pinned)} />
+            <ImpactTooltip id="impact-tooltip" row={activePoint.row} pinned={Boolean(pinned)} totalRecordedInjuries={totalRecordedInjuries} />
           </div>
         )}
       </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground" aria-label="Impact heat map key">
+        <span className="font-medium text-foreground">Impact zone</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#2fbf83]/60" />Lower incidence and severity</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#e5bd45]/70" />One measure elevated</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#df4f52]/70" />Higher incidence and severity</span>
+      </div>
+      <ol className="mt-4 grid gap-x-6 gap-y-2 border-t border-border/60 pt-4 text-sm sm:grid-cols-2" aria-label="Diagnoses shown on the impact chart">
+        {data.map((row) => (
+          <li key={row.impactKey} className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2">
+            <span className="grid h-5 w-5 place-items-center rounded-full bg-[#173f52] text-[10px] font-bold text-white">{row.displayIndex}</span>
+            <span className="min-w-0 truncate text-foreground">{row.label}</span>
+            {row.recorded_injuries !== undefined && totalRecordedInjuries ? (
+              <span className="tabular-nums text-muted-foreground">{number(row.recorded_injuries / totalRecordedInjuries * 100)}%</span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
       {/* Not decoration: this is the only place the chart admits it is hiding rows. */}
       {nonPositiveSeverityRows.length > 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
