@@ -2272,7 +2272,7 @@ create view analysis.urc_2024_25_team_monthly_v1
 with (security_invoker = true) as
 with predecessor_months as (
   select p.team_key, p.curated_build_id, item as source_item,
-    to_date('01 ' || item ->> 'month', 'DD Mon YYYY') as month_start
+    to_date('01 ' || (item ->> 'month'), 'DD Mon YYYY') as month_start
   from reporting.dashboard_bundle_team_payloads_v1 p
   cross join lateral jsonb_array_elements(p.dashboard_payload -> 'monthly') item
   where p.bundle_release_id =
