@@ -8998,9 +8998,20 @@ def release_league(args: argparse.Namespace) -> None:
                 ),
             ])
         else:
-            manifest_checks.append(
-                ("timings_ms", reviewed_manifest.get("timings_ms"), timings_ms)
-            )
+            reviewed_timings = reviewed_manifest.get("timings_ms")
+            timing_keys = {"candidate_query", "reconciliation", "preflight_total"}
+            if (
+                not isinstance(reviewed_timings, dict)
+                or set(reviewed_timings) != timing_keys
+                or any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or value < 0
+                    for value in reviewed_timings.values()
+                )
+            ):
+                raise SystemExit("league preflight manifest timings are invalid")
+            manifest_checks.append(("timings_ms", reviewed_timings, reviewed_timings))
         expected_manifest_keys = {field for field, _actual, _expected in manifest_checks}
         if set(reviewed_manifest) != expected_manifest_keys:
             raise SystemExit(

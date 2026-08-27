@@ -269,6 +269,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             pipeline.ANALYSIS_WINDOW_V5_EVIDENCE_SHA256,
             hashlib.sha256(manifest.read_bytes()).hexdigest(),
         )
+        self.assertIn("league preflight manifest timings are invalid", self.source)
 
     def test_release_cli_accepts_explicit_v5_and_keeps_v2_defaults(self) -> None:
         with (
