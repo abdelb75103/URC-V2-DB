@@ -2182,7 +2182,6 @@ with dimensions as (
   left join audit.urc_2024_25_specific_diagnosis_mappings_v1 m
     on m.season = f.season
    and m.source_row = f.source_row
-   and m.source_row_sha256 = f.ingestion_source_row_sha256
   where f.canonical_problem_type = 'injury'
   group by f.curated_build_id, f.team_key, f.season,
     m.diagnosis_group_code, m.diagnosis_group_label
@@ -2931,7 +2930,6 @@ begin
     join audit.urc_2024_25_specific_diagnosis_mappings_v1 m
       on m.season = f.season
      and m.source_row = f.source_row
-     and m.source_row_sha256 = f.ingestion_source_row_sha256
     where f.canonical_problem_type <> 'injury'
   )
      or (select count(*)
@@ -2939,7 +2937,6 @@ begin
          left join audit.urc_2024_25_specific_diagnosis_mappings_v1 m
            on m.season = f.season
           and m.source_row = f.source_row
-          and m.source_row_sha256 = f.ingestion_source_row_sha256
          where f.canonical_problem_type = 'injury'
            and m.source_row is null) <> 2
   then

@@ -385,6 +385,9 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
         self.assertEqual(
             lower_sql.count("reporting.canonical_jsonb_sha256_v1("), 2
         )
+        self.assertNotIn(
+            "m.source_row_sha256 = f.ingestion_source_row_sha256", lower_sql
+        )
 
     def test_every_injury_section_reads_final_classification_fact(self) -> None:
         lower_sql = self.sql.lower()
