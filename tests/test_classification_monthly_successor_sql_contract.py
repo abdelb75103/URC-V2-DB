@@ -385,6 +385,9 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
         self.assertNotIn(
             "m.source_row_sha256 = f.ingestion_source_row_sha256", lower_sql
         )
+        self.assertIn(
+            "cohort.final_values ->> 'timeloss vs medical attention'", lower_sql
+        )
 
     def test_every_injury_section_reads_final_classification_fact(self) -> None:
         lower_sql = self.sql.lower()

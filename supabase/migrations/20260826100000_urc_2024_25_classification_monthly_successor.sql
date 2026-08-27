@@ -1942,7 +1942,7 @@ with members as (
       else null::numeric
     end as parsed_days_lost,
     lower(trim(coalesce(
-      nullif(cohort.master_source_classification_value, ''),
+      nullif(cohort.final_values ->> 'TimeLoss vs Medical Attention', ''),
       ''
     ))) as source_classification_value
   from cohort
