@@ -21,8 +21,8 @@ export const INJURY_FAMILY_COLORS: Record<string, string> = {
 };
 
 const METRIC_LABELS: Record<InjuryTypeMetric, { label: string; unit: string; longUnit: string }> = {
-  time_loss_injuries: { label: 'Count', unit: 'cases', longUnit: 'time-loss cases' },
-  incidence_per_1000h: { label: 'Incidence', unit: '/1,000 h', longUnit: 'injuries per 1,000 player-hours' },
+  time_loss_injuries: { label: 'TL injuries', unit: 'injuries', longUnit: 'TL injuries' },
+  incidence_per_1000h: { label: 'TL incidence', unit: '/1,000 h', longUnit: 'TL injuries per 1,000 player-hours' },
   burden_per_1000h: { label: 'Burden', unit: 'days /1,000 h', longUnit: 'days per 1,000 player-hours' },
 };
 
@@ -156,15 +156,15 @@ export function InjuryTypeDossier({
       </div>
 
       <div className="grid grid-cols-3 border-y border-border/60">
-        <DossierMetric label="Count" value={formatValue(row?.time_loss_injuries, 0)} unit="cases" active={metric === 'time_loss_injuries'} />
-        <DossierMetric label="Incidence" value={formatMetric(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
+        <DossierMetric label="TL injuries" value={formatValue(row?.time_loss_injuries, 0)} unit="injuries" active={metric === 'time_loss_injuries'} />
+        <DossierMetric label="TL incidence" value={formatMetric(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
         <DossierMetric label="Burden" value={formatMetric(row?.burden_per_1000h, 'burden_per_1000h')} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
       </div>
 
       <div className="flex flex-1 flex-col px-5 py-4">
         <div className="flex items-baseline justify-between gap-4">
           <h4 className="text-sm font-semibold text-foreground">Included injury types</h4>
-          <span className="text-[11px] text-muted-foreground">Cases</span>
+          <span className="text-[11px] text-muted-foreground">TL injuries</span>
         </div>
         {contributingSubtypes.length ? (
           <div className="mt-3 space-y-1">

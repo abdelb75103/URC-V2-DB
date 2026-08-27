@@ -27,8 +27,8 @@ const REGIONS = [
 ] as const;
 
 const METRIC_LABELS: Record<LocationMetric, { label: string; unit: string }> = {
-  time_loss_injuries: { label: 'time-loss injuries', unit: '' },
-  incidence_per_1000h: { label: 'incidence', unit: ' per 1,000 player-hours' },
+  time_loss_injuries: { label: 'TL injuries', unit: '' },
+  incidence_per_1000h: { label: 'TL incidence', unit: ' TL injuries per 1,000 player-hours' },
   burden_per_1000h: { label: 'burden', unit: ' days per 1,000 player-hours' },
 };
 

@@ -115,6 +115,8 @@ test('injury type dossier links ranked selection to exact subtype evidence', asy
   assert.match(dossier, /aria-pressed=\{selected\}/);
   assert.match(dossier, /min-h-14/);
   assert.match(dossier, /Included injury types/);
+  assert.match(dossier, /label: 'TL incidence'/);
+  assert.match(dossier, /label: 'TL injuries'/);
   assert.match(dossier, /subtype\.time_loss_injuries > 0/);
   assert.match(dossier, /contributingSubtypes\.map/);
   assert.doesNotMatch(dossier, /<svg|silhouette|anatomy/i);
@@ -507,6 +509,7 @@ test('comparison tab offers Overall when projected overall data exists', async (
 
 test('body map regions keep a reliable touch and pointer hit area', async () => {
   const bodyMap = await readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8');
+  assert.match(bodyMap, /label: 'TL incidence'/);
 
   // Every controlled IOC region is hoverable, including regions with no cases, and
   // reports 0 rather than being inert (decision, 25 July 2026).
