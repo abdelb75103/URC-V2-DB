@@ -49,15 +49,16 @@ test('dashboard does not rebuild visible severity rows, and keeps the contact Un
   // decision: the contact rows must NOT be routed through the suppression.
   assert.match(
     dashboardSource,
-    /const contactRows = \(dashboard\.contact_distribution \?\? supplement\?\.contact_distribution \?\? \[\]\)/,
+    /const contactDistribution = dashboard\.contact_distribution \?\? supplement\?\.contact_distribution \?\? \[\];/,
   );
-  // Check the contactRows statement itself rather than the whole file, so any
-  // wrapped form such as withoutFrontFacingUnknown((rows ?? []).filter(...))
+  // Check the contact-data block itself rather than the whole file, so any
+  // wrapped form such as withoutFrontFacingUnknown(contactDistribution.filter(...))
   // is caught, without matching unrelated uses elsewhere in the component.
   const contactStatement = dashboardSource.slice(
-    dashboardSource.indexOf('const contactRows ='),
-    dashboardSource.indexOf('return (', dashboardSource.indexOf('const contactRows =')),
+    dashboardSource.indexOf('const contactDistribution ='),
+    dashboardSource.indexOf('return (', dashboardSource.indexOf('const contactDistribution =')),
   );
   assert.ok(contactStatement.length > 0);
+  assert.match(contactStatement, /const contactRows = contactDistribution\s*\.filter/);
   assert.doesNotMatch(contactStatement, /withoutFrontFacingUnknown/);
 });
