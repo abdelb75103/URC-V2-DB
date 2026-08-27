@@ -19,7 +19,7 @@ Every change that alters a derived value, classification, cohort, denominator, o
 | Rule version | `reporting_classification_2024-25_2026-08-27_v1` |
 | Carry-forward | Classification decisions are `season-specific`. Whole-hour exposure presentation and the recorded-injury timeline series use shared components and therefore carry across season tabs. |
 | Evidence | Classification evidence `docs/evidence/urc_2024-25_classification_monthly_successor_2026-08-26.json`, SHA-256 `0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833`; diagnosis evidence `docs/evidence/urc_2024-25_specific_diagnosis_evidence.json`, SHA-256 `5855127dc199df1918cb906250809ad00b6f2d8ea03904a7ceee5d587996a753` |
-| Migration | `supabase/migrations/20260826100000_urc_2024_25_classification_monthly_successor.sql`, SHA-256 `480e990eb17805bb875afe2c13a97e4e2dd71832f40c243fd629a0c29074bd5b` |
+| Migration | `supabase/migrations/20260826100000_urc_2024_25_classification_monthly_successor.sql`, SHA-256 `5b2e7bce3d7c90634cdf7ed34a1d8b88e414d760c12c73fd95f9dfdbb5b110ad` |
 
 **Classification and duration.** The correction-aware successor separates final classification from duration. Source-reported and adjudicated Time Loss cases remain Time Loss when duration is null, count in incidence, and remain internally open or ongoing without invented days. Medical Attention and zero-day cases are closed on Date Injured and contribute only to recorded counts. Remaining unclassified cases also contribute only to recorded counts. Severity, mean, median and burden use known-duration Time Loss cases.
 

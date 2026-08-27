@@ -1883,8 +1883,7 @@ begin
 end;
 $$;
 
-create view analysis.urc_2024_25_final_injury_classification_v1
-with (security_invoker = true) as
+create materialized view analysis.urc_2024_25_final_injury_classification_v1 as
 with members as (
   select *
   from analysis.row_correction_member_releases_v1
