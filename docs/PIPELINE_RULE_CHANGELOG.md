@@ -15,7 +15,7 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `applied-pending-promotion`: the additive migration is registered on the approved live URC database and its candidate reconciliation passes. The currently approved bundle remains unchanged until the governed promotion. |
+| Status | `applied-and-promoted`: the additive migration is registered and the complete 16-team successor bundle is approved on the live URC database. |
 | Rule version | `reporting_classification_2024-25_2026-08-27_v1`, recorded-profile successor migration `20260827172000` |
 | Carry-forward | The recorded prevalence rows are `season-specific` to 2024-25. The shared Injury Impact presentation carries across season tabs and falls back to the available TL profile share when a season does not publish recorded profile counts. |
 | Migration | `20260827172000`, SHA-256 `885a713f85f22bb8e68cbb1bed7f1540c6f81897e95ad3e71522aaf7aa9400b2` |
@@ -25,6 +25,10 @@ Every change that alters a derived value, classification, cohort, denominator, o
 **Presentation.** Numbered dots link to a compact diagnosis key below the chart, replacing colliding permanent labels. The background is one smooth green-to-yellow-to-orange-to-red gradient from low incidence and severity to high incidence and severity. The tooltip labels recorded injuries, recorded share, TL injuries and total days lost. Clicking a point highlights only that point and does not draw a focus border around the chart.
 
 **Integrity and scope.** Recorded counts are rebuilt from the final injury-only 2024-25 classification at Overall, Match, Training and Unknown setting grain. The migration pins 1,662 recorded injuries, 913 TL injuries and 17,575 observed days, and pins the reviewed overall counts for Hamstring injury (120), Lumbar spine pain (41), Acromioclavicular joint injury (39) and Groin and adductor injury (37). It changes no source row, diagnosis mapping, cohort, denominator, monthly value or headline total.
+
+**Live attestation.** Release `urc-2024-25-v5-0445139ad3a3-a1` (`20f2b6ed-d3d3-4349-88b9-fc5c9f143eed`) was promoted with reviewer `Abdel Babiker`. The league payload SHA-256 is `df8e86d801de8f6f7d3ebfeade21baa24d8763f36fa1f113ca2d0e1456a7e271`; the complete bundle SHA-256 is `0445139ad3a36236eeb047b9f94a3188f55906b2dd76624585111030d3143288`; the 16-team parity export-set SHA-256 is `50e88d00b2cd0db179b41f11c76d38636bd95a344c9bb56c96d4b3c7f2c0cfd1`. The least-privilege `web_reader` reconciliation passed the target attestation, all three pinned headline totals, injury-only diagnosis totals across Overall and setting rows, the three reported common diagnoses and complete recorded-profile coverage. The predecessor-to-candidate diff changed only `injury_profiles` for the league and every team.
+
+**Execution note.** The first migration attempt used a normal intermediate profile view, exceeded the 15-minute statement timeout and rolled back fully. Materialising that one intermediate result removed repeated lineage expansion; the accepted migration then applied with all assertions in seven seconds. Database size, cache hit rate and wait-state checks found no storage, lock or compute-limit issue.
 
 ## 2026-08-27: 2024-25 setting-profile reporting successor
 

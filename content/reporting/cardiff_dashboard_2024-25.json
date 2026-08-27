@@ -424,6 +424,19 @@
   },
   "injury_profiles": [
     {
+      "code": "lower_leg",
+      "label": "Lower leg",
+      "setting": "all",
+      "days_lost": 32,
+      "dimension": "body_location",
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 5.265486082524976,
+      "recorded_injuries": 4,
+      "mean_severity_days": 32,
+      "time_loss_injuries": 2,
+      "incidence_per_1000h": 0.329092880157811
+    },
+    {
       "code": "thigh",
       "label": "Thigh",
       "setting": "all",
@@ -431,6 +444,7 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 23.8592338114413,
+      "recorded_injuries": 3,
       "mean_severity_days": 48.333333333333336,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 0.49363932023671653
@@ -443,6 +457,7 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 14.809179607101495,
+      "recorded_injuries": 3,
       "mean_severity_days": 90,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 0.49363932023671653
@@ -455,21 +470,10 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.8100108408679605,
+      "recorded_injuries": 3,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 0.49363932023671653
-    },
-    {
-      "code": "lower_leg",
-      "label": "Lower leg",
-      "setting": "all",
-      "days_lost": 32,
-      "dimension": "body_location",
-      "exposure_hours": 6077.3116666666665,
-      "burden_per_1000h": 5.265486082524976,
-      "mean_severity_days": 32,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.329092880157811
     },
     {
       "code": "ankle",
@@ -479,9 +483,23 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 2,
       "mean_severity_days": null,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 0.329092880157811
+    },
+    {
+      "code": "foot",
+      "label": "Foot",
+      "setting": "all",
+      "days_lost": 9,
+      "dimension": "body_location",
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 1.4809179607101495,
+      "recorded_injuries": 2,
+      "mean_severity_days": 9,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.1645464400789055
     },
     {
       "code": "elbow",
@@ -491,6 +509,7 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 11.847343685681196,
+      "recorded_injuries": 1,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -503,6 +522,7 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 10.695518605128857,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -515,19 +535,8 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 2.632743041262488,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.1645464400789055
-    },
-    {
-      "code": "foot",
-      "label": "Foot",
-      "setting": "all",
-      "days_lost": 9,
-      "dimension": "body_location",
-      "exposure_hours": 6077.3116666666665,
-      "burden_per_1000h": 1.4809179607101495,
-      "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
     },
@@ -539,6 +548,7 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.4809179607101495,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -551,6 +561,7 @@
       "dimension": "body_location",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -563,6 +574,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 30.555555555555557,
+      "recorded_injuries": 3,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 8.333333333333334
@@ -575,6 +587,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 355.55555555555554,
+      "recorded_injuries": 2,
       "mean_severity_days": 64,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 5.555555555555555
@@ -587,6 +600,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 250,
+      "recorded_injuries": 2,
       "mean_severity_days": 90,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 5.555555555555555
@@ -599,6 +613,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 200,
+      "recorded_injuries": 1,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -611,6 +626,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 180.55555555555554,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -623,6 +639,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 44.44444444444444,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -635,6 +652,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 25,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -647,6 +665,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -659,6 +678,7 @@
       "dimension": "body_location",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -671,19 +691,8 @@
       "dimension": "body_location",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 5.597036136156066,
+      "recorded_injuries": 3,
       "mean_severity_days": 32,
-      "time_loss_injuries": 1,
-      "incidence_per_1000h": 0.17490737925487707
-    },
-    {
-      "code": "thigh",
-      "label": "Thigh",
-      "setting": "training",
-      "days_lost": 17,
-      "dimension": "body_location",
-      "exposure_hours": 5717.3116666666665,
-      "burden_per_1000h": 2.9734254473329105,
-      "mean_severity_days": 17,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
     },
@@ -695,7 +704,21 @@
       "dimension": "body_location",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 1.5741664132938937,
+      "recorded_injuries": 2,
       "mean_severity_days": 9,
+      "time_loss_injuries": 1,
+      "incidence_per_1000h": 0.17490737925487707
+    },
+    {
+      "code": "thigh",
+      "label": "Thigh",
+      "setting": "training",
+      "days_lost": 17,
+      "dimension": "body_location",
+      "exposure_hours": 5717.3116666666665,
+      "burden_per_1000h": 2.9734254473329105,
+      "recorded_injuries": 1,
+      "mean_severity_days": 17,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
     },
@@ -707,6 +730,7 @@
       "dimension": "body_location",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -719,6 +743,7 @@
       "dimension": "body_location",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -731,9 +756,23 @@
       "dimension": "body_location",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
+    },
+    {
+      "code": "dx_soleus_injury_5b8a0d0266",
+      "label": "Soleus injury",
+      "setting": "all",
+      "days_lost": 32,
+      "dimension": "diagnosis",
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 5.265486082524976,
+      "recorded_injuries": 4,
+      "mean_severity_days": 32,
+      "time_loss_injuries": 2,
+      "incidence_per_1000h": 0.329092880157811
     },
     {
       "code": "dx_concussion_a91e1107d7",
@@ -743,6 +782,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.8100108408679605,
+      "recorded_injuries": 3,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 0.49363932023671653
@@ -755,19 +795,8 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 21.061944330099905,
+      "recorded_injuries": 2,
       "mean_severity_days": 64,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.329092880157811
-    },
-    {
-      "code": "dx_soleus_injury_5b8a0d0266",
-      "label": "Soleus injury",
-      "setting": "all",
-      "days_lost": 32,
-      "dimension": "diagnosis",
-      "exposure_hours": 6077.3116666666665,
-      "burden_per_1000h": 5.265486082524976,
-      "mean_severity_days": 32,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 0.329092880157811
     },
@@ -779,6 +808,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 14.809179607101495,
+      "recorded_injuries": 1,
       "mean_severity_days": 90,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -791,6 +821,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 11.847343685681196,
+      "recorded_injuries": 1,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -803,6 +834,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 10.695518605128857,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -815,6 +847,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 2.7972894813413935,
+      "recorded_injuries": 1,
       "mean_severity_days": 17,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -827,6 +860,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 2.632743041262488,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -839,6 +873,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.4809179607101495,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -851,6 +886,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.4809179607101495,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -863,6 +899,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -875,6 +912,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -887,6 +925,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -899,6 +938,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -911,6 +951,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -923,6 +964,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -935,6 +977,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 30.555555555555557,
+      "recorded_injuries": 3,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 8.333333333333334
@@ -947,6 +990,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 355.55555555555554,
+      "recorded_injuries": 2,
       "mean_severity_days": 64,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 5.555555555555555
@@ -959,6 +1003,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 250,
+      "recorded_injuries": 1,
       "mean_severity_days": 90,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -971,6 +1016,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 200,
+      "recorded_injuries": 1,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -983,6 +1029,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 180.55555555555554,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -995,6 +1042,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 44.44444444444444,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1007,6 +1055,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 25,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1019,6 +1068,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1031,6 +1081,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1043,6 +1094,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1055,6 +1107,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 5.597036136156066,
+      "recorded_injuries": 3,
       "mean_severity_days": 32,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1067,6 +1120,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 2.9734254473329105,
+      "recorded_injuries": 1,
       "mean_severity_days": 17,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1079,6 +1133,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 1.5741664132938937,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1091,6 +1146,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1103,6 +1159,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1115,6 +1172,7 @@
       "dimension": "diagnosis",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -1127,9 +1185,23 @@
       "dimension": "diagnosis",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
+    },
+    {
+      "code": "lower_leg__muscle_injury",
+      "label": "Lower leg \u00b7 Muscle injury",
+      "setting": "all",
+      "days_lost": 32,
+      "dimension": "injury_profile",
+      "exposure_hours": 6077.3116666666665,
+      "burden_per_1000h": 5.265486082524976,
+      "recorded_injuries": 4,
+      "mean_severity_days": 32,
+      "time_loss_injuries": 2,
+      "incidence_per_1000h": 0.329092880157811
     },
     {
       "code": "thigh__muscle_injury",
@@ -1139,6 +1211,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 23.8592338114413,
+      "recorded_injuries": 3,
       "mean_severity_days": 48.333333333333336,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 0.49363932023671653
@@ -1151,6 +1224,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.8100108408679605,
+      "recorded_injuries": 3,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 0.49363932023671653
@@ -1163,19 +1237,8 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 14.809179607101495,
+      "recorded_injuries": 2,
       "mean_severity_days": 90,
-      "time_loss_injuries": 2,
-      "incidence_per_1000h": 0.329092880157811
-    },
-    {
-      "code": "lower_leg__muscle_injury",
-      "label": "Lower leg \u00b7 Muscle injury",
-      "setting": "all",
-      "days_lost": 32,
-      "dimension": "injury_profile",
-      "exposure_hours": 6077.3116666666665,
-      "burden_per_1000h": 5.265486082524976,
-      "mean_severity_days": 32,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 0.329092880157811
     },
@@ -1187,6 +1250,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 2,
       "mean_severity_days": null,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 0.329092880157811
@@ -1199,6 +1263,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 11.847343685681196,
+      "recorded_injuries": 1,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1211,6 +1276,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 10.695518605128857,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1223,6 +1289,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 2.632743041262488,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1235,6 +1302,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.4809179607101495,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1247,6 +1315,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.4809179607101495,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1259,6 +1328,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1271,6 +1341,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -1283,6 +1354,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -1295,6 +1367,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 30.555555555555557,
+      "recorded_injuries": 3,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 8.333333333333334
@@ -1307,6 +1380,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 355.55555555555554,
+      "recorded_injuries": 2,
       "mean_severity_days": 64,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 5.555555555555555
@@ -1319,6 +1393,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 250,
+      "recorded_injuries": 1,
       "mean_severity_days": 90,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1331,6 +1406,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 200,
+      "recorded_injuries": 1,
       "mean_severity_days": 72,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1343,6 +1419,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 180.55555555555554,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1355,6 +1432,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 44.44444444444444,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1367,6 +1445,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 25,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1379,6 +1458,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1391,6 +1471,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1403,6 +1484,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 360,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1415,6 +1497,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 5.597036136156066,
+      "recorded_injuries": 3,
       "mean_severity_days": 32,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1427,6 +1510,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 2.9734254473329105,
+      "recorded_injuries": 1,
       "mean_severity_days": 17,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1439,6 +1523,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 1.5741664132938937,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1451,6 +1536,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1463,6 +1549,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1475,6 +1562,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -1487,6 +1575,7 @@
       "dimension": "injury_profile",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
@@ -1499,6 +1588,7 @@
       "dimension": "injury_type",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 29.124719893966272,
+      "recorded_injuries": 7,
       "mean_severity_days": 44.25,
       "time_loss_injuries": 5,
       "incidence_per_1000h": 0.8227322003945275
@@ -1511,6 +1601,7 @@
       "dimension": "injury_type",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 16.290097567811646,
+      "recorded_injuries": 6,
       "mean_severity_days": 49.5,
       "time_loss_injuries": 5,
       "incidence_per_1000h": 0.8227322003945275
@@ -1523,6 +1614,7 @@
       "dimension": "injury_type",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.8100108408679605,
+      "recorded_injuries": 4,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 0.49363932023671653
@@ -1535,6 +1627,7 @@
       "dimension": "injury_type",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 11.847343685681196,
+      "recorded_injuries": 2,
       "mean_severity_days": 72,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 0.329092880157811
@@ -1547,6 +1640,7 @@
       "dimension": "injury_type",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 10.695518605128857,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1559,6 +1653,7 @@
       "dimension": "injury_type",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 2.632743041262488,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1571,6 +1666,7 @@
       "dimension": "injury_type",
       "exposure_hours": 6077.3116666666665,
       "burden_per_1000h": 1.4809179607101495,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.1645464400789055
@@ -1583,6 +1679,7 @@
       "dimension": "injury_type",
       "exposure_hours": 360,
       "burden_per_1000h": 355.55555555555554,
+      "recorded_injuries": 3,
       "mean_severity_days": 64,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 8.333333333333334
@@ -1595,6 +1692,7 @@
       "dimension": "injury_type",
       "exposure_hours": 360,
       "burden_per_1000h": 275,
+      "recorded_injuries": 3,
       "mean_severity_days": 49.5,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 8.333333333333334
@@ -1607,6 +1705,7 @@
       "dimension": "injury_type",
       "exposure_hours": 360,
       "burden_per_1000h": 30.555555555555557,
+      "recorded_injuries": 3,
       "mean_severity_days": 11,
       "time_loss_injuries": 3,
       "incidence_per_1000h": 8.333333333333334
@@ -1619,6 +1718,7 @@
       "dimension": "injury_type",
       "exposure_hours": 360,
       "burden_per_1000h": 200,
+      "recorded_injuries": 2,
       "mean_severity_days": 72,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 5.555555555555555
@@ -1631,6 +1731,7 @@
       "dimension": "injury_type",
       "exposure_hours": 360,
       "burden_per_1000h": 180.55555555555554,
+      "recorded_injuries": 1,
       "mean_severity_days": 65,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1643,6 +1744,7 @@
       "dimension": "injury_type",
       "exposure_hours": 360,
       "burden_per_1000h": 44.44444444444444,
+      "recorded_injuries": 1,
       "mean_severity_days": 16,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 2.7777777777777777
@@ -1655,6 +1757,7 @@
       "dimension": "injury_type",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 8.570461583488976,
+      "recorded_injuries": 4,
       "mean_severity_days": 24.5,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 0.34981475850975413
@@ -1667,6 +1770,7 @@
       "dimension": "injury_type",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 3,
       "mean_severity_days": null,
       "time_loss_injuries": 2,
       "incidence_per_1000h": 0.34981475850975413
@@ -1679,6 +1783,7 @@
       "dimension": "injury_type",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 1.5741664132938937,
+      "recorded_injuries": 1,
       "mean_severity_days": 9,
       "time_loss_injuries": 1,
       "incidence_per_1000h": 0.17490737925487707
@@ -1691,6 +1796,7 @@
       "dimension": "injury_type",
       "exposure_hours": 5717.3116666666665,
       "burden_per_1000h": 0,
+      "recorded_injuries": 1,
       "mean_severity_days": null,
       "time_loss_injuries": 0,
       "incidence_per_1000h": 0
