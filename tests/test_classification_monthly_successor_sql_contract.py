@@ -381,6 +381,9 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
         self.assertIn("'01 ' || (item ->> 'month')", self.sql)
         self.assertNotIn("'01 ' || item ->> 'month'", self.sql)
         self.assertNotIn("min(source_item)", lower_sql)
+        self.assertEqual(
+            lower_sql.count("reporting.canonical_jsonb_sha256_v1("), 2
+        )
 
     def test_every_injury_section_reads_final_classification_fact(self) -> None:
         lower_sql = self.sql.lower()

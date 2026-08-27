@@ -2426,8 +2426,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
   cohort.cohort_evidence_sha256,
   '0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833'::text
     as classification_evidence_sha256,
-  reporting.canonical_jsonb_sha256_v1(
-    m.dashboard_payload || jsonb_build_object(
+  m.dashboard_payload || jsonb_build_object(
       'method', jsonb_build_array(
         'Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.',
         'Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.',
@@ -2604,8 +2603,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
         from analysis.urc_2024_25_team_contact_distribution_v1 x
         where x.team_key = m.team_key and x.curated_build_id = m.curated_build_id
       ), '[]'::jsonb)
-    )
-  ) as dashboard,
+    ) as dashboard,
   '8b50b9e2-023b-4f99-b6ae-e53d8e21706e'::uuid as predecessor_release_id,
   '93fdd34371aac097c4364d3c64c32135fba7e3f235747b9daeb285335b330a8f'::text
     as predecessor_canonical_bundle_sha256,
@@ -2638,8 +2636,7 @@ select
   cohort.cohort_evidence_sha256,
   '0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833'::text
     as classification_evidence_sha256,
-  reporting.canonical_jsonb_sha256_v1(
-    predecessor.dashboard_payload || jsonb_build_object(
+  predecessor.dashboard_payload || jsonb_build_object(
       'method', jsonb_build_array(
         'Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.',
         'Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.',
@@ -2807,8 +2804,7 @@ select
         ) order by x.setting_code, x.contact_context)
         from analysis.urc_2024_25_league_contact_distribution_v1 x
       ), '[]'::jsonb)
-    )
-  ) as dashboard,
+    ) as dashboard,
   '8b50b9e2-023b-4f99-b6ae-e53d8e21706e'::uuid as predecessor_release_id,
   '93fdd34371aac097c4364d3c64c32135fba7e3f235747b9daeb285335b330a8f'::text
     as predecessor_canonical_bundle_sha256,
