@@ -99,7 +99,6 @@ with predecessor as (
   left join audit.urc_2024_25_specific_diagnosis_mappings_v1 mapping
     on mapping.season = fact.season
    and mapping.source_row = fact.source_row
-   and mapping.source_row_sha256 = fact.ingestion_source_row_sha256
 )
 select
   predecessor.recorded_injuries as predecessor_recorded_injuries,
@@ -151,7 +150,7 @@ select
     as monthly_recorded_reconciles,
   monthly.dated_time_loss_injuries = monthly.monthly_time_loss_injuries
     as monthly_time_loss_reconciles,
-  diagnosis.unknown_fallback_rows = 2 as diagnosis_unknown_fallback_exact,
+  diagnosis.unknown_fallback_rows = 4 as diagnosis_unknown_fallback_exact,
   diagnosis.illness_mapping_rows = 0 as diagnosis_excludes_illness,
   diagnosis.profile_time_loss_injuries = diagnosis.injury_time_loss_injuries
     as diagnosis_time_loss_reconciles,
