@@ -1460,12 +1460,9 @@ export function ImpactScatterChart({ rows, totalRecordedInjuries }: { rows: Inju
       </div>
       <ol className="mt-4 grid gap-x-6 gap-y-2 border-t border-border/60 pt-4 text-sm sm:grid-cols-2" aria-label="Diagnoses shown on the impact chart">
         {data.map((row) => (
-          <li key={row.impactKey} className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-2">
+          <li key={row.impactKey} className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2">
             <span className="grid h-5 w-5 place-items-center rounded-full bg-[#173f52] text-[10px] font-bold text-white">{row.displayIndex}</span>
             <span className="min-w-0 truncate text-foreground">{row.label}</span>
-            {row.recorded_injuries !== undefined && totalRecordedInjuries ? (
-              <span className="tabular-nums text-muted-foreground">{number(row.recorded_injuries / totalRecordedInjuries * 100)}%</span>
-            ) : null}
           </li>
         ))}
       </ol>
