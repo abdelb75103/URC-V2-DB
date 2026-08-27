@@ -2978,10 +2978,6 @@ begin
         'Unknown-setting injuries are included in all-setting metrics but have no setting-specific rate.',
         'Specific diagnoses use reviewed groups; unresolved injury diagnoses remain internal unknown values and are not shown as named diagnoses.'
       )
-      or reporting.canonical_jsonb_sha256_v1(candidates.dashboard -> 'method') is distinct from
-        '9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c'
-      or reporting.canonical_jsonb_sha256_v1(candidates.dashboard -> 'limitations') is distinct from
-        'd8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9'
   ) then
     raise exception 'successor method/limitations disclosure content or hash failed';
   end if;

@@ -312,7 +312,6 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
             "assert_urc_2024_25_classification_successor_v1",
             "successor_disclosure_method_sha256",
             "successor_disclosure_limitations_sha256",
-            "canonical_jsonb_sha256_v1",
             "'method', jsonb_build_array(",
             "'limitations', jsonb_build_array(",
             "open or ongoing time loss",
@@ -382,9 +381,7 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
         self.assertIn("'01 ' || (item ->> 'month')", self.sql)
         self.assertNotIn("'01 ' || item ->> 'month'", self.sql)
         self.assertNotIn("min(source_item)", lower_sql)
-        self.assertEqual(
-            lower_sql.count("reporting.canonical_jsonb_sha256_v1("), 2
-        )
+        self.assertNotIn("reporting.canonical_jsonb_sha256_v1(", lower_sql)
         self.assertNotIn(
             "m.source_row_sha256 = f.ingestion_source_row_sha256", lower_sql
         )

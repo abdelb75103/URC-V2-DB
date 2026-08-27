@@ -41,7 +41,7 @@ values (
   '20260826100000',
   'urc_2024_25_classification_monthly_successor',
   array[
-    'migration_sha256=6fbbcf5a700c9d6d45869bbb85f821b3a0cad2b828b468b89478900865375add',
+    'migration_sha256=10c8e16ab612b1ab60dd4fdce0ed82ab554d610c852b8c201a4e1e8792ac59c8',
     'evidence_file_sha256=0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833',
     'specific_diagnosis_evidence_sha256=a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167',
     'specific_diagnosis_mapping_rows_sha256=8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7',
@@ -70,7 +70,7 @@ on conflict (version) do nothing;
 do $$
 declare
   expected_statements text[] := array[
-    'migration_sha256=6fbbcf5a700c9d6d45869bbb85f821b3a0cad2b828b468b89478900865375add',
+    'migration_sha256=10c8e16ab612b1ab60dd4fdce0ed82ab554d610c852b8c201a4e1e8792ac59c8',
     'evidence_file_sha256=0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833',
     'specific_diagnosis_evidence_sha256=a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167',
     'specific_diagnosis_mapping_rows_sha256=8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7',
