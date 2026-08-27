@@ -1446,9 +1446,9 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#e5bd45]/70" />One measure elevated</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#df4f52]/70" />Higher incidence and severity</span>
       </div>
-      <ol className="mt-4 grid gap-x-6 gap-y-2 border-t border-border/60 pt-4 text-sm sm:grid-cols-2 lg:grid-cols-3" aria-label="Diagnoses shown on the Risk Matrix">
+      <ol className="mt-4 columns-1 gap-6 border-t border-border/60 pt-4 text-sm sm:columns-2 lg:columns-4" aria-label="Diagnoses shown on the Risk Matrix">
         {data.map((row) => (
-          <li key={row.impactKey} className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2">
+          <li key={row.impactKey} className="mb-2 grid break-inside-avoid grid-cols-[1.5rem_minmax(0,1fr)] items-center gap-2">
             <span className="grid h-5 w-5 place-items-center rounded-full bg-[#173f52] text-[10px] font-bold text-white">{row.displayIndex}</span>
             <span className="min-w-0 truncate text-foreground">{row.label}</span>
           </li>

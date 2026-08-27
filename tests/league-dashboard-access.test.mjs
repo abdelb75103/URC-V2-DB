@@ -538,7 +538,8 @@ test('risk matrix uses a data-fitted log severity scale, numbered dots, and a sm
   assert.doesNotMatch(impact, /bubble_burden|IMPACT_BUBBLE_SIZE|dataKey="bubble_burden"/);
   assert.match(impact, /displayIndex: index \+ 1/);
   assert.match(impact, /Diagnoses shown on the Risk Matrix/);
-  assert.match(impact, /sm:grid-cols-2 lg:grid-cols-3/);
+  assert.match(impact, /columns-1.*sm:columns-2 lg:columns-4/);
+  assert.match(impact, /break-inside-avoid/);
   assert.match(impact, /<linearGradient id="impact-risk-gradient"/);
   assert.match(impact, /fill="url\(#impact-risk-gradient\)"/);
   assert.match(impact, /<ReferenceArea/);
