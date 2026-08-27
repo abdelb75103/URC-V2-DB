@@ -388,6 +388,7 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
         self.assertIn(
             "cohort.final_values ->> 'timeloss vs medical attention'", lower_sql
         )
+        self.assertIn("cohort.source_row in (1120, 1121) then 1::numeric", lower_sql)
 
     def test_every_injury_section_reads_final_classification_fact(self) -> None:
         lower_sql = self.sql.lower()

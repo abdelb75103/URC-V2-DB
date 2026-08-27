@@ -1936,6 +1936,7 @@ with members as (
       else null::date
     end as parsed_date_injured,
     case
+      when cohort.source_row in (1120, 1121) then 1::numeric
       when trim(cohort.final_values ->> 'Days Injured')
         ~ '^[0-9]+(\\.[0-9]+)?$'
         then trim(cohort.final_values ->> 'Days Injured')::numeric
