@@ -571,16 +571,22 @@ function TimelineTooltip({
 
 export function SeasonTimelineChart({
   rows,
-  showCases,
-  showIncidence,
+  showInjuries,
+  showTlInjuries,
+  showOverallIncidence,
+  showTlIncidence,
 }: {
   rows: MonthlySettingRow[];
-  showCases: boolean;
-  showIncidence: boolean;
+  showInjuries: boolean;
+  showTlInjuries: boolean;
+  showOverallIncidence: boolean;
+  showTlIncidence: boolean;
 }) {
   const data = useMemo(() => fromSeptember(sortSeasonMonths(rows)), [rows]);
   if (!data.length) return <ChartEmpty reason="No dated injury cases are available for the selected setting." />;
-  if (!showCases && !showIncidence) return <ChartEmpty reason="Select at least one series to plot." />;
+  if (!showInjuries && !showTlInjuries && !showOverallIncidence && !showTlIncidence) {
+    return <ChartEmpty reason="Select at least one series to plot." />;
+  }
   const hasRecordedCases = data.every((row) => typeof row.recorded_injuries === 'number');
   const hasOverallIncidence = data.some((row) => typeof row.overall_incidence_per_1000h === 'number');
   const hasTlIncidence = data.some((row) => typeof row.incidence_per_1000h === 'number');
@@ -621,7 +627,7 @@ export function SeasonTimelineChart({
             wrapperStyle={{ zIndex: 30 }}
           />
           <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
-          {showCases && hasRecordedCases && (
+          {showInjuries && hasRecordedCases && (
             <Bar
               yAxisId="cases"
               dataKey="recorded_injuries"
@@ -633,7 +639,7 @@ export function SeasonTimelineChart({
               isAnimationActive={false}
             />
           )}
-          {showCases && (
+          {showTlInjuries && (
             <Bar
               yAxisId="cases"
               dataKey="time_loss_injuries"
@@ -645,7 +651,7 @@ export function SeasonTimelineChart({
               isAnimationActive={false}
             />
           )}
-          {showIncidence && hasOverallIncidence && (
+          {showOverallIncidence && hasOverallIncidence && (
             <Line
               yAxisId="rate"
               type="monotone"
@@ -659,7 +665,7 @@ export function SeasonTimelineChart({
               isAnimationActive={false}
             />
           )}
-          {showIncidence && hasTlIncidence && (
+          {showTlIncidence && hasTlIncidence && (
             <Line
               yAxisId="rate"
               type="monotone"
@@ -1393,7 +1399,13 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
       const py = pointY(row);
       const width = Math.max(row.label.length * 5.35, 24);
       const centreBelow = row.label.toLowerCase() === 'synovitis/capsulitis';
+      const namedSeparation = row.label.toLowerCase() === 'posterior malleolus fracture'
+        ? [{ labelDx: -10, labelDy: -28, labelAnchor: 'end' as const }]
+        : row.label.toLowerCase() === 'rectus femoris tendon rupture'
+          ? [{ labelDx: 10, labelDy: 28, labelAnchor: 'start' as const }]
+          : [];
       const candidates: Array<Pick<ImpactChartRow, 'labelDx' | 'labelDy' | 'labelAnchor'>> = [
+        ...namedSeparation,
         ...(centreBelow ? [{ labelDx: 8, labelDy: 18, labelAnchor: 'middle' as const }] : []),
         { labelDx: 10, labelDy: 4, labelAnchor: 'start' },
         { labelDx: -10, labelDy: 4, labelAnchor: 'end' },

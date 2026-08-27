@@ -332,8 +332,12 @@ function OverviewTab({
   supplement?: DashboardSupplement;
 }) {
   const [setting, setSetting] = useState<Setting>('all');
-  const [showCases, setShowCases] = useState(true);
-  const [showIncidence, setShowIncidence] = useState(true);
+  const [showInjuries, setShowInjuries] = useState(true);
+  const [showTlInjuries, setShowTlInjuries] = useState(true);
+  const [showOverallIncidence, setShowOverallIncidence] = useState(true);
+  const [showTlIncidence, setShowTlIncidence] = useState(true);
+  const [severitySetting, setSeveritySetting] = useState<Setting>('all');
+  const [contactSetting, setContactSetting] = useState<Setting>('all');
   const [locationMetric, setLocationMetric] = useState<LocationMetric>('incidence_per_1000h');
   const [benchMetric, setBenchMetric] = useState<ProfileMetric>('incidence_per_1000h');
   const [includeZeroDay, setIncludeZeroDay] = useState(true);
@@ -357,12 +361,13 @@ function OverviewTab({
   const settingFilterAvailable = settingOptions.length > 1;
   const effectiveSetting: Setting = settingFilterAvailable && settingOptions.includes(setting) ? setting : 'all';
   const perSettingMonthly = Boolean(supplement);
-  const perSettingSeverity = Boolean(supplement);
   const filtered = effectiveSetting !== 'all';
 
   const recorded = supplement?.descriptive_consequence_summary.recorded_injuries
     ?? headline.recorded_injuries
-    ?? dashboard.severity_distribution.reduce((sum, row) => sum + row.recorded_injuries, 0);
+    ?? dashboard.severity_distribution
+      .filter((row) => !row.setting || row.setting === 'all')
+      .reduce((sum, row) => sum + row.recorded_injuries, 0);
   const isOverall = effectiveSetting === 'all';
   const headlineValues = {
     recorded_injuries: active?.recorded_injuries ?? (isOverall ? recorded : null),
@@ -405,9 +410,15 @@ function OverviewTab({
   });
   const locationMax = Math.max(...barRows.map((row) => metricValue(row, locationMetric)), 0);
 
-  const severitySource = supplement
-    ? supplement.severity_distribution.filter((row) => row.setting === effectiveSetting)
-    : dashboard.severity_distribution;
+  const severityDistribution = supplement?.severity_distribution ?? dashboard.severity_distribution;
+  const severitySettings = availableSettings(
+    severityDistribution.filter((row): row is typeof row & { setting: Setting } => Boolean(row.setting)),
+    ['all', 'match', 'training'],
+  );
+  const effectiveSeveritySetting = severitySettings.includes(severitySetting) ? severitySetting : severitySettings[0] ?? 'all';
+  const severitySource = severitySettings.length
+    ? severityDistribution.filter((row) => row.setting === effectiveSeveritySetting)
+    : severityDistribution;
   const severityRows = [
     { key: 'zero', label: '0 days (medical attention)', value: severitySource.find((row) => row.key === 'zero_days_medical_attention_only')?.recorded_injuries ?? 0 },
     { key: 'one_to_seven', label: '1-7 days', value: severitySource.filter((row) => ['one_day', 'two_to_three_days', 'four_to_seven_days'].includes(row.key)).reduce((sum, row) => sum + row.recorded_injuries, 0) },
@@ -420,8 +431,11 @@ function OverviewTab({
   // Unlike the other breakdowns this one keeps its Unknown slice, so the ring
   // reads as a share of all cases rather than of the classified ones only.
   const contactOrder = ['contact', 'non_contact', 'unknown'];
-  const contactRows = (dashboard.contact_distribution ?? supplement?.contact_distribution ?? [])
-    .filter((row) => row.setting === effectiveSetting)
+  const contactDistribution = dashboard.contact_distribution ?? supplement?.contact_distribution ?? [];
+  const contactSettings = availableSettings(contactDistribution, ['all', 'match', 'training']);
+  const effectiveContactSetting = contactSettings.includes(contactSetting) ? contactSetting : contactSettings[0] ?? 'all';
+  const contactRows = contactDistribution
+    .filter((row) => row.setting === effectiveContactSetting)
     .map((row) => ({
       key: row.key,
       label: row.label,
@@ -442,11 +456,21 @@ function OverviewTab({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Injuries" value={fmt(headlineValues.recorded_injuries, 0)} unit="injuries">
-          <PairedStat label="TL injuries" value={fmt(headlineValues.time_loss_injuries)} color="#ffc45c" />
+        <StatTile
+          label="Injuries"
+          value={fmt(headlineValues.recorded_injuries, 0)}
+          unit="injuries"
+          companion={<PairedStat label="TL injuries" value={fmt(headlineValues.time_loss_injuries)} color="#ffc45c" />}
+        >
+          <Sparkline values={trend.map((row) => row.recorded_injuries ?? null)} color={SETTING_COLORS.all} ariaLabel="Injuries by month" />
         </StatTile>
-        <StatTile label="Overall incidence" value={fmt(headlineValues.overall_incidence_per_1000h)} unit="injuries /1,000 h">
-          <PairedStat label="TL incidence" value={fmt(headlineValues.incidence_per_1000h)} color="#ffc45c" />
+        <StatTile
+          label="Overall incidence"
+          value={fmt(headlineValues.overall_incidence_per_1000h)}
+          unit="injuries /1,000 h"
+          companion={<PairedStat label="TL incidence" value={fmt(headlineValues.incidence_per_1000h)} color="#ffc45c" />}
+        >
+          <Sparkline values={trend.map((row) => row.overall_incidence_per_1000h ?? null)} color={SETTING_COLORS.all} ariaLabel="Overall incidence by month" />
         </StatTile>
         <StatTile
           label="Burden"
@@ -471,12 +495,20 @@ function OverviewTab({
             <ScopeChip show={effectiveSetting !== 'all' && !perSettingMonthly} />
           </div>
           <div className="flex flex-wrap gap-4">
-            <CheckToggle checked={showCases} onChange={setShowCases} label="Injuries" swatch={SETTING_COLORS.all} />
-            <CheckToggle checked={showIncidence} onChange={setShowIncidence} label="Overall and TL incidence" swatch="#ffc45c" />
+            <CheckToggle checked={showInjuries} onChange={setShowInjuries} label="Injuries" swatch={SETTING_COLORS.all} />
+            <CheckToggle checked={showTlInjuries} onChange={setShowTlInjuries} label="TL injuries" swatch="#ffc45c" />
+            <CheckToggle checked={showOverallIncidence} onChange={setShowOverallIncidence} label="Overall incidence" swatch={SETTING_COLORS.all} />
+            <CheckToggle checked={showTlIncidence} onChange={setShowTlIncidence} label="TL incidence" swatch="#ffc45c" />
           </div>
         </div>
         <div className="overflow-x-auto">
-          <SeasonTimelineChart rows={monthlyRows} showCases={showCases} showIncidence={showIncidence} />
+          <SeasonTimelineChart
+            rows={monthlyRows}
+            showInjuries={showInjuries}
+            showTlInjuries={showTlInjuries}
+            showOverallIncidence={showOverallIncidence}
+            showTlIncidence={showTlIncidence}
+          />
         </div>
       </Panel>
 
@@ -553,11 +585,13 @@ function OverviewTab({
 
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-foreground">Severity</h3>
-              <ScopeChip show={effectiveSetting !== 'all' && !perSettingSeverity} />
+            <h3 className="text-lg font-semibold text-foreground">Severity</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              {severitySettings.length > 1 && (
+                <SettingControl value={effectiveSeveritySetting} settings={severitySettings} onChange={setSeveritySetting} />
+              )}
+              <CheckToggle checked={includeZeroDay} onChange={setIncludeZeroDay} label="Include 0-day" />
             </div>
-            <CheckToggle checked={includeZeroDay} onChange={setIncludeZeroDay} label="Include 0-day" />
           </div>
           <SeverityArc rows={severityRows} />
         </Panel>
@@ -569,7 +603,12 @@ function OverviewTab({
       <div className={`grid gap-5 ${contactRows.length ? 'xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : ''}`}>
         {contactRows.length > 0 && (
           <Panel contentClassName="p-4 sm:p-5">
-            <h3 className="mb-3 text-lg font-semibold text-foreground">Contact mechanism</h3>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold text-foreground">Contact mechanism</h3>
+              {contactSettings.length > 1 && (
+                <SettingControl value={effectiveContactSetting} settings={contactSettings} onChange={setContactSetting} />
+              )}
+            </div>
             <SeverityArc rows={contactRows} scaleLabels={null} ariaLabel="Contact mechanism breakdown" />
           </Panel>
         )}
@@ -594,18 +633,24 @@ function sortByMonth<T extends { month: string }>(rows: T[]) {
   return sortSeasonMonths(rows);
 }
 
-function StatTile({ label, value, unit, children }: {
+function StatTile({ label, value, unit, companion, children }: {
   label: string;
   value: string;
   unit?: string;
+  companion?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <Card className="min-w-0 border-border/70 bg-card/70 shadow-none">
       <CardContent className="p-4 sm:p-5">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="mt-2 text-3xl font-bold leading-none tracking-tight tabular-nums text-foreground sm:text-4xl">{value}</p>
-        {unit && <p className="mt-1.5 text-[11px] text-muted-foreground">{unit}</p>}
+        <div className="mt-2 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-3xl font-bold leading-none tracking-tight tabular-nums text-foreground sm:text-4xl">{value}</p>
+            {unit && <p className="mt-1.5 text-[11px] text-muted-foreground">{unit}</p>}
+          </div>
+          {companion}
+        </div>
         {children && <div className="mt-3">{children}</div>}
       </CardContent>
     </Card>
@@ -614,9 +659,9 @@ function StatTile({ label, value, unit, children }: {
 
 function PairedStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <p className="flex items-baseline justify-between gap-3 border-t border-border/60 pt-2 text-xs">
-      <span className="font-medium" style={{ color }}>{label}</span>
-      <span className="font-semibold tabular-nums" style={{ color }}>{value}</span>
+    <p className="shrink-0 text-right text-xs" style={{ color }}>
+      <span className="block font-medium">{label}</span>
+      <span className="mt-1 block text-lg font-semibold leading-none tabular-nums">{value}</span>
     </p>
   );
 }
@@ -763,12 +808,14 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
   const impactSource = impactDimension === 'diagnosis'
     ? source
     : profiles.filter((row) => row.dimension === (impactDimension === 'location' ? 'body_location' : 'injury_type'));
-  // Keep the chart focused on the twelve profiles with the greatest overall
-  // impact; every displayed profile receives the same dot size and a direct label.
   const impactCohort = impactSource.filter((row) => row.setting === setting);
-  const impactRows = [...impactCohort]
-    .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0))
-    .slice(0, 12);
+  const impactRanked = [...impactCohort]
+    .sort((a, b) => (b.burden_per_1000h ?? 0) - (a.burden_per_1000h ?? 0));
+  const impactCodes = new Set(impactRanked.slice(0, 12).map((row) => row.code));
+  if (impactDimension === 'diagnosis') {
+    impactRanked.filter(isKneeLigamentDiagnosis).forEach((row) => impactCodes.add(row.code));
+  }
+  const impactRows = impactRanked.filter((row) => impactCodes.has(row.code));
 
   return (
     <div>
@@ -818,6 +865,20 @@ function rankedForMetric(rows: InjuryProfileRow[], metric: ProfileMetric) {
 
 const RANKED_LANE_SIZE = 5;
 
+function isKneeLigamentDiagnosis(row?: Pick<InjuryProfileRow, 'code' | 'label'>) {
+  if (!row) return false;
+  const value = `${row.code} ${row.label}`.toLowerCase();
+  return row.code.startsWith('dx_acl_')
+    || row.code.startsWith('dx_mcl_')
+    || row.code.startsWith('dx_pcl_')
+    || value.includes('posterior cruciate ligament')
+    || value.includes('knee cruciate ligament')
+    || value.includes('knee ligament')
+    || value.includes('knee multiligament')
+    || value.includes('knee posterolateral corner')
+    || row.label.toLowerCase() === 'lateral collateral ligament injury';
+}
+
 /** The codes on screen for one setting: the union of each metric's top five. */
 function rankedLaneCodes(rows: InjuryProfileRow[], setting: Setting) {
   const codes = new Set<string>();
@@ -857,7 +918,16 @@ function commonInjuryColorMap(rows: InjuryProfileRow[]) {
 
   const assigned = new Map<string, InjuryCardColor>();
   for (const code of codes) {
-    const referenceColor = REFERENCE_INJURY_COLORS[code];
+    const row = rows.find((candidate) => candidate.code === code);
+    const label = row?.label.toLowerCase() ?? '';
+    const referenceColor = REFERENCE_INJURY_COLORS[code]
+      ?? (label.includes('concussion') && !label.includes('non-concussion') ? REFERENCE_INJURY_COLORS.concussion : undefined)
+      ?? (label.includes('hamstring') ? REFERENCE_INJURY_COLORS.hamstring_strain : undefined)
+      ?? (isKneeLigamentDiagnosis(row) ? REFERENCE_INJURY_COLORS.compound__knee__joint_sprain : undefined)
+      ?? ((label.includes('ankle') && (label.includes('ligament') || label.includes('syndesmosis'))) ? REFERENCE_INJURY_COLORS.compound__ankle__joint_sprain : undefined)
+      ?? ((label.includes('contusion') || label.includes('haematoma')) ? REFERENCE_INJURY_COLORS.contusion_haematoma : undefined)
+      ?? ((label.includes('groin') || label.includes('adductor')) ? REFERENCE_INJURY_COLORS.adductor_groin : undefined)
+      ?? (label.includes('calf') ? REFERENCE_INJURY_COLORS.calf_muscle : undefined);
     if (referenceColor) assigned.set(code, referenceColor);
   }
 

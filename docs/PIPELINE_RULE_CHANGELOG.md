@@ -11,6 +11,21 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-27: 2024-25 setting-profile reporting successor
+
+| Field | Value |
+|---|---|
+| Status | `applied-and-registered-pending-release`: additive reporting migration, registration, UI and reconciliation contracts are complete. Live SQL reconciliation passes; the existing approved bundle remains served until reviewed promotion. |
+| Rule version | `reporting_classification_2024-25_2026-08-27_v1`, setting-profile successor migration `20260827170000` |
+| Carry-forward | The 2024-25 reporting rows are `season-specific`. The shared dashboard controls, sparklines, series switches and stable diagnosis colours carry across season tabs when the season payload supplies the matching fields. |
+| Migration | `20260827170000_urc_2024_25_setting_profile_successor.sql`, SHA-256 `ea15f4e92f4e701c414781ba35428e425cafda3bf2159be1aa62f941682a2a03`. |
+
+**What changes.** The successor restores explicit Overall, Match and Training rows for body location, injury type, compound injury profile and injury-only specific diagnosis. It also publishes setting-specific severity rows and regenerates injury-type families through the existing versioned family function. Overall rows use total exposure, Match rows use match exposure, and Training rows use training exposure. Unknown-setting rows remain inside the all-setting roll-up but carry no rate denominator.
+
+**What does not change.** The final injury cohort, row classification, monthly series and approved headline totals remain fixed at 1,662 injuries, 913 TL injuries and 17,575 observed days. Specific-diagnosis profiles continue to exclude illness. Body location and injury type remain separate classifications.
+
+**Presentation.** The overview restores the Injuries and Overall incidence sparklines and places their TL companions beside the main values. The timeline exposes four independent series switches. Common Injuries keeps the established clinical colour families, the Impact chart retains specific knee-ligament diagnoses beyond the general top-twelve cut, and its two near-coincident named diagnoses use opposite label positions. Severity and Contact mechanism have their own Overall, Match and Training controls.
+
 ## 2026-08-26: 2024-25 final injury classification and monthly timeline successor
 
 | Field | Value |

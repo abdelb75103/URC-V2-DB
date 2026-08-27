@@ -51,6 +51,7 @@ export type AnalyticsRow = {
 export type SeverityRow = {
   key: string;
   label: string;
+  setting?: 'all' | 'match' | 'training';
   recorded_injuries: number;
   time_loss_injuries: number;
   days_lost: number;

@@ -139,6 +139,7 @@ const injuryTypeFamilySchema = injuryProfileSchema.omit({ dimension: true }).ext
 const severityRowSchema = z.object({
   key: z.string(),
   label: z.string(),
+  setting: z.enum(["all", "match", "training"]).optional(),
   recorded_injuries: z.number(),
   time_loss_injuries: z.number(),
   days_lost: z.number(),

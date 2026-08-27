@@ -72,13 +72,11 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("st.setting_code = 'all' or c.setting_code = st.setting_code", severity_cte)
         self.assertIn("'setting', v.setting_code", PREVIEW)
         self.assertIn('.filter((item) => item.setting === "all")', GENERATOR)
-        # The Overview drives severity and contact from one global setting control
-        # (redesign 2026-07-25); panels that cannot honour it show a scope chip
-        # rather than silently returning overall data.
+        # Severity and contact expose their own setting controls.
         self.assertIn("const [setting, setSetting] = useState<Setting>('all')", UI)
-        self.assertIn("severity_distribution.filter((row) => row.setting === effectiveSetting)", UI)
-        self.assertIn("contact_distribution ?? [])", UI)
-        self.assertIn("row.setting === effectiveSetting", UI)
+        self.assertIn("row.setting === effectiveSeveritySetting", UI)
+        self.assertIn("const contactDistribution = dashboard.contact_distribution", UI)
+        self.assertIn("row.setting === effectiveContactSetting", UI)
         self.assertIn("<ScopeChip", UI)
         self.assertNotIn("Data coverage & provenance", UI)
         self.assertNotIn("InferenceCoverageSummary", UI)
@@ -339,7 +337,8 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn('process.env.NODE_ENV === "production"', PREVIEW_READER)
         self.assertIn("supplement.monthly_by_setting.filter((row) => row.setting === effectiveSetting)", UI)
         self.assertIn("const perSettingMonthly = Boolean(supplement)", UI)
-        self.assertIn("const perSettingSeverity = Boolean(supplement)", UI)
+        self.assertIn("const severityDistribution = supplement?.severity_distribution ?? dashboard.severity_distribution", UI)
+        self.assertIn("const severitySettings = availableSettings", UI)
 
 
 if __name__ == "__main__":

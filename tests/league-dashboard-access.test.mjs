@@ -718,8 +718,8 @@ test('overview and time line use only released overall-incidence values', async 
 
   assert.match(dashboard, /const isOverall = effectiveSetting === 'all';/);
   assert.match(dashboard, /const headlineValues = \{[\s\S]*?recorded_injuries: active\?\.recorded_injuries \?\? \(isOverall \? recorded : null\),[\s\S]*?overall_incidence_per_1000h: active\?\.overall_incidence_per_1000h \?\? \(isOverall \? headline\.overall_incidence_per_1000h : null\)/);
-  assert.match(dashboard, /StatTile label="Overall incidence" value=\{fmt\(headlineValues\.overall_incidence_per_1000h\)\}/);
-  assert.match(dashboard, /PairedStat label="TL incidence" value=\{fmt\(headlineValues\.incidence_per_1000h\)\}/);
+  assert.match(dashboard, /<StatTile[\s\S]*?label="Overall incidence"[\s\S]*?value=\{fmt\(headlineValues\.overall_incidence_per_1000h\)\}/);
+  assert.match(dashboard, /companion=\{<PairedStat label="TL incidence" value=\{fmt\(headlineValues\.incidence_per_1000h\)\}/);
   assert.match(dashboard, /overall_incidence_per_1000h: row\.overall_incidence_per_1000h \?\? null/);
   assert.doesNotMatch(dashboard, /recorded_injuries\s*\/\s*.*exposure_hours/);
   assert.match(charts, /const hasOverallIncidence = data\.some\(\(row\) => typeof row\.overall_incidence_per_1000h === 'number'\)/);
