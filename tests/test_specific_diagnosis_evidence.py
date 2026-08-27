@@ -34,6 +34,7 @@ class SpecificDiagnosisEvidenceTests(unittest.TestCase):
         evidence = json.loads(EVIDENCE.read_text(encoding="utf-8"))
         rows = evidence["rows"]
         reconciliation = evidence["aggregate_reconciliation"]
+        fallback = evidence["scope"]["unmapped_effective_cohort_fallback"]
 
         self.assertEqual(len(rows), 2052)
         self.assertEqual(reconciliation["injury_metric_rows"], 1660)
@@ -41,6 +42,8 @@ class SpecificDiagnosisEvidenceTests(unittest.TestCase):
             reconciliation["illness_rows_excluded_from_injury_metrics"], 392
         )
         self.assertEqual(reconciliation["injury_rows_with_illness_flag"], 0)
+        self.assertEqual(fallback["rows"], 4)
+        self.assertEqual(fallback["source_rows"], [603, 1120, 1121, 1122])
         self.assertEqual(
             sum(row["injury_metric_eligible"] for row in rows), 1660
         )

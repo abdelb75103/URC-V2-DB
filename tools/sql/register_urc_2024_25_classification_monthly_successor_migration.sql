@@ -41,9 +41,9 @@ values (
   '20260826100000',
   'urc_2024_25_classification_monthly_successor',
   array[
-    'migration_sha256=d0becc8cff89ba7e6339a337c5cd717bdafb9fb56e4d3fe062bdfc5d3e1954bd',
+    'migration_sha256=6fbbcf5a700c9d6d45869bbb85f821b3a0cad2b828b468b89478900865375add',
     'evidence_file_sha256=0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833',
-    'specific_diagnosis_evidence_sha256=5855127dc199df1918cb906250809ad00b6f2d8ea03904a7ceee5d587996a753',
+    'specific_diagnosis_evidence_sha256=a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167',
     'specific_diagnosis_mapping_rows_sha256=8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7',
     'successor_disclosure_method_sha256=9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c',
     'successor_disclosure_limitations_sha256=d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9',
@@ -70,9 +70,9 @@ on conflict (version) do nothing;
 do $$
 declare
   expected_statements text[] := array[
-    'migration_sha256=d0becc8cff89ba7e6339a337c5cd717bdafb9fb56e4d3fe062bdfc5d3e1954bd',
+    'migration_sha256=6fbbcf5a700c9d6d45869bbb85f821b3a0cad2b828b468b89478900865375add',
     'evidence_file_sha256=0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833',
-    'specific_diagnosis_evidence_sha256=5855127dc199df1918cb906250809ad00b6f2d8ea03904a7ceee5d587996a753',
+    'specific_diagnosis_evidence_sha256=a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167',
     'specific_diagnosis_mapping_rows_sha256=8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7',
     'successor_disclosure_method_sha256=9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c',
     'successor_disclosure_limitations_sha256=d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9',

@@ -423,10 +423,11 @@ def build_evidence(
             "exclusion_rule": "Only rows whose canonical Problem type is exactly Injury may enter diagnosis metrics. Illness rows remain evidence-visible and are marked injury_metric_eligible=false.",
             "source_label_visibility": "specific_diagnosis_source_label is retained in this private evidence artefact; dashboards should use diagnosis_group_code and diagnosis_group_label.",
             "unmapped_effective_cohort_fallback": {
-                "rows": 2,
+                "rows": 4,
+                "source_rows": [603, 1120, 1121, 1122],
                 "diagnosis_group_code": "unknown",
                 "diagnosis_group_label": "Unknown diagnosis",
-                "note": "Two injury rows in the effective live cohort are outside the grouped summary scope and must remain unknown until a later row-level mapping binds them.",
+                "note": "Four injury rows in the correction-aware effective cohort are outside the grouped summary scope and remain unknown until later row-level mappings bind them.",
             },
         },
         "source_artifacts": {

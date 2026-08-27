@@ -1833,7 +1833,7 @@ select
     as source_master_sha256,
   'b83d9ab7cf68d8c1b2239ebcd49cb9de882d91b4db1174d80b3fbcdf7baea051'::text
     as active_correction_set_sha256,
-  '5855127dc199df1918cb906250809ad00b6f2d8ea03904a7ceee5d587996a753'::text
+  'a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167'::text
     as specific_diagnosis_evidence_sha256,
   '8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7'::text
     as specific_diagnosis_mapping_rows_sha256,
@@ -1865,7 +1865,7 @@ begin
      or evidence.active_correction_set_sha256 <>
        'b83d9ab7cf68d8c1b2239ebcd49cb9de882d91b4db1174d80b3fbcdf7baea051'
      or evidence.specific_diagnosis_evidence_sha256 <>
-       '5855127dc199df1918cb906250809ad00b6f2d8ea03904a7ceee5d587996a753'
+       'a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167'
      or evidence.specific_diagnosis_mapping_rows_sha256 <>
        '8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7'
      or evidence.specific_diagnosis_injury_rows <> 1660
@@ -2877,7 +2877,7 @@ begin
      or evidence.adjudication_manifest_sha256 <>
        'cd5bed8cd5a98a6b5290194371fb92f01020ed8020ff3ddb859251741f349835'
      or evidence.specific_diagnosis_evidence_sha256 <>
-       '5855127dc199df1918cb906250809ad00b6f2d8ea03904a7ceee5d587996a753'
+       'a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167'
      or evidence.specific_diagnosis_mapping_rows_sha256 <>
        '8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7'
      or evidence.specific_diagnosis_injury_rows <> 1660
@@ -2938,9 +2938,9 @@ begin
            on m.season = f.season
           and m.source_row = f.source_row
          where f.canonical_problem_type = 'injury'
-           and m.source_row is null) <> 2
+           and m.source_row is null) <> 4
   then
-    raise exception 'specific diagnosis mapping must be injury-only with two unknown fallbacks';
+    raise exception 'specific diagnosis mapping must be injury-only with four unknown fallbacks';
   end if;
 
   if (select count(*) from analysis.urc_2024_25_team_dashboard_candidate_v1) <> 16

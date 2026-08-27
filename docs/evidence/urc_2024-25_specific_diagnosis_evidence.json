@@ -36995,8 +36995,14 @@
     "unmapped_effective_cohort_fallback": {
       "diagnosis_group_code": "unknown",
       "diagnosis_group_label": "Unknown diagnosis",
-      "note": "Two injury rows in the effective live cohort are outside the grouped summary scope and must remain unknown until a later row-level mapping binds them.",
-      "rows": 2
+      "note": "Four injury rows in the correction-aware effective cohort are outside the grouped summary scope and remain unknown until later row-level mappings bind them.",
+      "rows": 4,
+      "source_rows": [
+        603,
+        1120,
+        1121,
+        1122
+      ]
     }
   },
   "season": "2024-25",

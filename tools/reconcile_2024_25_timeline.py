@@ -609,6 +609,9 @@ def load_diagnosis_evidence(
     rows = document.get("rows")
     if not isinstance(rows, list):
         raise ReconciliationError("specific-diagnosis evidence rows are missing")
+    fallback = document.get("scope", {}).get("unmapped_effective_cohort_fallback", {})
+    if fallback.get("rows") != 4 or fallback.get("source_rows") != [603, 1120, 1121, 1122]:
+        raise ReconciliationError("specific-diagnosis effective-cohort fallback changed")
     mapping: dict[int, dict[str, str]] = {}
     illness_rows = 0
     for item in rows:
