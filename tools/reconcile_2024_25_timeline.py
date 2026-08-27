@@ -47,7 +47,7 @@ EXPECTED_PREDECESSOR_RELEASE_LABEL = "urc-2024-25-dragons-type-diagnosis-2026082
 EXPECTED_CORRECTION_SET_HASH = "b83d9ab7cf68d8c1b2239ebcd49cb9de882d91b4db1174d80b3fbcdf7baea051"
 EXPECTED_ADJUDICATION_ROWS = 32
 EXPECTED_ADJUDICATION_SHA256 = "cd5bed8cd5a98a6b5290194371fb92f01020ed8020ff3ddb859251741f349835"
-EXPECTED_EVIDENCE_FILE_SHA256 = "0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833"
+EXPECTED_EVIDENCE_FILE_SHA256 = "2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38"
 EXPECTED_ACCEPTED_WORKBOOK_SHA256 = "4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73"
 EXPECTED_ADJUDICATION_WORKBOOK_SHA256 = "87ebb569afc45ef28116df98dc83c2d8799139eaecd1c249372c209fa783f155"
 EXPECTED_DIAGNOSIS_WORKBOOK_SHA256 = "4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73"
@@ -57,7 +57,7 @@ EXPECTED_CORRECTED_TIME_LOSS_DAYS = {1120: 1, 1121: 1}
 SUCCESSOR_METHOD = (
     "Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.",
     "Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.",
-    "Explicit Medical Attention and zero-day cases are closed Medical Attention on Date Injured and are excluded from Time Loss, incidence and burden.",
+    "Explicit Medical Attention and zero-day cases are closed and excluded from Time Loss, incidence and burden; Date Injured is the closure date when available.",
     "Unclassified eligible injuries count as recorded injuries only and are excluded from Time Loss, Medical Attention, severity, burden and dashboard unknown categories.",
     "Monthly assignment uses Date Injured only; undated eligible injuries remain in season totals and are excluded from monthly series.",
     "Diagnosis metrics use reviewed specific-diagnosis groups for injuries only; illnesses are excluded.",
@@ -66,7 +66,7 @@ SUCCESSOR_METHOD = (
 )
 SUCCESSOR_LIMITATIONS = (
     "Open or ongoing Time Loss cases are counted for incidence but cannot contribute severity or burden until duration is known.",
-    "Medical Attention and zero-day cases are recorded and closed on Date Injured, but never contribute to Time Loss, incidence or burden.",
+    "Medical Attention and zero-day cases are recorded and closed but never contribute to Time Loss, incidence or burden; a missing Date Injured is not imputed.",
     "Unclassified eligible cases are recorded only; no Time Loss, Medical Attention, severity, burden or front-facing unknown category is assigned.",
     "Only dated cases are plotted monthly from Date Injured; undated cases remain season totals only.",
     "The immutable reporting window defines numerator and denominator eligibility.",

@@ -73,7 +73,7 @@ CURRENT_REVIEW_WORKBOOK_DISK_SHA256 = (
 SUCCESSOR_DISCLOSURE_METHOD = [
     "Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.",
     "Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.",
-    "Explicit Medical Attention and zero-day cases are closed Medical Attention on Date Injured and are excluded from Time Loss, incidence and burden.",
+    "Explicit Medical Attention and zero-day cases are closed and excluded from Time Loss, incidence and burden; Date Injured is the closure date when available.",
     "Unclassified eligible injuries count as recorded injuries only and are excluded from Time Loss, Medical Attention, severity, burden and dashboard unknown categories.",
     "Monthly assignment uses Date Injured only; undated eligible injuries remain in season totals and are excluded from monthly series.",
     "Diagnosis metrics use reviewed specific-diagnosis groups for injuries only; illnesses are excluded.",
@@ -82,7 +82,7 @@ SUCCESSOR_DISCLOSURE_METHOD = [
 ]
 SUCCESSOR_DISCLOSURE_LIMITATIONS = [
     "Open or ongoing Time Loss cases are counted for incidence but cannot contribute severity or burden until duration is known.",
-    "Medical Attention and zero-day cases are recorded and closed on Date Injured, but never contribute to Time Loss, incidence or burden.",
+    "Medical Attention and zero-day cases are recorded and closed but never contribute to Time Loss, incidence or burden; a missing Date Injured is not imputed.",
     "Unclassified eligible cases are recorded only; no Time Loss, Medical Attention, severity, burden or front-facing unknown category is assigned.",
     "Only dated cases are plotted monthly from Date Injured; undated cases remain season totals only.",
     "The immutable reporting window defines numerator and denominator eligibility.",
@@ -91,10 +91,10 @@ SUCCESSOR_DISCLOSURE_LIMITATIONS = [
     "Specific diagnoses use reviewed groups; unresolved injury diagnoses remain internal unknown values and are not shown as named diagnoses.",
 ]
 SUCCESSOR_DISCLOSURE_METHOD_SHA256 = (
-    "9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c"
+    "51dcd68013ec08c8b3247f4bcc8b46070cfdc8b32c35a9ec61e16819f2311ae4"
 )
 SUCCESSOR_DISCLOSURE_LIMITATIONS_SHA256 = (
-    "d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9"
+    "e78252aed4ac4905bec62af38bc754f4e4482c3bd0eb9c22f523c32c3c8e8695"
 )
 
 
@@ -139,7 +139,7 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
     def test_evidence_file_and_source_master_are_pinned(self) -> None:
         self.assertEqual(
             hashlib.sha256(EVIDENCE.read_bytes()).hexdigest(),
-            "0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833",
+            "2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38",
         )
         self.assertEqual(hashlib.sha256(MASTER.read_bytes()).hexdigest(), SOURCE_MASTER_SHA256)
         self.assertEqual(self.evidence["source_master"]["sha256"], SOURCE_MASTER_SHA256)
@@ -315,7 +315,7 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
             "'method', jsonb_build_array(",
             "'limitations', jsonb_build_array(",
             "open or ongoing time loss",
-            "zero-day cases are closed medical attention",
+            "zero-day cases are closed and excluded",
             "unclassified eligible cases are recorded only",
             "monthly assignment uses date injured only",
             "canonical_problem_type = 'injury'",

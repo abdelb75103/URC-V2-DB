@@ -41,12 +41,12 @@ values (
   '20260826100000',
   'urc_2024_25_classification_monthly_successor',
   array[
-    'migration_sha256=3f4ca2255c55873fdc94ec2a3b396e9b02f299ba00b0abf9eaf7720e61037803',
-    'evidence_file_sha256=0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833',
+    'migration_sha256=e25baddbcf5870f61d5bec68b9130ee2a616af99ece32e9317126e401681280c',
+    'evidence_file_sha256=2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38',
     'specific_diagnosis_evidence_sha256=a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167',
     'specific_diagnosis_mapping_rows_sha256=8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7',
-    'successor_disclosure_method_sha256=9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c',
-    'successor_disclosure_limitations_sha256=d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9',
+    'successor_disclosure_method_sha256=51dcd68013ec08c8b3247f4bcc8b46070cfdc8b32c35a9ec61e16819f2311ae4',
+    'successor_disclosure_limitations_sha256=e78252aed4ac4905bec62af38bc754f4e4482c3bd0eb9c22f523c32c3c8e8695',
     'adjudication_manifest_sha256=cd5bed8cd5a98a6b5290194371fb92f01020ed8020ff3ddb859251741f349835',
     'source_master_sha256=15b9af0da05aa57698487f4c8ebacf9923cec4e66846ac00b76fa3c2b75f2f63',
     'accepted_workbook_sha256=4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73',
@@ -70,12 +70,12 @@ on conflict (version) do nothing;
 do $$
 declare
   expected_statements text[] := array[
-    'migration_sha256=3f4ca2255c55873fdc94ec2a3b396e9b02f299ba00b0abf9eaf7720e61037803',
-    'evidence_file_sha256=0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833',
+    'migration_sha256=e25baddbcf5870f61d5bec68b9130ee2a616af99ece32e9317126e401681280c',
+    'evidence_file_sha256=2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38',
     'specific_diagnosis_evidence_sha256=a43ba36a7f67ecd208112d702bcc058de947b00d721399e9e0ad26d23f3ac167',
     'specific_diagnosis_mapping_rows_sha256=8c26ddfbabef220a5ddc8e957b6ef143f0eeb46342d4e9634edf720162e5b7c7',
-    'successor_disclosure_method_sha256=9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c',
-    'successor_disclosure_limitations_sha256=d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9',
+    'successor_disclosure_method_sha256=51dcd68013ec08c8b3247f4bcc8b46070cfdc8b32c35a9ec61e16819f2311ae4',
+    'successor_disclosure_limitations_sha256=e78252aed4ac4905bec62af38bc754f4e4482c3bd0eb9c22f523c32c3c8e8695',
     'adjudication_manifest_sha256=cd5bed8cd5a98a6b5290194371fb92f01020ed8020ff3ddb859251741f349835',
     'source_master_sha256=15b9af0da05aa57698487f4c8ebacf9923cec4e66846ac00b76fa3c2b75f2f63',
     'accepted_workbook_sha256=4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73',

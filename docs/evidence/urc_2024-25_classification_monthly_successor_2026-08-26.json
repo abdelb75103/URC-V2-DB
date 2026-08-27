@@ -64,7 +64,7 @@
     "method": [
       "Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.",
       "Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.",
-      "Explicit Medical Attention and zero-day cases are closed Medical Attention on Date Injured and are excluded from Time Loss, incidence and burden.",
+      "Explicit Medical Attention and zero-day cases are closed and excluded from Time Loss, incidence and burden; Date Injured is the closure date when available.",
       "Unclassified eligible injuries count as recorded injuries only and are excluded from Time Loss, Medical Attention, severity, burden and dashboard unknown categories.",
       "Monthly assignment uses Date Injured only; undated eligible injuries remain in season totals and are excluded from monthly series.",
       "Diagnosis metrics use reviewed specific-diagnosis groups for injuries only; illnesses are excluded.",
@@ -73,7 +73,7 @@
     ],
     "limitations": [
       "Open or ongoing Time Loss cases are counted for incidence but cannot contribute severity or burden until duration is known.",
-      "Medical Attention and zero-day cases are recorded and closed on Date Injured, but never contribute to Time Loss, incidence or burden.",
+      "Medical Attention and zero-day cases are recorded and closed but never contribute to Time Loss, incidence or burden; a missing Date Injured is not imputed.",
       "Unclassified eligible cases are recorded only; no Time Loss, Medical Attention, severity, burden or front-facing unknown category is assigned.",
       "Only dated cases are plotted monthly from Date Injured; undated cases remain season totals only.",
       "The immutable reporting window defines numerator and denominator eligibility.",
@@ -81,8 +81,8 @@
       "Unknown-setting injuries are included in all-setting metrics but have no setting-specific rate.",
       "Specific diagnoses use reviewed groups; unresolved injury diagnoses remain internal unknown values and are not shown as named diagnoses."
     ],
-    "method_sha256": "9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c",
-    "limitations_sha256": "d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9",
+    "method_sha256": "51dcd68013ec08c8b3247f4bcc8b46070cfdc8b32c35a9ec61e16819f2311ae4",
+    "limitations_sha256": "e78252aed4ac4905bec62af38bc754f4e4482c3bd0eb9c22f523c32c3c8e8695",
     "hash_method": "SHA-256 of the compact UTF-8 JSON array with separators comma and colon."
   },
   "adjudication_summary": {
@@ -733,8 +733,8 @@
       "monthly distance_km"
     ],
     "successor_disclosure_keys": ["method", "limitations"],
-    "successor_disclosure_method_sha256": "9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c",
-    "successor_disclosure_limitations_sha256": "d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9",
+    "successor_disclosure_method_sha256": "51dcd68013ec08c8b3247f4bcc8b46070cfdc8b32c35a9ec61e16819f2311ae4",
+    "successor_disclosure_limitations_sha256": "e78252aed4ac4905bec62af38bc754f4e4482c3bd0eb9c22f523c32c3c8e8695",
     "injury_derived_sections": [
       "headline",
       "setting_split",

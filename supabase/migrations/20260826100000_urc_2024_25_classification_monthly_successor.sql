@@ -1823,7 +1823,7 @@ select
   -- Verified against these exact SQL rows by the local evidence contract test.
   'cd5bed8cd5a98a6b5290194371fb92f01020ed8020ff3ddb859251741f349835'::text
     as adjudication_manifest_sha256,
-  '0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833'::text
+  '2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38'::text
     as evidence_file_sha256,
   '87ebb569afc45ef28116df98dc83c2d8799139eaecd1c249372c209fa783f155'::text
     as adjudication_workbook_sha256,
@@ -1839,9 +1839,9 @@ select
     as specific_diagnosis_mapping_rows_sha256,
   1660::integer as specific_diagnosis_injury_rows,
   392::integer as specific_diagnosis_illness_rows_excluded,
-  '9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c'::text
+  '51dcd68013ec08c8b3247f4bcc8b46070cfdc8b32c35a9ec61e16819f2311ae4'::text
     as successor_disclosure_method_sha256,
-  'd8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9'::text
+  'e78252aed4ac4905bec62af38bc754f4e4482c3bd0eb9c22f523c32c3c8e8695'::text
     as successor_disclosure_limitations_sha256
 from rows;
 
@@ -1857,7 +1857,7 @@ begin
      or evidence.blank_source_values <> 29
      or evidence.false_source_values <> 3
      or evidence.evidence_file_sha256 <>
-       '0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833'
+       '2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38'
      or evidence.source_master_sha256 <>
        '15b9af0da05aa57698487f4c8ebacf9923cec4e66846ac00b76fa3c2b75f2f63'
      or evidence.adjudication_manifest_sha256 <>
@@ -1874,9 +1874,9 @@ begin
      or (select count(distinct diagnosis_group_code)
          from audit.urc_2024_25_specific_diagnosis_mappings_v1) <> 274
      or evidence.successor_disclosure_method_sha256 <>
-       '9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c'
+       '51dcd68013ec08c8b3247f4bcc8b46070cfdc8b32c35a9ec61e16819f2311ae4'
      or evidence.successor_disclosure_limitations_sha256 <>
-       'd8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9'
+       'e78252aed4ac4905bec62af38bc754f4e4482c3bd0eb9c22f523c32c3c8e8695'
   then
     raise exception '2024-25 adjudication evidence failed closed exact-count/hash gate';
   end if;
@@ -2422,13 +2422,13 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
     as classification_view_version,
   'analysis_window_2024-25_2026-07-25_v1'::text as cohort_view_version,
   cohort.cohort_evidence_sha256,
-  '0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833'::text
+  '2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38'::text
     as classification_evidence_sha256,
   m.dashboard_payload || jsonb_build_object(
       'method', jsonb_build_array(
         'Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.',
         'Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.',
-        'Explicit Medical Attention and zero-day cases are closed Medical Attention on Date Injured and are excluded from Time Loss, incidence and burden.',
+        'Explicit Medical Attention and zero-day cases are closed and excluded from Time Loss, incidence and burden; Date Injured is the closure date when available.',
         'Unclassified eligible injuries count as recorded injuries only and are excluded from Time Loss, Medical Attention, severity, burden and dashboard unknown categories.',
         'Monthly assignment uses Date Injured only; undated eligible injuries remain in season totals and are excluded from monthly series.',
         'Diagnosis metrics use reviewed specific-diagnosis groups for injuries only; illnesses are excluded.',
@@ -2437,7 +2437,7 @@ select m.team_key, m.season, m.team_release_id, m.curated_build_id,
       ),
       'limitations', jsonb_build_array(
         'Open or ongoing Time Loss cases are counted for incidence but cannot contribute severity or burden until duration is known.',
-        'Medical Attention and zero-day cases are recorded and closed on Date Injured, but never contribute to Time Loss, incidence or burden.',
+        'Medical Attention and zero-day cases are recorded and closed but never contribute to Time Loss, incidence or burden; a missing Date Injured is not imputed.',
         'Unclassified eligible cases are recorded only; no Time Loss, Medical Attention, severity, burden or front-facing unknown category is assigned.',
         'Only dated cases are plotted monthly from Date Injured; undated cases remain season totals only.',
         'The immutable reporting window defines numerator and denominator eligibility.',
@@ -2631,13 +2631,13 @@ select
     as classification_view_version,
   'analysis_window_2024-25_2026-07-25_v1'::text as cohort_view_version,
   cohort.cohort_evidence_sha256,
-  '0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833'::text
+  '2a34003e961b669100b23f6c088e797a1d18171fa720e59582ac70916768aa38'::text
     as classification_evidence_sha256,
   predecessor.dashboard_payload || jsonb_build_object(
       'method', jsonb_build_array(
         'Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.',
         'Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.',
-        'Explicit Medical Attention and zero-day cases are closed Medical Attention on Date Injured and are excluded from Time Loss, incidence and burden.',
+        'Explicit Medical Attention and zero-day cases are closed and excluded from Time Loss, incidence and burden; Date Injured is the closure date when available.',
         'Unclassified eligible injuries count as recorded injuries only and are excluded from Time Loss, Medical Attention, severity, burden and dashboard unknown categories.',
         'Monthly assignment uses Date Injured only; undated eligible injuries remain in season totals and are excluded from monthly series.',
         'Diagnosis metrics use reviewed specific-diagnosis groups for injuries only; illnesses are excluded.',
@@ -2646,7 +2646,7 @@ select
       ),
       'limitations', jsonb_build_array(
         'Open or ongoing Time Loss cases are counted for incidence but cannot contribute severity or burden until duration is known.',
-        'Medical Attention and zero-day cases are recorded and closed on Date Injured, but never contribute to Time Loss, incidence or burden.',
+        'Medical Attention and zero-day cases are recorded and closed but never contribute to Time Loss, incidence or burden; a missing Date Injured is not imputed.',
         'Unclassified eligible cases are recorded only; no Time Loss, Medical Attention, severity, burden or front-facing unknown category is assigned.',
         'Only dated cases are plotted monthly from Date Injured; undated cases remain season totals only.',
         'The immutable reporting window defines numerator and denominator eligibility.',
@@ -2962,7 +2962,7 @@ begin
     where candidates.dashboard -> 'method' is distinct from jsonb_build_array(
         'Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.',
         'Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.',
-        'Explicit Medical Attention and zero-day cases are closed Medical Attention on Date Injured and are excluded from Time Loss, incidence and burden.',
+        'Explicit Medical Attention and zero-day cases are closed and excluded from Time Loss, incidence and burden; Date Injured is the closure date when available.',
         'Unclassified eligible injuries count as recorded injuries only and are excluded from Time Loss, Medical Attention, severity, burden and dashboard unknown categories.',
         'Monthly assignment uses Date Injured only; undated eligible injuries remain in season totals and are excluded from monthly series.',
         'Diagnosis metrics use reviewed specific-diagnosis groups for injuries only; illnesses are excluded.',
@@ -2971,7 +2971,7 @@ begin
       )
       or candidates.dashboard -> 'limitations' is distinct from jsonb_build_array(
         'Open or ongoing Time Loss cases are counted for incidence but cannot contribute severity or burden until duration is known.',
-        'Medical Attention and zero-day cases are recorded and closed on Date Injured, but never contribute to Time Loss, incidence or burden.',
+        'Medical Attention and zero-day cases are recorded and closed but never contribute to Time Loss, incidence or burden; a missing Date Injured is not imputed.',
         'Unclassified eligible cases are recorded only; no Time Loss, Medical Attention, severity, burden or front-facing unknown category is assigned.',
         'Only dated cases are plotted monthly from Date Injured; undated cases remain season totals only.',
         'The immutable reporting window defines numerator and denominator eligibility.',
@@ -3123,9 +3123,9 @@ begin
   if exists (
     select 1 from analysis.urc_2024_25_final_injury_classification_v1
     where final_classification = 'Medical Attention'
-      and (closure_status <> 'Closed' or date_injured is null)
+      and closure_status <> 'Closed'
   ) then
-    raise exception 'Medical Attention rows must be closed on Date Injured';
+    raise exception 'Medical Attention rows must be closed without imputing missing dates';
   end if;
 
   if exists (
