@@ -1,7 +1,7 @@
 # Handoff: what this project is and where truth lives
 
 Written 2026-07-24; operational reader and correction status updated
-2026-07-29. Audience: a cold reader who needs to be productive in ten minutes.
+2026-08-24. Audience: a cold reader who needs to be productive in ten minutes.
 `AGENTS.md` is the binding contract; this is the orientation map.
 
 ## What this is
@@ -22,7 +22,11 @@ per-team supplied standardized CSVs      data/intake/2024-25/<team>/
 MASTER  every source row, append-only    data/2024-25/master/
         3,060 rows, 755 marked excluded  master_2024-25_v5.json (the v5 baseline)
         with reasons; formatted workbook urc_injury_master_workbook_2024-25.xlsx
-        is a generated render            (hashes: baseline_record.json)
+        is a pinned generated render     (hashes: baseline_record.json)
+        |
+REVIEW  current human-review view        data/2024-25/review/
+        Drive-derived workbook           urc_injury_master_review_2024-25.xlsx
+        with analysis-window labels      (see docs/REVIEW_WORKBOOK_2024-25.md)
         |
 DECISION LEDGER, ordered and replayable  data/2024-25/decisions/ledger.json
         12 steps, every row-level edit,  (8 master exclusions restored and
@@ -36,6 +40,14 @@ Files are the intake, the database is the truth, rendered artifacts are
 exports. The master and inclusion layers
 visibly disagree on inferred cells by design: source preserved, inference
 labelled, both recorded in the ledger.
+
+For manual workbook lookup, the REVIEW file above is the source of truth. It
+does not replace the append-only master, decision ledger, accepted inclusion
+CSV, or approved reporting views. The older generated master workbook remains
+at its pinned path solely because the baseline and ledger verify its exact
+hash. Other superseded review workbooks are isolated under
+`data/2024-25/archive/review-workbooks/` and must not be used for current
+review.
 
 ## The four tools
 
@@ -78,9 +90,10 @@ rule change with carry-forward status. Open items ride in the ledger's
 
 ## The database and website
 
-Supabase Postgres serves the approved 2024-25 release through
-`reporting.latest_team_dashboard_v5` / `latest_league_dashboard_v5`; the
-website is read-only and fails closed. The current bundle is
+Supabase Postgres serves the website through the season-aware
+`reporting.latest_team_dashboard_v6` and `latest_league_dashboard_v6` views.
+Their 2024-25 branch passes through the correction-aware V5 readers. The
+website is read-only and fails closed. The current 2024-25 bundle is
 `urc-2024-25-correction-r1122-20260729-a1`, bundle SHA-256
 `34fc4dbafb87c2ec0047c6e955ae448b20f0430ded1b0eecaf9187e76d175067`.
 Frozen V2 payload storage remains intact;

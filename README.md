@@ -11,7 +11,7 @@ pseudonymised intake + approved profile/manifest
   -> curated builds, injuries, exposure, fixtures, and denominators
   -> versioned analysis views
   -> immutable reviewed team and league release snapshots
-  -> reporting.latest_*_dashboard_v2
+  -> reporting.latest_*_dashboard_v6
   -> server-rendered website
 ```
 
@@ -33,6 +33,10 @@ Start with [docs/PIPELINE_RUNBOOK.md](docs/PIPELINE_RUNBOOK.md). It is the canon
 | `app/`, `components/`, `lib/`, `config/` | Read-only Next.js website. |
 | `content/reporting/` | Public emergency/parity exports. The website reads approved database views, not these files. |
 | `data/`, `output/`, `outputs/` | Git-ignored local inputs, evidence, review artifacts, and generated output. Never treat these directories as source code. |
+
+The V6 dashboard readers are season-aware. They pass 2024-25 through the
+correction-aware V5 reporting path and activate the approved 2025-26 V6 bundle
+only when its complete league release exists.
 
 ## Safe local checks
 

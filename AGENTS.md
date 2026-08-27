@@ -7,6 +7,7 @@ Maintain season parity: render each season in its own tab through shared compone
 ## Reading
 
 - For pipeline, intake, release, or rule work, read `docs/PIPELINE_RUNBOOK.md`, `docs/TEAM_INTAKE_PROFILING_GATE.md`, and `docs/PIPELINE_RULE_CHANGELOG.md`.
+- For 2024-25 human review, use only `data/2024-25/review/urc_injury_master_review_2024-25.xlsx` and read `docs/REVIEW_WORKBOOK_2024-25.md`. Workbooks under `data/2024-25/archive/review-workbooks/` are historical and must not be used for current review.
 - For any sharing, cutover, or access-control change, read `docs/ACCESS_RESTORATION_GATE.md`.
 
 ## Integrity and privacy

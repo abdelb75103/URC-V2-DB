@@ -4791,6 +4791,7 @@ ANALYSIS_WINDOW_V5_CANDIDATE_SNAPSHOT_MIGRATION_VERSION = "20260726020000"
 ANALYSIS_WINDOW_V5_COVERAGE_SNAPSHOT_MIGRATION_VERSION = "20260726120000"
 CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION = "20260726160000"
 CONTACT_DISTRIBUTION_READER_V4_MIGRATION_VERSION = "20260726161000"
+URC_2024_25_CLASSIFICATION_MONTHLY_SUCCESSOR_MIGRATION_VERSION = "20260826100000"
 ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION = "analysis_window_2024-25_2026-07-25_v1"
 ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR = "docs/evidence/analysis_window_2024-25_v5.json"
 ANALYSIS_WINDOW_V5_EVIDENCE_SHA256 = "c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d"
@@ -8084,6 +8085,7 @@ def release_league(args: argparse.Namespace) -> None:
         ("v3", "reporting_classification_2026-07-22_v2", "season_bound_2026-07-20_v1"),
         ("v4", "reporting_classification_2026-07-22_v2", "lineage_2024-25_2026-07-24_v1"),
         ("v5", "reporting_classification_2026-07-22_v2", ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION),
+        ("v5", "reporting_classification_2024-25_2026-08-27_v1", ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION),
     }
     if season == "2025-26":
         supported_release_variants.add(YEAR2_2025_26_RELEASE_TUPLE)
@@ -8092,7 +8094,7 @@ def release_league(args: argparse.Namespace) -> None:
             "unsupported analysis/classification/cohort version combination; "
             "V3 requires an accepted reporting classification and the season-bound cohort; "
             "V4 requires the accepted OSIICS classification and lineage cohort; "
-            "V5 requires the accepted OSIICS classification and analysis-window cohort"
+            "V5 requires an accepted reporting classification and the analysis-window cohort"
         )
     if bool(getattr(args, "plan", False)):
         print(
@@ -8302,6 +8304,10 @@ def release_league(args: argparse.Namespace) -> None:
             CONTACT_DISTRIBUTION_V5_MIGRATION_VERSION,
             CONTACT_DISTRIBUTION_READER_V4_MIGRATION_VERSION,
         ]
+        if classification_view_version == "reporting_classification_2024-25_2026-08-27_v1":
+            required_migrations.append(
+                URC_2024_25_CLASSIFICATION_MONTHLY_SUCCESSOR_MIGRATION_VERSION
+            )
     elif analysis_version == "v4":
         required_migrations = [
             INJURY_MASTER_LINEAGE_MIGRATION_VERSION,
@@ -8403,9 +8409,14 @@ def release_league(args: argparse.Namespace) -> None:
                 "V6 cohort, headline, or monthly reconciliation failed"
             )
         elif analysis_version == "v5":
-            semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
-            semantic_monthly_view = "analysis.analysis_window_league_monthly_v5"
-            semantic_summary_view = "analysis.analysis_window_league_summary_v5"
+            if classification_view_version == "reporting_classification_2024-25_2026-08-27_v1":
+                semantic_cohort_view = "analysis.urc_2024_25_final_injury_classification_v1"
+                semantic_monthly_view = "analysis.urc_2024_25_league_monthly_v1"
+                semantic_summary_view = "analysis.urc_2024_25_league_metrics_v1"
+            else:
+                semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
+                semantic_monthly_view = "analysis.analysis_window_league_monthly_v5"
+                semantic_summary_view = "analysis.analysis_window_league_summary_v5"
             semantic_missing_error = "analysis-window semantic reconciliation returned no row"
             semantic_mismatch_error = (
                 "analysis-window cohort, headline, or monthly reconciliation failed"
@@ -8486,7 +8497,20 @@ def release_league(args: argparse.Namespace) -> None:
             }]
         else:
             rule_params = SqlParams()
-            if classification_view_version == "reporting_classification_2026-07-22_v2":
+            if classification_view_version == "reporting_classification_2024-25_2026-08-27_v1":
+                classification_adjudications = query_sql(
+                    """
+                    select rule_version, adjudication_rows, time_loss_rows,
+                           medical_attention_rows, unclassified_rows,
+                           adjudication_manifest_sha256, evidence_file_sha256,
+                           source_master_sha256, active_correction_set_sha256
+                    from analysis.urc_2024_25_classification_evidence_v1
+                    """
+                )
+                if len(classification_adjudications) != 1:
+                    raise SystemExit("2024-25 successor classification evidence is incomplete")
+                expected_refs = set()
+            elif classification_view_version == "reporting_classification_2026-07-22_v2":
                 adjudication_filter = """
                   (rule_version = 'reporting_classification_2026-07-20_v1'
                     and adjudication_ref in ('IA-02', 'ACL-01'))
@@ -8500,22 +8524,23 @@ def release_league(args: argparse.Namespace) -> None:
                   and adjudication_ref in ('IA-02', 'ACL-01')
                 """
                 expected_refs = {"IA-02", "ACL-01"}
-            classification_adjudications = query_sql(
-                f"""
-                select adjudication_ref, rule_version, evidence_sha256,
-                       workbook_sha256, evidence_manifest_sha256, reviewer,
-                       workbook_snapshot_locator, migration_version, migration_sha256,
-                       rationale
-                from audit.rule_adjudications
-                where {adjudication_filter}
-                order by adjudication_ref
-                """,
-                rule_params.values,
-            )
-            if len(classification_adjudications) != len(expected_refs) or {
-                row["adjudication_ref"] for row in classification_adjudications
-            } != expected_refs:
-                raise SystemExit("exact reporting-classification evidence is incomplete")
+            if expected_refs:
+                classification_adjudications = query_sql(
+                    f"""
+                    select adjudication_ref, rule_version, evidence_sha256,
+                           workbook_sha256, evidence_manifest_sha256, reviewer,
+                           workbook_snapshot_locator, migration_version, migration_sha256,
+                           rationale
+                    from audit.rule_adjudications
+                    where {adjudication_filter}
+                    order by adjudication_ref
+                    """,
+                    rule_params.values,
+                )
+                if len(classification_adjudications) != len(expected_refs) or {
+                    row["adjudication_ref"] for row in classification_adjudications
+                } != expected_refs:
+                    raise SystemExit("exact reporting-classification evidence is incomplete")
     cohort_adjudications: list[dict[str, Any]] = []
     if cohort_view_version != "v2":
         cohort_params = SqlParams()

@@ -13,9 +13,9 @@ The correction-aware seam is also additive:
 - `reporting.dashboard_bundle_context_v1` unifies frozen V2, correction, and rollback context.
 - `reporting.dashboard_bundle_league_payloads_v1` and `reporting.dashboard_bundle_team_payloads_v1` unify frozen V2 payloads with correction payloads.
 - `reporting.latest_approved_dashboard_bundle_v4` selects the current complete approved bundle from either storage family.
-- The website reads the allowlisted `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` projections.
+- The 2024-25 correction path resolves through the allowlisted `reporting.latest_team_dashboard_v5` and `reporting.latest_league_dashboard_v5` projections. The website reads the season-aware V6 successor views, whose 2024-25 branch passes these V5 values through unchanged.
 
-The unified bundle views and the internal `latest_approved_dashboard_bundle_v4` selector are private implementation surfaces. They are ungranted to `web_reader` and are reached under owner execution only through the security-definer V5 allowlist. The application queries only `latest_team_dashboard_v5` and `latest_league_dashboard_v5`. Historical V2, V3 and V4 aggregate-reader grants remain temporarily available for deployment rollback, but none exposes correction, release, build or audit fields. Retire those older grants only through an additive migration after the V5 deployment and rollback window are verified; do not drop their depended-on views.
+The unified bundle views and the internal `latest_approved_dashboard_bundle_v4` selector are private implementation surfaces. They are ungranted to `web_reader` and are reached under owner execution only through the security-definer V5 allowlist. The application queries only `latest_team_dashboard_v6` and `latest_league_dashboard_v6`; their 2024-25 branch delegates to V5. Historical V2, V3 and V4 aggregate-reader grants remain temporarily available for deployment rollback, but none exposes correction, release, build or audit fields. Retire those older grants only through an additive migration after the V5 deployment and rollback window are verified; do not drop their depended-on views.
 
 Until a reviewed correction or rollback successor is approved, the V5 readers project the currently served V5 V2 bundle without changing its context, payloads, hashes, or metrics.
 

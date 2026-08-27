@@ -41,6 +41,8 @@ export type AnalyticsRow = {
   time_loss_injuries: number;
   recorded_injuries?: number;
   days_lost: number;
+  /** Released rate for all recorded injuries, when the season payload provides it. */
+  overall_incidence_per_1000h?: number | null;
   incidence_per_1000h?: number | null;
   burden_per_1000h?: number | null;
   mean_severity_days?: number | null;
@@ -61,9 +63,13 @@ export type SeveritySettingRow = SeverityRow & {
 export type SettingMetricRow = {
   setting: 'all' | 'match' | 'training' | 'unknown';
   label: string;
+  /** Released total-recorded count for this setting, when the payload provides it. */
+  recorded_injuries?: number | null;
   time_loss_injuries: number;
   days_lost: number;
   exposure_hours: number | null;
+  /** Released rate for all recorded injuries in this setting, when the payload provides it. */
+  overall_incidence_per_1000h?: number | null;
   incidence_per_1000h: number | null;
   burden_per_1000h: number | null;
   mean_severity_days: number | null;
@@ -95,6 +101,8 @@ export type MonthlySettingRow = {
   time_loss_injuries: number;
   rate_time_loss_injuries: number;
   exposure_hours: number | null;
+  /** Released rate for all recorded injuries, when the season payload provides it. */
+  overall_incidence_per_1000h?: number | null;
   incidence_per_1000h: number | null;
 };
 

@@ -11,6 +11,26 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-26: 2024-25 final injury classification and monthly timeline successor
+
+| Field | Value |
+|---|---|
+| Status | `implementation-ready`: governed evidence, the single additive SQL successor, local replay and shared dashboard changes pass their local gates. Live execution is recorded separately after promotion. |
+| Rule version | `reporting_classification_2024-25_2026-08-27_v1` |
+| Carry-forward | Classification decisions are `season-specific`. Whole-hour exposure presentation and the recorded-injury timeline series use shared components and therefore carry across season tabs. |
+| Evidence | Classification evidence `docs/evidence/urc_2024-25_classification_monthly_successor_2026-08-26.json`, SHA-256 `0f7707e9b905ce1c604beeb2261ac18df880af9942de5093e2a564589e08e833`; diagnosis evidence `docs/evidence/urc_2024-25_specific_diagnosis_evidence.json`, SHA-256 `5855127dc199df1918cb906250809ad00b6f2d8ea03904a7ceee5d587996a753` |
+| Migration | `supabase/migrations/20260826100000_urc_2024_25_classification_monthly_successor.sql`, SHA-256 `1b2d6a150949f3e879148eb934c2cfebf2d90e9408445891541da2868a23f802` |
+
+**Classification and duration.** The correction-aware successor separates final classification from duration. Source-reported and adjudicated Time Loss cases remain Time Loss when duration is null, count in incidence, and remain internally open or ongoing without invented days. Medical Attention and zero-day cases are closed on Date Injured and contribute only to recorded counts. Remaining unclassified cases also contribute only to recorded counts. Severity, mean, median and burden use known-duration Time Loss cases.
+
+**Adjudication and lineage.** The 32 human decisions reconcile to 15 Time Loss, 1 Medical Attention and 16 unclassified outcomes. Their source facts remain 29 blank values and 3 `FALSE` values; `FALSE` is retained as a source value, not treated as a scientific class. Canonical identity is the exact 2024-25 immutable master hash plus stable master source row and its deterministic 28-field row-value hash. Workbook sheet and row locators are secondary provenance only. The adjudication baseline remains hash-bound, while the current authoritative review workbook hash is `4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73`. The evidence binds the exact approved Dragons predecessor, retained live-aligned fixture and active correction-set hash.
+
+**Local reconciliation.** The retained live-aligned Dragons fixture reconciles 1,662 recorded injuries, 787 known-duration Time Loss injuries and 17,575 observed days. The successor preserves the accepted one-day TL corrections at source rows 1120 and 1121. The adjudicated row set contains 15 null-duration Time Loss outcomes; together with 111 source-reported null-duration Time Loss cases, the final classification produces 913 Time Loss injuries without changing recorded totals or observed days. Monthly Date Injured totals are 1,656 recorded and 912 Time Loss injuries, with 6 undated recorded cases and 1 undated Time Loss case retained in season totals. All 16 teams reconcile to league. Analysis window, coverage, prior season, monthly exposure and monthly distance remain byte-identical.
+
+**Diagnosis and presentation.** Reviewed specific-diagnosis groups replace the derived location and injury-type compound for diagnosis views. The evidence contains 1,660 injury mappings; 392 illnesses are excluded, two eligible injuries fall back to internal `unknown`, and front-facing diagnosis lists hide `unknown`. Overview and timeline show Injuries with TL injuries, and Overall incidence with TL incidence. Match and Training overview filters use their own released total and TL values. Other incidence views remain TL incidence. Shared exposure-hour labels round to whole hours while stored values and rates retain full precision.
+
+---
+
 ## 2026-08-23: Year 2 V6 league candidate sealed snapshot
 
 | Field | Value |
@@ -197,7 +217,7 @@ The served bundle remains release `76ac684a-dc60-4b12-ab78-0a502d284555`, label 
 | Status | `released`: additive payload section, two tracked live migrations, independent review, and an approved 16-team bundle promotion. No re-clean, no reprocessing, no new adjudication. |
 | Rule version | Analysis `v5`, classification `reporting_classification_2026-07-22_v2`, cohort `analysis_window_2024-25_2026-07-25_v1`. Candidate binding moves to `20260726160000`. |
 | Carry-forward | `carries-forward`. The distribution is a versioned rule-layer view over `curated.injuries.contact_context`, so a later season inherits it unchanged once that season's candidate chain is built on the same pattern. The pinned 2024-25 acceptance numbers inside the integrity function are season-specific. |
-| Decision provenance | Abdel Babiker, 26 July 2026. Unknown-slice retention decided the same day. Plan: `docs/CONTACT_RING_RELEASE_PLAN_2026-07-26.md` |
+| Decision provenance | Abdel Babiker, 26 July 2026. Unknown-slice retention decided the same day. Historical plan: `docs/archive/CONTACT_RING_RELEASE_PLAN_2026-07-26.md` |
 | Reviewed migrations | `20260726160000_contact_distribution_v5.sql` (`aaa92ec6...`); `20260726161000_contact_distribution_reader_v4.sql` (`423bf1c0...`) |
 | Code | `tools/sql/refresh_analysis_window_v5_candidate_snapshots.sql` (`8ec0b99d...`), `tools/sql/register_contact_distribution_migrations.sql`, `pipeline/__main__.py`, `lib/reporting.ts`, `lib/reporting-types.ts`, `components/dashboard/team-dashboard.tsx` |
 | Runtime records | Both migrations applied and tracked on the approved hosted target. Live release `76ac684a-dc60-4b12-ab78-0a502d284555`, label `urc-2024-25-v5-4ae722941285-a1`, approved 26 July 2026, bundle payload `4ae72294...`, parity export set `5fe9829a...`. Retired predecessor `a5a07fca-1be6-4ead-9a6b-648a3475c205` (`urc-2024-25-v5-45169a66a7da-a1`) is the rollback route. |
@@ -238,7 +258,7 @@ The served bundle remains release `76ac684a-dc60-4b12-ab78-0a502d284555`, label 
 
 **Why the labels are comparative.** The quadrants read "Longer absences · More frequent" rather than "High severity · High incidence". The split is a within-cohort median, not a clinical or released threshold, so a profile just below a line is lower than its peers, not low. Absolute wording would assert a category the pipeline has never defined.
 
-**Standing limit.** Quadrant membership is a reading aid on this chart and carries no released status. It must not be quoted as a classification of a diagnosis, body location, or injury type, and no export, view, or payload records it. This supersedes the "no quadrants in Phase 1" position in `docs/OVERVIEW_TABS_ADDITIVE_PLAN_2026-07-25.md` § 1.3 on the statistical objection only, by moving the median off the truncated slice; that section's governance point stands and is the reason for this limit.
+**Standing limit.** Quadrant membership is a reading aid on this chart and carries no released status. It must not be quoted as a classification of a diagnosis, body location, or injury type, and no export, view, or payload records it. This supersedes the "no quadrants in Phase 1" position in `docs/archive/OVERVIEW_TABS_ADDITIVE_PLAN_2026-07-25.md` § 1.3 on the statistical objection only, by moving the median off the truncated slice; that section's governance point stands and is the reason for this limit.
 
 ---
 

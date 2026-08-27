@@ -60,7 +60,7 @@ select
         select 1
         from reporting.aggregate_releases correction_release
         where correction_release.release_label = 'urc-2024-25-correction-r1122-20260729-a1'
-          and correction_release.status = 'approved'
+          and correction_release.status in ('approved', 'retired')
       )
   ) as frozen_release_matches
 `;

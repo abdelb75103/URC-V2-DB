@@ -1,7 +1,9 @@
 # Contact mechanism ring — additive release plan, 2026-07-26
 
-Status: plan only. Nothing in this document has been applied. No migration
-written, no database action taken.
+Status: archived pre-implementation plan. The contact distribution was later
+released. Use `../PIPELINE_RULE_CHANGELOG.md` for the accepted implementation
+and current runtime record. The statements below describe the state before that
+release and are not operating instructions.
 
 Scope: **the contact mechanism ring only.** Per-setting severity is explicitly
 out of scope (see "Deliberately excluded").

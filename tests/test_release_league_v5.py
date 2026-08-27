@@ -20,6 +20,11 @@ V5_TUPLE = (
     "reporting_classification_2026-07-22_v2",
     "analysis_window_2024-25_2026-07-25_v1",
 )
+SUCCESSOR_V5_TUPLE = (
+    "v5",
+    "reporting_classification_2024-25_2026-08-27_v1",
+    "analysis_window_2024-25_2026-07-25_v1",
+)
 V4_TUPLE = (
     "v4",
     "reporting_classification_2026-07-22_v2",
@@ -242,6 +247,17 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             '"payload_candidate_validation_migration": (', self.source
         )
 
+    def test_2024_25_successor_reuses_v5_release_path_with_new_semantics(self) -> None:
+        for value in (
+            SUCCESSOR_V5_TUPLE[1],
+            "URC_2024_25_CLASSIFICATION_MONTHLY_SUCCESSOR_MIGRATION_VERSION",
+            "analysis.urc_2024_25_final_injury_classification_v1",
+            "analysis.urc_2024_25_league_monthly_v1",
+            "analysis.urc_2024_25_league_metrics_v1",
+            "analysis.urc_2024_25_classification_evidence_v1",
+        ):
+            self.assertIn(value, self.source)
+
     def test_v5_manifest_hash_matches_the_release_gate(self) -> None:
         manifest = (
             Path(__file__).resolve().parents[1]
@@ -296,7 +312,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
         )
 
     def test_v5_rejects_a_mismatched_cohort_before_database_access(self) -> None:
-        with self.assertRaisesRegex(SystemExit, "V5 requires the accepted OSIICS classification"):
+        with self.assertRaisesRegex(SystemExit, "V5 requires an accepted reporting classification"):
             pipeline.release_league(
                 release_args((V5_TUPLE[0], V5_TUPLE[1], "lineage_2024-25_2026-07-24_v1"))
             )

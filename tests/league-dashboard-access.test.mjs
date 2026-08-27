@@ -551,7 +551,7 @@ test('injury impact tooltip prioritises the plotted axes, gives exact small-samp
   const chart = charts.slice(charts.indexOf('export function ImpactScatterChart'));
 
   assert.match(tooltip, /\{row\.label\}.*settingLabel\(row\.setting\)/s);
-  assert.ok(tooltip.indexOf('>Incidence<') < tooltip.indexOf('>Mean severity<'), 'incidence must lead the plotted metrics');
+  assert.ok(tooltip.indexOf('>TL incidence<') < tooltip.indexOf('>Mean severity<'), 'TL incidence must lead the plotted metrics');
   assert.ok(tooltip.indexOf('>Mean severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
   assert.match(tooltip, /n = \{count\(row\.time_loss_injuries\)\} time-loss .*\{count\(row\.days_lost\)\} total days lost/s);
   assert.doesNotMatch(tooltip, /Time-loss cases/);
@@ -657,13 +657,14 @@ test('impact chart formats floating point axis ticks for presentation', async ()
   assert.doesNotMatch(charts, /unit=" \/1,000h"|unit=" days"/);
 });
 
-test('timeline bars are cyan and ranked team comparisons mark the active league mean', async () => {
+test('timeline distinguishes injuries from TL injuries and ranked team comparisons mark the active league mean', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const timeline = charts.slice(charts.indexOf('export function SeasonTimelineChart'), charts.indexOf('export function SeverityArc'));
   const comparison = dashboard.slice(dashboard.indexOf('function TeamComparisonTab'), dashboard.indexOf('function BenchmarkCell'));
 
-  assert.match(timeline, /fill=\{SETTING_COLORS\.all\}[\s\S]*?fillOpacity=\{1\}/);
+  assert.match(timeline, /dataKey="recorded_injuries"[\s\S]*?name="Injuries"[\s\S]*?fill=\{SETTING_COLORS\.all\}/);
+  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="TL injuries"[\s\S]*?fill="#ffc45c"/);
   assert.match(comparison, /const leagueMean = benchmark\?\.\[metric\]/);
   assert.match(comparison, /leagueMean=\{leagueMean\}/);
   assert.match(comparison, /border-dotted border-orange-400/);
@@ -684,14 +685,41 @@ test('monthly production fallback never fabricates a duplicate recorded-case ser
   assert.match(charts, /hasRecordedCases \? \[[\s\S]*?Recorded injury cases[\s\S]*?\] : \[[\s\S]*?Time-loss cases/);
 });
 
-test('exposure values use a dedicated one-decimal formatter', async () => {
+test('exposure values use a dedicated zero-decimal formatter', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
 
-  assert.match(dashboard, /function fmtHours[\s\S]*?maximumFractionDigits: 1,[\s\S]*?minimumFractionDigits: 1/);
-  assert.match(charts, /function hours[\s\S]*?maximumFractionDigits: 1,[\s\S]*?minimumFractionDigits: 1/);
+  assert.match(dashboard, /function fmtHours[\s\S]*?maximumFractionDigits: 0,[\s\S]*?minimumFractionDigits: 0/);
+  assert.match(charts, /function hours[\s\S]*?maximumFractionDigits: 0,[\s\S]*?minimumFractionDigits: 0/);
   assert.doesNotMatch(dashboard, /fmt\([^)]*exposure_hours, 0\)/);
   assert.doesNotMatch(charts, /count\(row\.exposure_hours\)/);
+});
+
+test('season timeline keeps recorded injuries distinct from time-loss injuries', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+
+  const timeline = charts.slice(charts.indexOf('export function SeasonTimelineChart'), charts.indexOf('export function SeverityArc'));
+  assert.match(timeline, /const hasRecordedCases = data\.every/);
+  assert.match(timeline, /dataKey="recorded_injuries"[\s\S]*?name="Injuries"/);
+  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="TL injuries"/);
+  assert.match(timeline, /dataKey="overall_incidence_per_1000h"[\s\S]*?name="Overall incidence"/);
+  assert.match(timeline, /dataKey="incidence_per_1000h"[\s\S]*?name="TL incidence"/);
+  assert.match(timeline, /<Legend/);
+  assert.doesNotMatch(dashboard, /open|ongoing/i);
+});
+
+test('overview and time line use only released overall-incidence values', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+
+  assert.match(dashboard, /const isOverall = effectiveSetting === 'all';/);
+  assert.match(dashboard, /const headlineValues = \{[\s\S]*?recorded_injuries: active\?\.recorded_injuries \?\? \(isOverall \? recorded : null\),[\s\S]*?overall_incidence_per_1000h: active\?\.overall_incidence_per_1000h \?\? \(isOverall \? headline\.overall_incidence_per_1000h : null\)/);
+  assert.match(dashboard, /StatTile label="Overall incidence" value=\{fmt\(headlineValues\.overall_incidence_per_1000h\)\}/);
+  assert.match(dashboard, /PairedStat label="TL incidence" value=\{fmt\(headlineValues\.incidence_per_1000h\)\}/);
+  assert.match(dashboard, /overall_incidence_per_1000h: row\.overall_incidence_per_1000h \?\? null/);
+  assert.doesNotMatch(dashboard, /recorded_injuries\s*\/\s*.*exposure_hours/);
+  assert.match(charts, /const hasOverallIncidence = data\.some\(\(row\) => typeof row\.overall_incidence_per_1000h === 'number'\)/);
 });
 
 test('exposure tab switches approved measures and gates provisional HSR behind the local preview', async () => {

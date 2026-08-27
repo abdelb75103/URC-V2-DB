@@ -1,5 +1,8 @@
 # Handoff: dashboard redesign review — 2026-07-25
 
+Status: archived handoff. The branch, commit, working-tree, server and decision
+state below are historical and must not be used as current instructions.
+
 **Your job:** walk Abdel through the changes below **one at a time**. Present a
 change, show him old versus new, get his decision, apply it, then move to the
 next. Do not batch them. Do not present the whole list at once and ask him to
@@ -151,7 +154,7 @@ metrics per injury), no pipeline or database work.
 **Commit and push:** he chose "neither yet". Ask again once decisions are made.
 
 **Phase 2 — blocked, needs separate approval.** Recorded in
-`docs/OVERVIEW_TABS_ADDITIVE_PLAN_2026-07-25.md`. Each needs a versioned
+`docs/archive/OVERVIEW_TABS_ADDITIVE_PLAN_2026-07-25.md`. Each needs a versioned
 migration, a recorded adjudication, a rerun and a re-release for all 16 teams,
 retiring bundle `urc-2024-25-v4-6f04bd64d2a6-a2`. Every DB action needs his
 explicit approval of the exact hosted target.

@@ -58,7 +58,7 @@ const TABS = [
 
 const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; longUnit: string }> = [
   { key: 'time_loss_injuries', label: 'Count', shortUnit: 'injuries', longUnit: 'time-loss injuries' },
-  { key: 'incidence_per_1000h', label: 'Incidence', shortUnit: '/1,000 h', longUnit: 'injuries /1,000 h' },
+  { key: 'incidence_per_1000h', label: 'TL incidence', shortUnit: '/1,000 h', longUnit: 'TL injuries /1,000 h' },
   { key: 'burden_per_1000h', label: 'Burden', shortUnit: 'days/1,000 h', longUnit: 'days /1,000 h' },
   { key: 'mean_severity_days', label: 'Severity', shortUnit: 'days', longUnit: 'days' },
 ];
@@ -167,8 +167,8 @@ function rankedBarValue(value: number, metric: ProfileMetric) {
 function fmtHours(value: number | null | undefined) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
   return new Intl.NumberFormat('en-IE', {
-    maximumFractionDigits: 1,
-    minimumFractionDigits: 1,
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
   }).format(value);
 }
 
@@ -363,6 +363,13 @@ function OverviewTab({
   const recorded = supplement?.descriptive_consequence_summary.recorded_injuries
     ?? headline.recorded_injuries
     ?? dashboard.severity_distribution.reduce((sum, row) => sum + row.recorded_injuries, 0);
+  const isOverall = effectiveSetting === 'all';
+  const headlineValues = {
+    recorded_injuries: active?.recorded_injuries ?? (isOverall ? recorded : null),
+    time_loss_injuries: active?.time_loss_injuries ?? (isOverall ? headline.time_loss_injuries : null),
+    overall_incidence_per_1000h: active?.overall_incidence_per_1000h ?? (isOverall ? headline.overall_incidence_per_1000h : null),
+    incidence_per_1000h: active?.incidence_per_1000h ?? (isOverall ? headline.incidence_per_1000h : null),
+  };
 
   const monthlyRows = supplement
     ? supplement.monthly_by_setting.filter((row) => row.setting === effectiveSetting)
@@ -373,6 +380,7 @@ function OverviewTab({
         time_loss_injuries: row.time_loss_injuries,
         rate_time_loss_injuries: row.time_loss_injuries,
         exposure_hours: row.exposure_hours ?? null,
+        overall_incidence_per_1000h: row.overall_incidence_per_1000h ?? null,
         incidence_per_1000h: row.incidence_per_1000h ?? null,
       }));
   // Every monthly chart plots from September and says how many pre-window months
@@ -434,19 +442,11 @@ function OverviewTab({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          label={filtered ? 'Time-loss cases' : supplement ? 'Attributed records' : 'Recorded cases'}
-          value={filtered ? fmt(active?.time_loss_injuries, 0) : fmt(recorded, 0)}
-          unit="cases"
-        >
-          <Sparkline values={trend.map((row) => row.recorded_injuries ?? row.time_loss_injuries)} ariaLabel="Cases by month" />
+        <StatTile label="Injuries" value={fmt(headlineValues.recorded_injuries, 0)} unit="injuries">
+          <PairedStat label="TL injuries" value={fmt(headlineValues.time_loss_injuries)} color="#ffc45c" />
         </StatTile>
-        <StatTile
-          label="Incidence"
-          value={fmt(active?.incidence_per_1000h ?? (filtered ? null : headline.incidence_per_1000h))}
-          unit="injuries /1,000 h"
-        >
-          <Sparkline values={trend.map((row) => row.incidence_per_1000h)} color="#ffc45c" ariaLabel="Incidence by month" />
+        <StatTile label="Overall incidence" value={fmt(headlineValues.overall_incidence_per_1000h)} unit="injuries /1,000 h">
+          <PairedStat label="TL incidence" value={fmt(headlineValues.incidence_per_1000h)} color="#ffc45c" />
         </StatTile>
         <StatTile
           label="Burden"
@@ -471,8 +471,8 @@ function OverviewTab({
             <ScopeChip show={effectiveSetting !== 'all' && !perSettingMonthly} />
           </div>
           <div className="flex flex-wrap gap-4">
-            <CheckToggle checked={showCases} onChange={setShowCases} label="Cases" swatch={SETTING_COLORS.all} />
-            <CheckToggle checked={showIncidence} onChange={setShowIncidence} label="Incidence" swatch="#ffc45c" />
+            <CheckToggle checked={showCases} onChange={setShowCases} label="Injuries" swatch={SETTING_COLORS.all} />
+            <CheckToggle checked={showIncidence} onChange={setShowIncidence} label="Overall and TL incidence" swatch="#ffc45c" />
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -488,7 +488,7 @@ function OverviewTab({
               value={locationMetric}
               options={[
                 { value: 'time_loss_injuries' as LocationMetric, label: 'Count' },
-                { value: 'incidence_per_1000h' as LocationMetric, label: 'Incidence' },
+                { value: 'incidence_per_1000h' as LocationMetric, label: 'TL incidence' },
                 { value: 'burden_per_1000h' as LocationMetric, label: 'Burden' },
               ]}
               onChange={setLocationMetric}
@@ -609,6 +609,15 @@ function StatTile({ label, value, unit, children }: {
         {children && <div className="mt-3">{children}</div>}
       </CardContent>
     </Card>
+  );
+}
+
+function PairedStat({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <p className="flex items-baseline justify-between gap-3 border-t border-border/60 pt-2 text-xs">
+      <span className="font-medium" style={{ color }}>{label}</span>
+      <span className="font-semibold tabular-nums" style={{ color }}>{value}</span>
+    </p>
   );
 }
 
@@ -971,7 +980,7 @@ function CommonInjuryCard({
   const unit = metric === 'time_loss_injuries'
     ? 'cases'
     : metric === 'incidence_per_1000h'
-      ? 'per 1,000 player-h'
+      ? 'TL injuries per 1,000 player-h'
       : metric === 'burden_per_1000h'
         ? 'days per 1,000 player-h'
         : 'mean days lost';
@@ -1083,8 +1092,8 @@ function TeamComparisonTab({
 
   if (!rows.length) return <EmptyState>No approved team comparison rows are available.</EmptyState>;
   const settingLabel = activeSetting === 'all' ? 'overall' : activeSetting;
-  const metricLabel = metric === 'incidence_per_1000h' ? 'incidence' : 'burden';
-  const metricUnit = metric === 'incidence_per_1000h' ? 'injuries /1,000 hours' : 'days /1,000 hours';
+  const metricLabel = metric === 'incidence_per_1000h' ? 'TL incidence' : 'burden';
+  const metricUnit = metric === 'incidence_per_1000h' ? 'TL injuries /1,000 hours' : 'days /1,000 hours';
   // The viewer's own row leads the table; the rest stay alphabetical by alias.
   const alphabetical = [...rows].sort((a, b) => {
     if (a.comparison_id === viewerComparisonId) return -1;
@@ -1114,11 +1123,11 @@ function TeamComparisonTab({
         <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Team Comparison</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented value={activeSetting} options={availableSettingOptions.length ? availableSettingOptions : comparisonSettings} onChange={setSetting} label="Choose comparison setting" />
-          <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'Incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
+          <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'TL incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
         </div>
       </div>
       <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-lg border border-border/70 bg-card/70">
-        <OverviewStat label={`League ${settingLabel} incidence`} value={fmt(benchmark?.incidence_per_1000h)} unit="injuries /1,000 hours" />
+        <OverviewStat label={`League ${settingLabel} TL incidence`} value={fmt(benchmark?.incidence_per_1000h)} unit="TL injuries /1,000 hours" />
         <OverviewStat label={`League ${settingLabel} burden`} value={fmt(benchmark?.burden_per_1000h)} unit="days /1,000 hours" />
       </div>
       <div className="space-y-4">
@@ -1163,9 +1172,9 @@ function TeamComparisonTab({
                   <th colSpan={2} className="rounded-t-md border-l-4 border-card bg-primary/15 px-3 py-1.5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Training</th>
                 </tr>
                 <tr>
-                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Incidence</th>
+                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL incidence</th>
                   <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
-                  <th className="border-l-4 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Incidence</th>
+                  <th className="border-l-4 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL incidence</th>
                   <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
                 </tr>
               </thead>
@@ -1205,7 +1214,7 @@ function TeamComparisonTab({
           </div>
         </Panel>
         <Panel contentClassName="p-4 sm:p-5">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Match and training incidence</h3>
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Match and training TL incidence</h3>
           <ComparisonScatterChart
             rows={scatterRows}
             leagueMatchIncidence={matchBenchmark?.incidence_per_1000h}
@@ -1705,7 +1714,7 @@ function LocationDetail({ row, metric }: { row?: InjuryProfileRow; metric: Profi
       </div>
       <div className="grid grid-cols-3 border-t border-border/60 xl:flex xl:flex-1 xl:flex-col">
         <LocationMetricValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} active={metric === 'time_loss_injuries'} />
-        <LocationMetricValue label="Incidence" value={fmtRanked(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
+        <LocationMetricValue label="TL incidence" value={fmtRanked(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
         <LocationMetricValue label="Burden" value={fmtRanked(row?.burden_per_1000h, 'burden_per_1000h')} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
       </div>
     </div>

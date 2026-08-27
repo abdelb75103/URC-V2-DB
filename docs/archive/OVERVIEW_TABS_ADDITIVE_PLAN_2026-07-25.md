@@ -1,6 +1,8 @@
 # Additive dashboard enhancement plan — 2026-07-25 (rev 2, post-review)
 
-Status: reviewed by an independent agent, corrected, ready to execute Phase 1.
+Status: archived planning snapshot. Later decisions amended and superseded parts
+of this plan. Use `../PIPELINE_RULE_CHANGELOG.md` and the current code for
+accepted behaviour. Do not execute this plan as a current task list.
 
 Guiding rule from Abdel (2026-07-25): **additive only.** Nothing existing is
 removed. New visualisations are added as previews *below* the current ones so

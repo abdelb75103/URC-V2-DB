@@ -6,6 +6,12 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "pipeline" / "approved_target.mjs"
+TARGET_VIEW_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260826010000_dashboard_reader_target_retired_predecessor.sql"
+)
 
 
 class ApprovedTargetTests(unittest.TestCase):
@@ -27,6 +33,7 @@ class ApprovedTargetTests(unittest.TestCase):
               calls += 1;
               if (!sql.includes('20260803163430')) throw new Error('migration evidence missing');
               if (!sql.includes('urc-2024-25-correction-r1122-20260729-a1')) throw new Error('release evidence missing');
+              if (!sql.includes("status in ('approved', 'retired')")) throw new Error('retained predecessor evidence missing');
               return {{ rows: [{{
                 database_name: 'postgres',
                 database_role: 'postgres',
@@ -67,6 +74,11 @@ class ApprovedTargetTests(unittest.TestCase):
         result = self.run_node(source)
         self.assertEqual(0, result.returncode)
         self.assertIn("approved URC project", result.stderr)
+
+    def test_reader_attestation_accepts_the_retained_predecessor_after_successor_promotion(self) -> None:
+        migration = TARGET_VIEW_MIGRATION.read_text(encoding="utf-8")
+        self.assertIn("status in ('approved', 'retired')", migration)
+        self.assertIn("grant select on reporting.approved_dashboard_reader_target_v1 to web_reader", migration)
 
     def test_each_sql_client_repeats_live_proof_immediately_before_caller_sql(self) -> None:
         for relative_path in ("pipeline/sql_query.mjs", "pipeline/sql_exec.mjs"):

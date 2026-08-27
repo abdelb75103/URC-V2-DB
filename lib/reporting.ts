@@ -84,6 +84,7 @@ const analyticsRowSchema = z.object({
   time_loss_injuries: z.number(),
   recorded_injuries: z.number().nullish(),
   days_lost: z.number(),
+  overall_incidence_per_1000h: z.number().nullish(),
   incidence_per_1000h: z.number().nullish(),
   burden_per_1000h: z.number().nullish(),
   mean_severity_days: z.number().nullish(),
@@ -92,9 +93,11 @@ const analyticsRowSchema = z.object({
 const settingMetricSchema = z.object({
   setting: z.enum(["all", "match", "training", "unknown"]),
   label: z.string(),
+  recorded_injuries: z.number().nullish(),
   time_loss_injuries: z.number(),
   days_lost: z.number(),
   exposure_hours: z.number().nullish(),
+  overall_incidence_per_1000h: z.number().nullish(),
   incidence_per_1000h: z.number().nullish(),
   burden_per_1000h: z.number().nullish(),
   mean_severity_days: z.number().nullish(),
@@ -232,7 +235,7 @@ const v6HeadlineRateSchema = z.object({
   label: z.string(), value: z.number().nullable(), unit: z.string(),
   numerator: z.number().nullable(), denominator: z.number().nullable(), formula: z.string(),
 }).strict();
-const v6HeadlineSchema = z.tuple([
+const v6HeadlineBaseSchema = z.tuple([
   v6HeadlineCountSchema.extend({
     key: z.literal("recorded_injuries"),
     formula: z.literal("count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"),
@@ -258,9 +261,22 @@ const v6HeadlineSchema = z.tuple([
     formula: z.literal("pooled days lost / pooled exposure hours * 1000"),
   }).strict(),
 ]);
+const v6OverallIncidenceHeadlineSchema = v6HeadlineRateSchema.extend({
+  key: z.literal("overall_incidence_per_1000h"),
+  formula: z.literal("pooled recorded injuries / pooled exposure hours * 1000"),
+}).strict();
+const v6HeadlineSchema = z.union([
+  v6HeadlineBaseSchema,
+  z.tuple([
+    ...v6HeadlineBaseSchema.items,
+    v6OverallIncidenceHeadlineSchema,
+  ]),
+]);
 const v6MonthlyRowSchema = z.object({
   month: z.string(), exposure_hours: z.number().nullable(), distance_km: z.number().nullable(),
+  recorded_injuries: z.number().int().nonnegative().optional(),
   time_loss_injuries: z.number(), days_lost: z.number(),
+  overall_incidence_per_1000h: z.number().nullable().optional(),
   incidence_per_1000h: z.number().nullable(), burden_per_1000h: z.number().nullable(),
 }).strict();
 const v6CategoryRowSchema = z.object({
@@ -276,9 +292,11 @@ const v6SettingSplitRowSchema = z.object({
 const v6SettingMetricSchema = z.object({
   setting: z.enum(["all", "match", "training", "unknown"]),
   label: z.string(),
+  recorded_injuries: z.number().nullable().optional(),
   time_loss_injuries: z.number(),
   days_lost: z.number(),
   exposure_hours: z.number().nullable(),
+  overall_incidence_per_1000h: z.number().nullable().optional(),
   incidence_per_1000h: z.number().nullable(),
   burden_per_1000h: z.number().nullable(),
   mean_severity_days: z.number().nullable(),
@@ -758,7 +776,9 @@ function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"
       if (!value) return null;
       return {
         ...stripNulls(value),
+        recorded_injuries: value.recorded_injuries ?? null,
         exposure_hours: value.exposure_hours ?? null,
+        overall_incidence_per_1000h: value.overall_incidence_per_1000h ?? null,
         incidence_per_1000h: value.incidence_per_1000h ?? null,
         burden_per_1000h: value.burden_per_1000h ?? null,
         mean_severity_days: value.mean_severity_days ?? null,
@@ -1022,7 +1042,9 @@ export async function getLeagueSettingMetrics(
 function normalizeSettingMetrics(items: z.infer<typeof settingMetricSchema>[]): SettingMetricRow[] {
   return items.map((item) => ({
     ...stripNulls(item),
+    recorded_injuries: item.recorded_injuries ?? null,
     exposure_hours: item.exposure_hours ?? null,
+    overall_incidence_per_1000h: item.overall_incidence_per_1000h ?? null,
     incidence_per_1000h: item.incidence_per_1000h ?? null,
     burden_per_1000h: item.burden_per_1000h ?? null,
     mean_severity_days: item.mean_severity_days ?? null,
@@ -1069,7 +1091,9 @@ function normalizeDashboardRow(
     setting_split: row.setting_split.map(stripNulls) as AnalyticsRow[],
     setting_metrics: row.setting_metrics.map((item) => ({
       ...stripNulls(item),
+      recorded_injuries: item.recorded_injuries ?? null,
       exposure_hours: item.exposure_hours ?? null,
+      overall_incidence_per_1000h: item.overall_incidence_per_1000h ?? null,
       incidence_per_1000h: item.incidence_per_1000h ?? null,
       burden_per_1000h: item.burden_per_1000h ?? null,
       mean_severity_days: item.mean_severity_days ?? null,

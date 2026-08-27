@@ -4,7 +4,7 @@ Status: current operating map. This document explains the accepted route; `AGENT
 
 ## 2024-25 injury-lineage restructure (2026-07-24)
 
-The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, complete). The live dashboards now serve the accepted V5 contact-distribution successor `urc-2024-25-v5-4ae722941285-a1`; the earlier analysis-window V5 and 24 July v4 bundles remain retained. The local route is four verbs under `tools/`:
+The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RESTRUCTURE_PLAN_2026-07-24.md`, complete). The current approved 2024-25 bundle is `urc-2024-25-dragons-type-diagnosis-20260826-b1`; the r1122 correction bundle, V5 contact-distribution bundle, earlier analysis-window V5 bundle and 24 July v4 bundle remain retained predecessors. The local route is four verbs under `tools/`:
 
 1. `render.py`: canonical master data table to the formatted master workbook (extract, render, compare, mark-excluded). Baseline hashes: `data/2024-25/master/baseline_record.json`.
 2. `replay.py`: v5 baseline plus `data/2024-25/decisions/ledger.json` to the inclusion CSV, its manifest, and generated `docs/METHODOLOGY.md`. Must reproduce the accepted CSV byte-for-byte; conflicts stop the line.
@@ -13,11 +13,32 @@ The human-review lineage is the authoritative clean of 2024-25 (`docs/CLEANUP_RE
 
 Routine change loop: author one decision record, run replay, read the diff summary and flags, stop for Abdel's review. That covers the data layer and stops there; reaching the website is the separate, separately approved release path (lineage load, `release-league` preflight, recorded yes, promotion, then `export-team-dashboards`). The table below remains the DB-side operating map; releases in this lineage now use the simplified path recorded in the 2026-07-24 changelog entry.
 
-## Dynamic row-correction path (additive, installed 27 July 2026)
+### 2024-25 classification and timeline local candidate
 
-`docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md` is the operator procedure for correcting one existing effective injury row without rebuilding unaffected releases. The commands are `capture-served-baseline`, `verify-served-baseline`, `correction-propose`, `correction-apply`, `correction-release`, and `correction-rollback`.
+Run the correction-aware classification successor locally with:
 
-The base implementation is migration `20260726200000_dynamic_row_correction_pipeline.sql`, SHA-256 `07bbd951aedf19705ba8ea99cff30d445c6634ddfad90f84e3b9f2f38218aac5`. It was applied and checksum-registered on 27 July 2026 against the existing approved hosted Supabase/Postgres database reached through `SUPABASE_DB_URL_POOLER`, parsed from `/Users/abdelbabiker/Desktop/URC-V2-DB/.env.local` without sourcing or printing it. The additive hardening successor is `20260727010000_dynamic_row_correction_pipeline_hardening.sql`, SHA-256 `29dd76bb42ac7bdc10f3a6691bf538a1af4786a15408acc467a4c9beab4cd57b`; it was rollback-only rehearsed, applied, checksum-registered and then rerun in installed state on the same target on 27 July 2026. Both transaction harness runs completed every preview, apply, promotion, sequential-correction, concurrency, season-isolation, registered-SHA, clinical-origin, rollback-label-collision and rollback scenario under an outer rollback. A renewed independent `sol_xhigh` T4 review accepted the installed implementation with no P0, P1 or P2 blockers.
+```bash
+python3 tools/reconcile_2024_25_timeline.py
+```
+
+The command requires the retained live-aligned Dragons predecessor fixture at
+`outputs/dragons_type_diagnosis_20260825/.work/served_baseline_after_dragons_type_diagnosis.json`.
+It verifies the full fixture hash, embedded bundle hash, active correction-set
+hash, immutable master, inclusion mapping, accepted adjudication-context hashes,
+the 32-row evidence set and every reconciliation assertion before atomically
+writing the ignored candidate and adjacent manifest under `data/reporting/`.
+The authoritative review workbook and grouped diagnosis summary feed the
+hash-bound, injury-only specific-diagnosis evidence. The command excludes
+illnesses from diagnosis metrics, proves the exact controlled method and
+limitations disclosures in all 16 team payloads and the league payload, and
+preserves the approved non-injury allowlist. It makes no database or network
+connection. Migration and registration remain separate live actions.
+
+## Dynamic row-correction path (additive batch route, installed 3 August 2026)
+
+`docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md` is the operator procedure for correcting one or more existing effective injury rows for one team without rebuilding unaffected releases. Use `capture-served-baseline`, `verify-served-baseline`, `correction-batch-propose`, `correction-batch-apply`, `correction-batch-release`, and `correction-rollback`. Use a one-item batch for a single correction. The legacy `correction-propose`, `correction-apply`, and `correction-release` commands fail closed.
+
+The 27 July single-row base and hardening migrations remain immutable history. The installed batch successor and its hardening chain are listed with checksums in `docs/DYNAMIC_ROW_CORRECTION_WORKFLOW.md`. The accepted 3 August rollback-only harness proved batch preview, apply, promotion, predecessor restoration, concurrency guards, and reuse of the 15 unaffected team payloads without retaining test corrections.
 
 Frozen V2 bundle storage is not extended or bypassed. Dynamic promotion and rollback write only to `reporting.correction_release_context_v1` or `reporting.correction_rollback_context_v1`, `reporting.correction_league_payloads_v1`, and `reporting.correction_team_payloads_v1`. They never insert into `reporting.league_release_context_v2`, `reporting.league_release_payloads_v2`, or `reporting.team_dashboard_payloads_v2`.
 
@@ -27,15 +48,15 @@ The unified sources and internal V4 selector are private and ungranted to `web_r
 
 The correction release tables and CLI currently enforce a complete 16-team bundle. A new or replacement club follows the normal profile, intake, processing and release path. If a season expands beyond 16 members, introduce an additive correction-contract successor before using correction promotion for that season.
 
-Before the first real correction, record the reconciliation rule between the database correction audit and the file-backed master, decision ledger and inclusion CSV. The correction tooling never rewrites those lineage artifacts silently.
+The 29 July fixture and illness decisions reconcile the first real database corrections into the file-backed decision ledger and inclusion replay. The correction tooling never rewrites those lineage artifacts silently.
 
 The operator sequence is deliberately gated:
 
 1. Capture and verify the currently served bundle read-only.
-2. Produce a Git-ignored read-only proposal. It resolves the exact row, checks its current typed value, binds row and correction-set fingerprints, and asks versioned SQL for the full team and pooled league preview. There is no reviewer field at proposal time.
-3. Abdel reviews the proposal. `correction-apply --reviewer 'Abdel Babiker'` replays every stale/concurrency check, appends the immutable approval and correction evidence, then stores one immutable payload-bearing draft.
-4. `correction-release --preflight` reads that stored draft and proves its predecessor and payload hashes. A metric-changing one-team correction must reuse the other 15 team payloads byte-for-byte, including their `contact_distribution`. The affected team and pooled league contact distribution are recomputed from the same effective injury cohort when eligibility changes. A no-impact correction must reuse all 16, but still requires an explicit release promotion so its reviewed decision enters the immutable release lineage.
-5. A separate reviewed `correction-release --preflight-file ...` promotion publishes the exact draft in the additive correction payload tables as an immutable successor. Its required rollback arguments allow a parity-export closeout failure to create an immediate append-only predecessor successor.
+2. Produce a Git-ignored `correction-batch-propose` proposal for exactly one team and season. It resolves every item, checks each current typed value, binds row and correction-set fingerprints, and asks versioned SQL for the full team and pooled league preview. There is no reviewer field at proposal time.
+3. Abdel reviews every item and the combined impact. `correction-batch-apply --reviewer 'Abdel Babiker'` replays the stale and concurrency checks, appends immutable approval and correction evidence, then stores one immutable payload-bearing draft.
+4. `correction-batch-release --preflight` reads that stored draft and proves its predecessor and payload hashes. A metric-changing batch must reuse the other 15 team payloads byte-for-byte, including their `contact_distribution`. The affected team and pooled league contact distribution are recomputed from the same effective injury cohort when eligibility changes. A no-impact batch must reuse all 16, but still requires an explicit release promotion so its reviewed decision enters the immutable release lineage.
+5. A separate reviewed `correction-batch-release --preflight-file ...` promotion publishes the exact draft in the additive correction payload tables as an immutable successor. Its required rollback arguments allow a parity-export closeout failure to create an immediate append-only predecessor successor.
 6. `correction-rollback` never deletes or reapproves history. It creates another immutable additive release whose payloads exactly copy the retained predecessor of the correction release.
 
 The safety contract is binding: keep all private evidence, baseline, proposal and preflight files Git-ignored; calculate impact only in versioned SQL; preserve `ingestion.source_rows`, curated data, V5, frozen views, frozen V2 payload/context rows and predecessor bundles; allow only one pending correction set per season; and stop on any row, correction-set, candidate or payload hash mismatch. The active-correction guard blocks both approval of an ordinary V2 successor and retirement of the served predecessor while a correction is active. A later release must be correction-aware or explicitly roll the correction back.

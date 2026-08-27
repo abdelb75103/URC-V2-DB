@@ -136,6 +136,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
                     ("v3", "reporting_classification_2026-07-22_v2", "season_bound_2026-07-20_v1"),
                     ("v4", "reporting_classification_2026-07-22_v2", "lineage_2024-25_2026-07-24_v1"),
                     ("v5", "reporting_classification_2026-07-22_v2", "analysis_window_2024-25_2026-07-25_v1"),
+                    ("v5", "reporting_classification_2024-25_2026-08-27_v1", "analysis_window_2024-25_2026-07-25_v1"),
                 }
             ),
         )

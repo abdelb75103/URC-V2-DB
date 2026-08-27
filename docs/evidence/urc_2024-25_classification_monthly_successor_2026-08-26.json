@@ -1,0 +1,757 @@
+{
+  "schema_version": "urc_2024-25_classification_monthly_successor_evidence_v1",
+  "season": "2024-25",
+  "rule_version": "urc_2024-25_classification_monthly_successor_2026-08-26_v1",
+  "status": "approved_pending_execution",
+  "implementation_provenance": {
+    "local_verification": "tools/reconcile_2024_25_timeline.py completed built_and_reconciled without database access",
+    "current_review_workbook_disk_sha256": "4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73",
+    "current_review_workbook_disk_authoritative": true,
+    "authoritative_workbook_sha256": "4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73",
+    "calculation_anchors": ["data/2024-25/master/master_2024-25_v5.json", "accepted workbook hash", "this evidence file"]
+  },
+  "source_decision_record": {
+    "path": "outputs/urc_2024-25_timeline_review_2026-08-26/decisions.json",
+    "sha256": "5c79fa05300eaec2f2f5d20c644dc027bec5c8d32608d1f612fbd55dfc9a3025",
+    "execution_authority": false
+  },
+  "accepted_review_workbook": {
+    "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+    "sha256": "4f1db130f9f5aff23c3473eb2ab64a467f739a0b6ac7e4f170ca0383d9072b73",
+    "purpose": "authoritative 2024-25 review workbook for current human review and specific-diagnosis provenance"
+  },
+  "adjudication_baseline_workbook": {
+    "sha256": "87ebb569afc45ef28116df98dc83c2d8799139eaecd1c249372c209fa783f155",
+    "purpose": "exact workbook bound to the 32 first-human judgements"
+  },
+  "source_master": {
+    "path": "data/2024-25/master/master_2024-25_v5.json",
+    "sha256": "15b9af0da05aa57698487f4c8ebacf9923cec4e66846ac00b76fa3c2b75f2f63",
+    "purpose": "immutable canonical source for source_row identity and row-value fingerprints"
+  },
+  "predecessor": {
+    "target_project_ref": "eukkvswaxweenovqqgzr",
+    "release_id": "8b50b9e2-023b-4f99-b6ae-e53d8e21706e",
+    "release_label": "urc-2024-25-dragons-type-diagnosis-20260826-b1",
+    "status": "approved",
+    "analysis_version": "v5",
+    "classification_view_version": "reporting_classification_2026-07-22_v2",
+    "cohort_view_version": "analysis_window_2024-25_2026-07-25_v1",
+    "member_count": 16,
+    "league_payload_sha256": "47853342b5f999810bdb151a3e4757a982bbaf3d6b49f002ee19f53e0378cc56",
+    "canonical_bundle_sha256": "93fdd34371aac097c4364d3c64c32135fba7e3f235747b9daeb285335b330a8f",
+    "team_payload_set_sha256": "e9bc850368b3277b35cdd2e6cb6088a28f9a7e195beca317b25e3676b96fe76a"
+  },
+  "predecessor_preflight": {
+    "path": "outputs/dragons_type_diagnosis_20260825/.work/served_baseline_after_dragons_type_diagnosis.json",
+    "sha256": "06a51c1e880f2a3b9b227e990b80b491005cf827fd12bb81c6cbb06856d5d503",
+    "embedded_candidate_canonical_bundle_sha256": "93fdd34371aac097c4364d3c64c32135fba7e3f235747b9daeb285335b330a8f",
+    "purpose": "retained local fixture for the exact approved live predecessor"
+  },
+  "active_correction_set": {
+    "label": "dragons_type_diagnosis_20260825",
+    "sha256": "b83d9ab7cf68d8c1b2239ebcd49cb9de882d91b4db1174d80b3fbcdf7baea051",
+    "purpose": "exact active correction set bound by the successor registration"
+  },
+  "rules": {
+    "final_classification": "adjudication overrides default; explicit Medical Attention or usable zero days is closed Medical Attention; source-reported, inferred or corrected Time Loss remains Time Loss even with null duration; otherwise eligible is unclassified",
+    "duration": "classification and duration are separate; null duration stays null and known days alone drive severity and burden",
+    "monthly": "Date Injured only; undated eligible rows remain in season totals and are omitted from monthly series",
+    "unknown_front_facing": "unclassified rows are not emitted as a dashboard unknown category",
+    "display": "exposure and player hours retain full precision in payloads and rates; shared dashboard formatters round labels to whole hours"
+  },
+  "successor_disclosure": {
+    "method": [
+      "Overall incidence includes all eligible injury records; TL incidence includes final Time Loss injuries, including open or ongoing cases with null duration. Both use pooled exposure hours x 1,000.",
+      "Severity mean, severity median and burden use known-duration Time Loss injuries only; null-duration Time Loss contributes no days until duration is known.",
+      "Explicit Medical Attention and zero-day cases are closed Medical Attention on Date Injured and are excluded from Time Loss, incidence and burden.",
+      "Unclassified eligible injuries count as recorded injuries only and are excluded from Time Loss, Medical Attention, severity, burden and dashboard unknown categories.",
+      "Monthly assignment uses Date Injured only; undated eligible injuries remain in season totals and are excluded from monthly series.",
+      "Diagnosis metrics use reviewed specific-diagnosis groups for injuries only; illnesses are excluded.",
+      "IOC-aligned body-location and tissue/pathology categories remain separate accepted mappings.",
+      "Exposure and rate calculations retain full stored precision; display formatting may round hours."
+    ],
+    "limitations": [
+      "Open or ongoing Time Loss cases are counted for incidence but cannot contribute severity or burden until duration is known.",
+      "Medical Attention and zero-day cases are recorded and closed on Date Injured, but never contribute to Time Loss, incidence or burden.",
+      "Unclassified eligible cases are recorded only; no Time Loss, Medical Attention, severity, burden or front-facing unknown category is assigned.",
+      "Only dated cases are plotted monthly from Date Injured; undated cases remain season totals only.",
+      "The immutable reporting window defines numerator and denominator eligibility.",
+      "Historical exposure state is retained; correction overlays do not mutate curated rows.",
+      "Unknown-setting injuries are included in all-setting metrics but have no setting-specific rate.",
+      "Specific diagnoses use reviewed groups; unresolved injury diagnoses remain internal unknown values and are not shown as named diagnoses."
+    ],
+    "method_sha256": "9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c",
+    "limitations_sha256": "d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9",
+    "hash_method": "SHA-256 of the compact UTF-8 JSON array with separators comma and colon."
+  },
+  "adjudication_summary": {
+    "rows": 32,
+    "time_loss": 15,
+    "medical_attention": 1,
+    "unclassified": 16,
+    "source_values": {
+      "blank": 29,
+      "FALSE": 3
+    },
+    "second_human_review_required": false
+  },
+  "source_row_fingerprint_method": "Canonical source identity is the ordered tuple (season, stable master source_row, source_row_sha256). source_row_sha256 is SHA-256 of compact UTF-8 JSON with sorted keys for the 28 replay-serialised Injury Master fields A:AB from immutable master_2024-25_v5.json. Each cell is normalised exactly by tools/replay.py via render.decode_value then export.serialize_value, and headers retain the documented A:AB order before JSON key sorting. The stable master source_row is the deterministic occurrence discriminator for duplicate row values, so a duplicate value hash never silently collides. The secondary workbook locator fingerprint is SHA-256 of season, sheet, Excel row and adjudication-baseline workbook hash; it is provenance only, not the primary key.",
+  "source_row_fingerprint_field_order": ["Team", "PlayerID", "Received At Club", "Received/Injured In Team", "Problem type", "Date Injured", "Fit For Selection Date", "Confirmed Return Date", "Days Injured", "Occasion category", "Body Part", "Orchard Code", "Illness Code", "Description", "Injury Tissue Type/s", "Side", "Nature of onset", "Recurrence", "Is Contact", "Mechanism of Injury", "Mechanism Notes", "Injury Surface Type", "Match Type", "Received At Position", "Required Surgery", "TimeLoss vs Medical Attention", "Diagnosis", "Exclusion Reason"],
+  "adjudication_manifest_sha256": "cd5bed8cd5a98a6b5290194371fb92f01020ed8020ff3ddb859251741f349835",
+  "row_adjudications": [
+    {
+      "source_row": 132,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 132
+      },
+      "source_locator_fingerprint": "b052957add6119407c20ec1c9745bff1973aefc4e0fe0c490aed7941a912fcb1",
+      "source_row_sha256": "ca50325fe041d5e33e554cd9e8d47b68ea8df1ef84c31b2859f273c99268fdaa",
+      "source_value": "",
+      "final_classification": "Medical Attention",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Explicit human adjudication records a closed Medical Attention case on Date Injured.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "91d26dcf2a9636cd444e093a874494683de6b590687af50a3c1cc81f2f8a9a25"
+    },
+    {
+      "source_row": 144,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 144
+      },
+      "source_locator_fingerprint": "fd9c81c368f17078c7204f43d7bbb682e4f41598bf408e10eb8edbd5d49ee7f5",
+      "source_row_sha256": "da8f53ec5cc4e3101df921032bdddab59177e3aaaafc2273a3b3a7c19d1e537e",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "3d7450ecd884e0ff4dd94091ac77b4704ff553acac5053812af1e65e0ab1719a"
+    },
+    {
+      "source_row": 193,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 193
+      },
+      "source_locator_fingerprint": "c16ebf5655254245e72c236e4f77ed50283e5f599dda4c076032b10dd4cc08e6",
+      "source_row_sha256": "948a8a97a8f44d7216e392f3da837c5ae19ac6e81b09299486252fe1c67fe904",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "cd1d844dd3925ee58fa1bb053fc681e8278dba9051ccd266c5a575ed9feba44d"
+    },
+    {
+      "source_row": 203,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 203
+      },
+      "source_locator_fingerprint": "8fca45556146e61498eb61f9b01ecd25dde9d66fe0ab28e47ec61b46331aa405",
+      "source_row_sha256": "c4d1e1aa5075eb82f3d752ae26b905b3239b4c49ad367840ba4f8f159db27c62",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "4014dec203a1d8623944a9986750c67793db08933ce37cdaf676388ea0493271"
+    },
+    {
+      "source_row": 413,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 413
+      },
+      "source_locator_fingerprint": "f6742ae382283a550d33ecda50bf44f4276c3e8727bafb4878fb1c98895c99d5",
+      "source_row_sha256": "0d3b71fd2f97475a710abe17a0e57a22c7f8107bcd6dd1cfc61abb9f0d249630",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "5d9492e67a22c688b438144a76b155ce57e06871b1bb62daddf14e006a4fee24"
+    },
+    {
+      "source_row": 454,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 454
+      },
+      "source_locator_fingerprint": "c6a128fd4dd82bcce138546dd9a091b74af84a57d0e561cc0d5e23d9b6d3334f",
+      "source_row_sha256": "58603e21290d822294304e9dfa1725a03d181735b936e82d0dbef92b561dff77",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "9a5c4998efddf3ef4da825b573a2bffa18a189b8fa5c0e675528cc63c5d85c41"
+    },
+    {
+      "source_row": 469,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 469
+      },
+      "source_locator_fingerprint": "21327d7177bb8b07a31ed7cf57abe06c471965f7b81d384eae64c876b61ebf53",
+      "source_row_sha256": "a0fa69f5d64c59bd429acb26ac52507a40f276d2d9ba1f5a7488a3e2916f4195",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "03af8eaeb6f4493c01c433e8d592d8176463cd1c610d9f61eb97e8f1bd8ef74d"
+    },
+    {
+      "source_row": 484,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 484
+      },
+      "source_locator_fingerprint": "5db4aa29f8b3b2300032a930703abdbcd63a7ac2b58ca872586bbed501811f32",
+      "source_row_sha256": "5ed46ccda322f4ce5206ecd21b97edb44a826382abb58d4087f1d30c37cd0305",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "ad6966fa6f15b358c077efa044bc888f2e3bb064c95f70a5a7425ee5105f6af2"
+    },
+    {
+      "source_row": 486,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 486
+      },
+      "source_locator_fingerprint": "70377311fc4622c9ca07f8bd69e393e370ff2dd99bedaa875c9c5b34833c6da2",
+      "source_row_sha256": "4c41edd94f55f09808a20cc28a1dcd9c540fea0333f3aeb0257d1de3c11b62c5",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "905a75655f970c0bce72745427190b34da18aaeff4142cb7133b99dfbce1d46b"
+    },
+    {
+      "source_row": 488,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 488
+      },
+      "source_locator_fingerprint": "0c5cbc7a08b9986c705c1160223fadf04e810b419dd16e28180ceb9c1ace990f",
+      "source_row_sha256": "289341186e95660283db982979bf2bed042f0a0824f160c8d09d10db7646c0d1",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "7dad193f04e23968b04d3af7dcda6c5f05076e72f19015bd58a5f5ae25e77d69"
+    },
+    {
+      "source_row": 490,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 490
+      },
+      "source_locator_fingerprint": "2c966eab54f2e640a392a3038c237e08eae6e6b26a9ff76f3ff7be117414e61a",
+      "source_row_sha256": "c36222720060ecb5475fb7a578a5d0fdd0e970d187654be86583059b1359f6e5",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "5928bcb2fa2930bc6aab376980e0bcd858b04906c0eb5048a503c8f6479bbc76"
+    },
+    {
+      "source_row": 491,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 491
+      },
+      "source_locator_fingerprint": "05f2a7d9c3cadc3924d60478ec56f2e23396bf87b4f1059829105f59e67401ee",
+      "source_row_sha256": "7cd00b5fb81d2d19acbde11cda762249b263921e0859ea8f3c73f23d3faae5ff",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "1c78dd7f9fa0d6fffaab3e6f90ce260c05cedd73ebda7df47c089f97ab2aac3d"
+    },
+    {
+      "source_row": 495,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 495
+      },
+      "source_locator_fingerprint": "65ad1b03f26b311768b51c9ffc0e56c7f8344b93cbf99e84c51c1f1cb4618227",
+      "source_row_sha256": "97263bed643d3514d3ffb98921cdb2a400bcc9acfb38c366b0f30f94be161d94",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "68364d562c989bd0e69b710cf738517d2257b6bc7c93047d83b0f26ba3b4adb0"
+    },
+    {
+      "source_row": 497,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 497
+      },
+      "source_locator_fingerprint": "3cb074677295bc965a08dc2ff45fee849302bcee3480f8e4aaf9a207bf640442",
+      "source_row_sha256": "07afc39ab0a47742b175b93911e30b1807353d825cbbc81c4e0ccde610e949ed",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "0c70e39c45646f360b768def404f917ba2a48c068931a3aa9d82f0353a1fce6a"
+    },
+    {
+      "source_row": 499,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 499
+      },
+      "source_locator_fingerprint": "05fc4d0befbecb828b4972f516d59d9d0fed6f26348b4b73eff12bdb8619f33b",
+      "source_row_sha256": "0244d092e7160cab078ff27c3390d2992bf7dbc3ce2d14341b6539c5c9a3a38a",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "daab20b382fb0f5726f4bd38c1d43da0c4684dfc39ee2054da362ad563758df0"
+    },
+    {
+      "source_row": 500,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 500
+      },
+      "source_locator_fingerprint": "eb7300e0f39395628a8e587e7ecd9c736790e1dc06a40f1affa49a6c380d186b",
+      "source_row_sha256": "9c55452f85e16f6ba02479bf5e405921864284d741b0000915bdc2ef6c6f9605",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "a823d9f4ee47b99262cd37925cb16520d8d3673aff31fa4ed2928ff8ec4f6d97"
+    },
+    {
+      "source_row": 503,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 503
+      },
+      "source_locator_fingerprint": "5f4cc4afad1d933abb113029bafe890c538fb34c3116215f5eb110339153641b",
+      "source_row_sha256": "3b780f0e8f960619e3b58b20c2216f2c116d8e35d5d2c165db8836f9be48ef3f",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "0759101b5f0f1eae9a04db97bd5d9e429f35f865b6a648e1efe6311f7c4394fc"
+    },
+    {
+      "source_row": 510,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 510
+      },
+      "source_locator_fingerprint": "46d53bfac344d8daf08454129c91609679c47d8f7442f41da771c26cead8128b",
+      "source_row_sha256": "71a43b157b9eadfe205857914a9f6e7eebdb0f3fa3ea35e358d311db0c919b53",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "84c7ee3e4ae7667cce0d91e9d0228eceeb172fe4eb4b682e55b9c1be24533eb7"
+    },
+    {
+      "source_row": 511,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 511
+      },
+      "source_locator_fingerprint": "23f2867f4158455c45abe7ffbd4e015ce008f7c840937c21fe45793f20ba7ca7",
+      "source_row_sha256": "8d6fdf50723fdd8eb913b5e283346afc5f4076e2a0435c8dccc40740901cdbe8",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "aab4e7dc4674f7c8d7f453f22e55b186789058c7d1a8ebc9ad6456e1b68785b3"
+    },
+    {
+      "source_row": 514,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 514
+      },
+      "source_locator_fingerprint": "b0ee6a28f3a4e993e508c61652921658710a765d5dad333e43f0b3ba047e9e54",
+      "source_row_sha256": "08be9dee5d7a985618ac8052149e9896c703f2834753f92e0cd6ab2c8529fc68",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "b9c4ee4bc5662eef08d0b13fe8736e042ef8f3c8f707404f324011c3cfcbf078"
+    },
+    {
+      "source_row": 515,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 515
+      },
+      "source_locator_fingerprint": "64f83f53cc3c19574e32f39eaf51b73f4a11a2d9db917919a679fe998972a9c9",
+      "source_row_sha256": "52c0d4ba949f99b957c9549f2f268ff960a70e997a949154dad5227fa3c9506e",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "01755c7025cadcc54104bd883878500f3d90ffb8c84a5ca7ac65d739dab141c3"
+    },
+    {
+      "source_row": 526,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 526
+      },
+      "source_locator_fingerprint": "42ae6d768eb101477e7709c501a788d28718580b4359c3337e0e323c54fd6c19",
+      "source_row_sha256": "386ba9339d5bb1c56b005b9bc6205e99cab713313ef8011944b3527832e18984",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only. Club follow-up remains optional and does not block this release.",
+      "club_follow_up": true,
+      "second_human_review": "pending",
+      "evidence_sha256": "6bd0ec715dc599ceb18541df905a0f579e0271b616e6d09a95cdd2ff8129803c"
+    },
+    {
+      "source_row": 528,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 528
+      },
+      "source_locator_fingerprint": "4821c8cab69d096de9c5982a0fca7b023545b5c42f6078265af543dde4d051dc",
+      "source_row_sha256": "77a079cee6879408387adf3640555dd9dbeb6047376f9d75ef54a9eff3386400",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "f2528e19f393a8a30d3496c8a490683a1b9b57cc9e6480dcddd4118392441119"
+    },
+    {
+      "source_row": 529,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 529
+      },
+      "source_locator_fingerprint": "7c831f5ae53a7aa78c31093d17c0af8bcdedf2d116c830fcbbb74bb8834aa1d6",
+      "source_row_sha256": "fc761f453a2cc7a64a39369250eef1aabcf39374068ed58cc5a2141ee8db7726",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "867123dc46f67d7603ff2af05426e486baf2f35a9afe896f264511df3b23b336"
+    },
+    {
+      "source_row": 530,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 530
+      },
+      "source_locator_fingerprint": "f9903a2ae777b950b51711103d2974ff1a97df0a5e6448494c5030be2bc220fc",
+      "source_row_sha256": "6c606677cdf0270112f98cd5cfbbe74a3c355205670d61294bd23fc8b3fffddb",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "dbc8356ea64becc923b7d5012e8bcd33cba360a214ada9e2cff79b9942ba929c"
+    },
+    {
+      "source_row": 531,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 531
+      },
+      "source_locator_fingerprint": "679dbc6e8c45ec6baa77520b00a503859fe60aef4050e1383c8fff44c0a6c554",
+      "source_row_sha256": "cf57e99c4af7495ee70842541ea96947839393336d0df060b43196c5b21ffd13",
+      "source_value": "",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "ce4297e1f47403204ed8fb64f74071e646113504e7179ec6fafe561a5c3d3b7a"
+    },
+    {
+      "source_row": 535,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 535
+      },
+      "source_locator_fingerprint": "d650c98fec3050451af359d4adae6487206feb1cb2d0f5b446b45c925ea49470",
+      "source_row_sha256": "0600a3aabc3e8a87bd272ea48f53385f0a9fa520cc8d59814e97ff542f37e7f0",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "899f4acfa61abb255db9c8d64651614490d14c853494ad86d145133cfc42c6f7"
+    },
+    {
+      "source_row": 1570,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 1570
+      },
+      "source_locator_fingerprint": "b8438a58d89fa99ffafb8e30ccc6bcd70affd0a06949a64785a246bf8ed23c88",
+      "source_row_sha256": "236652a92e72d7cd5c1a5c58150af1fa8471f20c84ea71cd33901c3c0e2362e4",
+      "source_value": "FALSE",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "4b8117ed1784d63edc2f10c9afad906708ef8c77f092cc5c2230d42aa14d795e"
+    },
+    {
+      "source_row": 1578,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 1578
+      },
+      "source_locator_fingerprint": "c83fce59600a5593d7360d0f16cb5338025cfde4a1ddb82c6263b1e6295de8dc",
+      "source_row_sha256": "4ce1188e48832630613e0a3d087c7282ab03bdcb3bc8be90db57dde8599abb10",
+      "source_value": "FALSE",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "edacfa5be47b609b7b6de25da34e7939a68aeee279ebc3256bf3af42efc577ef"
+    },
+    {
+      "source_row": 1875,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 1875
+      },
+      "source_locator_fingerprint": "21d59b88321d8312faa1a41ed73d76be3009e3747ca1dcd009cb6d17616428cf",
+      "source_row_sha256": "8a22d45d5710f214a189e8ba002aba5c9fa0fbed1a2959c2ef2e3c22b4e7df88",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "5abd39d99db554ab5bde2837fec8b6d5d5779adcb0ca79bc621f9c99b76577b9"
+    },
+    {
+      "source_row": 1876,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 1876
+      },
+      "source_locator_fingerprint": "568cf5828c10c49297e325cec7a7702d4f1c67ef3760a0fd968911684f3cfa2e",
+      "source_row_sha256": "26c713efd915a79004a632066f78f1f0547a716a68cfee950ea8215cdbbbcbc4",
+      "source_value": "",
+      "final_classification": "Time Loss",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human adjudication overrides the default inference and records Time Loss without inventing duration or a return date.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "eeeb105ada6fd1fc306d63728e32277cbdc3dbb32a2ff67688b06dd097cf8fa6"
+    },
+    {
+      "source_row": 2275,
+      "source_locator": {
+        "path": "data/2024-25/review/urc_injury_master_review_2024-25.xlsx",
+        "sheet": "Injury Master",
+        "excel_row": 2275
+      },
+      "source_locator_fingerprint": "ab93374ae951e828dbccfde9514eda553f3df22b028516dd2c9a38d6f73c001f",
+      "source_row_sha256": "13f217c8ef35100fbc5c748e5d1360b1c3f65c90adcb1d058b9922ca279debda",
+      "source_value": "FALSE",
+      "final_classification": "unclassified",
+      "classification_origin": "adjudicated",
+      "reviewer": "Abdel Babiker",
+      "reviewed_at": "2026-08-26",
+      "rationale": "Human review found no governed basis to classify this eligible row as Time Loss or Medical Attention; retain it as recorded only.",
+      "club_follow_up": false,
+      "second_human_review": "pending",
+      "evidence_sha256": "724d317a17f101c35f47b26d9c4a7284165e2a268d2f8be9c8e4ad52852c881b"
+    }
+  ],
+  "reconciliation_contract": {
+    "source_reported_null_duration_time_loss": 111,
+    "adjudicated_null_duration_time_loss": 15,
+    "successor_time_loss_injuries": 913,
+    "predecessor_recorded_injuries": 1662,
+    "successor_recorded_injuries": 1662,
+    "predecessor_observed_days_lost": 17575,
+    "successor_observed_days_lost": 17575,
+    "known_duration_time_loss_injuries": 787,
+    "dated_monthly_recorded_injuries": 1656,
+    "dated_monthly_time_loss_injuries": 912,
+    "undated_recorded_injuries": 6,
+    "undated_time_loss_injuries": 1,
+    "adjudicated_recorded_total_delta": 0,
+    "adjudicated_observed_days_delta": 0,
+    "team_count": 16,
+    "non_injury_payload_sections_must_be_byte_identical": [
+      "analysis_window",
+      "coverage",
+      "prior_season",
+      "monthly exposure_hours",
+      "monthly distance_km"
+    ],
+    "successor_disclosure_keys": ["method", "limitations"],
+    "successor_disclosure_method_sha256": "9bd4ff3c60fb1aa33e3f4d1d1c5ff35f83bbd6cbd777aca90b6fbd3bc980de7c",
+    "successor_disclosure_limitations_sha256": "d8b32c5dddb9f740d238b44e4c40d099ed671ccc58bcdc95a5310471c78b75f9",
+    "injury_derived_sections": [
+      "headline",
+      "setting_split",
+      "setting_metrics",
+      "setting recorded_injuries",
+      "setting overall_incidence_per_1000h",
+      "monthly recorded_injuries",
+      "monthly time_loss_injuries",
+      "monthly days_lost",
+      "monthly overall_incidence_per_1000h",
+      "monthly incidence_per_1000h",
+      "monthly burden_per_1000h",
+      "body_locations",
+      "injury_types",
+      "injury_profiles",
+      "severity_distribution",
+      "contact_distribution"
+    ]
+  }
+}

@@ -166,6 +166,48 @@ test("2025-26 reader preserves unavailable coverage and monthly exposure as null
   assert.equal(parsed.monthly[0].distance_km, null);
 });
 
+test("2025-26 reader accepts optional monthly recorded injuries", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const withoutRecorded = validDashboard();
+  assert.doesNotThrow(() => parseDashboardReaderRow(withoutRecorded, "2025-26", "team"));
+
+  const withRecorded = validDashboard();
+  withRecorded.monthly[0].recorded_injuries = 3;
+  assert.equal(parseDashboardReaderRow(withRecorded, "2025-26", "team").monthly[0].recorded_injuries, 3);
+});
+
+test("2025-26 reader accepts released overall-incidence values when present", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const dashboard = validDashboard();
+  dashboard.headline.push({
+    key: "overall_incidence_per_1000h",
+    label: "Overall incidence",
+    value: 10,
+    unit: "per 1,000 player-hours",
+    numerator: 1,
+    denominator: 100,
+    formula: "pooled recorded injuries / pooled exposure hours * 1000",
+  });
+  dashboard.monthly[0].overall_incidence_per_1000h = 10;
+
+  const parsed = parseDashboardReaderRow(dashboard, "2025-26", "team");
+  assert.equal(parsed.headline.at(-1).key, "overall_incidence_per_1000h");
+  assert.equal(parsed.monthly[0].overall_incidence_per_1000h, 10);
+});
+
+test("2025-26 reader accepts released per-setting headline values when present", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const dashboard = validDashboard();
+  dashboard.setting_metrics.forEach((metric, index) => {
+    metric.recorded_injuries = index + 2;
+    metric.overall_incidence_per_1000h = index + 3;
+  });
+
+  const parsed = parseDashboardReaderRow(dashboard, "2025-26", "team");
+  assert.equal(parsed.setting_metrics[1].recorded_injuries, 3);
+  assert.equal(parsed.setting_metrics[1].overall_incidence_per_1000h, 4);
+});
+
 test("2024-25 legacy reader still rejects unavailable coverage", async () => {
   const { parseDashboardReaderRow } = await loadReportingModule();
   const unavailable = validDashboard();

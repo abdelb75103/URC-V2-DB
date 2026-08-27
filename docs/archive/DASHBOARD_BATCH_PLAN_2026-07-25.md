@@ -1,5 +1,9 @@
 # Implementation plan: batched dashboard review decisions (2026-07-25)
 
+Status: archived planning snapshot. Its repository state and open questions are
+historical. Use the current code and `../PIPELINE_RULE_CHANGELOG.md` for accepted
+behaviour.
+
 Source of decisions: `HANDOFF_DASHBOARD_DECISIONS_2026-07-25.md` (scratchpad), plus
 Abdel's added item 13 (Common Injuries slope chart). Nothing here has been executed.
 
