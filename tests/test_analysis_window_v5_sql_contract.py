@@ -376,7 +376,6 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
             ),
         )
         for required in (
-            "set transaction isolation level repeatable read",
             "refresh materialized view",
             "V5 team candidate snapshot must contain exactly 16 teams",
             "V5 league candidate snapshot must contain exactly one row",
@@ -385,6 +384,10 @@ class AnalysisWindowV5SqlContractTests(unittest.TestCase):
             "V5 shared injury and classification snapshots do not reconcile",
         ):
             self.assertIn(required, self.snapshot_refresh)
+        self.assertNotIn(
+            "set transaction isolation level repeatable read",
+            self.snapshot_refresh,
+        )
         refresh_order = [
             self.snapshot_refresh.index(name)
             for name in (

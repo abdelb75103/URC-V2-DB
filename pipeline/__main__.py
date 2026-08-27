@@ -7745,6 +7745,7 @@ def league_release_plan(
                 "approval": "exact hosted target and snapshot refresh required",
                 "action": shlex.join(
                     [
+                        "env", "PIPELINE_TRANSACTION_ISOLATION=repeatable_read",
                         "node", "pipeline/run_with_pooler.mjs", "node",
                         "pipeline/sql_exec.mjs",
                         "tools/sql/refresh_analysis_window_v5_candidate_snapshots.sql",

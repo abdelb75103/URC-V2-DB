@@ -1,5 +1,3 @@
-set transaction isolation level repeatable read;
-
 refresh materialized view
   analysis.analysis_window_injury_cohort_v5_snapshot;
 refresh materialized view

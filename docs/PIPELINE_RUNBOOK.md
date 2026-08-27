@@ -261,7 +261,8 @@ The initial v5 implementation and migration sequence was:
    source decision changes v5, obtain fresh explicit approval for the live refresh, then
    refresh the three shared cohorts and both payload snapshots in one
    repeatable-read transaction with
-   `node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs
+   `env PIPELINE_TRANSACTION_ISOLATION=repeatable_read
+   node pipeline/run_with_pooler.mjs node pipeline/sql_exec.mjs
    tools/sql/refresh_analysis_window_v5_candidate_snapshots.sql` before a new
    preflight. The refresh fails closed unless the 16 team identities, one
    league row and approved tuple reconcile. A corrective

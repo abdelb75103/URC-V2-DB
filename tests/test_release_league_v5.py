@@ -373,6 +373,10 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
             plan["steps"][-1]["includes"],
             "promotion and 16-team parity export",
         )
+        self.assertIn(
+            "PIPELINE_TRANSACTION_ISOLATION=repeatable_read",
+            plan["steps"][1]["action"],
+        )
 
     def test_first_safe_mismatch_covers_coverage_and_headline_denominators(self) -> None:
         dashboard = {
