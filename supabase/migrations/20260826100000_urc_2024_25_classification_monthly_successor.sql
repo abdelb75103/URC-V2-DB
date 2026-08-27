@@ -2392,7 +2392,6 @@ group by setting_code, contact_context, contact_label;
 create view analysis.urc_2024_25_league_monthly_v1
 with (security_invoker = true) as
 select month_start,
-  min(source_item) as source_item,
   sum(recorded_injuries)::bigint as recorded_injuries,
   sum(time_loss_injuries)::bigint as time_loss_injuries,
   sum(days_lost)::numeric as days_lost,
@@ -2741,10 +2740,13 @@ select
       ), '[]'::jsonb),
       'monthly', coalesce((
         select jsonb_agg(
-          x.source_item || jsonb_build_object(
+          jsonb_build_object(
+            'month', to_char(x.month_start, 'Mon YYYY'),
             'recorded_injuries', x.recorded_injuries,
             'time_loss_injuries', x.time_loss_injuries,
             'days_lost', x.days_lost,
+            'exposure_hours', x.exposure_hours,
+            'distance_km', x.distance_km,
             'overall_incidence_per_1000h', x.overall_incidence_per_1000h,
             'incidence_per_1000h', x.incidence_per_1000h,
             'burden_per_1000h', x.burden_per_1000h

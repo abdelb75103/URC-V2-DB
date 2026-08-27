@@ -380,6 +380,7 @@ class ClassificationMonthlySuccessorContractTests(unittest.TestCase):
         self.assertIn(SPECIFIC_DIAGNOSIS_ROWS_SHA256, self.sql + self.registration)
         self.assertIn("'01 ' || (item ->> 'month')", self.sql)
         self.assertNotIn("'01 ' || item ->> 'month'", self.sql)
+        self.assertNotIn("min(source_item)", lower_sql)
 
     def test_every_injury_section_reads_final_classification_fact(self) -> None:
         lower_sql = self.sql.lower()
