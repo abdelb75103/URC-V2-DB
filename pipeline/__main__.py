@@ -9041,10 +9041,15 @@ def release_league(args: argparse.Namespace) -> None:
         )
 
     existing_params = SqlParams()
+    existing_bundle_view = (
+        "reporting.latest_approved_league_bundle_v6"
+        if season == "2025-26"
+        else "reporting.latest_approved_dashboard_bundle_v4"
+    )
     existing = query_sql(
-        f"select c.release_id::text, r.release_label from reporting.league_release_context_v2 c "
-        f"join reporting.aggregate_releases r on r.id = c.release_id "
-        f"where c.season = {existing_params.text(season)} and r.status = 'approved'",
+        f"select b.release_id::text, r.release_label from {existing_bundle_view} b "
+        f"join reporting.aggregate_releases r on r.id = b.release_id "
+        f"where b.season = {existing_params.text(season)} and r.status = 'approved'",
         existing_params.values,
     )
     predecessor: dict[str, Any] | None = None

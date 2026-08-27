@@ -258,6 +258,7 @@ class ReleaseLeagueV5Tests(unittest.TestCase):
         ):
             self.assertIn(value, self.source)
         self.assertIn("semantic_monthly_is_fixed_season = True", self.source)
+        self.assertIn("reporting.latest_approved_dashboard_bundle_v4", self.source)
 
     def test_v5_manifest_hash_matches_the_release_gate(self) -> None:
         manifest = (
