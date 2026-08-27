@@ -16,7 +16,11 @@ select
   exists (
     select 1 from supabase_migrations.schema_migrations
     where version = '20260827170000'
-  ) as setting_profile_successor_registered
+  ) as setting_profile_successor_registered,
+  exists (
+    select 1 from supabase_migrations.schema_migrations
+    where version = '20260827171000'
+  ) as assertion_lifecycle_registered
 from reporting.latest_approved_dashboard_bundle_v4 approved
 join reporting.aggregate_releases release on release.id = approved.release_id
 join reporting.league_release_context_v2 context on context.release_id = approved.release_id

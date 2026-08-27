@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase/migrations/20260827170000_urc_2024_25_setting_profile_successor.sql"
 REGISTRATION = ROOT / "tools/sql/register_urc_2024_25_setting_profile_successor_migration.sql"
+ASSERTION_MIGRATION = ROOT / "supabase/migrations/20260827171000_urc_2024_25_setting_profile_assertion_lifecycle.sql"
+ASSERTION_REGISTRATION = ROOT / "tools/sql/register_urc_2024_25_setting_profile_assertion_lifecycle_migration.sql"
 UI = ROOT / "components/dashboard/team-dashboard.tsx"
 CHARTS = ROOT / "components/dashboard/charts.tsx"
 
@@ -15,6 +17,8 @@ class SettingProfileSuccessorTests(unittest.TestCase):
     def setUpClass(cls):
         cls.migration = MIGRATION.read_text()
         cls.registration = REGISTRATION.read_text()
+        cls.assertion_migration = ASSERTION_MIGRATION.read_text()
+        cls.assertion_registration = ASSERTION_REGISTRATION.read_text()
         cls.ui = UI.read_text()
         cls.charts = CHARTS.read_text()
 
@@ -22,6 +26,9 @@ class SettingProfileSuccessorTests(unittest.TestCase):
         digest = hashlib.sha256(MIGRATION.read_bytes()).hexdigest()
         self.assertIn(f"migration_sha256={digest}", self.registration)
         self.assertIn("perform analysis.assert_urc_2024_25_setting_profile_successor_v1()", self.registration.lower())
+        assertion_digest = hashlib.sha256(ASSERTION_MIGRATION.read_bytes()).hexdigest()
+        self.assertIn(f"migration_sha256={assertion_digest}", self.assertion_registration)
+        self.assertIn("predecessor_release_id", self.assertion_migration)
 
     def test_setting_rows_use_correct_denominators_and_explicit_all_rollup(self):
         self.assertIn("union all select 'all'::text", self.migration.lower())

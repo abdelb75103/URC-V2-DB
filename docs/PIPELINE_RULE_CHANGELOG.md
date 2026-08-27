@@ -15,16 +15,18 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `applied-and-registered-pending-release`: additive reporting migration, registration, UI and reconciliation contracts are complete. Live SQL reconciliation passes; the existing approved bundle remains served until reviewed promotion. |
+| Status | `applied-and-promoted`: both additive migrations are registered and the complete 16-team successor bundle is approved on the live URC database. |
 | Rule version | `reporting_classification_2024-25_2026-08-27_v1`, setting-profile successor migration `20260827170000` |
 | Carry-forward | The 2024-25 reporting rows are `season-specific`. The shared dashboard controls, sparklines, series switches and stable diagnosis colours carry across season tabs when the season payload supplies the matching fields. |
-| Migration | `20260827170000_urc_2024_25_setting_profile_successor.sql`, SHA-256 `ea15f4e92f4e701c414781ba35428e425cafda3bf2159be1aa62f941682a2a03`. |
+| Migration | Setting profiles `20260827170000`, SHA-256 `ea15f4e92f4e701c414781ba35428e425cafda3bf2159be1aa62f941682a2a03`; post-promotion assertion lifecycle `20260827171000`, SHA-256 `b67679fffc1973d274c20c90abdfac8aba52b3e70d166142b6c154a5b0f9074d`. |
 
 **What changes.** The successor restores explicit Overall, Match and Training rows for body location, injury type, compound injury profile and injury-only specific diagnosis. It also publishes setting-specific severity rows and regenerates injury-type families through the existing versioned family function. Overall rows use total exposure, Match rows use match exposure, and Training rows use training exposure. Unknown-setting rows remain inside the all-setting roll-up but carry no rate denominator.
 
 **What does not change.** The final injury cohort, row classification, monthly series and approved headline totals remain fixed at 1,662 injuries, 913 TL injuries and 17,575 observed days. Specific-diagnosis profiles continue to exclude illness. Body location and injury type remain separate classifications.
 
 **Presentation.** The overview restores the Injuries and Overall incidence sparklines and places their TL companions beside the main values. The timeline exposes four independent series switches. Common Injuries keeps the established clinical colour families, the Impact chart retains specific knee-ligament diagnoses beyond the general top-twelve cut, and its two near-coincident named diagnoses use opposite label positions. Severity and Contact mechanism have their own Overall, Match and Training controls.
+
+**Live attestation.** Release `urc-2024-25-v5-af3ad20196b9-a1` (`a2135732-2774-4dcb-9be6-7f15532b9d0f`) was promoted with reviewer `Abdel Babiker`. The league payload SHA-256 is `240d3cb82f7d067d227b6b8efe4212629c0cc993bff0aade50ee823401f00d75`; the complete bundle SHA-256 is `af3ad20196b9dbf82a752530662ac057c78847465c3bc6b3f6fb8eebaafb34a8`; the 16-team parity export-set SHA-256 is `f1b33d714961d50f69a298238c4b0065debed1d7d4d876d4b8c364d5b06879b0`. Post-promotion proof through the least-privilege website reader found one approved league bundle, 1,662 injuries, 913 TL injuries, 17,575 observed days, ten monthly rows with both injury series, injury-only diagnosis totals that reconcile across Overall, Match, Training and Unknown, and complete setting-specific profile, severity and family rows.
 
 ## 2026-08-26: 2024-25 final injury classification and monthly timeline successor
 
