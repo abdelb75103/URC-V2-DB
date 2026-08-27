@@ -1093,7 +1093,10 @@ function ImpactTooltip({
       className="w-[min(18rem,calc(100vw-2rem))] rounded-lg px-3 py-2 text-xs shadow-xl backdrop-blur-sm"
       style={TOOLTIP_SURFACE}
     >
-      <p className="font-semibold text-white">{row.label}</p>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-semibold text-white">{row.label}</p>
+        <span className="shrink-0 text-[11px] capitalize text-muted-foreground">{settingLabel(row.setting)}</span>
+      </div>
       <dl className="mt-1.5 space-y-1">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
           <dt style={{ color }}>TL incidence</dt>
@@ -1116,7 +1119,11 @@ function ImpactTooltip({
           <dd className="text-right font-semibold tabular-nums">{count(row.days_lost)}</dd>
         </div>
       </dl>
-      <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{settingLabel(row.setting)}{caution && ` · ${caution}`}{pinned && ' · Pinned, press Escape to dismiss'}</p>
+      {(caution || pinned) && (
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+          {caution}{caution && pinned && ' · '}{pinned && 'Pinned, press Escape to dismiss'}
+        </p>
+      )}
     </div>
   );
 }

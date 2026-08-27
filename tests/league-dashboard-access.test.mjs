@@ -569,7 +569,8 @@ test('injury impact tooltip prioritises the plotted axes, gives exact small-samp
   const interaction = charts.slice(charts.indexOf('function ImpactDot'), charts.indexOf('export function ImpactScatterChart'));
   const chart = charts.slice(charts.indexOf('export function ImpactScatterChart'));
 
-  assert.match(tooltip, /\{row\.label\}.*settingLabel\(row\.setting\)/s);
+  assert.match(tooltip, /flex items-baseline.*\{row\.label\}.*settingLabel\(row\.setting\)/s);
+  assert.match(tooltip, /\{\(caution \|\| pinned\) && \(/);
   assert.ok(tooltip.indexOf('>TL incidence<') < tooltip.indexOf('>Mean severity<'), 'TL incidence must lead the plotted metrics');
   assert.ok(tooltip.indexOf('>Mean severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
   assert.doesNotMatch(tooltip, />Recorded injuries</);
