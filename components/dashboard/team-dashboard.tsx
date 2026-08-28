@@ -58,10 +58,13 @@ const TABS = [
 
 const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; longUnit: string }> = [
   { key: 'time_loss_injuries', label: 'Count', shortUnit: 'injuries', longUnit: 'time-loss injuries' },
-  { key: 'incidence_per_1000h', label: 'TL incidence', shortUnit: '/1,000 h', longUnit: 'TL injuries /1,000 h' },
+  { key: 'incidence_per_1000h', label: 'TL Incidence', shortUnit: '/1,000 h', longUnit: 'TL injuries /1,000 h' },
   { key: 'burden_per_1000h', label: 'Burden', shortUnit: 'days/1,000 h', longUnit: 'days /1,000 h' },
   { key: 'mean_severity_days', label: 'Severity', shortUnit: 'days', longUnit: 'days' },
 ];
+
+const SECTION_HEADING_CLASS = 'text-2xl font-semibold tracking-tight text-foreground sm:text-3xl';
+const PANEL_HEADING_CLASS = 'text-lg font-semibold leading-snug text-foreground';
 
 type InjuryCardColor = { background: string; foreground: string };
 
@@ -208,7 +211,7 @@ function Panel({ title, children, className = '', contentClassName = 'p-5 sm:p-6
       <CardContent className={contentClassName}>
         {title && (
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+            <h3 className={`${PANEL_HEADING_CLASS} capitalize`}>{title}</h3>
           </div>
         )}
         {children}
@@ -220,7 +223,7 @@ function Panel({ title, children, className = '', contentClassName = 'p-5 sm:p-6
 function SectionHeading({ title }: { title: string }) {
   return (
     <div className="mb-6">
-      <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{title}</h2>
+      <h2 className={`${SECTION_HEADING_CLASS} capitalize`}>{title}</h2>
     </div>
   );
 }
@@ -447,8 +450,8 @@ function OverviewTab({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          {dashboard.scope === 'league' ? 'League injury picture' : 'Team injury picture'}
+        <h2 className={SECTION_HEADING_CLASS}>
+          {dashboard.scope === 'league' ? 'League Injury Picture' : 'Team Injury Picture'}
         </h2>
         {settingFilterAvailable && (
           <SettingControl value={effectiveSetting} settings={settingOptions} onChange={setSetting} />
@@ -491,7 +494,7 @@ function OverviewTab({
       <Panel contentClassName="p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold text-foreground">Season timeline</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Season Timeline</h3>
             <ScopeChip show={effectiveSetting !== 'all' && !perSettingMonthly} />
           </div>
           <div className="flex flex-wrap gap-4">
@@ -515,7 +518,7 @@ function OverviewTab({
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-foreground">Injury Location</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Injury Location</h3>
             <Segmented
               value={locationMetric}
               options={[
@@ -585,7 +588,7 @@ function OverviewTab({
 
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-lg font-semibold text-foreground">Severity</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Severity</h3>
             <div className="flex flex-wrap items-center gap-2">
               {severitySettings.length > 1 && (
                 <SettingControl value={effectiveSeveritySetting} settings={severitySettings} onChange={setSeveritySetting} />
@@ -604,7 +607,7 @@ function OverviewTab({
         {contactRows.length > 0 && (
           <Panel contentClassName="p-4 sm:p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-lg font-semibold text-foreground">Contact mechanism</h3>
+              <h3 className={PANEL_HEADING_CLASS}>Contact Mechanism</h3>
               {contactSettings.length > 1 && (
                 <SettingControl value={effectiveContactSetting} settings={contactSettings} onChange={setContactSetting} />
               )}
@@ -614,7 +617,7 @@ function OverviewTab({
         )}
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-lg font-semibold text-foreground">Match vs training</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Match Vs Training</h3>
             <MetricControl value={benchMetric} onChange={setBenchMetric} />
           </div>
           <SettingBench match={match} training={training} metric={benchMetric} />
@@ -822,7 +825,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-border/60 pb-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Most Common {settingTitle}Injuries</h2>
+          <h2 className={SECTION_HEADING_CLASS}>Most Common {settingTitle}Injuries</h2>
         </div>
         <SettingControl value={setting} settings={settings.length ? settings : ['all', 'match', 'training']} onChange={setSetting} />
       </div>
@@ -831,7 +834,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
           <CommonInjuryRankings rows={rows} totalInjuries={totalInjuries} injuryColors={injuryColors} />
           <section aria-labelledby="common-injuries-risk-matrix" className="mt-8">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h3 id="common-injuries-risk-matrix" className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Risk Matrix</h3>
+              <h3 id="common-injuries-risk-matrix" className={PANEL_HEADING_CLASS}>Risk Matrix</h3>
               <Segmented
                 value={impactDimension}
                 options={[
@@ -1013,7 +1016,7 @@ function CommonInjuryLane({
 
   return (
     <section aria-labelledby={`common-injuries-${metric.key}`}>
-      <h3 id={`common-injuries-${metric.key}`} className="mb-3 text-base font-semibold text-foreground sm:text-lg">
+      <h3 id={`common-injuries-${metric.key}`} className={`${PANEL_HEADING_CLASS} mb-3 capitalize`}>
         {metric.label}
       </h3>
       {ranked.length ? (
@@ -1068,7 +1071,7 @@ function CommonInjuryCard({
     >
       <article className="flex h-full items-center justify-between gap-3" aria-label={`${rank}. ${row.label}, ${fmt(row[metric], metric === 'time_loss_injuries' ? 0 : 1)} ${unit}`}>
         <div className="min-w-0 self-center">
-          <h4 className="text-sm font-semibold leading-snug text-inherit">{row.label}</h4>
+          <h4 className="text-sm font-semibold leading-snug text-inherit capitalize">{row.label}</h4>
           {metric === 'time_loss_injuries' && (
             <p className="mt-1 text-xs text-inherit">{share}% of time-loss cases</p>
           )}
@@ -1191,10 +1194,10 @@ function TeamComparisonTab({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Team Comparison</h2>
+        <h2 className={SECTION_HEADING_CLASS}>Team Comparison</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented value={activeSetting} options={availableSettingOptions.length ? availableSettingOptions : comparisonSettings} onChange={setSetting} label="Choose comparison setting" />
-          <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'TL incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
+          <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'TL Incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
         </div>
       </div>
       <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-lg border border-border/70 bg-card/70">
@@ -1202,7 +1205,7 @@ function TeamComparisonTab({
         <OverviewStat label={`League ${settingLabel} burden`} value={fmt(benchmark?.burden_per_1000h)} unit="days /1,000 hours" />
       </div>
       <div className="space-y-4">
-        <Panel title={`Ranked by ${settingLabel} ${metricLabel} (${metricUnit})`}>
+        <Panel title={`Ranked By ${settingLabel} ${metricLabel} (${metricUnit})`}>
           <div ref={ladderRef} className="min-w-0">
             {ranked.map((row, index) => (
               <ComparisonBarRow
@@ -1233,7 +1236,7 @@ function TeamComparisonTab({
             </div>
           )}
         </Panel>
-        <Panel title="Match and training values against the league average">
+        <Panel title="Match And Training Values Vs League Average">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] table-fixed text-sm">
               <thead className="text-muted-foreground">
@@ -1243,9 +1246,9 @@ function TeamComparisonTab({
                   <th colSpan={2} className="rounded-t-md border-l-4 border-card bg-primary/15 px-3 py-1.5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Training</th>
                 </tr>
                 <tr>
-                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL incidence</th>
+                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL Incidence</th>
                   <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
-                  <th className="border-l-4 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL incidence</th>
+                  <th className="border-l-4 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL Incidence</th>
                   <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
                 </tr>
               </thead>
@@ -1285,7 +1288,7 @@ function TeamComparisonTab({
           </div>
         </Panel>
         <Panel contentClassName="p-4 sm:p-5">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Match and training TL incidence</h3>
+          <h3 className={`${PANEL_HEADING_CLASS} mb-4`}>Match And Training TL Incidence</h3>
           <ComparisonScatterChart
             rows={scatterRows}
             leagueMatchIncidence={matchBenchmark?.incidence_per_1000h}
@@ -1492,7 +1495,7 @@ function ExposureTab({
     <div className="space-y-5 sm:space-y-6">
       <SectionHeading title="Exposure" />
       <section aria-labelledby="total-exposure-heading">
-        <h3 id="total-exposure-heading" className="mb-3 text-lg font-semibold text-foreground">Total exposure</h3>
+        <h3 id="total-exposure-heading" className={`${PANEL_HEADING_CLASS} mb-3`}>Total Exposure</h3>
         {hasExposureTotals ? (
           <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
             <OverviewStat label="Total hours" value={fmtHours(totalHours)} unit="player-hours" />
@@ -1505,7 +1508,7 @@ function ExposureTab({
       </section>
       <Panel contentClassName="p-4 sm:p-5">
         <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-lg font-semibold text-foreground">Monthly exposure</h3>
+          <h3 className={PANEL_HEADING_CLASS}>Monthly Exposure</h3>
           <Segmented value={monthlyMeasure} options={options} onChange={setMonthlyMeasure} label="Choose monthly exposure measure" scrollable={false} />
         </div>
         <ExposureTrendChart rows={monthlyRows} measure={monthlyMeasure} totalHoursColor={teamColor?.mark} />
@@ -1570,7 +1573,7 @@ function ExposureComparison({
   return (
     <Panel contentClassName="p-4 sm:p-5">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-lg font-semibold text-foreground">Team comparison</h3>
+        <h3 className={PANEL_HEADING_CLASS}>Team Comparison</h3>
         <Segmented value={measure} options={options} onChange={onMeasureChange} label="Choose team comparison exposure measure" scrollable={false} />
       </div>
       {!ranked.length ? (
@@ -1636,7 +1639,7 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Injury Location</h2>
+        <h2 className={SECTION_HEADING_CLASS}>Injury Location</h2>
         <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <SettingControl value={effectiveSetting} settings={settings.length ? settings : ['all', 'match', 'training']} onChange={setSetting} />
           <MetricControl value={metric} onChange={setMetric} locationOnly />
@@ -1670,7 +1673,7 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
           </div>
           <SettingSplitBars
             profiles={locationProfiles}
-            title="Match against training by region"
+            title="Match Vs Training By Region"
             emptyMessage="No body region has both a match and a training row."
           />
         </div>
@@ -1716,7 +1719,7 @@ function SettingSplitBars({ profiles, title, emptyMessage }: {
     <Panel contentClassName="p-4 sm:p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+          <h3 className={`${PANEL_HEADING_CLASS} capitalize`}>{title}</h3>
           <ScopeChip show label="Match & training" />
         </div>
         <MetricControl value={metric} onChange={setMetric} locationOnly />
@@ -1888,7 +1891,7 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Injury Types</h2>
+        <h2 className={SECTION_HEADING_CLASS}>Injury Types</h2>
         <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-end">
           <SettingControl value={effectiveSetting} settings={settings.length ? settings : ['all']} onChange={setSetting} />
           <MetricControl value={metric} onChange={setMetric} locationOnly />
@@ -1918,7 +1921,7 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
           </div>
           <SettingSplitBars
             profiles={classifiedFamilies}
-            title="Match against training by injury type"
+            title="Match Vs Training By Injury Type"
             emptyMessage="No injury type has both a match and a training row."
           />
         </div>
@@ -1991,7 +1994,7 @@ export function TeamDashboard({
         </div>
         <div className="min-w-0">
           <h1
-            className="text-2xl font-bold leading-tight text-foreground sm:text-3xl"
+            className="text-2xl font-bold leading-tight text-foreground capitalize sm:text-3xl"
             style={teamColor && teamColor.source !== 'achromatic' ? { color: teamColor.text } : undefined}
           >
             {teamName} Dashboard

@@ -946,7 +946,7 @@ export function ComparisonScatterChart({
     : { value: 'League training mean', position: 'right' as const, fill: SETTING_COLORS.training, fontSize: 10 };
 
   return (
-    <section aria-label="Match against training TL incidence for every club. Horizontal position is match TL incidence, vertical position is training TL incidence, and circle area is player-hours. The green zone is below both league means and the red zone is above both league means.">
+    <section aria-label="Match vs training TL incidence for every club. Horizontal position is match TL incidence, vertical position is training TL incidence, and circle area is player-hours. The green zone is below both league means and the red zone is above both league means.">
       <div className="pb-2" ref={boxRef}>
         <div className="h-[360px] sm:min-w-[620px]">
           <ResponsiveContainer width="100%" height="100%">

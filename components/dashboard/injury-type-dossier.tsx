@@ -148,7 +148,7 @@ export function InjuryTypeDossier({
       <div className="flex items-start justify-between gap-4 px-5 py-4" style={{ boxShadow: `inset 3px 0 0 ${color}` }}>
         <div className="min-w-0">
           <p className="text-xs font-medium text-muted-foreground">Selected injury type</p>
-          <h3 className="mt-1 truncate text-xl font-semibold leading-tight text-foreground">{row?.label ?? 'Not available'}</h3>
+          <h3 className="mt-1 truncate text-xl font-semibold leading-tight text-foreground capitalize">{row?.label ?? 'Not Available'}</h3>
         </div>
         {rank && total > 0 ? (
           <p className="shrink-0 text-xs tabular-nums text-muted-foreground">Rank {rank} of {total}</p>
@@ -163,7 +163,7 @@ export function InjuryTypeDossier({
 
       <div className="flex flex-1 flex-col px-5 py-4">
         <div className="flex items-baseline justify-between gap-4">
-          <h4 className="text-sm font-semibold text-foreground">Included injury types</h4>
+          <h4 className="text-sm font-semibold text-foreground">Included Injury Types</h4>
           <span className="text-[11px] text-muted-foreground">TL injuries</span>
         </div>
         {contributingSubtypes.length ? (

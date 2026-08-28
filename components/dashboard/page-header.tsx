@@ -38,7 +38,7 @@ export function PageHeader({
             <Image src={imageUrl} alt={crestAlt} width={48} height={48} className="object-contain" />
           </div>
         )}
-        <h1 className="truncate text-2xl font-bold text-foreground sm:text-3xl">{title}</h1>
+        <h1 className="truncate text-2xl font-bold leading-tight text-foreground capitalize sm:text-3xl">{title}</h1>
       </div>
     </header>
   );

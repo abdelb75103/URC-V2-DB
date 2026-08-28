@@ -114,7 +114,7 @@ test('injury type dossier links ranked selection to exact subtype evidence', asy
   assert.match(dossier, /onClick/);
   assert.match(dossier, /aria-pressed=\{selected\}/);
   assert.match(dossier, /min-h-14/);
-  assert.match(dossier, /Included injury types/);
+  assert.match(dossier, /Included Injury Types/);
   assert.match(dossier, /label: 'TL incidence'/);
   assert.match(dossier, /label: 'TL injuries'/);
   assert.match(dossier, /subtype\.time_loss_injuries > 0/);
