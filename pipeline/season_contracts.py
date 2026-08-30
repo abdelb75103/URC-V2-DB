@@ -223,7 +223,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         MigrationContract(
             version="20260830160000",
             name="urc_2025_26_v6_exposure_successor_league_snapshot",
-            sha256="d3fd1527679807156c7676500b283534fe0fab5a30b4f678a40fa2b9283e8415",
+            sha256="c01c5cc7295605603eeb3ff2cea1dd853cbc244c74be303c2ebb6ca1366dd9be",
         ),
     ),
     release_rule_version="league_dashboard_release_2026-08-15_v6",

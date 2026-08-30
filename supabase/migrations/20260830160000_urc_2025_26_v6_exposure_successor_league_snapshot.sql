@@ -370,8 +370,8 @@ begin
   if (select count(*) from _v6_league_summary) <> 1
     or not exists (
       select 1 from _v6_league_summary
-      where recorded_injuries = 335 and time_loss_injuries = 107
-        and days_lost = 1950
+      where recorded_injuries = 7514 and time_loss_injuries = 138
+        and days_lost = 2881
     )
   then
     raise exception 'V6 staged league summary is incomplete or differs from approved members';
@@ -464,7 +464,7 @@ begin
     raise exception 'V6 staged coverage, build or release evidence is incomplete';
   end if;
 
-  if (select count(*) from _v6_league_profiles) <> 213
+  if (select count(*) from _v6_league_profiles) <> 227
     or (
       select count(*) from (
         select setting_code, dimension, code, label
@@ -841,8 +841,10 @@ begin
       select 1
       from information_schema.role_table_grants
       where table_schema = 'analysis'
-        and table_name =
-          'league_dashboard_release_candidate_snapshot_v6_20260830'
+        and table_name in (
+          'league_dashboard_release_candidate_snapshot_v6_20260830',
+          'league_dashboard_release_candidates_analysis_window_v6'
+        )
         and grantee in ('PUBLIC', 'anon', 'authenticated', 'web_reader')
     )
     or not exists (
@@ -852,7 +854,7 @@ begin
         'analysis.league_dashboard_release_candidate_snapshot_v6_20260830'::regclass
         and tgname =
           'league_dashboard_release_candidate_snapshot_v6_20260830_immutable'
-        and tgenabled <> 'D'
+        and tgenabled in ('O', 'A')
         and not tgisinternal
     )
     or (

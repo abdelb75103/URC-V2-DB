@@ -109,7 +109,9 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
         for token in (
             "relrowsecurity",
             "role_table_grants",
+            "league_dashboard_release_candidates_analysis_window_v6",
             "pg_trigger",
+            "tgenabled in ('o', 'a')",
             "security_invoker=true",
             "array_agg(column_name::text order by ordinal_position)",
             "includes_temporary_league_mean_estimates_for_two_teams",

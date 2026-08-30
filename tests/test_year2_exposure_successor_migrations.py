@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from decimal import Decimal
 from pathlib import Path
 import unittest
 
@@ -20,6 +22,7 @@ TEAM_SNAPSHOT = (
     ROOT
     / "supabase/migrations/20260830155000_urc_2025_26_v6_exposure_successor_team_snapshot.sql"
 )
+PREFLIGHT_DIR = ROOT / "data/reporting/year2_exposure_successor_preflight"
 
 
 class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
@@ -113,6 +116,10 @@ class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
             "exposure_rows = 62481",
             "exposed_players = 490",
             "weeks = 44",
+            "recorded_injuries = 7514",
+            "time_loss_injuries = 138",
+            "days_lost = 2881",
+            "count(*) from _v6_league_profiles) <> 227",
             "includes_temporary_league_mean_estimates_for_two_teams",
             "before update or delete",
             "enable row level security",
@@ -137,6 +144,85 @@ class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
             "jsonb_array_length(dashboard -> 'limitations') = 3",
         ):
             self.assertIn(token, sql)
+
+    def test_local_reviewed_members_reproduce_every_pinned_league_cardinality(self) -> None:
+        if not PREFLIGHT_DIR.is_dir():
+            self.skipTest("reviewed local preflight set is not present")
+
+        payload_paths = sorted(
+            path for path in PREFLIGHT_DIR.glob("*.json")
+            if not path.name.endswith(".manifest.json")
+        )
+        self.assertEqual(len(payload_paths), 16)
+        recorded = time_loss = days_lost = 0
+        source_rows = 0
+        source_hours = Decimal(0)
+        total_hours = Decimal(0)
+        estimate_hours: dict[str, Decimal] = {}
+        profile_keys: set[tuple[str, str, str, str]] = set()
+        severity_keys: set[str] = set()
+        setting_keys: set[str] = set()
+        contact_keys: set[tuple[str, str, str]] = set()
+        months: set[str] = set()
+        setting_cells = contact_cells = 0
+
+        for path in payload_paths:
+            payload_bytes = path.read_bytes()
+            payload = json.loads(
+                payload_bytes,
+                parse_float=Decimal,
+                parse_int=Decimal,
+            )
+            manifest = json.loads(Path(f"{path}.manifest.json").read_bytes())
+            self.assertEqual(
+                manifest["preflight_file_sha256"],
+                hashlib.sha256(payload_bytes).hexdigest(),
+            )
+            headline = {item["key"]: item for item in payload["headline"]}
+            recorded += int(headline["recorded_injuries"]["value"])
+            time_loss += int(headline["time_loss_injuries"]["value"])
+            days_lost += int(headline["severity_mean_days"]["numerator"])
+            coverage = payload["coverage"]
+            total_hours += coverage["hours"]
+            if coverage["included_exposure_status"] == (
+                "source_backed_exposure_submitted_may_be_incomplete"
+            ):
+                source_hours += coverage["hours"]
+                source_rows += int(coverage["exposure_rows"])
+            else:
+                estimate_hours[path.stem] = coverage["hours"]
+            profile_keys.update(
+                (item["setting"], item["dimension"], item["code"], item["label"])
+                for item in payload["injury_profiles"]
+            )
+            severity_keys.update(item["key"] for item in payload["severity_distribution"])
+            setting_keys.update(item["setting"] for item in payload["setting_metrics"])
+            contact_keys.update(
+                (item["setting"], item["key"], item["label"])
+                for item in payload["contact_distribution"]
+            )
+            months.update(item["month"] for item in payload["monthly"])
+            setting_cells += len(payload["setting_metrics"])
+            contact_cells += len(payload["contact_distribution"])
+
+        self.assertEqual((recorded, time_loss, days_lost), (7514, 138, 2881))
+        self.assertEqual(source_rows, 62481)
+        self.assertEqual(source_hours, Decimal("76872.2616717166666666"))
+        self.assertEqual(total_hours, Decimal("87854.0133391047619046"))
+        self.assertEqual(
+            estimate_hours,
+            {
+                "benetton": Decimal("5490.8758336940476190"),
+                "edinburgh": Decimal("5490.8758336940476190"),
+            },
+        )
+        self.assertEqual(len(profile_keys), 227)
+        self.assertEqual(len(severity_keys), 7)
+        self.assertEqual(len(setting_keys), 4)
+        self.assertEqual(len(contact_keys), 12)
+        self.assertEqual(len(months), 10)
+        self.assertEqual(setting_cells, 64)
+        self.assertEqual(contact_cells, 192)
 
     def test_team_snapshot_is_private_immutable_and_state_bound(self) -> None:
         sql = TEAM_SNAPSHOT.read_text().lower()

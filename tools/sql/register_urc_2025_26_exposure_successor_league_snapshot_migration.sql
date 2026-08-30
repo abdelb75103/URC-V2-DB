@@ -40,8 +40,10 @@ begin
       select 1
       from information_schema.role_table_grants
       where table_schema = 'analysis'
-        and table_name =
-          'league_dashboard_release_candidate_snapshot_v6_20260830'
+        and table_name in (
+          'league_dashboard_release_candidate_snapshot_v6_20260830',
+          'league_dashboard_release_candidates_analysis_window_v6'
+        )
         and grantee in ('PUBLIC', 'anon', 'authenticated', 'web_reader')
     )
     or not exists (
@@ -51,7 +53,7 @@ begin
         'analysis.league_dashboard_release_candidate_snapshot_v6_20260830'::regclass
         and tgname =
           'league_dashboard_release_candidate_snapshot_v6_20260830_immutable'
-        and tgenabled <> 'D'
+        and tgenabled in ('O', 'A')
         and not tgisinternal
     )
     or (
@@ -81,7 +83,7 @@ insert into supabase_migrations.schema_migrations (version, name, statements)
 values (
   '20260830160000',
   'urc_2025_26_v6_exposure_successor_league_snapshot',
-  array['migration_sha256=d3fd1527679807156c7676500b283534fe0fab5a30b4f678a40fa2b9283e8415']
+  array['migration_sha256=c01c5cc7295605603eeb3ff2cea1dd853cbc244c74be303c2ebb6ca1366dd9be']
 )
 on conflict (version) do nothing;
 
@@ -92,7 +94,7 @@ begin
     where version = '20260830160000'
       and name = 'urc_2025_26_v6_exposure_successor_league_snapshot'
       and statements = array[
-        'migration_sha256=d3fd1527679807156c7676500b283534fe0fab5a30b4f678a40fa2b9283e8415'
+        'migration_sha256=c01c5cc7295605603eeb3ff2cea1dd853cbc244c74be303c2ebb6ca1366dd9be'
       ]
   ) then
     raise exception 'Year 2 exposure-successor league snapshot registration is invalid';
