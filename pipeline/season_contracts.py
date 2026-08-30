@@ -82,6 +82,7 @@ class ReleaseContract:
     league_summary_view: str | None = None
     required_migrations: tuple[str, ...] = ()
     required_migration_contracts: tuple[MigrationContract, ...] = ()
+    league_required_migration_contracts: tuple[MigrationContract, ...] = ()
     release_rule_version: str | None = None
     release_reason_code: str | None = None
     decision_recorded_at: str | None = None
@@ -164,6 +165,8 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260822030000",
         "20260822220611",
         "20260823120000",
+        "20260830150000",
+        "20260830155000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -206,6 +209,23 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             name="urc_2025_26_v6_league_candidate_fast_path",
             sha256="ad8ed2146569c81020f2d8425a84d053045a1bf727f767949eff0cee97f715eb",
         ),
+        MigrationContract(
+            version="20260830150000",
+            name="urc_2025_26_exposure_successor_placeholders",
+            sha256="4f890614d38f6b899b412e0a019cb53fd53306cf6cc557e351e197e9ab489912",
+        ),
+        MigrationContract(
+            version="20260830155000",
+            name="urc_2025_26_v6_exposure_successor_team_snapshot",
+            sha256="9a5168da5d23bcb775c4e9c71fd03516e5cbc8fd55ad7c4376977d5cdbef326d",
+        ),
+    ),
+    league_required_migration_contracts=(
+        MigrationContract(
+            version="20260830160000",
+            name="urc_2025_26_v6_exposure_successor_league_snapshot",
+            sha256="c01c5cc7295605603eeb3ff2cea1dd853cbc244c74be303c2ebb6ca1366dd9be",
+        ),
     ),
     release_rule_version="league_dashboard_release_2026-08-15_v6",
     release_reason_code="league_dashboard_release_v6",
@@ -216,10 +236,10 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     classification_rule_evidence_locator="docs/evidence/urc_2025_26_classification_rule.json",
     classification_rule_evidence_sha256="e898320fc5fa8cdfbf4fde4382d1ade62c87fe2dbef820ecf72b557bfb07cd5f",
     exposure_coverage_evidence_locator=(
-        "docs/evidence/urc_2025_26_incomplete_exposure_reporting_v6.json"
+        "docs/evidence/urc_2025_26_exposure_successor_v6.json"
     ),
     exposure_coverage_evidence_sha256=(
-        "b6fae7ce7e4609000337c29d7965e99809da3733b126522a1faabf600fdcc23c"
+        "66ba0a272de96510106a68c74046d4bf59ab04570ed38d83cbb98665f51c3ce1"
     ),
     injury_eligibility_evidence_locator=(
         "docs/evidence/urc_2025_26_injury_eligibility_bridge.json"

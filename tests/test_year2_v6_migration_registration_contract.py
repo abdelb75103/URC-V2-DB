@@ -17,6 +17,28 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRATION = (
     ROOT / "tools/sql/register_urc_2025_26_v6_migrations.sql"
 ).read_text(encoding="utf-8")
+PLACEHOLDER_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_exposure_successor_placeholder_migration.sql"
+).read_text(encoding="utf-8")
+TEAM_SNAPSHOT_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_exposure_successor_team_snapshot_migration.sql"
+).read_text(encoding="utf-8")
+LEAGUE_SNAPSHOT_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_exposure_successor_league_snapshot_migration.sql"
+).read_text(encoding="utf-8")
+
+
+def registration_for(version: str) -> str:
+    if version == "20260830150000":
+        return PLACEHOLDER_REGISTRATION
+    if version == "20260830155000":
+        return TEAM_SNAPSHOT_REGISTRATION
+    if version == "20260830160000":
+        return LEAGUE_SNAPSHOT_REGISTRATION
+    return REGISTRATION
 
 
 class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
@@ -58,9 +80,46 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
         for item in contract.required_migration_contracts:
             migration = ROOT / "supabase/migrations" / f"{item.version}_{item.name}.sql"
             self.assertEqual(item.sha256, hashlib.sha256(migration.read_bytes()).hexdigest())
-            self.assertEqual(REGISTRATION.count(item.statement), 2)
-            self.assertIn(f"'{item.version}',", REGISTRATION)
-            self.assertIn(f"'{item.name}'", REGISTRATION)
+            registration = registration_for(item.version)
+            self.assertEqual(registration.count(item.statement), 2)
+            self.assertIn(f"'{item.version}',", registration)
+            self.assertIn(f"'{item.name}'", registration)
+
+    def test_league_release_adds_the_sealed_successor_snapshot_contract(self) -> None:
+        base_contracts = pipeline.release_migration_contracts(
+            YEAR2_2025_26_RELEASE_CONTRACT
+        )
+        league_contracts = pipeline.release_migration_contracts(
+            YEAR2_2025_26_RELEASE_CONTRACT,
+            include_league=True,
+        )
+
+        self.assertEqual(
+            tuple(item.version for item in league_contracts),
+            tuple(item.version for item in base_contracts) + ("20260830160000",),
+        )
+        item = league_contracts[-1]
+        migration = ROOT / "supabase/migrations" / f"{item.version}_{item.name}.sql"
+        self.assertEqual(item.sha256, hashlib.sha256(migration.read_bytes()).hexdigest())
+        self.assertEqual(LEAGUE_SNAPSHOT_REGISTRATION.count(item.statement), 2)
+
+    def test_successor_league_registration_rechecks_privacy_shape_and_semantics(self) -> None:
+        registration = LEAGUE_SNAPSHOT_REGISTRATION.lower()
+
+        for token in (
+            "relrowsecurity",
+            "role_table_grants",
+            "league_dashboard_release_candidates_analysis_window_v6",
+            "pg_trigger",
+            "tgenabled in ('o', 'a')",
+            "security_invoker=true",
+            "array_agg(column_name::text order by ordinal_position)",
+            "includes_temporary_league_mean_estimates_for_two_teams",
+            "87854.0133391047619046",
+            "jsonb_array_length(dashboard -> 'limitations') = 3",
+            "payload_sha256 = reporting.canonical_jsonb_sha256_v1(dashboard)",
+        ):
+            self.assertIn(token, registration)
 
     def test_registration_fails_closed_on_missing_objects_or_private_table_grants(self) -> None:
         for token in (

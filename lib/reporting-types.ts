@@ -212,6 +212,7 @@ export type ExposureReviewPreview = {
 export type TeamComparisonRow = {
   comparison_id: string;
   team_alias: string;
+  included_exposure_status: string;
   exposure_hours: number | null;
   distance_km: number | null;
   match_hours: number | null;

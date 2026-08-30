@@ -113,7 +113,7 @@ class IncompleteExposureReportingV6Tests(unittest.TestCase):
         )
         self.assertEqual(
             evidence_sha256,
-            YEAR2_2025_26_RELEASE_CONTRACT.exposure_coverage_evidence_sha256,
+            "b6fae7ce7e4609000337c29d7965e99809da3733b126522a1faabf600fdcc23c",
         )
         self.assertEqual(
             hashlib.sha256(MIGRATION.read_bytes()).hexdigest(),
@@ -129,8 +129,8 @@ class IncompleteExposureReportingV6Tests(unittest.TestCase):
         self.assertIn(
             {
                 "role": "incomplete_exposure_reporting",
-                "locator": "docs/evidence/urc_2025_26_incomplete_exposure_reporting_v6.json",
-                "sha256": "b6fae7ce7e4609000337c29d7965e99809da3733b126522a1faabf600fdcc23c",
+                "locator": "docs/evidence/urc_2025_26_exposure_successor_v6.json",
+                "sha256": "66ba0a272de96510106a68c74046d4bf59ab04570ed38d83cbb98665f51c3ce1",
             },
             records,
         )

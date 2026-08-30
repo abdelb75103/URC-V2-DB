@@ -30,6 +30,27 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 **Rollback.** The current immutable release `urc-2024-25-v5-0445139ad3a3-a1` remains retained. Rollback is a new ordinary release from those retained predecessor bytes, never a mutation or re-approval of the historical release.
 
+---
+
+## 2026-08-30: Reviewed 2025-26 exposure successor and temporary team estimates
+
+| Field | Value |
+|---|---|
+| Status | `accepted-for-live-execution`: the exact 14-team V14 package and two-phase release implementation passed independent Sol xhigh review. No database operation or dashboard promotion had run when this decision was recorded. |
+| Rule version | `urc_2025_26_exposure_successor_2026_08_30_v1` |
+| Carry-forward | `season-specific`: the 14 source-backed files and two temporary estimates apply only to 2025-26. A later season requires its own reviewed exposure evidence. |
+| Evidence | Candidate manifest SHA-256 `b292df743642e2c01365fc56f68b49446ec496c1765206013c52e570e297a3f8`; QC SHA-256 `1d9036750a56e1e47725a483e3de019526ad570c9cb789ee36b270c55ae91d14`; reporting evidence `docs/evidence/urc_2025_26_exposure_successor_v6.json`, SHA-256 `66ba0a272de96510106a68c74046d4bf59ab04570ed38d83cbb98665f51c3ce1`; V14 root SHA-256 `44a4b66806462ef83e97fe93fceb58b26ddd989b43b7fb5ebc0fe72a426cdd5c`. |
+| Migrations | Team candidate and placeholder boundary `20260830150000`, SHA-256 `4f890614d38f6b899b412e0a019cb53fd53306cf6cc557e351e197e9ab489912`; immutable active-state-bound team snapshot `20260830155000`, SHA-256 `9a5168da5d23bcb775c4e9c71fd03516e5cbc8fd55ad7c4376977d5cdbef326d`; finite-time materialised-member league snapshot `20260830160000`, SHA-256 `c01c5cc7295605603eeb3ff2cea1dd853cbc244c74be303c2ebb6ca1366dd9be`. |
+| Decision provenance | Abdel Babiker, 30 August 2026, conditional on exact candidate revalidation, independent review, approved-target proof before each database operation, reporting-only estimates and no 2024-25 drift. |
+
+**Source-backed denominator.** Fourteen team exposure files contribute 62,481 included rows and exact included hours of `76872.26167171666666666666667`. Curated builds select each file by its reviewed SHA-256, not by filename alone. The package preserves the candidate decisions, predecessor chain and source-row lineage. No exposure value is imputed inside those files.
+
+**Temporary estimates.** Benetton and Edinburgh have no source-backed exposure hours. Each receives one season-total estimate equal to the exact source-backed total divided by 14. Fixture-derived match hours remain unchanged and training hours equal the temporary total less those match hours. Monthly exposure and distance remain unavailable. A valid source-backed denominator always takes precedence, so a future reviewed submission retires the reporting overlay without changing source history.
+
+**Publication boundary.** Team payloads label the estimate explicitly and retain the limitation text. The league payload labels that it includes two temporary estimates and keeps league distance unavailable. The private placeholder event ledger is append-only and unavailable to website roles. The league candidate is sealed only after all 16 exact team release and build identities exist. The 2024-25 relations, release payloads and readers are not referenced or modified. No Vercel operation is part of this change.
+
+---
+
 ## 2026-08-30: Accepted 2025-26 zero-day and date-duration successor
 
 | Field | Value |

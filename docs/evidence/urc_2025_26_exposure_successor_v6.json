@@ -1,0 +1,50 @@
+{
+  "schema": "urc_2025_26_exposure_successor_v6_evidence_v1",
+  "season": "2025-26",
+  "candidate": "v13_exposure_successor_full_16_20260830_v4_scope_adjudicated",
+  "candidate_manifest_sha256": "b292df743642e2c01365fc56f68b49446ec496c1765206013c52e570e297a3f8",
+  "candidate_qc_sha256": "1d9036750a56e1e47725a483e3de019526ad570c9cb789ee36b270c55ae91d14",
+  "candidate_qc_status": "pass",
+  "row_count": 83076,
+  "included_row_count": 62481,
+  "included_hours_exact_from_csv": "76872.26167171666666666666667",
+  "included_hours_rounded_6dp": "76872.261672",
+  "new_excluded_row_count": 5379,
+  "new_excluded_hours": "4909.8404721",
+  "hours_imputed_in_candidate": 0,
+  "privacy_hits_reported_by_candidate_qc": 0,
+  "source_backed_team_count": 14,
+  "teams_without_source_backed_hours": [
+    "benetton",
+    "edinburgh"
+  ],
+  "temporary_placeholder": {
+    "method": "mean_of_other_14_source_backed_team_hours_v1",
+    "calculation": "sum of active source-backed team hours excluding Benetton and Edinburgh, divided by 14",
+    "application": "Benetton and Edinburgh only",
+    "retirement": "a valid source-backed denominator always takes precedence over the placeholder",
+    "monthly_exposure": "not estimated",
+    "distance": "not estimated"
+  },
+  "limitations": [
+    "Benetton and Edinburgh season exposure hours are temporary league-mean estimates, not submitted exposure.",
+    "Their training hours are the estimated total less fixture-derived match hours.",
+    "Their monthly exposure and distance remain unavailable because the placeholder has no session-level source rows."
+  ],
+  "source_backed_exposure_sha256s": {
+    "bulls": "eb10d32f46e0eb85bf5f246b7a30f7778860a447cc5f633cdfc3f6c4c66c2ca3",
+    "cardiff": "0462c28deb1bdde6dad780b9e7410e74c6bf7b1bbbc1b9b56ed301353e775438",
+    "connacht": "db65fead17ddd81882fc7a7076b3a1a7f05eabe9a6224324f5e20b3e62b8c4e6",
+    "dragons": "d179be4b86753792e726b649c75a93bb8fa0b59da528d1e8f6272e7efd74b3f0",
+    "glasgow": "cc914cf335d506325148e263b6ead6eb968af9f06933f93e787030ce40e0fddb",
+    "leinster": "d003759fb23c70f94ee6cda8dd6ec3bdd22a7ece45b6efc57689f6043e922639",
+    "lions": "b9b756d0dbd2dd285baa8b3e7f600fdc3d141e302500a28257dc39dbf6d0cbb1",
+    "munster": "aacb57fd82c46b41f9479068bd4ada6966ca218052254fae28b4a411db663bf4",
+    "ospreys": "e99c4b44b2faba4d1e3bb76802f30c6817e9a89116a7edf6e97e31a02ca79c28",
+    "scarlets": "db6123174ebcbd65845a9f294aa44b23a39990d7aace0c6b3c6d843ba0b6b775",
+    "sharks": "9e5f3653d66c359f1b72586224edab6942edb771a6aaa7b4f82295d31bd1b722",
+    "stormers": "cce607106b672eb7be05cf955638f603b03cd543546776c4d3fec39691049b1e",
+    "ulster": "9ad6331f328f75af9a408ea5f8bdef6f093678f5d808592f0a47329a22e357d8",
+    "zebre": "26c058a659823e5c9f818b2525d3daab6c16fd3a4cd0722b7e9c82af0089c1fa"
+  }
+}

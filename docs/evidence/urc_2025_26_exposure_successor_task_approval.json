@@ -1,0 +1,29 @@
+{
+  "schema": "urc_2025_26_exposure_successor_task_approval_v1",
+  "approved_by": "Abdel Babiker",
+  "requested_at": "2026-08-30T18:31:10Z",
+  "source_thread_id": "01a053f0-94b4-7c82-b509-82d4210c373e",
+  "source_item_id": "fco_01a053f0-9701-76c1-b47c-da06c93a5ccf",
+  "approval_statement": "Ingest the reviewed 2025-26 exposure into the approved live database in the established 2024-25 analytical shape, keep the seasons isolated, add clearly labelled temporary league-mean placeholders for Benetton and Edinburgh, and carry the reviewed result through the existing 2025-26 dashboard release path.",
+  "candidate_manifest_sha256": "b292df743642e2c01365fc56f68b49446ec496c1765206013c52e570e297a3f8",
+  "candidate_qc_sha256": "1d9036750a56e1e47725a483e3de019526ad570c9cb789ee36b270c55ae91d14",
+  "authorisation": {
+    "database_action_authorised": true,
+    "project_ref": "eukkvswaxweenovqqgzr",
+    "database": "postgres",
+    "actions": [
+      "ingestion",
+      "processing",
+      "build",
+      "migration",
+      "release"
+    ]
+  },
+  "conditions": [
+    "The exact candidate, manifests, decisions and privacy boundary must pass revalidation.",
+    "A fresh independent review must pass before live mutation.",
+    "The approved Supabase/Postgres target must be proved immediately before every database query or write.",
+    "Benetton and Edinburgh estimates must remain reporting overlays and never source evidence.",
+    "No 2024-25 data or released payload may drift."
+  ]
+}

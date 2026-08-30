@@ -789,6 +789,7 @@ function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"
 
     return {
       internal_team_key: row.team_key,
+      included_exposure_status: row.coverage.included_exposure_status,
       exposure_hours: row.coverage.hours,
       distance_km: row.coverage.distance_km,
       match_hours: row.coverage.match_hours ?? null,

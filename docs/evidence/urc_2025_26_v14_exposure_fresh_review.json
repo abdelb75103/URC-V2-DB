@@ -1,0 +1,37 @@
+{
+  "schema": "urc_2025_26_v14_exposure_fresh_review_v1",
+  "season": "2025-26",
+  "decision": "PASS",
+  "completed_at": "2026-08-30T19:10:15Z",
+  "candidate_manifest_sha256": "b292df743642e2c01365fc56f68b49446ec496c1765206013c52e570e297a3f8",
+  "candidate_qc_sha256": "1d9036750a56e1e47725a483e3de019526ad570c9cb789ee36b270c55ae91d14",
+  "reviewer": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "xhigh",
+    "task": "/root/year2_exposure_release_review"
+  },
+  "scope": [
+    "candidate manifest and QC identity",
+    "exact source-file selection",
+    "temporary placeholder derivation and precedence",
+    "team and league migration phase split",
+    "immutable task approval binding",
+    "V14 package and ingest validation contract",
+    "2024-25 season isolation",
+    "least-privilege reporting boundary"
+  ],
+  "material_findings": [],
+  "resolved_findings": [
+    "Pinned each source-backed 2025-26 build to its exact reviewed exposure SHA-256.",
+    "Separated the team-required placeholder migration from the league-only sealed snapshot migration.",
+    "Bound package approval to the exact immutable task instruction bytes.",
+    "Required explicit null mapping fields and exact review and approval timestamps.",
+    "Bound source-backed team candidates to all 14 approved exposure SHA-256 values."
+  ],
+  "verification": {
+    "focused_python_tests": 176,
+    "git_diff_check": "pass",
+    "database_accessed": false,
+    "vercel_accessed": false
+  }
+}
