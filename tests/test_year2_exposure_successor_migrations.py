@@ -16,6 +16,10 @@ LEAGUE = (
     ROOT
     / "supabase/migrations/20260830160000_urc_2025_26_v6_exposure_successor_league_snapshot.sql"
 )
+TEAM_SNAPSHOT = (
+    ROOT
+    / "supabase/migrations/20260830155000_urc_2025_26_v6_exposure_successor_team_snapshot.sql"
+)
 
 
 class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
@@ -29,6 +33,10 @@ class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
         self.assertEqual(
             by_version["20260830150000"].sha256,
             hashlib.sha256(PLACEHOLDER.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            by_version["20260830155000"].sha256,
+            hashlib.sha256(TEAM_SNAPSHOT.read_bytes()).hexdigest(),
         )
         self.assertEqual(
             by_version["20260830160000"].sha256,
@@ -82,6 +90,44 @@ class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
         self.assertIn("member_count = 16", league)
         self.assertNotIn("2024-25", placeholder)
         self.assertNotIn("2024-25", league)
+
+    def test_team_snapshot_is_private_immutable_and_state_bound(self) -> None:
+        sql = TEAM_SNAPSHOT.read_text().lower()
+
+        for token in (
+            "enable row level security",
+            "before update or delete",
+            "active_state_sha256",
+            "'builds', build_state.builds",
+            "'placeholders', placeholder_state.placeholders",
+            "count(*) = 16",
+            "count(*) = 2",
+            "payload_sha256 = reporting.canonical_jsonb_sha256_v1(dashboard)",
+        ):
+            self.assertIn(token, sql)
+        self.assertNotIn("grant select", sql)
+        self.assertNotIn("2024-25", sql)
+
+        view_select = sql.split(
+            "create or replace view analysis.team_dashboard_release_candidates_analysis_window_v6",
+            maxsplit=1,
+        )[1].split("from analysis.team_dashboard_release_candidate_snapshot_v6_20260830", maxsplit=1)[0]
+        for column in (
+            "snapshot.team_key", "snapshot.season", "snapshot.team_release_id",
+            "snapshot.curated_build_id", "snapshot.analysis_version",
+            "snapshot.classification_view_version",
+            "snapshot.classification_evidence_sha256",
+            "snapshot.cohort_view_version", "snapshot.cohort_evidence_sha256",
+            "snapshot.dashboard", "snapshot.processing_eligible_injury_count",
+            "snapshot.eligible_curated_injury_count", "snapshot.recorded_cohort_count",
+            "snapshot.processing_record_version_set_sha256",
+            "snapshot.curated_record_version_set_sha256",
+            "snapshot.reporting_record_version_set_sha256",
+            "snapshot.approved_injury_source_file_count",
+            "snapshot.unapproved_injury_source_row_count",
+            "snapshot.wrong_problem_type_rule_version_count",
+        ):
+            self.assertEqual(view_select.count(column), 1)
 
 
 if __name__ == "__main__":

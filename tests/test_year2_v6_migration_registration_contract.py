@@ -21,6 +21,10 @@ PLACEHOLDER_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_exposure_successor_placeholder_migration.sql"
 ).read_text(encoding="utf-8")
+TEAM_SNAPSHOT_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_exposure_successor_team_snapshot_migration.sql"
+).read_text(encoding="utf-8")
 LEAGUE_SNAPSHOT_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_exposure_successor_league_snapshot_migration.sql"
@@ -30,6 +34,8 @@ LEAGUE_SNAPSHOT_REGISTRATION = (
 def registration_for(version: str) -> str:
     if version == "20260830150000":
         return PLACEHOLDER_REGISTRATION
+    if version == "20260830155000":
+        return TEAM_SNAPSHOT_REGISTRATION
     if version == "20260830160000":
         return LEAGUE_SNAPSHOT_REGISTRATION
     return REGISTRATION
