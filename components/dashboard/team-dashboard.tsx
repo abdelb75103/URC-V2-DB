@@ -494,7 +494,7 @@ function OverviewTab({
       <Panel contentClassName="p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h3 className={PANEL_HEADING_CLASS}>Season Timeline</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Season timeline</h3>
             <ScopeChip show={effectiveSetting !== 'all' && !perSettingMonthly} />
           </div>
           <div className="flex flex-wrap gap-4">
@@ -617,7 +617,7 @@ function OverviewTab({
         )}
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h3 className={PANEL_HEADING_CLASS}>Match Vs Training</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Match vs training</h3>
             <MetricControl value={benchMetric} onChange={setBenchMetric} />
           </div>
           <SettingBench match={match} training={training} metric={benchMetric} />
@@ -1481,7 +1481,6 @@ function ExposureTab({
     || monthlyRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)))
     || comparisonRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)));
   const hasExposureTotals = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value));
-  const usesEstimate = coverage.included_exposure_status.includes('estimate');
 
   if (!hasExposureData) {
     return (
@@ -1495,12 +1494,6 @@ function ExposureTab({
   return (
     <div className="space-y-5 sm:space-y-6">
       <SectionHeading title="Exposure" />
-      {usesEstimate && (
-        <div className="rounded-xl border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-          <p className="font-semibold">Temporary exposure estimate</p>
-          <p className="mt-1">{dashboard.limitations[0] ?? 'Season exposure uses a temporary league-mean estimate.'}</p>
-        </div>
-      )}
       <section aria-labelledby="total-exposure-heading">
         <h3 id="total-exposure-heading" className={`${PANEL_HEADING_CLASS} mb-3`}>Total Exposure</h3>
         {hasExposureTotals ? (
@@ -1683,7 +1676,7 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
           </div>
           <SettingSplitBars
             profiles={locationProfiles}
-            title="Match Vs Training By Region"
+            title="Match vs training by region"
             emptyMessage="No body region has both a match and a training row."
           />
         </div>
@@ -1931,7 +1924,7 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
           </div>
           <SettingSplitBars
             profiles={classifiedFamilies}
-            title="Match Vs Training By Injury Type"
+            title="Match vs training by injury type"
             emptyMessage="No injury type has both a match and a training row."
           />
         </div>
@@ -1990,6 +1983,10 @@ export function TeamDashboard({
     subtypes: withoutFrontFacingUnknown(family.subtypes),
   }));
   const scopeLabel = dashboard.scope === 'league' ? 'League-wide' : teamName;
+  const usesExposureEstimate = dashboard.coverage.included_exposure_status.includes('estimate');
+  const exposureEstimateNote = dashboard.limitations.find((item) => (
+    /temporary/i.test(item) && /estimate/i.test(item)
+  )) ?? 'Rates use a temporary league-mean season exposure estimate. Monthly exposure and distance are unavailable for estimated teams.';
 
   return (
     <div className="mx-auto w-full max-w-7xl overflow-x-clip px-4 pb-16 pt-6 sm:px-6 lg:px-8">
@@ -2013,6 +2010,17 @@ export function TeamDashboard({
           <SeasonSelector season={season} seasonPath={seasonPath} />
         </div>
       </header>
+
+      {usesExposureEstimate && (
+        <div
+          className="mb-6 rounded-xl border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"
+          role="note"
+          aria-label="Temporary exposure estimate"
+        >
+          <p className="font-semibold">Temporary exposure estimate affects rate denominators</p>
+          <p className="mt-1">{exposureEstimateNote}</p>
+        </div>
+      )}
 
       <Tabs defaultValue="overview">
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">

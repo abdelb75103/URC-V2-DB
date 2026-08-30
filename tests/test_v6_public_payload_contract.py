@@ -18,18 +18,27 @@ from pipeline.season_contracts import (
 )
 
 
+def lineage_fields() -> dict[str, str]:
+    return {
+        "injury_lineage_version_id": "2f419706-8c36-58dd-b4cb-e92162e782b8",
+        "injury_lineage_snapshot_version": "20260830170000",
+        "injury_lineage_member_sha256": "e" * 64,
+    }
+
+
 def dashboard() -> dict[str, object]:
     headline = [
-        {"key": "recorded_injuries", "label": "Recorded injuries", "value": 12, "unit": "injuries", "formula": "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"},
-        {"key": "time_loss_injuries", "label": "Time-loss injuries", "value": 9, "unit": "injuries", "formula": "count(eligible injury rows where days lost > 0)"},
-        {"key": "incidence_per_1000h", "label": "Incidence", "value": 4.5, "unit": "per 1,000 player-hours", "numerator": 9, "denominator": 2000, "formula": "pooled time-loss injuries / pooled exposure hours * 1000"},
-        {"key": "severity_mean_days", "label": "Mean severity", "value": 7, "unit": "days lost per injury", "numerator": 63, "denominator": 9, "formula": "pooled days lost / pooled time-loss injuries"},
-        {"key": "severity_median_days", "label": "Median severity", "value": 6, "unit": "days lost per injury", "formula": "median(days lost) across pooled time-loss injuries"},
-        {"key": "burden_per_1000h", "label": "Burden", "value": 31.5, "unit": "days lost per 1,000 player-hours", "numerator": 63, "denominator": 2000, "formula": "pooled days lost / pooled exposure hours * 1000"},
+        {"key": "recorded_injuries", "label": "Recorded injuries", "value": 12, "unit": "injuries", "formula": "count(final classified eligible injury rows, including undated)"},
+        {"key": "time_loss_injuries", "label": "Time-loss injuries", "value": 9, "unit": "injuries", "formula": "count(final classification = Time Loss)"},
+        {"key": "overall_incidence_per_1000h", "label": "Overall incidence", "value": 6, "unit": "per 1,000 player-hours", "numerator": 12, "denominator": 2000, "formula": "pooled recorded injuries / pooled exposure hours * 1000"},
+        {"key": "incidence_per_1000h", "label": "Incidence", "value": 4.5, "unit": "per 1,000 player-hours", "numerator": 9, "denominator": 2000, "formula": "pooled final Time Loss injuries / pooled exposure hours * 1000"},
+        {"key": "severity_mean_days", "label": "Mean severity", "value": 7, "unit": "days lost per injury", "numerator": 63, "denominator": 9, "formula": "known-duration Time Loss days lost / known-duration Time Loss injuries"},
+        {"key": "severity_median_days", "label": "Median severity", "value": 6, "unit": "days lost per injury", "denominator": 9, "formula": "median known-duration Time Loss days lost"},
+        {"key": "burden_per_1000h", "label": "Burden", "value": 31.5, "unit": "days lost per 1,000 player-hours", "numerator": 63, "denominator": 2000, "formula": "known-duration Time Loss days lost / pooled exposure hours * 1000"},
     ]
     profile = {
         "dimension": "injury_type", "code": "muscle_injury", "label": "Muscle injury", "setting": "all",
-        "time_loss_injuries": 9, "days_lost": 63, "exposure_hours": 2000,
+        "recorded_injuries": 12, "time_loss_injuries": 9, "days_lost": 63, "exposure_hours": 2000,
         "incidence_per_1000h": 4.5, "burden_per_1000h": 31.5, "mean_severity_days": 7,
     }
     contact = [
@@ -50,17 +59,22 @@ def dashboard() -> dict[str, object]:
             profile,
             {**profile, "dimension": "diagnosis", "code": "compound__thigh__muscle_injury", "label": "Thigh · Muscle injury"},
         ],
-        "injury_type_families": [{**profile, "dimension": "injury_type_family", "mapping_version": "injury_type_family_2026-07-21_v1", "subtypes": [profile]}],
+        "injury_type_families": [{**{key: value for key, value in profile.items() if key != "recorded_injuries"}, "dimension": "injury_type_family", "mapping_version": "injury_type_family_2026-07-21_v1", "subtypes": [{key: value for key, value in profile.items() if key != "recorded_injuries"}]}],
         "severity_distribution": [],
         "setting_split": [
-            {"key": key, "label": label, "time_loss_injuries": 0, "days_lost": 0,
-             "exposure_hours": None if key == "unknown" else 2000}
+            {"key": key, "label": label, "recorded_injuries": 0,
+             "time_loss_injuries": 0, "days_lost": 0,
+             "exposure_hours": None if key == "unknown" else 2000,
+             "overall_incidence_per_1000h": None, "incidence_per_1000h": None,
+             "burden_per_1000h": None, "mean_severity_days": None}
             for key, label in (("all", "All"), ("match", "Match"), ("training", "Training"), ("unknown", "Unknown"))
         ],
         "setting_metrics": [
-            {"setting": key, "label": label, "time_loss_injuries": 0, "days_lost": 0,
+            {"setting": key, "label": label, "recorded_injuries": 0,
+             "time_loss_injuries": 0, "days_lost": 0,
              "exposure_hours": None if key == "unknown" else 2000,
-             "incidence_per_1000h": None, "burden_per_1000h": None, "mean_severity_days": None}
+             "overall_incidence_per_1000h": None, "incidence_per_1000h": None,
+             "burden_per_1000h": None, "mean_severity_days": None}
             for key, label in (("all", "All"), ("match", "Match"), ("training", "Training"), ("unknown", "Unknown"))
         ],
         "contact_distribution": contact,
@@ -165,6 +179,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
             1,
         )
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
@@ -269,6 +284,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         del reviewed["coverage"]["teams_included"]  # type: ignore[index]
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
@@ -325,6 +341,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         del reviewed["coverage"]["teams_included"]  # type: ignore[index]
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
@@ -405,6 +422,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         del reviewed["coverage"]["teams_included"]  # type: ignore[index]
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         base_candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "analysis_version": "v6",
@@ -489,6 +507,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         del reviewed["coverage"]["teams_included"]  # type: ignore[index]
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
@@ -532,6 +551,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         del reviewed["coverage"]["teams_included"]  # type: ignore[index]
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
@@ -575,6 +595,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         del reviewed["coverage"]["teams_included"]  # type: ignore[index]
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
@@ -649,6 +670,7 @@ class V6AnalysisParityPublicInterfaceTests(unittest.TestCase):
         del candidate_dashboard["coverage"]["teams_included"]  # type: ignore[index]
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",

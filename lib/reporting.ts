@@ -233,52 +233,45 @@ const v6HeadlineCountSchema = z.object({
   label: z.string(), value: z.number().nullable(), unit: z.string(), formula: z.string(),
 }).strict();
 const v6HeadlineRateSchema = z.object({
-  key: z.enum(["incidence_per_1000h", "severity_mean_days", "burden_per_1000h"]),
+  key: z.enum(["overall_incidence_per_1000h", "incidence_per_1000h", "severity_mean_days", "burden_per_1000h"]),
   label: z.string(), value: z.number().nullable(), unit: z.string(),
   numerator: z.number().nullable(), denominator: z.number().nullable(), formula: z.string(),
 }).strict();
-const v6HeadlineBaseSchema = z.tuple([
+const v6HeadlineSchema = z.tuple([
   v6HeadlineCountSchema.extend({
     key: z.literal("recorded_injuries"),
-    formula: z.literal("count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)"),
+    formula: z.literal("count(final classified eligible injury rows, including undated)"),
   }).strict(),
   v6HeadlineCountSchema.extend({
     key: z.literal("time_loss_injuries"),
-    formula: z.literal("count(eligible injury rows where days lost > 0)"),
+    formula: z.literal("count(final classification = Time Loss)"),
+  }).strict(),
+  v6HeadlineRateSchema.extend({
+    key: z.literal("overall_incidence_per_1000h"),
+    formula: z.literal("pooled recorded injuries / pooled exposure hours * 1000"),
   }).strict(),
   v6HeadlineRateSchema.extend({
     key: z.literal("incidence_per_1000h"),
-    formula: z.literal("pooled time-loss injuries / pooled exposure hours * 1000"),
+    formula: z.literal("pooled final Time Loss injuries / pooled exposure hours * 1000"),
   }).strict(),
   v6HeadlineRateSchema.extend({
     key: z.literal("severity_mean_days"),
-    formula: z.literal("pooled days lost / pooled time-loss injuries"),
+    formula: z.literal("known-duration Time Loss days lost / known-duration Time Loss injuries"),
   }).strict(),
-  v6HeadlineCountSchema.extend({
+  v6HeadlineCountSchema.extend({ denominator: z.number() }).extend({
     key: z.literal("severity_median_days"),
-    formula: z.literal("median(days lost) across pooled time-loss injuries"),
+    formula: z.literal("median known-duration Time Loss days lost"),
   }).strict(),
   v6HeadlineRateSchema.extend({
     key: z.literal("burden_per_1000h"),
-    formula: z.literal("pooled days lost / pooled exposure hours * 1000"),
+    formula: z.literal("known-duration Time Loss days lost / pooled exposure hours * 1000"),
   }).strict(),
-]);
-const v6OverallIncidenceHeadlineSchema = v6HeadlineRateSchema.extend({
-  key: z.literal("overall_incidence_per_1000h"),
-  formula: z.literal("pooled recorded injuries / pooled exposure hours * 1000"),
-}).strict();
-const v6HeadlineSchema = z.union([
-  v6HeadlineBaseSchema,
-  z.tuple([
-    ...v6HeadlineBaseSchema.items,
-    v6OverallIncidenceHeadlineSchema,
-  ]),
 ]);
 const v6MonthlyRowSchema = z.object({
   month: z.string(), exposure_hours: z.number().nullable(), distance_km: z.number().nullable(),
-  recorded_injuries: z.number().int().nonnegative().optional(),
+  recorded_injuries: z.number().int().nonnegative(),
   time_loss_injuries: z.number(), days_lost: z.number(),
-  overall_incidence_per_1000h: z.number().nullable().optional(),
+  overall_incidence_per_1000h: z.number().nullable(),
   incidence_per_1000h: z.number().nullable(), burden_per_1000h: z.number().nullable(),
 }).strict();
 const v6CategoryRowSchema = z.object({
@@ -288,22 +281,27 @@ const v6CategoryRowSchema = z.object({
 }).strict();
 const v6SettingSplitRowSchema = z.object({
   key: z.enum(["all", "match", "training", "unknown"]),
-  label: z.string(), time_loss_injuries: z.number(), days_lost: z.number(),
-  exposure_hours: z.number().nullable(),
-}).strict();
-const v6SettingMetricSchema = z.object({
-  setting: z.enum(["all", "match", "training", "unknown"]),
-  label: z.string(),
-  recorded_injuries: z.number().nullable().optional(),
-  time_loss_injuries: z.number(),
+  label: z.string(), recorded_injuries: z.number(), time_loss_injuries: z.number(),
   days_lost: z.number(),
   exposure_hours: z.number().nullable(),
-  overall_incidence_per_1000h: z.number().nullable().optional(),
+  overall_incidence_per_1000h: z.number().nullable(),
   incidence_per_1000h: z.number().nullable(),
   burden_per_1000h: z.number().nullable(),
   mean_severity_days: z.number().nullable(),
 }).strict();
-const v6InjuryProfileSchema = z.object({
+const v6SettingMetricSchema = z.object({
+  setting: z.enum(["all", "match", "training", "unknown"]),
+  label: z.string(),
+  recorded_injuries: z.number(),
+  time_loss_injuries: z.number(),
+  days_lost: z.number(),
+  exposure_hours: z.number().nullable(),
+  overall_incidence_per_1000h: z.number().nullable(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+}).strict();
+const v6InjuryProfileMetricSchema = z.object({
   dimension: z.enum(["body_location", "injury_type", "injury_profile", "diagnosis"]),
   code: z.string(),
   label: z.string(),
@@ -314,8 +312,11 @@ const v6InjuryProfileSchema = z.object({
   incidence_per_1000h: z.number().nullable(),
   burden_per_1000h: z.number().nullable(),
   mean_severity_days: z.number().nullable(),
+});
+const v6InjuryProfileSchema = v6InjuryProfileMetricSchema.extend({
+  recorded_injuries: z.number(),
 }).strict();
-const v6InjuryTypeSubtypeSchema = v6InjuryProfileSchema.extend({
+const v6InjuryTypeSubtypeSchema = v6InjuryProfileMetricSchema.extend({
   dimension: z.literal("injury_type"),
 }).strict();
 const v6InjuryProfilesSchema = z.array(v6InjuryProfileSchema).superRefine((profiles, context) => {
@@ -350,7 +351,9 @@ const v6InjuryTypeFamilySchema = z.object({
     }
   });
 });
-const v6SeverityRowSchema = severityRowSchema.strict();
+const v6SeverityRowSchema = severityRowSchema.extend({
+  setting: z.literal("all"),
+}).strict();
 const v6ContactRowSchema = (
   setting: "all" | "match" | "training" | "unknown",
   key: "contact" | "non_contact" | "unknown",

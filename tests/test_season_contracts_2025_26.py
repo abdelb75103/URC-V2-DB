@@ -84,11 +84,11 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         self.assertEqual(contract.analysis_version, "v6")
         self.assertEqual(
             contract.classification_view_version,
-            "reporting_classification_2026-07-22_v2",
+            "reporting_classification_2025-26_2026-08-30_v2",
         )
         self.assertEqual(
             contract.cohort_view_version,
-            "analysis_window_2025-26_2026-08-15_v1",
+            "injury_lineage_2025-26_2026-08-30_v2",
         )
         self.assertEqual(
             contract.league_candidate_view,
@@ -103,26 +103,26 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             "analysis.league_team_dashboard_release_candidates_analysis_window_v6",
         )
         self.assertEqual(contract.member_view, "analysis.league_member_releases_v6")
-        self.assertEqual(contract.injury_cohort_view, "analysis.analysis_window_injury_cohort_v6")
-        self.assertEqual(contract.league_monthly_view, "analysis.analysis_window_league_monthly_v6")
-        self.assertEqual(contract.league_summary_view, "analysis.analysis_window_league_summary_v6")
+        self.assertEqual(contract.injury_cohort_view, "analysis.urc_2025_26_injury_successor_cohort_v1")
+        self.assertEqual(contract.league_monthly_view, "analysis.urc_2025_26_injury_successor_league_monthly_v1")
+        self.assertEqual(contract.league_summary_view, "analysis.urc_2025_26_injury_successor_league_summary_v1")
         self.assertEqual(
             contract.required_migrations,
             (
                 "20260815010000", "20260815020000", "20260815030000",
                 "20260822010000", "20260822020000", "20260822030000",
                 "20260822220611", "20260823120000", "20260830150000",
-                "20260830155000",
+                "20260830155000", "20260830170000",
             ),
         )
         self.assertEqual(
             tuple(item.version for item in contract.league_required_migration_contracts),
-            ("20260830160000",),
+            (),
         )
-        self.assertEqual(contract.cohort_adjudication_ref, "ANALYSIS-WINDOW-2025-26-01")
+        self.assertEqual(contract.cohort_adjudication_ref, "INJURY-LINEAGE-2025-26-2026-08-30-V2")
         self.assertEqual(
             contract.cohort_evidence_locator,
-            "docs/evidence/urc_2025_26_reporting_contract.json",
+            "docs/evidence/urc_2025_26_injury_reporting_cutover.json",
         )
         self.assertEqual(
             contract.exposure_coverage_evidence_locator,
@@ -288,8 +288,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         expected_hashes.update(
             {
                 "urc_2025_26_fixture_preparation.json": fixture_contract_for("2025-26").evidence_sha256,
-                "urc_2025_26_reporting_contract.json": contract.cohort_evidence_sha256,
-                "urc_2025_26_classification_rule.json": contract.classification_rule_evidence_sha256,
+                "urc_2025_26_injury_reporting_cutover.json": contract.cohort_evidence_sha256,
                 "urc_2025_26_exposure_successor_v6.json": contract.exposure_coverage_evidence_sha256,
                 "urc_2025_26_injury_eligibility_bridge.json": contract.injury_eligibility_evidence_sha256,
             }
@@ -424,8 +423,8 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         self.assertEqual(plan["season"], "2025-26")
         self.assertEqual(plan["release_tuple"], {
             "analysis_version": "v6",
-            "classification_view_version": "reporting_classification_2026-07-22_v2",
-            "cohort_view_version": "analysis_window_2025-26_2026-08-15_v1",
+            "classification_view_version": YEAR2_2025_26_RELEASE_TUPLE[1],
+            "cohort_view_version": YEAR2_2025_26_RELEASE_TUPLE[2],
         })
         self.assertEqual(plan["rollback"]["mode"], "append_only_retained_bundle_successor")
         self.assertIn("--rollback-of-release-id", plan["rollback"]["preflight"])
@@ -446,8 +445,8 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
                     "pipeline", "release-league", "--preflight",
                     "--season", "2025-26",
                     "--analysis-version", "v6",
-                    "--classification-view-version", "reporting_classification_2026-07-22_v2",
-                    "--cohort-view-version", "analysis_window_2025-26_2026-08-15_v1",
+                    "--classification-view-version", YEAR2_2025_26_RELEASE_TUPLE[1],
+                    "--cohort-view-version", YEAR2_2025_26_RELEASE_TUPLE[2],
                 ],
             ),
         ):

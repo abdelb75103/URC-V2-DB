@@ -32,8 +32,8 @@ FROZEN_2024_25_RELEASE_TUPLES = frozenset(
 
 YEAR2_2025_26_RELEASE_TUPLE: ReleaseTuple = (
     "v6",
-    "reporting_classification_2026-07-22_v2",
-    "analysis_window_2025-26_2026-08-15_v1",
+    "reporting_classification_2025-26_2026-08-30_v2",
+    "injury_lineage_2025-26_2026-08-30_v2",
 )
 
 
@@ -153,9 +153,9 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     team_candidate_view="analysis.team_dashboard_release_candidates_analysis_window_v6",
     league_team_candidate_view="analysis.league_team_dashboard_release_candidates_analysis_window_v6",
     member_view="analysis.league_member_releases_v6",
-    injury_cohort_view="analysis.analysis_window_injury_cohort_v6",
-    league_monthly_view="analysis.analysis_window_league_monthly_v6",
-    league_summary_view="analysis.analysis_window_league_summary_v6",
+    injury_cohort_view="analysis.urc_2025_26_injury_successor_cohort_v1",
+    league_monthly_view="analysis.urc_2025_26_injury_successor_league_monthly_v1",
+    league_summary_view="analysis.urc_2025_26_injury_successor_league_summary_v1",
     required_migrations=(
         "20260815010000",
         "20260815020000",
@@ -167,6 +167,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260823120000",
         "20260830150000",
         "20260830155000",
+        "20260830170000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -219,22 +220,21 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             name="urc_2025_26_v6_exposure_successor_team_snapshot",
             sha256="9a5168da5d23bcb775c4e9c71fd03516e5cbc8fd55ad7c4376977d5cdbef326d",
         ),
-    ),
-    league_required_migration_contracts=(
         MigrationContract(
-            version="20260830160000",
-            name="urc_2025_26_v6_exposure_successor_league_snapshot",
-            sha256="c01c5cc7295605603eeb3ff2cea1dd853cbc244c74be303c2ebb6ca1366dd9be",
+            version="20260830170000",
+            name="urc_2025_26_injury_successor_cutover",
+            sha256="fa81c00c7c812f0dec0f0a20eeaad51854bddc4b15af45b28c9e1f961f393988",
         ),
     ),
-    release_rule_version="league_dashboard_release_2026-08-15_v6",
-    release_reason_code="league_dashboard_release_v6",
-    decision_recorded_at="2026-08-15",
-    cohort_adjudication_ref="ANALYSIS-WINDOW-2025-26-01",
-    cohort_evidence_locator="docs/evidence/urc_2025_26_reporting_contract.json",
-    cohort_evidence_sha256="e8d82b7d5b89c32576b806bb33778601030538ba8fb56fc1a68febc5f56d3fd2",
-    classification_rule_evidence_locator="docs/evidence/urc_2025_26_classification_rule.json",
-    classification_rule_evidence_sha256="e898320fc5fa8cdfbf4fde4382d1ade62c87fe2dbef820ecf72b557bfb07cd5f",
+    league_required_migration_contracts=(),
+    release_rule_version="league_dashboard_release_2026-08-30_v6_injury_successor",
+    release_reason_code="league_dashboard_release_v6_injury_successor",
+    decision_recorded_at="2026-08-30",
+    cohort_adjudication_ref="INJURY-LINEAGE-2025-26-2026-08-30-V2",
+    cohort_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
+    cohort_evidence_sha256="f3efc83fa4629e2743dbc55e8abe8f62d1d4ced5d57a22ec872272eca56862be",
+    classification_rule_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
+    classification_rule_evidence_sha256="f3efc83fa4629e2743dbc55e8abe8f62d1d4ced5d57a22ec872272eca56862be",
     exposure_coverage_evidence_locator=(
         "docs/evidence/urc_2025_26_exposure_successor_v6.json"
     ),

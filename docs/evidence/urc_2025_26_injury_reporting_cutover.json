@@ -1,0 +1,48 @@
+{
+  "schema_version": "urc_2025_26_injury_reporting_cutover_v1",
+  "season": "2025-26",
+  "status": "accepted_for_prewrite_review",
+  "successor_version_id": "2f419706-8c36-58dd-b4cb-e92162e782b8",
+  "classification_view_version": "reporting_classification_2025-26_2026-08-30_v2",
+  "cohort_view_version": "injury_lineage_2025-26_2026-08-30_v2",
+  "source": {
+    "migration_version": "20260830140000",
+    "migration_sha256": "76598d5843072cf1b4673a1aacdaed907874c402cd6fdd88a2956ccf598cc37a",
+    "manifest_sha256": "7f890764273b1a8e389fd8c4b9881f41c76bd82926d8a7af9dc87e79bf17b4ab",
+    "classification_evidence_sha256": "36013e4249b0997ef5e3c6067226c61c2d9321dd58825de25000ca528d70d247",
+    "delta_payload_sha256": "111328427560503939a66e845d4a6e0fb8fa606f9dbf4a6f508aa0df04cab637",
+    "delta_evidence_sha256": "f9e8d82998232a2e7e6f7325f319a685546197b4f4c3ff022f366fafa854c78a"
+  },
+  "aggregate_acceptance": {
+    "master_rows": 2993,
+    "included_rows": 1923,
+    "dashboard_recorded_injuries": 1484,
+    "time_loss_injuries": 877,
+    "medical_attention_injuries": 607,
+    "known_duration_time_loss_injuries": 731,
+    "known_time_loss_days": 19047,
+    "review_required_rows": 0
+  },
+  "exposure_acceptance": {
+    "source_backed_teams": 14,
+    "source_backed_rows": 62481,
+    "source_backed_hours": "76872.2616717166666666",
+    "estimated_teams": ["benetton", "edinburgh"],
+    "estimated_hours_each": "5490.8758336940476190",
+    "league_hours": "87854.0133391047619046",
+    "estimated_monthly_allocation": false
+  },
+  "cutover": {
+    "migration_version": "20260830170000",
+    "migration_sha256": "fa81c00c7c812f0dec0f0a20eeaad51854bddc4b15af45b28c9e1f961f393988",
+    "private_lineage_binding_required": true,
+    "web_reader_access_to_lineage": false,
+    "obsolete_injury_path_recorded_rows": 7514,
+    "obsolete_path_is_reporting_authority": false
+  },
+  "privacy": {
+    "aggregate_only": true,
+    "direct_identifiers": false,
+    "raw_rows": false
+  }
+}

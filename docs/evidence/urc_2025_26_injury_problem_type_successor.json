@@ -1,0 +1,49 @@
+{
+  "schema": "urc_2025_26_injury_problem_type_successor_v1",
+  "season": "2025-26",
+  "decision_status": "user_approved",
+  "protected_v12_root_manifest_sha256": "01dd17a82ab1835fd84f2c84048b9e15b4072a4f9bca3b3d3a348817a68d7241",
+  "protected_v12_file_set_sha256": "5ea322d4e246510ce82075f5690ea2ac5715dace31ead35bff9db3bacc6a7abd",
+  "approved_injury_source_sha256_by_team": {
+    "benetton": "58602000b171e29d0db271eec95b4357508a484602a1e80d95b20d1d1cde4d9b",
+    "bulls": "f2a069c5f235d5b82b135de03c38fb96cba645b34b7622853a19d1fef5f53717",
+    "cardiff": "011e8c7c6cf84ab34e7425eb4e8d018b88717e9251410d5cffb9c2a438b5e0a7",
+    "connacht": "6da2bbcfce008ecc7ccff30bfcc7d1b23fc262865f976d784ced4236bebd4d0d",
+    "dragons": "2c9ee7fe0860f3d7a7063b860f7c5d60e5c088d8504e8d9d58d8c9bb7f410b22",
+    "edinburgh": "214e0eec95972245363f9fd61e3f3cb04b335e1c6243091e2c3b7562ae91ad17",
+    "glasgow": "e1a63d8f7a896c09e7d555f1b9cf9faa704b011af0f50eb49223baf050177f1f",
+    "leinster": "11e0aaba4abc77259d76008909cdd0b42bf2c121a75fd8ba622d5f8b0fc8fa52",
+    "lions": "21a9288bed1767cd9f25044b166111d8759c5daf845fcc7a3a1e435f85c2acff",
+    "munster": "b7206d5c75ff7a9cd2f15ae82bfe788d47a88ef4602d8ce21cb5255003d71c79",
+    "ospreys": "870216b1d3570f869d684694c3256116bb31c5ad20ad50b1aa8035415ec529a4",
+    "scarlets": "eb21acd209a662782f7c9e1f3b92e77cf8b2fe418758c6e23ff44b59f81fa14b",
+    "sharks": "5cc526aa901cd3eb167caeaf8c424070e50ff243f6c0c30b7d5e3c4ea8ec9cf8",
+    "stormers": "4f598ec18e230dae104b2b08e6fb19826629e77673169ac791665a0547bfd1dd",
+    "ulster": "cbb18d92e8253414ed3abfcf02161e11b80259b258fbb8572827ae40b97c6dc9",
+    "zebre": "318bd3303fe5c91e9480ab204f938fa17de77dc7fe4757e3a353e398cfaed95a"
+  },
+  "problem_type_precedence": [
+    "clear_illness_evidence",
+    "explicit_injury_evidence",
+    "direct_controlled_injury_evidence",
+    "approved_signed_injury_input_fallback",
+    "unknown"
+  ],
+  "conflict_rule": "clear_illness_evidence_wins",
+  "eligible_unknown_policy": "fail_closed",
+  "cohort_reconciliation": {
+    "recorded_cohort": "distinct eligible curated injury rows in the active 2025-26 builds",
+    "required_result": "exact_set_equality",
+    "headline_reconciliation": "recorded_injuries equals eligible curated injury count"
+  },
+  "release_limitation": {
+    "episode_grain_status": "unresolved",
+    "deduplication_applied": false,
+    "display_text": "Eligible signed injury-source rows are retained as recorded injuries. Candidate duplicate and repeated status rows remain included because the available source evidence does not yet prove episode identity. No silent episode deduplication was applied."
+  },
+  "privacy": {
+    "direct_identifiers": false,
+    "raw_rows": false,
+    "raw_clinical_text": false
+  }
+}

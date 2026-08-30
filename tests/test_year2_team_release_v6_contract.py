@@ -17,6 +17,14 @@ from tests.test_v6_public_payload_contract import dashboard as public_dashboard
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def lineage_fields() -> dict[str, str]:
+    return {
+        "injury_lineage_version_id": "2f419706-8c36-58dd-b4cb-e92162e782b8",
+        "injury_lineage_snapshot_version": "20260830170000",
+        "injury_lineage_member_sha256": "e" * 64,
+    }
 SQL = (ROOT / "supabase/migrations/20260815030000_urc_2025_26_team_release_v6.sql").read_text(encoding="utf-8").lower()
 
 
@@ -144,6 +152,7 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
             1,
         )
         candidate = {
+            **lineage_fields(),
             "team_key": "example",
             "season": "2025-26",
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
@@ -316,6 +325,7 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
     def test_reviewed_team_preflight_manifest_is_checksum_bound_and_rejects_each_identity_tamper(self) -> None:
         contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
         candidate = {
+            **lineage_fields(),
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
             "payload_sha256": "a" * 64,
             "classification_evidence_sha256": "c" * 64,
@@ -374,6 +384,7 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
     def test_reviewed_preflight_hashes_the_single_buffer_it_parses(self) -> None:
         contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
         candidate = {
+            **lineage_fields(),
             "curated_build_id": "00000000-0000-0000-0000-000000000001",
             "payload_sha256": "a" * 64,
             "classification_evidence_sha256": "c" * 64,
@@ -538,13 +549,13 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         self.assertIn('assert_v6_public_dashboard_contract(dashboard, "league dashboard")', source)
         self.assertIn('assert_v6_public_dashboard_contract(row["dashboard"], row["team_key"])', source)
 
-    def test_year2_classification_provenance_carries_only_catalogue_rules_not_year1_row_adjudications(self) -> None:
+    def test_year2_classification_provenance_binds_the_authoritative_successor(self) -> None:
         source = inspect.getsource(pipeline.release_league)
         v6_branch = source.split("classification_adjudications = [{", 1)[1].split(
             "}]", 1
         )[0]
-        self.assertIn("catalogue_and_conservative_inference_only", v6_branch)
-        self.assertIn("not_carried_forward", v6_branch)
+        self.assertIn("authoritative_successor_lineage", v6_branch)
+        self.assertIn("2f419706-8c36-58dd-b4cb-e92162e782b8", v6_branch)
         self.assertNotIn("IA-02", v6_branch)
         self.assertNotIn("ACL-01", v6_branch)
         self.assertNotIn("OSIICS-01", v6_branch)

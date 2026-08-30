@@ -544,7 +544,8 @@ def integer_values_equal(left: object, right: object) -> bool:
 
 
 def first_release_payload_mismatch(
-    dashboard: dict[str, Any], semantic: dict[str, Any],
+    dashboard: dict[str, Any], semantic: dict[str, Any], *,
+    require_complete_monthly_exposure: bool = True,
 ) -> tuple[str, object, object] | None:
     """Return the first safe aggregate mismatch in reading order."""
     headline_items = {
@@ -554,7 +555,7 @@ def first_release_payload_mismatch(
     }
     coverage = dashboard.get("coverage", {})
     coverage = coverage if isinstance(coverage, dict) else {}
-    checks = (
+    checks = [
         (
             "headline.recorded_injuries",
             headline_items.get("recorded_injuries", {}).get("value"),
@@ -574,12 +575,6 @@ def first_release_payload_mismatch(
             integer_values_equal,
         ),
         (
-            "monthly.exposure_hours",
-            semantic["monthly_exposure_hours"],
-            semantic["exposure_hours"],
-            decimal_values_close,
-        ),
-        (
             "coverage.hours",
             coverage.get("hours"),
             semantic["exposure_hours"],
@@ -597,7 +592,14 @@ def first_release_payload_mismatch(
             coverage.get("hours"),
             decimal_values_close,
         ),
-    )
+    ]
+    if require_complete_monthly_exposure:
+        checks.insert(3, (
+            "monthly.exposure_hours",
+            semantic["monthly_exposure_hours"],
+            semantic["exposure_hours"],
+            decimal_values_close,
+        ))
     return next(
         (
             (label, actual, expected)
@@ -6171,6 +6173,9 @@ def v6_team_preflight_manifest(
         },
         "candidate_view": contract.team_candidate_view,
         "curated_build_id": candidate["curated_build_id"],
+        "injury_lineage_version_id": candidate["injury_lineage_version_id"],
+        "injury_lineage_snapshot_version": candidate["injury_lineage_snapshot_version"],
+        "injury_lineage_member_sha256": candidate["injury_lineage_member_sha256"],
         "payload_sha256": candidate["payload_sha256"],
         "classification_evidence_sha256": candidate["classification_evidence_sha256"],
         "cohort_evidence_sha256": candidate["cohort_evidence_sha256"],
@@ -6300,6 +6305,9 @@ def release_team_v6(args: argparse.Namespace) -> None:
         f"""
         select candidate.team_key, candidate.season,
           candidate.curated_build_id::text, candidate.analysis_version,
+          candidate.injury_lineage_version_id::text,
+          candidate.injury_lineage_snapshot_version,
+          candidate.injury_lineage_member_sha256,
           candidate.classification_view_version,
           candidate.classification_evidence_sha256,
           candidate.cohort_view_version, candidate.cohort_evidence_sha256,
@@ -6324,8 +6332,8 @@ def release_team_v6(args: argparse.Namespace) -> None:
         from {contract.team_candidate_view} candidate
         where candidate.team_key = {candidate_params.text(team_key)}
           and candidate.season = '2025-26' and candidate.analysis_version = 'v6'
-          and candidate.classification_view_version = 'reporting_classification_2026-07-22_v2'
-          and candidate.cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+          and candidate.classification_view_version = {candidate_params.text(contract.classification_view_version)}
+          and candidate.cohort_view_version = {candidate_params.text(contract.cohort_view_version)}
         """,
         candidate_params.values,
     )
@@ -6338,6 +6346,15 @@ def release_team_v6(args: argparse.Namespace) -> None:
         for field in ("classification_evidence_sha256", "cohort_evidence_sha256")
     ):
         raise SystemExit("V6 team candidate lacks exact classification or cohort evidence")
+    if (
+        candidate.get("injury_lineage_version_id")
+        != "2f419706-8c36-58dd-b4cb-e92162e782b8"
+        or not isinstance(candidate.get("injury_lineage_snapshot_version"), str)
+        or not re.fullmatch(
+            r"[0-9a-f]{64}", clean_text(candidate.get("injury_lineage_member_sha256"))
+        )
+    ):
+        raise SystemExit("V6 team candidate lacks the exact injury lineage binding")
     candidate_dashboard_json = candidate["dashboard_json"]
     try:
         dashboard = json.loads(candidate_dashboard_json)
@@ -6426,9 +6443,12 @@ def release_team_v6(args: argparse.Namespace) -> None:
           where team_key = {params.text(team_key)} and season = '2025-26'
             and curated_build_id = {params.text(candidate['curated_build_id'])}::uuid
             and analysis_version = 'v6'
-            and classification_view_version = 'reporting_classification_2026-07-22_v2'
+            and injury_lineage_version_id = {params.text(candidate['injury_lineage_version_id'])}::uuid
+            and injury_lineage_snapshot_version = {params.text(candidate['injury_lineage_snapshot_version'])}
+            and injury_lineage_member_sha256 = {params.text(candidate['injury_lineage_member_sha256'])}
+            and classification_view_version = {params.text(contract.classification_view_version)}
             and classification_evidence_sha256 = {params.text(candidate['classification_evidence_sha256'])}
-            and cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+            and cohort_view_version = {params.text(contract.cohort_view_version)}
             and cohort_evidence_sha256 = {params.text(candidate['cohort_evidence_sha256'])}
             and dashboard = {params.text(candidate_dashboard_json)}::jsonb
             and reporting.canonical_jsonb_sha256_v1(dashboard) = {params.text(payload_sha256)}
@@ -6461,8 +6481,8 @@ def release_team_v6(args: argparse.Namespace) -> None:
       create temp table current_v6_team_release on commit drop as
       with run as (
         insert into audit.pipeline_runs (command, team, season, status, input_hash, output_hash, parameters, ended_at, code_version, dependency_lock_hash, operator)
-        values ('release_team_v6', {params.text(team)}, '2025-26', 'started', {params.text(candidate['curated_build_id'])}, {params.text(payload_sha256)},
-          {params.jsonb({'team_key': team_key, 'release_tuple': contract.release_tuple, 'reviewer': reviewer, 'preflight_sha256': reviewed_sha256, 'reviewed_preflight_manifest_sha256': reviewed_manifest_sha256, 'predecessor_release_id': predecessor['release_id'] if predecessor else None, 'payload_hash_algorithm': 'postgres_jsonb_text_sha256'})}, null,
+        values ('release_team_v6', {params.text(team)}, '2025-26', 'started', {params.text(candidate['injury_lineage_member_sha256'])}, {params.text(payload_sha256)},
+          {params.jsonb({'team_key': team_key, 'release_tuple': contract.release_tuple, 'reviewer': reviewer, 'preflight_sha256': reviewed_sha256, 'reviewed_preflight_manifest_sha256': reviewed_manifest_sha256, 'predecessor_release_id': predecessor['release_id'] if predecessor else None, 'injury_lineage_version_id': candidate['injury_lineage_version_id'], 'injury_lineage_snapshot_version': candidate['injury_lineage_snapshot_version'], 'injury_lineage_member_sha256': candidate['injury_lineage_member_sha256'], 'payload_hash_algorithm': 'postgres_jsonb_text_sha256'})}, null,
           {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}) returning id
       ), step as (
         insert into audit.step_runs (pipeline_run_id, step_name, step_version, reason_code, input_count, output_count, counts_by_team)
@@ -6478,9 +6498,17 @@ def release_team_v6(args: argparse.Namespace) -> None:
          classification_view_version, classification_evidence_sha256,
          cohort_view_version, cohort_evidence_sha256, dashboard_payload, payload_sha256)
       select current.id, {params.text(team_key)}, '2025-26', {params.text(candidate['curated_build_id'])}::uuid, 'v6',
-        'reporting_classification_2026-07-22_v2', {params.text(candidate['classification_evidence_sha256'])},
-        'analysis_window_2025-26_2026-08-15_v1', {params.text(candidate['cohort_evidence_sha256'])},
+        {params.text(contract.classification_view_version)}, {params.text(candidate['classification_evidence_sha256'])},
+        {params.text(contract.cohort_view_version)}, {params.text(candidate['cohort_evidence_sha256'])},
         {params.text(candidate_dashboard_json)}::jsonb, {params.text(payload_sha256)}
+      from current_v6_team_release current;
+      insert into reporting.team_release_injury_lineage_v1
+        (release_id, team_key, season, lineage_version_id,
+         candidate_snapshot_version, member_sha256)
+      select current.id, {params.text(team_key)}, '2025-26',
+        {params.text(candidate['injury_lineage_version_id'])}::uuid,
+        {params.text(candidate['injury_lineage_snapshot_version'])},
+        {params.text(candidate['injury_lineage_member_sha256'])}
       from current_v6_team_release current;
       update reporting.aggregate_releases release set status = 'retired'
       where release.id = {params.text(predecessor['release_id'] if predecessor else None)}::uuid
@@ -6500,6 +6528,15 @@ def release_team_v6(args: argparse.Namespace) -> None:
           where payload.payload_sha256 = {params.text(payload_sha256)}
             and payload.payload_sha256 = reporting.canonical_jsonb_sha256_v1(payload.dashboard_payload)
         ) then raise exception 'stored V6 team payload hash differs from canonical reviewed bytes'; end if;
+        if not exists (
+          select 1 from reporting.team_release_injury_lineage_v1 binding
+          join current_v6_team_release current on current.id = binding.release_id
+          where binding.team_key = {params.text(team_key)}
+            and binding.season = '2025-26'
+            and binding.lineage_version_id = {params.text(candidate['injury_lineage_version_id'])}::uuid
+            and binding.candidate_snapshot_version = {params.text(candidate['injury_lineage_snapshot_version'])}
+            and binding.member_sha256 = {params.text(candidate['injury_lineage_member_sha256'])}
+        ) then raise exception 'stored V6 team injury lineage differs from the reviewed candidate'; end if;
       end $$;
     """
     run_sql(sql, params.values)
@@ -7403,7 +7440,8 @@ V6_PUBLIC_DASHBOARD_KEYS = frozenset({
     "setting_metrics", "contact_distribution", "prior_season", "limitations",
 })
 V6_HEADLINE_KEYS = (
-    "recorded_injuries", "time_loss_injuries", "incidence_per_1000h",
+    "recorded_injuries", "time_loss_injuries", "overall_incidence_per_1000h",
+    "incidence_per_1000h",
     "severity_mean_days", "severity_median_days", "burden_per_1000h",
 )
 V6_CONTACT_GRID = tuple(
@@ -7479,27 +7517,31 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
     headline_contract = {
         "recorded_injuries": (
             {"key", "label", "value", "unit", "formula"},
-            "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)",
+            "count(final classified eligible injury rows, including undated)",
         ),
         "time_loss_injuries": (
             {"key", "label", "value", "unit", "formula"},
-            "count(eligible injury rows where days lost > 0)",
+            "count(final classification = Time Loss)",
+        ),
+        "overall_incidence_per_1000h": (
+            {"key", "label", "value", "unit", "numerator", "denominator", "formula"},
+            "pooled recorded injuries / pooled exposure hours * 1000",
         ),
         "incidence_per_1000h": (
             {"key", "label", "value", "unit", "numerator", "denominator", "formula"},
-            "pooled time-loss injuries / pooled exposure hours * 1000",
+            "pooled final Time Loss injuries / pooled exposure hours * 1000",
         ),
         "severity_mean_days": (
             {"key", "label", "value", "unit", "numerator", "denominator", "formula"},
-            "pooled days lost / pooled time-loss injuries",
+            "known-duration Time Loss days lost / known-duration Time Loss injuries",
         ),
         "severity_median_days": (
-            {"key", "label", "value", "unit", "formula"},
-            "median(days lost) across pooled time-loss injuries",
+            {"key", "label", "value", "unit", "denominator", "formula"},
+            "median known-duration Time Loss days lost",
         ),
         "burden_per_1000h": (
             {"key", "label", "value", "unit", "numerator", "denominator", "formula"},
-            "pooled days lost / pooled exposure hours * 1000",
+            "known-duration Time Loss days lost / pooled exposure hours * 1000",
         ),
     }
     for item in headline:
@@ -7520,8 +7562,9 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
 
     section_contracts = {
         "monthly": {
-            "month", "exposure_hours", "distance_km", "time_loss_injuries",
-            "days_lost", "incidence_per_1000h", "burden_per_1000h",
+            "month", "exposure_hours", "distance_km", "recorded_injuries",
+            "time_loss_injuries", "days_lost", "overall_incidence_per_1000h",
+            "incidence_per_1000h", "burden_per_1000h",
         },
         "body_locations": {
             "key", "label", "time_loss_injuries", "days_lost", "exposure_hours",
@@ -7532,13 +7575,17 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
             "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
         },
         "severity_distribution": {
-            "key", "label", "recorded_injuries", "time_loss_injuries", "days_lost",
+            "key", "label", "setting", "recorded_injuries",
+            "time_loss_injuries", "days_lost",
         },
         "setting_split": {
-            "key", "label", "time_loss_injuries", "days_lost", "exposure_hours",
+            "key", "label", "recorded_injuries", "time_loss_injuries",
+            "days_lost", "exposure_hours", "overall_incidence_per_1000h",
+            "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
         },
         "setting_metrics": {
-            "setting", "label", "time_loss_injuries", "days_lost", "exposure_hours",
+            "setting", "label", "recorded_injuries", "time_loss_injuries",
+            "days_lost", "exposure_hours", "overall_incidence_per_1000h",
             "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
         },
     }
@@ -7560,8 +7607,9 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
     if not isinstance(profiles, list):
         raise SystemExit(f"V6 {label} injury_profiles must be an array")
     profile_keys = {
-        "dimension", "code", "label", "setting", "time_loss_injuries", "days_lost",
-        "exposure_hours", "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
+        "dimension", "code", "label", "setting", "recorded_injuries",
+        "time_loss_injuries", "days_lost", "exposure_hours",
+        "incidence_per_1000h", "burden_per_1000h", "mean_severity_days",
     }
     for profile in profiles:
         if not isinstance(profile, dict) or set(profile) != profile_keys:
@@ -7573,7 +7621,8 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
     families = payload.get("injury_type_families")
     if not isinstance(families, list):
         raise SystemExit(f"V6 {label} injury_type_families must be an array")
-    family_keys = profile_keys | {"mapping_version", "subtypes"}
+    family_profile_keys = profile_keys - {"recorded_injuries"}
+    family_keys = family_profile_keys | {"mapping_version", "subtypes"}
     for family in families:
         if not isinstance(family, dict) or set(family) != family_keys:
             raise SystemExit(f"V6 {label} injury_type_families have an invalid public shape")
@@ -7583,7 +7632,7 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
         if not isinstance(subtypes, list) or not subtypes:
             raise SystemExit(f"V6 {label} injury_type_families require subtype evidence")
         for subtype in subtypes:
-            if not isinstance(subtype, dict) or set(subtype) != profile_keys:
+            if not isinstance(subtype, dict) or set(subtype) != family_profile_keys:
                 raise SystemExit(f"V6 {label} injury type family subtype has an invalid public shape")
             if subtype.get("dimension") != "injury_type" or subtype.get("setting") != family.get("setting"):
                 raise SystemExit(f"V6 {label} injury type family subtype does not match its family")
@@ -7601,6 +7650,17 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
         ):
             raise SystemExit(f"V6 {label} {section} must be a non-empty public string array")
     assert_public_payload_is_publishable(payload, f"V6 {label}")
+
+
+def assert_retained_v6_rollback_dashboard_contract(payload: object, label: str) -> None:
+    """Validate safe retained bytes without imposing the successor schema."""
+    if not isinstance(payload, dict) or set(payload) != V6_PUBLIC_DASHBOARD_KEYS:
+        raise SystemExit(f"retained V6 {label} has an invalid public payload shape")
+    if payload.get("season") != "2025-26":
+        raise SystemExit(f"retained V6 {label} is not bound to season 2025-26")
+    if not isinstance(payload.get("team"), str) or not payload["team"]:
+        raise SystemExit(f"retained V6 {label} has an invalid team label")
+    assert_public_payload_is_publishable(payload, f"retained V6 {label}")
 
 
 def write_parity_export_set(
@@ -8764,7 +8824,11 @@ def release_league(args: argparse.Namespace) -> None:
             "found an incomplete payload"
         )
     dashboard = candidate["dashboard"]
-    if analysis_version == "v6":
+    if analysis_version == "v6" and rollback_of_release_id:
+        assert_retained_v6_rollback_dashboard_contract(
+            dashboard, "league dashboard"
+        )
+    elif analysis_version == "v6":
         assert_v6_public_dashboard_contract(dashboard, "league dashboard")
     classification_evidence_sha256 = clean_text(
         candidate.get("classification_evidence_sha256")
@@ -8866,7 +8930,23 @@ def release_league(args: argparse.Namespace) -> None:
         if len(semantic_rows) != 1:
             raise SystemExit(semantic_missing_error)
         semantic = semantic_rows[0]
-        first_mismatch = first_release_payload_mismatch(dashboard, semantic)
+        estimated_year2_monthly_gap = (
+            analysis_version == "v6"
+            and cohort_view_version == "injury_lineage_2025-26_2026-08-30_v2"
+        )
+        if estimated_year2_monthly_gap and not decimal_values_close(
+            semantic["monthly_exposure_hours"],
+            Decimal("76872.2616717166666666"),
+        ):
+            raise SystemExit(
+                f"{semantic_mismatch_error}: source-backed monthly exposure differs "
+                "from the reviewed 14-team total"
+            )
+        first_mismatch = first_release_payload_mismatch(
+            dashboard,
+            semantic,
+            require_complete_monthly_exposure=not estimated_year2_monthly_gap,
+        )
         if first_mismatch is not None:
             label, actual, expected = first_mismatch
             raise SystemExit(
@@ -8876,18 +8956,17 @@ def release_league(args: argparse.Namespace) -> None:
     classification_adjudications: list[dict[str, Any]] = []
     if classification_view_version != "v2":
         if analysis_version == "v6" and year2_release_contract is not None:
-            # Year 2 carries only the approved catalogue and conservative
-            # inference rule, never the prior season's source-row ledger.
             classification_adjudications = [{
-                "rule_version": "reporting_classification_2026-07-22_v2",
-                "rule_evidence_locator": "docs/evidence/urc_2025_26_classification_rule.json",
-                "rule_evidence_sha256": "e898320fc5fa8cdfbf4fde4382d1ade62c87fe2dbef820ecf72b557bfb07cd5f",
-                "mapping_catalogue_projection_sha256": "79767a9fc4212309c8fa01749ddf47541a251e467897268a9c8edeb4265553ff",
-                "mapping_catalogue_row_count": 52,
-                "multi_type_catalogue_projection_sha256": "d7aa844af7a4e6a53072f90e129da5357dfd4523aef415ecf84fd447702db55a",
-                "multi_type_catalogue_row_count": 1,
-                "application_scope": "catalogue_and_conservative_inference_only",
-                "year1_row_adjudications": "not_carried_forward",
+                "rule_version": year2_release_contract.classification_view_version,
+                "rule_evidence_locator": year2_release_contract.classification_rule_evidence_locator,
+                "rule_evidence_sha256": year2_release_contract.classification_rule_evidence_sha256,
+                "successor_version_id": "2f419706-8c36-58dd-b4cb-e92162e782b8",
+                "successor_classification_evidence_sha256": "36013e4249b0997ef5e3c6067226c61c2d9321dd58825de25000ca528d70d247",
+                "recorded_injuries": 1484,
+                "time_loss_injuries": 877,
+                "medical_attention_injuries": 607,
+                "review_required_rows": 0,
+                "application_scope": "authoritative_successor_lineage",
             }]
         else:
             rule_params = SqlParams()
@@ -8946,13 +9025,16 @@ def release_league(args: argparse.Namespace) -> None:
                 year2_release_contract.required_migrations,
             )):
                 raise SystemExit("V6 release contract lacks immutable cohort evidence")
-            cohort_adjudication_filter = f"""
-              and adjudication_ref = {cohort_params.text(year2_release_contract.cohort_adjudication_ref)}
-              and evidence_sha256 = {cohort_params.text(year2_release_contract.cohort_evidence_sha256)}
-              and evidence_locator = {cohort_params.text(year2_release_contract.cohort_evidence_locator)}
-              and reviewer = 'Abdel Babiker'
-              and migration_version = {cohort_params.text(year2_release_contract.required_migrations[0])}
-            """
+            cohort_adjudications = [{
+                "adjudication_ref": year2_release_contract.cohort_adjudication_ref,
+                "cohort_view_version": cohort_view_version,
+                "season": season,
+                "decision": "accepted_authoritative_successor_lineage",
+                "evidence_sha256": year2_release_contract.cohort_evidence_sha256,
+                "evidence_locator": year2_release_contract.cohort_evidence_locator,
+                "reviewer": "Abdel Babiker",
+                "migration_version": "20260830170000",
+            }]
         elif analysis_version == "v5":
             if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION:
                 cohort_adjudication_filter = f"""
@@ -8981,17 +9063,18 @@ def release_league(args: argparse.Namespace) -> None:
             cohort_adjudication_filter = """
               and adjudication_ref = 'COHORT-01'
             """
-        cohort_adjudications = query_sql(
-            f"""
-            select adjudication_ref, cohort_view_version, season, decision,
-                   evidence_sha256, evidence_locator, reviewer, migration_version
-            from audit.reporting_cohort_rule_adjudications_v3
-            where cohort_view_version = {cohort_params.text(cohort_view_version)}
-              and season = {cohort_params.text(season)}
-              {cohort_adjudication_filter}
-            """,
-            cohort_params.values,
-        )
+        if not cohort_adjudications:
+            cohort_adjudications = query_sql(
+                f"""
+                select adjudication_ref, cohort_view_version, season, decision,
+                       evidence_sha256, evidence_locator, reviewer, migration_version
+                from audit.reporting_cohort_rule_adjudications_v3
+                where cohort_view_version = {cohort_params.text(cohort_view_version)}
+                  and season = {cohort_params.text(season)}
+                  {cohort_adjudication_filter}
+                """,
+                cohort_params.values,
+            )
         if len(cohort_adjudications) != 1:
             raise SystemExit("exact cohort adjudication evidence is incomplete")
     team_payloads = candidate.get("team_payloads")
@@ -9008,7 +9091,12 @@ def release_league(args: argparse.Namespace) -> None:
         for row in team_payloads:
             if not isinstance(row.get("team_key"), str) or not row["team_key"]:
                 raise SystemExit("V6 league candidate team payload lacks a team key")
-            assert_v6_public_dashboard_contract(row["dashboard"], row["team_key"])
+            if rollback_of_release_id:
+                assert_retained_v6_rollback_dashboard_contract(
+                    row["dashboard"], row["team_key"]
+                )
+            else:
+                assert_v6_public_dashboard_contract(row["dashboard"], row["team_key"])
     if analysis_version in {"v3", "v4", "v5", "v6"} and any(
         "injury_cohort_filters" in row["dashboard"].get("coverage", {})
         for row in team_payloads
@@ -13169,6 +13257,9 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
         f"""
         select candidate.team_key, candidate.season,
           candidate.curated_build_id::text, candidate.analysis_version,
+          candidate.injury_lineage_version_id::text,
+          candidate.injury_lineage_snapshot_version,
+          candidate.injury_lineage_member_sha256,
           candidate.classification_view_version,
           candidate.classification_evidence_sha256,
           candidate.cohort_view_version, candidate.cohort_evidence_sha256,
@@ -13194,8 +13285,8 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
         where candidate.team_key = {params.text(team_key)}
           and candidate.season = '2025-26'
           and candidate.analysis_version = 'v6'
-          and candidate.classification_view_version = 'reporting_classification_2026-07-22_v2'
-          and candidate.cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+          and candidate.classification_view_version = {params.text(contract.classification_view_version)}
+          and candidate.cohort_view_version = {params.text(contract.cohort_view_version)}
         """,
         params.values,
     )
@@ -13229,6 +13320,15 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
     for field, expected in exact_fields.items():
         if clean_text(candidate.get(field)) != expected:
             raise SystemExit(f"V6 analysis parity candidate has invalid {field}")
+    if (
+        candidate.get("injury_lineage_version_id")
+        != "2f419706-8c36-58dd-b4cb-e92162e782b8"
+        or not isinstance(candidate.get("injury_lineage_snapshot_version"), str)
+        or not re.fullmatch(
+            r"[0-9a-f]{64}", clean_text(candidate.get("injury_lineage_member_sha256"))
+        )
+    ):
+        raise SystemExit("V6 analysis parity candidate lacks the exact injury lineage binding")
 
     database_evidence_hashes = {
         field: candidate.get(field)
@@ -13287,6 +13387,9 @@ def verify_analysis_parity_v6(args: argparse.Namespace) -> None:
         "reviewed_preflight_manifest_sha256": reviewed_manifest_sha256,
         "candidate_view": contract.team_candidate_view,
         "canonical_payload_sha256": candidate_hash,
+        "injury_lineage_version_id": candidate["injury_lineage_version_id"],
+        "injury_lineage_snapshot_version": candidate["injury_lineage_snapshot_version"],
+        "injury_lineage_member_sha256": candidate["injury_lineage_member_sha256"],
         "classification_evidence_sha256": classification_evidence_sha256,
         "cohort_evidence_sha256": cohort_evidence_sha256,
         "required_migrations": [
@@ -15696,6 +15799,7 @@ def main() -> None:
             "reporting_classification_2026-07-20_v1",
             "reporting_classification_2026-07-22_v2",
             "reporting_classification_2024-25_2026-08-27_v1",
+            "reporting_classification_2025-26_2026-08-30_v2",
         ],
     )
     league_release_parser.add_argument(
@@ -15707,6 +15811,7 @@ def main() -> None:
             ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION,
             URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION,
             "analysis_window_2025-26_2026-08-15_v1",
+            "injury_lineage_2025-26_2026-08-30_v2",
         ],
     )
     league_release_parser.add_argument(

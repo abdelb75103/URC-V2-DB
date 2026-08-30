@@ -114,7 +114,7 @@ test('injury type dossier links ranked selection to exact subtype evidence', asy
   assert.match(dossier, /onClick/);
   assert.match(dossier, /aria-pressed=\{selected\}/);
   assert.match(dossier, /min-h-14/);
-  assert.match(dossier, /Included Injury Types/);
+  assert.match(dossier, /Included injury types/);
   assert.match(dossier, /label: 'TL incidence'/);
   assert.match(dossier, /label: 'TL injuries'/);
   assert.match(dossier, /subtype\.time_loss_injuries > 0/);
@@ -311,19 +311,22 @@ test('team comparisons preserve unavailable exposure and place it after known co
   process.env.WEB_READER_DB_URL = 'postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ known: 'Known', unavailable: 'Unavailable' });
   const headline = [
-    { key: 'recorded_injuries', label: 'Recorded injuries', value: 1, unit: 'cases', formula: 'count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)' },
-    { key: 'time_loss_injuries', label: 'Time-loss injuries', value: 1, unit: 'cases', formula: 'count(eligible injury rows where days lost > 0)' },
-    { key: 'incidence_per_1000h', label: 'Incidence', value: null, unit: 'injuries/1000h', numerator: 1, denominator: null, formula: 'pooled time-loss injuries / pooled exposure hours * 1000' },
-    { key: 'severity_mean_days', label: 'Mean severity', value: 2, unit: 'days', numerator: 2, denominator: 1, formula: 'pooled days lost / pooled time-loss injuries' },
-    { key: 'severity_median_days', label: 'Median severity', value: 2, unit: 'days', formula: 'median(days lost) across pooled time-loss injuries' },
-    { key: 'burden_per_1000h', label: 'Burden', value: null, unit: 'days/1000h', numerator: 2, denominator: null, formula: 'pooled days lost / pooled exposure hours * 1000' },
+    { key: 'recorded_injuries', label: 'Recorded injuries', value: 1, unit: 'cases', formula: 'count(final classified eligible injury rows, including undated)' },
+    { key: 'time_loss_injuries', label: 'Time Loss injuries', value: 1, unit: 'cases', formula: 'count(final classification = Time Loss)' },
+    { key: 'overall_incidence_per_1000h', label: 'Overall incidence', value: null, unit: 'per 1,000 player-hours', numerator: 1, denominator: null, formula: 'pooled recorded injuries / pooled exposure hours * 1000' },
+    { key: 'incidence_per_1000h', label: 'Time Loss incidence', value: null, unit: 'per 1,000 player-hours', numerator: 1, denominator: null, formula: 'pooled final Time Loss injuries / pooled exposure hours * 1000' },
+    { key: 'severity_mean_days', label: 'Mean severity', value: 2, unit: 'days', numerator: 2, denominator: 1, formula: 'known-duration Time Loss days lost / known-duration Time Loss injuries' },
+    { key: 'severity_median_days', label: 'Median severity', value: 2, unit: 'days', denominator: 1, formula: 'median known-duration Time Loss days lost' },
+    { key: 'burden_per_1000h', label: 'Burden', value: null, unit: 'days per 1,000 player-hours', numerator: 2, denominator: null, formula: 'known-duration Time Loss days lost / pooled exposure hours * 1000' },
   ];
   const settingMetrics = ['all', 'match', 'training', 'unknown'].map((setting) => ({
     setting,
     label: setting,
+    recorded_injuries: 1,
     time_loss_injuries: 1,
     days_lost: 2,
     exposure_hours: null,
+    overall_incidence_per_1000h: null,
     incidence_per_1000h: null,
     burden_per_1000h: null,
     mean_severity_days: 2,
@@ -474,6 +477,44 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
   const priorUrl = process.env.WEB_READER_DB_URL;
   process.env.WEB_READER_DB_URL = 'postgresql://web_reader.eukkvswaxweenovqqgzr:fixture@aws-0-eu-west-3.pooler.supabase.com:5432/postgres';
   const dashboard = JSON.parse(await readFile(new URL('../content/reporting/urc_dashboard_2025-26.json', import.meta.url), 'utf8'));
+  const recorded = dashboard.headline.find((row) => row.key === 'recorded_injuries').value;
+  const timeLoss = dashboard.headline.find((row) => row.key === 'time_loss_injuries').value;
+  const daysLost = dashboard.headline.find((row) => row.key === 'burden_per_1000h').numerator;
+  dashboard.headline = [
+    { key: 'recorded_injuries', label: 'Recorded injuries', value: recorded, unit: 'injuries', formula: 'count(final classified eligible injury rows, including undated)' },
+    { key: 'time_loss_injuries', label: 'Time-loss injuries', value: timeLoss, unit: 'injuries', formula: 'count(final classification = Time Loss)' },
+    { key: 'overall_incidence_per_1000h', label: 'Overall incidence', value: null, unit: 'per 1,000 player-hours', numerator: recorded, denominator: null, formula: 'pooled recorded injuries / pooled exposure hours * 1000' },
+    { key: 'incidence_per_1000h', label: 'Incidence', value: null, unit: 'per 1,000 player-hours', numerator: timeLoss, denominator: null, formula: 'pooled final Time Loss injuries / pooled exposure hours * 1000' },
+    { key: 'severity_mean_days', label: 'Mean severity', value: daysLost / timeLoss, unit: 'days', numerator: daysLost, denominator: timeLoss, formula: 'known-duration Time Loss days lost / known-duration Time Loss injuries' },
+    { key: 'severity_median_days', label: 'Median severity', value: 10, unit: 'days', denominator: timeLoss, formula: 'median known-duration Time Loss days lost' },
+    { key: 'burden_per_1000h', label: 'Burden', value: null, unit: 'days per 1,000 player-hours', numerator: daysLost, denominator: null, formula: 'known-duration Time Loss days lost / pooled exposure hours * 1000' },
+  ];
+  dashboard.setting_split = dashboard.setting_split.map((row) => ({
+    ...row,
+    recorded_injuries: row.time_loss_injuries,
+    overall_incidence_per_1000h: null,
+    incidence_per_1000h: null,
+    burden_per_1000h: null,
+    mean_severity_days: row.time_loss_injuries ? row.days_lost / row.time_loss_injuries : null,
+  }));
+  dashboard.setting_metrics = dashboard.setting_metrics.map((row) => ({
+    ...row,
+    recorded_injuries: row.time_loss_injuries,
+    overall_incidence_per_1000h: null,
+  }));
+  dashboard.monthly = dashboard.monthly.map((row) => ({
+    ...row,
+    recorded_injuries: row.time_loss_injuries,
+    overall_incidence_per_1000h: null,
+  }));
+  dashboard.injury_profiles = dashboard.injury_profiles.map((row) => ({
+    ...row,
+    recorded_injuries: row.time_loss_injuries,
+  }));
+  dashboard.severity_distribution = dashboard.severity_distribution.map((row) => ({
+    ...row,
+    setting: 'all',
+  }));
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
       if (sql.includes('approved_dashboard_reader_target_v2')) {

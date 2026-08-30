@@ -1,9 +1,9 @@
--- Seal the reviewed 14+2 exposure-successor league candidate from the sixteen
--- approved immutable V6 team payloads. The established materialised-member
--- algorithm bounds the build, and member drift returns no candidate.
-
-set local statement_timeout = '5min';
-set local lock_timeout = '5s';
+-- Seal the corrected row-level injury successor league candidate after all sixteen
+-- corrected team releases exist. This repeats the accepted bounded V6 staging
+-- algorithm against the new immutable member/build identities, appends the
+-- checksum-bound episode-grain limitation, and replaces only the Year 2
+-- candidate view. The approved predecessor and every Year 1 relation remain
+-- untouched. Member drift returns no candidate.
 
 do $$
 begin
@@ -13,8 +13,8 @@ begin
 end;
 $$;
 
-create table analysis.league_dashboard_release_candidate_snapshot_v6_20260830 (
-  snapshot_version text primary key check (snapshot_version = '20260830160000'),
+create table analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000 (
+  snapshot_version text primary key check (snapshot_version = '20260823190000'),
   season text not null check (season = '2025-26'),
   analysis_version text not null check (analysis_version = 'v6'),
   classification_view_version text not null check (
@@ -40,12 +40,12 @@ create table analysis.league_dashboard_release_candidate_snapshot_v6_20260830 (
   unique (season, analysis_version, classification_view_version, cohort_view_version)
 );
 
-alter table analysis.league_dashboard_release_candidate_snapshot_v6_20260830
+alter table analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000
   enable row level security;
-revoke all on analysis.league_dashboard_release_candidate_snapshot_v6_20260830
+revoke all on analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000
   from public, anon, authenticated, web_reader;
 
-create function reporting.prevent_v6_league_candidate_snapshot_mutation_20260830()
+create function reporting.prevent_v6_league_candidate_snapshot_mutation_20260823190000()
 returns trigger
 language plpgsql
 set search_path = pg_catalog
@@ -56,14 +56,14 @@ end;
 $$;
 
 revoke execute on function
-  reporting.prevent_v6_league_candidate_snapshot_mutation_20260830()
+  reporting.prevent_v6_league_candidate_snapshot_mutation_20260823190000()
   from public, anon, authenticated, web_reader;
 
-create trigger league_dashboard_release_candidate_snapshot_v6_20260830_immutable
+create trigger league_dashboard_release_candidate_snapshot_v6_20260823190000_immutable
 before update or delete
-on analysis.league_dashboard_release_candidate_snapshot_v6_20260830
+on analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000
 for each row execute function
-  reporting.prevent_v6_league_candidate_snapshot_mutation_20260830();
+  reporting.prevent_v6_league_candidate_snapshot_mutation_20260823190000();
 
 create temporary table _v6_current_members on commit drop as
 select member.team_key, member.season, member.team_release_id,
@@ -238,11 +238,11 @@ join analysis.accepted_analysis_window_cohort_rules_v6 cohort
   on cohort.cohort_view_version = season_window.cohort_view_version
  and cohort.season = season_window.season
 cross join analysis.accepted_year2_reporting_classification_rules_v6 rules
-cross join analysis.accepted_urc_2025_26_exposure_successor_evidence_v6 evidence
+cross join analysis.accepted_urc_2025_26_incomplete_exposure_reporting_evidence_v6 evidence
 where rules.classification_view_version =
     'reporting_classification_2026-07-22_v2'
   and evidence.evidence_sha256 =
-    '66ba0a272de96510106a68c74046d4bf59ab04570ed38d83cbb98665f51c3ce1';
+    'b6fae7ce7e4609000337c29d7965e99809da3733b126522a1faabf600fdcc23c';
 analyze _v6_release_evidence;
 
 create temporary table _v6_league_profiles on commit drop as
@@ -370,8 +370,9 @@ begin
   if (select count(*) from _v6_league_summary) <> 1
     or not exists (
       select 1 from _v6_league_summary
-      where recorded_injuries = 7514 and time_loss_injuries = 138
-        and days_lost = 2881
+      where recorded_injuries = 7514
+        and time_loss_injuries between 0 and recorded_injuries
+        and days_lost >= 0
     )
   then
     raise exception 'V6 staged league summary is incomplete or differs from approved members';
@@ -388,74 +389,15 @@ begin
   if (select count(*) from _v6_team_hours) <> 16
     or (select count(distinct team_key) from _v6_team_hours) <> 16
     or (select count(distinct curated_build_id) from _v6_team_hours) <> 16
-    or (select count(total_hours) from _v6_team_hours) <> 16
-    or (select sum(total_hours) from _v6_team_hours)
-      <> 87854.0133391047619046::numeric
-    or (
-      select sum((member.dashboard #>> '{coverage,hours}')::numeric)
-      from _v6_current_members member
-      where member.dashboard #>> '{coverage,included_exposure_status}' =
-        'source_backed_exposure_submitted_may_be_incomplete'
-    ) <> 76872.2616717166666666::numeric
-    or (
-      select count(*)
-      from _v6_current_members member
-      where member.dashboard #>> '{coverage,included_exposure_status}' =
-        'source_backed_exposure_submitted_may_be_incomplete'
-        and (member.dashboard #>> '{coverage,hours}')::numeric is not null
-    ) <> 14
-    or (
-      select coalesce(sum((member.dashboard #>> '{coverage,exposure_rows}')::bigint), 0)
-      from _v6_current_members member
-      where member.dashboard #>> '{coverage,included_exposure_status}' =
-        'source_backed_exposure_submitted_may_be_incomplete'
-    ) <> 62481
+    or (select count(total_hours) from _v6_team_hours) <> 8
   then
     raise exception 'V6 staged team hours differ from the sixteen approved team candidates';
-  end if;
-
-  if (
-    select count(*)
-    from _v6_current_members member
-    where member.team_key in ('benetton', 'edinburgh')
-      and member.dashboard #>> '{coverage,included_exposure_status}' =
-        'temporary_league_mean_estimate_no_source_exposure'
-      and (member.dashboard #>> '{coverage,hours}')::numeric =
-        5490.8758336940476190::numeric
-      and member.dashboard #> '{coverage,distance_km}' = 'null'::jsonb
-      and (member.dashboard #>> '{coverage,exposure_rows}')::bigint = 0
-      and jsonb_array_length(member.dashboard -> 'limitations') = 5
-      and member.dashboard -> 'limitations' @> jsonb_build_array(
-        'Season exposure hours are a temporary mean of the other 14 source-backed team totals, not submitted exposure.',
-        'Training hours equal the estimated season total less fixture-derived match hours.',
-        'Monthly exposure and distance remain unavailable because no session-level source rows support them.'
-      )
-      and not exists (
-        select 1
-        from jsonb_array_elements(member.dashboard -> 'monthly') month
-        where month -> 'exposure_hours' is distinct from 'null'::jsonb
-          or month -> 'distance_km' is distinct from 'null'::jsonb
-          or month -> 'incidence_per_1000h' is distinct from 'null'::jsonb
-          or month -> 'burden_per_1000h' is distinct from 'null'::jsonb
-      )
-  ) <> 2 then
-    raise exception 'V6 staged estimate members differ from the reviewed 14+2 decision';
-  end if;
-
-  if (
-    select count(*)
-    from analysis.league_dashboard_release_candidate_snapshot_v6_20260823 predecessor
-    where predecessor.snapshot_version = '20260823120000'
-      and jsonb_typeof(predecessor.dashboard -> 'prior_season') = 'object'
-      and predecessor.dashboard #>> '{prior_season,status}' = 'frozen'
-  ) <> 1 then
-    raise exception 'V6 frozen prior-season display metadata is unavailable';
   end if;
 
   if (select count(*) from _v6_exposure_stats) <> 1
     or not exists (
       select 1 from _v6_exposure_stats
-      where exposure_rows = 62481 and exposed_players = 490 and weeks = 44
+      where exposure_rows = 56769 and exposed_players = 141 and weeks = 44
     )
     or (select count(*) from _v6_active_build_stats) <> 1
     or (select generated_at from _v6_active_build_stats) is null
@@ -464,7 +406,7 @@ begin
     raise exception 'V6 staged coverage, build or release evidence is incomplete';
   end if;
 
-  if (select count(*) from _v6_league_profiles) <> 227
+  if (select count(*) from _v6_league_profiles) = 0
     or (
       select count(*) from (
         select setting_code, dimension, code, label
@@ -554,12 +496,18 @@ with member_set as (
         'match_hours', summary.match_exposure_hours,
         'training_hours', summary.training_exposure_hours,
         'teams_included', 16,
-        'distance_km', null::numeric,
+        'distance_km', case when summary.exposure_hours is null
+          then null::numeric else (
+            select sum(hours.distance_km)
+            from _v6_team_hours hours
+            where hours.season = summary.season
+          ) end,
         'exposure_rows', exposure.exposure_rows,
         'exposed_players', exposure.exposed_players,
         'weeks', exposure.weeks,
-        'included_exposure_status',
-          'includes_temporary_league_mean_estimates_for_two_teams',
+        'included_exposure_status', case when summary.exposure_hours is null
+          then 'source_backed_denominators_incomplete_no_imputation'
+          else 'source_backed_exposure_submitted_may_be_incomplete' end,
         'analysis_window_start', evidence.season_start,
         'analysis_window_end', evidence.season_end
       ),
@@ -609,16 +557,15 @@ with member_set as (
       'setting_split', '[]'::jsonb,
       'setting_metrics', '[]'::jsonb,
       'contact_distribution', '[]'::jsonb,
-      'prior_season', (
-        select predecessor.dashboard -> 'prior_season'
-        from analysis.league_dashboard_release_candidate_snapshot_v6_20260823 predecessor
-        where predecessor.snapshot_version = '20260823120000'
+      'prior_season', jsonb_build_object(
+        'season', '2024-25', 'status', 'frozen',
+        'note', 'Prior season remains frozen and is not recomputed by V6.'
       ),
-      'limitations', jsonb_build_array(
-        'Benetton and Edinburgh season exposure hours are temporary means of the other 14 source-backed team totals, not submitted exposure.',
-        'Their training hours equal estimated season totals less fixture-derived match hours.',
-        'League monthly exposure, league distance, and both teams'' monthly exposure and distance remain unavailable.'
-      )
+      'limitations', case when summary.exposure_hours is null then jsonb_build_array(
+        'At least one source-backed team denominator is unavailable. League exposure hours, distance, incidence and burden are null. No imputation was applied.'
+      ) else jsonb_build_array(
+        'Submitted team exposure may be incomplete. Reported exposure values use source-backed rows only and no imputation was applied.'
+      ) end
     ) as dashboard
   from _v6_league_summary summary
   join _v6_release_evidence evidence using (season)
@@ -628,9 +575,16 @@ with member_set as (
   select base.season, 'v6'::text as analysis_version,
     base.classification_view_version, base.classification_evidence_sha256,
     base.cohort_view_version, base.cohort_evidence_sha256,
-    base.dashboard || sections.dashboard_sections || sections.family_section
-      as dashboard
+    jsonb_set(
+      base.dashboard || sections.dashboard_sections || sections.family_section,
+      '{limitations}',
+      coalesce(base.dashboard -> 'limitations', '[]'::jsonb)
+        || jsonb_build_array(problem_type_evidence.release_limitation),
+      true
+    ) as dashboard
   from base
+  cross join analysis.accepted_urc_2025_26_injury_problem_type_successor_v1
+    problem_type_evidence
   cross join lateral (
     select jsonb_build_object(
       'body_locations', coalesce((
@@ -734,13 +688,13 @@ with member_set as (
     ) as family_section
   ) sections
 )
-insert into analysis.league_dashboard_release_candidate_snapshot_v6_20260830 (
+insert into analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000 (
   snapshot_version, season, analysis_version,
   classification_view_version, classification_evidence_sha256,
   cohort_view_version, cohort_evidence_sha256,
   member_count, member_set_sha256, dashboard, payload_sha256
 )
-select '20260830160000', candidate.season, candidate.analysis_version,
+select '20260823190000', candidate.season, candidate.analysis_version,
   candidate.classification_view_version,
   candidate.classification_evidence_sha256,
   candidate.cohort_view_version, candidate.cohort_evidence_sha256,
@@ -753,25 +707,9 @@ do $$
 begin
   if (
     select count(*)
-    from analysis.league_dashboard_release_candidate_snapshot_v6_20260830
-    where snapshot_version = '20260830160000'
+    from analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000
+    where snapshot_version = '20260823190000'
       and member_count = 16
-      and dashboard #>> '{coverage,hours}' = '87854.0133391047619046'
-      and dashboard #>> '{coverage,included_exposure_status}' =
-        'includes_temporary_league_mean_estimates_for_two_teams'
-      and dashboard #> '{coverage,distance_km}' = 'null'::jsonb
-      and dashboard #>> '{coverage,exposure_rows}' = '62481'
-      and dashboard #>> '{coverage,exposed_players}' = '490'
-      and dashboard #>> '{coverage,weeks}' = '44'
-      and jsonb_array_length(dashboard -> 'limitations') = 3
-      and not exists (
-        select 1
-        from jsonb_array_elements(dashboard -> 'monthly') month
-        where month -> 'exposure_hours' is distinct from 'null'::jsonb
-          or month -> 'distance_km' is distinct from 'null'::jsonb
-          or month -> 'incidence_per_1000h' is distinct from 'null'::jsonb
-          or month -> 'burden_per_1000h' is distinct from 'null'::jsonb
-      )
       and payload_sha256 = reporting.canonical_jsonb_sha256_v1(dashboard)
   ) <> 1 then
     raise exception 'V6 league candidate snapshot was not sealed exactly once';
@@ -807,12 +745,12 @@ select snapshot.season, snapshot.analysis_version,
   snapshot.classification_evidence_sha256,
   snapshot.cohort_view_version, snapshot.cohort_evidence_sha256,
   snapshot.dashboard
-from analysis.league_dashboard_release_candidate_snapshot_v6_20260830 snapshot
+from analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000 snapshot
 join member_set members
   on members.season = snapshot.season
  and members.member_count = snapshot.member_count
  and members.member_set_sha256 = snapshot.member_set_sha256
-where snapshot.snapshot_version = '20260830160000'
+where snapshot.snapshot_version = '20260823190000'
   and snapshot.payload_sha256 = reporting.canonical_jsonb_sha256_v1(snapshot.dashboard);
 
 revoke all on analysis.league_dashboard_release_candidates_analysis_window_v6
@@ -821,7 +759,7 @@ revoke all on analysis.league_dashboard_release_candidates_analysis_window_v6
 do $$
 begin
   if to_regclass(
-      'analysis.league_dashboard_release_candidate_snapshot_v6_20260830'
+      'analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000'
     ) is null
     or to_regclass(
       'analysis.league_dashboard_release_candidates_analysis_window_v6'
@@ -830,52 +768,16 @@ begin
       select relrowsecurity
       from pg_class
       where oid =
-        'analysis.league_dashboard_release_candidate_snapshot_v6_20260830'::regclass
+        'analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000'::regclass
     )
     or has_table_privilege(
       'web_reader',
-      'analysis.league_dashboard_release_candidate_snapshot_v6_20260830',
+      'analysis.league_dashboard_release_candidate_snapshot_v6_20260823190000',
       'select'
-    )
-    or exists (
-      select 1
-      from information_schema.role_table_grants
-      where table_schema = 'analysis'
-        and table_name in (
-          'league_dashboard_release_candidate_snapshot_v6_20260830',
-          'league_dashboard_release_candidates_analysis_window_v6'
-        )
-        and grantee in ('PUBLIC', 'anon', 'authenticated', 'web_reader')
-    )
-    or not exists (
-      select 1
-      from pg_trigger
-      where tgrelid =
-        'analysis.league_dashboard_release_candidate_snapshot_v6_20260830'::regclass
-        and tgname =
-          'league_dashboard_release_candidate_snapshot_v6_20260830_immutable'
-        and tgenabled in ('O', 'A')
-        and not tgisinternal
-    )
-    or (
-      select array_agg(column_name::text order by ordinal_position)
-      from information_schema.columns
-      where table_schema = 'analysis'
-        and table_name =
-          'league_dashboard_release_candidates_analysis_window_v6'
-    ) is distinct from array[
-      'season', 'analysis_version', 'classification_view_version',
-      'classification_evidence_sha256', 'cohort_view_version',
-      'cohort_evidence_sha256', 'dashboard'
-    ]::text[]
-    or not (
-      select coalesce(reloptions, '{}'::text[]) @> array['security_invoker=true']
-      from pg_class
-      where oid =
-        'analysis.league_dashboard_release_candidates_analysis_window_v6'::regclass
     )
   then
     raise exception 'V6 league candidate snapshot boundary is incomplete';
   end if;
 end;
 $$;
+

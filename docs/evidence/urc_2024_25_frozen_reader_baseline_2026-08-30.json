@@ -1,0 +1,55 @@
+{
+  "schema_version": "urc_2024_25_frozen_reader_baseline_v1",
+  "captured_at": "2026-08-30",
+  "target": {
+    "project_ref": "eukkvswaxweenovqqgzr",
+    "database": "postgres",
+    "proof": "registered-migration+frozen-release"
+  },
+  "database_reader": {
+    "team_count": 16,
+    "league_count": 1,
+    "league_payload_sha256": "4517f50bdf03688c087a34062071d97bd635576011e02f6f8ca5d1dc69a156ae",
+    "team_payload_sha256": {
+      "benetton": "0b9f0182a390b70044df07aa57c05d99f4f35da600d269bc98b379f74b6c512e",
+      "bulls": "567439d7469a587e0de556f7b450b452b7450c4dbbd434de6e2ee1593f77104c",
+      "cardiff": "e6dfe0686249bb5996abd1ed3b009c995ad57a0ff002eb42b7bf2b653aba2452",
+      "connacht": "9c0f03e37564c7265a456158c8032b34efaac5d73aa8aa807e3d62f942f33afc",
+      "dragons": "00e60904fd0406bde3e6ca6fe1bd717a35c31e549abe0f94db29ad4ec717a754",
+      "edinburgh": "8787d57b0d40da13ebebd127ee0ae94a888051e22e7fe51b085ba752d3f439b3",
+      "glasgow": "2fb6c8bf4c14b5d625605b62b88d19e15dfeda7b7f340a7888282563490d0949",
+      "leinster": "4eb4e8ed06957bcb9d60d0c8f37e9dcc450012adffcd5a00e0c78cc30d5e2192",
+      "lions": "13e14a33825b1308e65fbd0a1b4e4f4eb4505f2e715fefe5d23fd860dec3321c",
+      "munster": "efa4ac8c5b893503758a487f48dd81ec9982a80f64b523643f30ab9c374e09d8",
+      "ospreys": "9a369c2549fd24d6257a49fcdcc1c8918d346691f1e7c78c389ef442d054aea4",
+      "scarlets": "2e8de86f277459f517c48a3991db3e12636d291c333c243c42a40e0163c214b7",
+      "sharks": "4a1dd896530e75b3fc3cffecb1d6a5514c406af76c475de39cf63bdc7faca1fe",
+      "stormers": "ff546e12e68b2d948b8f283f7c80ba986a34c3e7571e00bab6df0d58691087c2",
+      "ulster": "354722356f15583aef0dc8f341a40b72d77c479e21f9724798bb6adf10f1b355",
+      "zebre": "e114b2faf84004cbc78b124799b9d7df0c435da0d96f0b7f6369fec8d3249b7f"
+    }
+  },
+  "repository_bytes": {
+    "benetton_dashboard_2024-25.json": "859c13f0320b55f3ff08ef6d9b58a8b69a2e2d1a683ee1a966e72f4f4ebc4696",
+    "bulls_dashboard_2024-25.json": "dfec685ce8ec73afecd5b044f7ca59a6f38b14f875d418369c7e44b1ededebb9",
+    "cardiff_dashboard_2024-25.json": "e4b493c30fc2feedc889c2655970f4ed2ac79ad73978401e14955fb52f8e5bf4",
+    "connacht_dashboard_2024-25.json": "8266dc356241dc12f742b37c6986a21d31161898052ff0764fc8df976a89f393",
+    "dragons_dashboard_2024-25.json": "8a3ed0cd7f6a889b8b77c7f19bf28d133e9b78614ac191339ee8434623b02a2c",
+    "edinburgh_dashboard_2024-25.json": "69c0c12b0ca6f204038af9a1bbb173a67c7f896ca0646561c54e2c44926383cb",
+    "glasgow_dashboard_2024-25.json": "503bdf20d805012986a7e993c37a50f0a2f155538d9fa885affa5c97df0893f9",
+    "leinster_dashboard_2024-25.json": "81adf58b8e637a88d881c07c56add3c6cc4f741cb723e2a80b77ed149e2bcac5",
+    "lions_dashboard_2024-25.json": "35bde303b42d084fd3d101089747dda5a31d21183fd3a99210ea7413907ce4a5",
+    "munster_dashboard_2024-25.json": "20880cf787529dc770b1bec1ffa290a9aea07d6d28a50705dcf0c0ed707830e9",
+    "ospreys_dashboard_2024-25.json": "2d96297378444c8943e8e8596a04306d8586a8aba067a416a2c0f6241dd3283d",
+    "scarlets_dashboard_2024-25.json": "64c320362aa5fb30d93c3631d3e83c80f99ca056397bf06a63d75b5deb7b843d",
+    "sharks_dashboard_2024-25.json": "198f2e0514bf0cd5fa988b1762dc73e434ab5524cc3b6c154cd09829b3a1aeab",
+    "stormers_dashboard_2024-25.json": "257be484e55305980f0feff5306ef3158f2b7b9783d0808bae9a12a178a54c5e",
+    "ulster_dashboard_2024-25.json": "db2df946526790b46b04c693f0db3979bb37ba14586a19d2b68a9a9593b5c357",
+    "urc_dashboard_2024-25.json": "4906bb70ef6ac1ef2ace51f92f9fa9d97de0de3b30c4349d1e8e93afb4451a17",
+    "zebre_dashboard_2024-25.json": "34cb442f493cc658bafc1df65b57875534d1391fcea817e38b4d3b9bc55ca3e6"
+  },
+  "privacy": {
+    "aggregate_only": true,
+    "direct_identifiers": false
+  }
+}

@@ -163,7 +163,7 @@ export function InjuryTypeDossier({
 
       <div className="flex flex-1 flex-col px-5 py-4">
         <div className="flex items-baseline justify-between gap-4">
-          <h4 className="text-sm font-semibold text-foreground">Included Injury Types</h4>
+          <h4 className="text-sm font-semibold text-foreground">Included injury types</h4>
           <span className="text-[11px] text-muted-foreground">TL injuries</span>
         </div>
         {contributingSubtypes.length ? (

@@ -34,9 +34,11 @@ const analytics = {
 const setting = {
   setting: "all",
   label: "All",
+  recorded_injuries: 1,
   time_loss_injuries: 1,
   days_lost: 2,
   exposure_hours: 100,
+  overall_incidence_per_1000h: 10,
   incidence_per_1000h: 10,
   burden_per_1000h: 20,
   mean_severity_days: 2,
@@ -45,15 +47,23 @@ const profile = {
   dimension: "injury_type",
   code: "joint_sprain",
   label: "Joint sprain",
-  ...setting,
+  setting: "all",
+  recorded_injuries: 1,
+  time_loss_injuries: 1,
+  days_lost: 2,
+  exposure_hours: 100,
+  incidence_per_1000h: 10,
+  burden_per_1000h: 20,
+  mean_severity_days: 2,
 };
 const headline = [
-  { key: "recorded_injuries", label: "Recorded injuries", value: 1, unit: "injuries", formula: "count(eligible injury rows in the immutable reporting window, including season-attributed undated rows)" },
-  { key: "time_loss_injuries", label: "Time-loss injuries", value: 1, unit: "injuries", formula: "count(eligible injury rows where days lost > 0)" },
-  { key: "incidence_per_1000h", label: "Incidence", value: 10, unit: "per 1,000 player-hours", numerator: 1, denominator: 100, formula: "pooled time-loss injuries / pooled exposure hours * 1000" },
-  { key: "severity_mean_days", label: "Mean severity", value: 2, unit: "days", numerator: 2, denominator: 1, formula: "pooled days lost / pooled time-loss injuries" },
-  { key: "severity_median_days", label: "Median severity", value: 2, unit: "days", formula: "median(days lost) across pooled time-loss injuries" },
-  { key: "burden_per_1000h", label: "Burden", value: 20, unit: "days per 1,000 player-hours", numerator: 2, denominator: 100, formula: "pooled days lost / pooled exposure hours * 1000" },
+  { key: "recorded_injuries", label: "Recorded injuries", value: 1, unit: "injuries", formula: "count(final classified eligible injury rows, including undated)" },
+  { key: "time_loss_injuries", label: "Time-loss injuries", value: 1, unit: "injuries", formula: "count(final classification = Time Loss)" },
+  { key: "overall_incidence_per_1000h", label: "Overall incidence", value: 10, unit: "per 1,000 player-hours", numerator: 1, denominator: 100, formula: "pooled recorded injuries / pooled exposure hours * 1000" },
+  { key: "incidence_per_1000h", label: "Incidence", value: 10, unit: "per 1,000 player-hours", numerator: 1, denominator: 100, formula: "pooled final Time Loss injuries / pooled exposure hours * 1000" },
+  { key: "severity_mean_days", label: "Mean severity", value: 2, unit: "days", numerator: 2, denominator: 1, formula: "known-duration Time Loss days lost / known-duration Time Loss injuries" },
+  { key: "severity_median_days", label: "Median severity", value: 2, unit: "days", denominator: 1, formula: "median known-duration Time Loss days lost" },
+  { key: "burden_per_1000h", label: "Burden", value: 20, unit: "days per 1,000 player-hours", numerator: 2, denominator: 100, formula: "known-duration Time Loss days lost / pooled exposure hours * 1000" },
 ];
 const teamCoverage = {
   exposure_rows: 1,
@@ -82,7 +92,12 @@ function validDashboard(scope = "team") {
     headline: structuredClone(headline),
     setting_split: ["all", "match", "training", "unknown"].map((key) => ({
       key, label: key[0].toUpperCase() + key.slice(1),
-      time_loss_injuries: 1, days_lost: 2, exposure_hours: key === "unknown" ? null : 100,
+      recorded_injuries: 1, time_loss_injuries: 1, days_lost: 2,
+      exposure_hours: key === "unknown" ? null : 100,
+      overall_incidence_per_1000h: key === "unknown" ? null : 10,
+      incidence_per_1000h: key === "unknown" ? null : 10,
+      burden_per_1000h: key === "unknown" ? null : 20,
+      mean_severity_days: 2,
     })),
     setting_metrics: ["all", "match", "training", "unknown"].map((key) => ({
       ...setting, setting: key, label: key[0].toUpperCase() + key.slice(1),
@@ -90,7 +105,8 @@ function validDashboard(scope = "team") {
     })),
     monthly: [{
       month: "2025-09", exposure_hours: 100, distance_km: 0,
-      time_loss_injuries: 1, days_lost: 2,
+      recorded_injuries: 1, time_loss_injuries: 1, days_lost: 2,
+      overall_incidence_per_1000h: 10,
       incidence_per_1000h: 10, burden_per_1000h: 20,
     }],
     body_locations: [{ ...analytics, key: "knee", label: "Knee" }],
@@ -100,13 +116,13 @@ function validDashboard(scope = "team") {
       { ...profile, dimension: "diagnosis", code: "compound__thigh__muscle_injury", label: "Thigh · Muscle injury" },
     ],
     injury_type_families: [{
-      ...profile,
+      ...Object.fromEntries(Object.entries(profile).filter(([key]) => key !== "recorded_injuries")),
       dimension: "injury_type_family",
       mapping_version: "injury_type_family_2026-07-21_v1",
-      subtypes: [{ ...profile }],
+      subtypes: [{ ...Object.fromEntries(Object.entries(profile).filter(([key]) => key !== "recorded_injuries")) }],
     }],
     severity_distribution: [{
-      key: "one_day", label: "One day", recorded_injuries: 1,
+      key: "one_day", label: "One day", setting: "all", recorded_injuries: 1,
       time_loss_injuries: 1, days_lost: 1,
     }],
     contact_distribution: ["all", "match", "training", "unknown"].flatMap((setting) => [
@@ -141,7 +157,7 @@ test("2025-26 reader rejects unexpected fields at every public nesting boundary"
   const crossSectionMutations = [
     (row) => { row.monthly[0].key = "known-elsewhere"; },
     (row) => { row.body_locations[0].month = "2025-09"; },
-    (row) => { row.setting_split[0].incidence_per_1000h = 10; },
+    (row) => { row.setting_split[0].candidate_id = "private"; },
     (row) => { row.headline[0].numerator = 1; },
   ];
   for (const mutate of crossSectionMutations) {
@@ -166,32 +182,23 @@ test("2025-26 reader preserves unavailable coverage and monthly exposure as null
   assert.equal(parsed.monthly[0].distance_km, null);
 });
 
-test("2025-26 reader accepts optional monthly recorded injuries", async () => {
+test("2025-26 reader requires monthly recorded injuries", async () => {
   const { parseDashboardReaderRow } = await loadReportingModule();
   const withoutRecorded = validDashboard();
-  assert.doesNotThrow(() => parseDashboardReaderRow(withoutRecorded, "2025-26", "team"));
+  delete withoutRecorded.monthly[0].recorded_injuries;
+  assert.throws(() => parseDashboardReaderRow(withoutRecorded, "2025-26", "team"));
 
   const withRecorded = validDashboard();
   withRecorded.monthly[0].recorded_injuries = 3;
   assert.equal(parseDashboardReaderRow(withRecorded, "2025-26", "team").monthly[0].recorded_injuries, 3);
 });
 
-test("2025-26 reader accepts released overall-incidence values when present", async () => {
+test("2025-26 reader requires released overall-incidence values", async () => {
   const { parseDashboardReaderRow } = await loadReportingModule();
   const dashboard = validDashboard();
-  dashboard.headline.push({
-    key: "overall_incidence_per_1000h",
-    label: "Overall incidence",
-    value: 10,
-    unit: "per 1,000 player-hours",
-    numerator: 1,
-    denominator: 100,
-    formula: "pooled recorded injuries / pooled exposure hours * 1000",
-  });
-  dashboard.monthly[0].overall_incidence_per_1000h = 10;
 
   const parsed = parseDashboardReaderRow(dashboard, "2025-26", "team");
-  assert.equal(parsed.headline.at(-1).key, "overall_incidence_per_1000h");
+  assert.equal(parsed.headline[2].key, "overall_incidence_per_1000h");
   assert.equal(parsed.monthly[0].overall_incidence_per_1000h, 10);
 });
 

@@ -25,9 +25,9 @@ TEAM_SNAPSHOT_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_exposure_successor_team_snapshot_migration.sql"
 ).read_text(encoding="utf-8")
-LEAGUE_SNAPSHOT_REGISTRATION = (
+CUTOVER_REGISTRATION = (
     ROOT
-    / "tools/sql/register_urc_2025_26_exposure_successor_league_snapshot_migration.sql"
+    / "tools/sql/register_urc_2025_26_injury_successor_cutover_migration.sql"
 ).read_text(encoding="utf-8")
 
 
@@ -36,8 +36,8 @@ def registration_for(version: str) -> str:
         return PLACEHOLDER_REGISTRATION
     if version == "20260830155000":
         return TEAM_SNAPSHOT_REGISTRATION
-    if version == "20260830160000":
-        return LEAGUE_SNAPSHOT_REGISTRATION
+    if version == "20260830170000":
+        return CUTOVER_REGISTRATION
     return REGISTRATION
 
 
@@ -85,7 +85,7 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
             self.assertIn(f"'{item.version}',", registration)
             self.assertIn(f"'{item.name}'", registration)
 
-    def test_league_release_adds_the_sealed_successor_snapshot_contract(self) -> None:
+    def test_obsolete_league_snapshot_contract_is_not_active(self) -> None:
         base_contracts = pipeline.release_migration_contracts(
             YEAR2_2025_26_RELEASE_CONTRACT
         )
@@ -94,32 +94,10 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
             include_league=True,
         )
 
-        self.assertEqual(
-            tuple(item.version for item in league_contracts),
-            tuple(item.version for item in base_contracts) + ("20260830160000",),
-        )
-        item = league_contracts[-1]
-        migration = ROOT / "supabase/migrations" / f"{item.version}_{item.name}.sql"
-        self.assertEqual(item.sha256, hashlib.sha256(migration.read_bytes()).hexdigest())
-        self.assertEqual(LEAGUE_SNAPSHOT_REGISTRATION.count(item.statement), 2)
-
-    def test_successor_league_registration_rechecks_privacy_shape_and_semantics(self) -> None:
-        registration = LEAGUE_SNAPSHOT_REGISTRATION.lower()
-
-        for token in (
-            "relrowsecurity",
-            "role_table_grants",
-            "league_dashboard_release_candidates_analysis_window_v6",
-            "pg_trigger",
-            "tgenabled in ('o', 'a')",
-            "security_invoker=true",
-            "array_agg(column_name::text order by ordinal_position)",
-            "includes_temporary_league_mean_estimates_for_two_teams",
-            "87854.0133391047619046",
-            "jsonb_array_length(dashboard -> 'limitations') = 3",
-            "payload_sha256 = reporting.canonical_jsonb_sha256_v1(dashboard)",
-        ):
-            self.assertIn(token, registration)
+        self.assertEqual(league_contracts, base_contracts)
+        self.assertFalse((
+            ROOT / "tools/sql/register_urc_2025_26_exposure_successor_league_snapshot_migration.sql"
+        ).exists())
 
     def test_registration_fails_closed_on_missing_objects_or_private_table_grants(self) -> None:
         for token in (
