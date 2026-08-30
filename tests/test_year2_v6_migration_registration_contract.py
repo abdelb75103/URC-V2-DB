@@ -103,6 +103,22 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
         self.assertEqual(item.sha256, hashlib.sha256(migration.read_bytes()).hexdigest())
         self.assertEqual(LEAGUE_SNAPSHOT_REGISTRATION.count(item.statement), 2)
 
+    def test_successor_league_registration_rechecks_privacy_shape_and_semantics(self) -> None:
+        registration = LEAGUE_SNAPSHOT_REGISTRATION.lower()
+
+        for token in (
+            "relrowsecurity",
+            "role_table_grants",
+            "pg_trigger",
+            "security_invoker=true",
+            "array_agg(column_name::text order by ordinal_position)",
+            "includes_temporary_league_mean_estimates_for_two_teams",
+            "87854.0133391047619046",
+            "jsonb_array_length(dashboard -> 'limitations') = 3",
+            "payload_sha256 = reporting.canonical_jsonb_sha256_v1(dashboard)",
+        ):
+            self.assertIn(token, registration)
+
     def test_registration_fails_closed_on_missing_objects_or_private_table_grants(self) -> None:
         for token in (
             "URC 2025-26 V6 migration objects are incomplete",

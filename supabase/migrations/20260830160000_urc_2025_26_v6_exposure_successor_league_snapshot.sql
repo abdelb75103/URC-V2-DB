@@ -837,6 +837,41 @@ begin
       'analysis.league_dashboard_release_candidate_snapshot_v6_20260830',
       'select'
     )
+    or exists (
+      select 1
+      from information_schema.role_table_grants
+      where table_schema = 'analysis'
+        and table_name =
+          'league_dashboard_release_candidate_snapshot_v6_20260830'
+        and grantee in ('PUBLIC', 'anon', 'authenticated', 'web_reader')
+    )
+    or not exists (
+      select 1
+      from pg_trigger
+      where tgrelid =
+        'analysis.league_dashboard_release_candidate_snapshot_v6_20260830'::regclass
+        and tgname =
+          'league_dashboard_release_candidate_snapshot_v6_20260830_immutable'
+        and tgenabled <> 'D'
+        and not tgisinternal
+    )
+    or (
+      select array_agg(column_name::text order by ordinal_position)
+      from information_schema.columns
+      where table_schema = 'analysis'
+        and table_name =
+          'league_dashboard_release_candidates_analysis_window_v6'
+    ) is distinct from array[
+      'season', 'analysis_version', 'classification_view_version',
+      'classification_evidence_sha256', 'cohort_view_version',
+      'cohort_evidence_sha256', 'dashboard'
+    ]::text[]
+    or not (
+      select coalesce(reloptions, '{}'::text[]) @> array['security_invoker=true']
+      from pg_class
+      where oid =
+        'analysis.league_dashboard_release_candidates_analysis_window_v6'::regclass
+    )
   then
     raise exception 'V6 league candidate snapshot boundary is incomplete';
   end if;
