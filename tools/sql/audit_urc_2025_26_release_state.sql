@@ -118,6 +118,6 @@ select jsonb_build_object(
       'statements', migration.statements
     ) order by migration.version), '[]'::jsonb)
     from supabase_migrations.schema_migrations migration
-    where migration.version between '20260822000000' and '20260830160000'
+    where migration.version between '20260822000000' and '20260830170000'
   )
 );

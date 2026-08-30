@@ -61,10 +61,15 @@ class MigrationContract:
     version: str
     name: str
     sha256: str
+    registration_statements: tuple[str, ...] = ()
 
     @property
     def statement(self) -> str:
         return f"migration_sha256={self.sha256}"
+
+    @property
+    def statements(self) -> list[str]:
+        return [self.statement, *self.registration_statements]
 
 
 @dataclass(frozen=True)
@@ -224,6 +229,11 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             version="20260830170000",
             name="urc_2025_26_injury_successor_cutover",
             sha256="06572c701bf99f2dc669c4c27feecb80bca69d0ed756d47b67a14ec4c8367187",
+            registration_statements=(
+                "injury_successor_version_id=2f419706-8c36-58dd-b4cb-e92162e782b8",
+                "classification_view_version=reporting_classification_2025-26_2026-08-30_v2",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
+            ),
         ),
     ),
     league_required_migration_contracts=(),

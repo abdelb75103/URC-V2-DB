@@ -123,7 +123,7 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
     def test_runtime_release_gate_rejects_a_registered_checksum_mismatch_without_database_access(self) -> None:
         contract = YEAR2_2025_26_RELEASE_CONTRACT
         exact_rows = [
-            {"version": item.version, "name": item.name, "statements": [item.statement]}
+            {"version": item.version, "name": item.name, "statements": item.statements}
             for item in contract.required_migration_contracts
         ]
         with patch.object(pipeline, "query_sql", return_value=exact_rows):

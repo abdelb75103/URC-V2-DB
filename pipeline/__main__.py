@@ -6067,7 +6067,7 @@ def assert_checksum_bound_migrations(
         migration_params.values,
     )
     expected = {
-        item.version: (item.name, [item.statement])
+        item.version: (item.name, item.statements)
         for item in contracts
     }
     actual = {

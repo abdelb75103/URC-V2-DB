@@ -297,7 +297,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             {
                 "version": item.version,
                 "name": item.name,
-                "statements": [item.statement],
+                "statements": item.statements,
             }
             for item in contract.required_migration_contracts
         ]
