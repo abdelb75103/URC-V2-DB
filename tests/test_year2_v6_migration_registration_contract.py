@@ -29,6 +29,10 @@ CUTOVER_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_injury_successor_cutover_migration.sql"
 ).read_text(encoding="utf-8")
+REPORTING_KEY_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_reporting_key_family_correction_migration.sql"
+).read_text(encoding="utf-8")
 
 
 def registration_for(version: str) -> str:
@@ -38,6 +42,8 @@ def registration_for(version: str) -> str:
         return TEAM_SNAPSHOT_REGISTRATION
     if version == "20260830170000":
         return CUTOVER_REGISTRATION
+    if version == "20260831100000":
+        return REPORTING_KEY_REGISTRATION
     return REGISTRATION
 
 

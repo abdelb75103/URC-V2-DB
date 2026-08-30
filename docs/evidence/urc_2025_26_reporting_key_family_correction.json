@@ -1,0 +1,60 @@
+{
+  "schema_version": "urc_2025_26_reporting_key_family_correction_v1",
+  "season": "2025-26",
+  "status": "accepted_additive_reporting_correction",
+  "decision_recorded_at": "2026-08-31",
+  "decision_provenance": "Abdel Babiker authorised this task as the sole authority for completing the release.",
+  "predecessor": {
+    "migration_version": "20260830170000",
+    "migration_sha256": "06572c701bf99f2dc669c4c27feecb80bca69d0ed756d47b67a14ec4c8367187",
+    "classification_view_version": "reporting_classification_2025-26_2026-08-30_v2",
+    "cohort_view_version": "injury_lineage_2025-26_2026-08-30_v2",
+    "injury_lineage_version_id": "2f419706-8c36-58dd-b4cb-e92162e782b8"
+  },
+  "successor": {
+    "migration_version": "20260831100000",
+    "classification_view_version": "reporting_classification_2025-26_2026-08-31_v3",
+    "cohort_view_version": "injury_lineage_2025-26_2026-08-30_v2",
+    "candidate_snapshot_version": "20260831100000"
+  },
+  "defect": {
+    "description": "The predecessor generated category identifiers before lowercasing source labels, so capital letters were replaced by underscores. Head became _ead and Muscle injury became _uscle_injury. The family function therefore classified every injury type as Review required. The predecessor family roll-up also divided known days lost by every Time Loss injury, including injuries with unknown duration.",
+    "affected_sections": [
+      "body_locations",
+      "injury_types",
+      "injury_profiles",
+      "injury_type_families"
+    ]
+  },
+  "correction_rule": {
+    "body_location_and_injury_type": "Match the exact case-insensitive source label to one active controlled code or label in curated.code_lists. Unmatched labels are represented by the controlled Unknown code and label; their original labels remain unchanged in the immutable V3 source rows.",
+    "diagnosis_identifier": "Generate the stable identifier only after lowercasing the retained diagnosis label.",
+    "family_mean_severity": "Pool the known-duration Time Loss denominator represented by each subtype mean, then divide pooled known days lost by that denominator. Unknown-duration Time Loss injuries remain in family injury counts but not the severity denominator.",
+    "scientific_boundary": "The correction changes reporting identifiers, controlled reporting labels for unmapped values, family assignment, and the family mean-severity denominator only. It does not infer a clinical category or change the immutable source label, cohort membership, classification, duration, exposure, injury counts, or days lost."
+  },
+  "mapping_acceptance": {
+    "dashboard_rows": 1484,
+    "body_location_mapped_rows": 1457,
+    "body_location_unmapped": {
+      "Illness": 23,
+      "Wrist/Hand": 4
+    },
+    "injury_type_mapped_rows": 1460,
+    "injury_type_unmapped": {
+      "Illness": 24
+    }
+  },
+  "aggregate_invariants": {
+    "recorded_injuries": 1484,
+    "time_loss_injuries": 877,
+    "medical_attention_injuries": 607,
+    "known_duration_time_loss_injuries": 731,
+    "known_time_loss_days": 19047,
+    "league_exposure_hours": "87854.0133391047619046"
+  },
+  "privacy": {
+    "aggregate_only": true,
+    "direct_identifiers": false,
+    "raw_rows": false
+  }
+}

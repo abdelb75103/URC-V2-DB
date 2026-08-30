@@ -84,7 +84,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         self.assertEqual(contract.analysis_version, "v6")
         self.assertEqual(
             contract.classification_view_version,
-            "reporting_classification_2025-26_2026-08-30_v2",
+            "reporting_classification_2025-26_2026-08-31_v3",
         )
         self.assertEqual(
             contract.cohort_view_version,
@@ -112,7 +112,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
                 "20260815010000", "20260815020000", "20260815030000",
                 "20260822010000", "20260822020000", "20260822030000",
                 "20260822220611", "20260823120000", "20260830150000",
-                "20260830155000", "20260830170000",
+                "20260830155000", "20260830170000", "20260831100000",
             ),
         )
         self.assertEqual(
@@ -123,6 +123,10 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         self.assertEqual(
             contract.cohort_evidence_locator,
             "docs/evidence/urc_2025_26_injury_reporting_cutover.json",
+        )
+        self.assertEqual(
+            contract.classification_rule_evidence_locator,
+            "docs/evidence/urc_2025_26_reporting_key_family_correction.json",
         )
         self.assertEqual(
             contract.exposure_coverage_evidence_locator,
@@ -289,6 +293,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             {
                 "urc_2025_26_fixture_preparation.json": fixture_contract_for("2025-26").evidence_sha256,
                 "urc_2025_26_injury_reporting_cutover.json": contract.cohort_evidence_sha256,
+                "urc_2025_26_reporting_key_family_correction.json": contract.classification_rule_evidence_sha256,
                 "urc_2025_26_exposure_successor_v6.json": contract.exposure_coverage_evidence_sha256,
                 "urc_2025_26_injury_eligibility_bridge.json": contract.injury_eligibility_evidence_sha256,
             }

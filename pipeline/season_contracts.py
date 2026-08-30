@@ -32,7 +32,7 @@ FROZEN_2024_25_RELEASE_TUPLES = frozenset(
 
 YEAR2_2025_26_RELEASE_TUPLE: ReleaseTuple = (
     "v6",
-    "reporting_classification_2025-26_2026-08-30_v2",
+    "reporting_classification_2025-26_2026-08-31_v3",
     "injury_lineage_2025-26_2026-08-30_v2",
 )
 
@@ -173,6 +173,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260830150000",
         "20260830155000",
         "20260830170000",
+        "20260831100000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -235,16 +236,27 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
             ),
         ),
+        MigrationContract(
+            version="20260831100000",
+            name="urc_2025_26_reporting_key_family_correction",
+            sha256="36754c640f808db0dc6e27d58135744005a304ba14cb3be7211b11224335b43f",
+            registration_statements=(
+                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
+                "classification_evidence_sha256=d9a8d41772ffadd89ad1b40ae3e8494586adc87a5beff372ddfa8307117cc172",
+                "candidate_snapshot_version=20260831100000",
+            ),
+        ),
     ),
     league_required_migration_contracts=(),
-    release_rule_version="league_dashboard_release_2026-08-30_v6_injury_successor",
-    release_reason_code="league_dashboard_release_v6_injury_successor",
-    decision_recorded_at="2026-08-30",
+    release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
+    release_reason_code="league_dashboard_release_v6_reporting_correction",
+    decision_recorded_at="2026-08-31",
     cohort_adjudication_ref="INJURY-LINEAGE-2025-26-2026-08-30-V2",
     cohort_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
     cohort_evidence_sha256="1941f341fa3d49d523ae0093016b8cb79aea07da94edd33c5255edf1ef021988",
-    classification_rule_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
-    classification_rule_evidence_sha256="1941f341fa3d49d523ae0093016b8cb79aea07da94edd33c5255edf1ef021988",
+    classification_rule_evidence_locator="docs/evidence/urc_2025_26_reporting_key_family_correction.json",
+    classification_rule_evidence_sha256="d9a8d41772ffadd89ad1b40ae3e8494586adc87a5beff372ddfa8307117cc172",
     exposure_coverage_evidence_locator=(
         "docs/evidence/urc_2025_26_exposure_successor_v6.json"
     ),
