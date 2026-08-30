@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import { Client } from "pg";
 import {
   assertApprovedConnectionString,
@@ -10,6 +11,39 @@ const paramsPath = process.argv[3];
 if (!sqlPath) {
   console.error("SQL file path required");
   process.exit(2);
+}
+
+const expectedParamsSha256 = (() => {
+  const value = (process.env.PIPELINE_PARAMS_SHA256 || "").trim().toLowerCase();
+  if (!value) return "";
+  if (!/^[0-9a-f]{64}$/.test(value)) {
+    console.error("PIPELINE_PARAMS_SHA256 must be a lowercase SHA-256 digest");
+    process.exit(2);
+  }
+  if (!paramsPath) {
+    console.error("PIPELINE_PARAMS_SHA256 requires a params file");
+    process.exit(2);
+  }
+  return value;
+})();
+
+let params;
+let paramsSha256 = "";
+if (paramsPath) {
+  try {
+    const paramsBytes = fs.readFileSync(paramsPath);
+    paramsSha256 = createHash("sha256").update(paramsBytes).digest("hex");
+    if (expectedParamsSha256 && paramsSha256 !== expectedParamsSha256) {
+      console.error(
+        `params SHA-256 mismatch: expected ${expectedParamsSha256}, got ${paramsSha256}`
+      );
+      process.exit(2);
+    }
+    params = JSON.parse(paramsBytes.toString("utf8"));
+  } catch (error) {
+    console.error(`failed to read params file: ${error.message}`);
+    process.exit(2);
+  }
 }
 
 // keepAlive lets a dead pooler connection surface as a socket error rather
@@ -88,11 +122,15 @@ try {
   // bound for the transaction is the fix; weakening the equality check is not.
   await client.query(`set local statement_timeout = ${statementTimeoutMs}`);
   if (paramsPath) {
-    const params = JSON.parse(fs.readFileSync(paramsPath, "utf8"));
     await client.query("create temp table _pipeline_params (idx integer primary key, value jsonb) on commit drop");
+    await client.query("create temp table _pipeline_params_attestation (payload_sha256 text not null) on commit drop");
     await client.query(
       "insert into _pipeline_params select ordinality::int, value from jsonb_array_elements($1::jsonb) with ordinality",
       [JSON.stringify(params)]
+    );
+    await client.query(
+      "insert into _pipeline_params_attestation (payload_sha256) values ($1)",
+      [paramsSha256]
     );
   }
   await proveApprovedLiveTarget(client);
