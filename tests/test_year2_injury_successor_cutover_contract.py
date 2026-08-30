@@ -21,7 +21,7 @@ class Year2InjurySuccessorCutoverContractTests(unittest.TestCase):
     def test_exact_private_successor_and_registration_are_bound(self) -> None:
         self.assertEqual(
             hashlib.sha256(MIGRATION.read_bytes()).hexdigest(),
-            "fa81c00c7c812f0dec0f0a20eeaad51854bddc4b15af45b28c9e1f961f393988",
+            "3df4c44f3e49cad5b2589d4bd6346a7274b11155c20fa30cb582b2a2231ad99e",
         )
         for value in (
             "2f419706-8c36-58dd-b4cb-e92162e782b8",
@@ -31,7 +31,7 @@ class Year2InjurySuccessorCutoverContractTests(unittest.TestCase):
             "111328427560503939a66e845d4a6e0fb8fa606f9dbf4a6f508aa0df04cab637",
             "f9e8d82998232a2e7e6f7325f319a685546197b4f4c3ff022f366fafa854c78a",
             "2b5e2243bfc912fac1561789e9327987d058a5543233f068f3bef9928c397670",
-            "migration_sha256=fa81c00c7c812f0dec0f0a20eeaad51854bddc4b15af45b28c9e1f961f393988",
+            "migration_sha256=3df4c44f3e49cad5b2589d4bd6346a7274b11155c20fa30cb582b2a2231ad99e",
         ):
             self.assertIn(value, self.raw + self.registration)
 
@@ -181,7 +181,7 @@ class Year2InjurySuccessorCutoverContractTests(unittest.TestCase):
         ):
             self.assertIn(value, lower)
         self.assertEqual(
-            self.registration.count("migration_sha256=fa81c00c7c812f0dec0f0a20eeaad51854bddc4b15af45b28c9e1f961f393988"),
+            self.registration.count("migration_sha256=3df4c44f3e49cad5b2589d4bd6346a7274b11155c20fa30cb582b2a2231ad99e"),
             2,
         )
         self.assertIsNone(re.search(r"grant\s+select.*web_reader", lower))

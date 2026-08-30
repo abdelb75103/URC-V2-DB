@@ -283,7 +283,12 @@ with active_builds as materialized (
   from analysis.analysis_window_active_builds_v6
   where season = '2025-26'
 ), rows as materialized (
-  select active.curated_build_id, active.team_key, active.season, injury.*
+  select active.curated_build_id, active.team_key, active.season,
+    injury.source_row, injury.injury_date, injury.is_time_loss,
+    injury.days_lost, injury.setting_code, injury.contact_context,
+    injury.body_location_code, injury.body_location_label,
+    injury.injury_type_code, injury.injury_type_label,
+    injury.diagnosis_code, injury.diagnosis_label, injury.severity_code
   from active_builds active
   left join analysis.urc_2025_26_injury_successor_rows_v1 injury
     on injury.team_key = active.team_key
