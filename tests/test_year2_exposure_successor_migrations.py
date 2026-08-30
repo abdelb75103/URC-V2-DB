@@ -44,11 +44,33 @@ class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
 
         self.assertNotIn("using (curated_build_id, team_key, season)", candidate)
         for predicate in (
-            "completeness.curated_build_id = active.curated_build_id",
-            "completeness.team_key = active.team_key",
-            "completeness.season = active.season",
+            "completeness.curated_build_id = candidate.curated_build_id",
+            "completeness.team_key = candidate.team_key",
+            "completeness.season = candidate.season",
         ):
             self.assertIn(predicate, candidate)
+
+    def test_candidate_preserves_the_live_integrity_columns_and_limitation(self) -> None:
+        sql = PLACEHOLDER.read_text().lower()
+
+        self.assertIn("analysis.urc_2025_26_injury_cohort_reconciliation_v1", sql)
+        self.assertIn(
+            "cross join analysis.accepted_urc_2025_26_injury_problem_type_successor_v1",
+            sql,
+        )
+        self.assertIn("jsonb_build_array(evidence.release_limitation)", sql)
+        for column in (
+            "processing_eligible_injury_count",
+            "eligible_curated_injury_count",
+            "recorded_cohort_count",
+            "processing_record_version_set_sha256",
+            "curated_record_version_set_sha256",
+            "reporting_record_version_set_sha256",
+            "approved_injury_source_file_count",
+            "unapproved_injury_source_row_count",
+            "wrong_problem_type_rule_version_count",
+        ):
+            self.assertEqual(sql.count(f"candidate.{column}"), 1, column)
 
     def test_placeholder_is_source_first_and_league_snapshot_is_member_bound(self) -> None:
         placeholder = PLACEHOLDER.read_text().lower()

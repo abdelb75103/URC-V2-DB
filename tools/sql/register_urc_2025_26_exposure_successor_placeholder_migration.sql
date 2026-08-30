@@ -18,7 +18,7 @@ insert into supabase_migrations.schema_migrations (version, name, statements)
 values (
   '20260830150000',
   'urc_2025_26_exposure_successor_placeholders',
-  array['migration_sha256=236c4b27a57d7ac94998530c94692e0599be768068dfef8740c4778feb2d7ba1']
+  array['migration_sha256=4f890614d38f6b899b412e0a019cb53fd53306cf6cc557e351e197e9ab489912']
 )
 on conflict (version) do nothing;
 
@@ -29,7 +29,7 @@ begin
     where version = '20260830150000'
       and name = 'urc_2025_26_exposure_successor_placeholders'
       and statements = array[
-        'migration_sha256=236c4b27a57d7ac94998530c94692e0599be768068dfef8740c4778feb2d7ba1'
+        'migration_sha256=4f890614d38f6b899b412e0a019cb53fd53306cf6cc557e351e197e9ab489912'
       ]
   ) then
     raise exception 'Year 2 exposure placeholder migration registration is invalid';

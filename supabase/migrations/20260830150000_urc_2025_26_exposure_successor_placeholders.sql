@@ -201,41 +201,80 @@ with expected_exposure(team_key, file_sha256) as (values
   ('stormers', 'cce607106b672eb7be05cf955638f603b03cd543546776c4d3fec39691049b1e'),
   ('ulster', '9ad6331f328f75af9a408ea5f8bdef6f093678f5d808592f0a47329a22e357d8'),
   ('zebre', '26c058a659823e5c9f818b2525d3daab6c16fd3a4cd0722b7e9c82af0089c1fa')
+), candidate as (
+  select active.team_key, active.season, null::uuid as team_release_id,
+    active.curated_build_id, 'v6'::text as analysis_version,
+    active.classification_view_version, active.classification_evidence_sha256,
+    active.cohort_view_version, active.cohort_evidence_sha256,
+    jsonb_set(
+      active.dashboard,
+      '{limitations}',
+      coalesce(active.dashboard -> 'limitations', '[]'::jsonb)
+        || jsonb_build_array(evidence.release_limitation),
+      true
+    ) as dashboard,
+    reconciliation.processing_eligible_injury_count,
+    reconciliation.eligible_curated_injury_count,
+    reconciliation.recorded_cohort_count,
+    reconciliation.processing_record_version_set_sha256,
+    reconciliation.curated_record_version_set_sha256,
+    reconciliation.reporting_record_version_set_sha256,
+    reconciliation.approved_injury_source_file_count,
+    reconciliation.unapproved_injury_source_row_count,
+    reconciliation.wrong_problem_type_rule_version_count
+  from analysis.team_dashboard_payload_analysis_window_v6_enriched active
+  join analysis.urc_2025_26_injury_cohort_reconciliation_v1 reconciliation
+    on reconciliation.curated_build_id = active.curated_build_id
+   and reconciliation.team_key = active.team_key
+   and reconciliation.season = active.season
+   and reconciliation.release_ready
+  cross join analysis.accepted_urc_2025_26_injury_problem_type_successor_v1 evidence
 )
-select active.team_key, active.season, null::uuid as team_release_id,
-  active.curated_build_id, 'v6'::text as analysis_version,
-  active.classification_view_version, active.classification_evidence_sha256,
-  active.cohort_view_version, active.cohort_evidence_sha256,
+select candidate.team_key, candidate.season, candidate.team_release_id,
+  candidate.curated_build_id, candidate.analysis_version,
+  candidate.classification_view_version, candidate.classification_evidence_sha256,
+  candidate.cohort_view_version, candidate.cohort_evidence_sha256,
   case when placeholder.event_id is null or completeness.denominator_available
-    then active.dashboard else
+    then candidate.dashboard else
     jsonb_set(
       jsonb_set(
-        active.dashboard,
+        candidate.dashboard,
         '{coverage,included_exposure_status}',
         to_jsonb('temporary_league_mean_estimate_no_source_exposure'::text)
       ),
       '{limitations}',
-      jsonb_build_array(
+      coalesce(candidate.dashboard -> 'limitations', '[]'::jsonb)
+        || jsonb_build_array(
         'Season exposure hours are a temporary mean of the other 14 source-backed team totals, not submitted exposure.',
         'Training hours equal the estimated season total less fixture-derived match hours.',
         'Monthly exposure and distance remain unavailable because no session-level source rows support them.'
       )
     )
-  end as dashboard
-from analysis.team_dashboard_payload_analysis_window_v6_enriched active
+  end as dashboard,
+  candidate.processing_eligible_injury_count,
+  candidate.eligible_curated_injury_count,
+  candidate.recorded_cohort_count,
+  candidate.processing_record_version_set_sha256,
+  candidate.curated_record_version_set_sha256,
+  candidate.reporting_record_version_set_sha256,
+  candidate.approved_injury_source_file_count,
+  candidate.unapproved_injury_source_row_count,
+  candidate.wrong_problem_type_rule_version_count
+from candidate
 left join analysis.active_exposure_placeholders_v1 placeholder
-  on placeholder.team_key = active.team_key and placeholder.season = active.season
+  on placeholder.team_key = candidate.team_key
+ and placeholder.season = candidate.season
 left join analysis.analysis_window_team_exposure_completeness_v6 completeness
-  on completeness.curated_build_id = active.curated_build_id
- and completeness.team_key = active.team_key
- and completeness.season = active.season
-left join expected_exposure expected on expected.team_key = active.team_key
+  on completeness.curated_build_id = candidate.curated_build_id
+ and completeness.team_key = candidate.team_key
+ and completeness.season = candidate.season
+left join expected_exposure expected on expected.team_key = candidate.team_key
 where expected.team_key is null or exists (
   select 1
   from curated.exposure exposure
   join ingestion.source_rows source_row on source_row.id = exposure.source_row_id
   join ingestion.source_files source_file on source_file.id = source_row.source_file_id
-  where exposure.curated_build_id = active.curated_build_id
+  where exposure.curated_build_id = candidate.curated_build_id
   group by exposure.curated_build_id
   having count(distinct source_file.file_sha256) = 1
     and min(source_file.file_sha256) = expected.file_sha256
