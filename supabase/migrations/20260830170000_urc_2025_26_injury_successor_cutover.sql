@@ -445,8 +445,14 @@ select active.team_key, active.season, active.curated_build_id,
   ) as dashboard
 from active_builds active
 join reporting.teams roster on roster.team_key = active.team_key
-join summary using (curated_build_id, team_key, season)
-join coverage using (curated_build_id, team_key, season)
+join summary
+  on summary.curated_build_id = active.curated_build_id
+ and summary.team_key = active.team_key
+ and summary.season = active.season
+join coverage
+  on coverage.curated_build_id = active.curated_build_id
+ and coverage.team_key = active.team_key
+ and coverage.season = active.season
 cross join analysis.accepted_urc_2025_26_injury_successor_evidence_v1 evidence
 cross join lateral (select count(*) filter (where is_time_loss and days_lost is not null)::bigint as known_duration_time_loss from rows where curated_build_id = active.curated_build_id and team_key = active.team_key) count_rows
 cross join lateral (

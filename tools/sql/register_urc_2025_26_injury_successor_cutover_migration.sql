@@ -38,7 +38,7 @@ values (
   '20260830170000',
   'urc_2025_26_injury_successor_cutover',
   array[
-    'migration_sha256=3df4c44f3e49cad5b2589d4bd6346a7274b11155c20fa30cb582b2a2231ad99e',
+    'migration_sha256=06572c701bf99f2dc669c4c27feecb80bca69d0ed756d47b67a14ec4c8367187',
     'injury_successor_version_id=2f419706-8c36-58dd-b4cb-e92162e782b8',
     'classification_view_version=reporting_classification_2025-26_2026-08-30_v2',
     'cohort_view_version=injury_lineage_2025-26_2026-08-30_v2'
@@ -53,7 +53,7 @@ begin
     where version = '20260830170000'
       and name = 'urc_2025_26_injury_successor_cutover'
       and statements = array[
-        'migration_sha256=3df4c44f3e49cad5b2589d4bd6346a7274b11155c20fa30cb582b2a2231ad99e',
+        'migration_sha256=06572c701bf99f2dc669c4c27feecb80bca69d0ed756d47b67a14ec4c8367187',
         'injury_successor_version_id=2f419706-8c36-58dd-b4cb-e92162e782b8',
         'classification_view_version=reporting_classification_2025-26_2026-08-30_v2',
         'cohort_view_version=injury_lineage_2025-26_2026-08-30_v2'

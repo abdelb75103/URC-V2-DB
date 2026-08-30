@@ -223,7 +223,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         MigrationContract(
             version="20260830170000",
             name="urc_2025_26_injury_successor_cutover",
-            sha256="3df4c44f3e49cad5b2589d4bd6346a7274b11155c20fa30cb582b2a2231ad99e",
+            sha256="06572c701bf99f2dc669c4c27feecb80bca69d0ed756d47b67a14ec4c8367187",
         ),
     ),
     league_required_migration_contracts=(),
@@ -232,9 +232,9 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     decision_recorded_at="2026-08-30",
     cohort_adjudication_ref="INJURY-LINEAGE-2025-26-2026-08-30-V2",
     cohort_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
-    cohort_evidence_sha256="c4ba345f2734fd622a0d9ebb18de1cc8830145ec77cfe24f959103f022ca6629",
+    cohort_evidence_sha256="1941f341fa3d49d523ae0093016b8cb79aea07da94edd33c5255edf1ef021988",
     classification_rule_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
-    classification_rule_evidence_sha256="c4ba345f2734fd622a0d9ebb18de1cc8830145ec77cfe24f959103f022ca6629",
+    classification_rule_evidence_sha256="1941f341fa3d49d523ae0093016b8cb79aea07da94edd33c5255edf1ef021988",
     exposure_coverage_evidence_locator=(
         "docs/evidence/urc_2025_26_exposure_successor_v6.json"
     ),
