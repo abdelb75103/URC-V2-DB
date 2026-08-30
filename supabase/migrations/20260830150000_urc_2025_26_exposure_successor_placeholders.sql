@@ -226,7 +226,9 @@ from analysis.team_dashboard_payload_analysis_window_v6_enriched active
 left join analysis.active_exposure_placeholders_v1 placeholder
   on placeholder.team_key = active.team_key and placeholder.season = active.season
 left join analysis.analysis_window_team_exposure_completeness_v6 completeness
-  using (curated_build_id, team_key, season)
+  on completeness.curated_build_id = active.curated_build_id
+ and completeness.team_key = active.team_key
+ and completeness.season = active.season
 left join expected_exposure expected on expected.team_key = active.team_key
 where expected.team_key is null or exists (
   select 1
