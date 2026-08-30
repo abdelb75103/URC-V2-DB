@@ -748,6 +748,9 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
 
   assert.match(dashboard, /Total hours[\s\S]*Total distance/);
+  assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
+  assert.match(dashboard, /Temporary exposure estimate/);
+  assert.match(dashboard, /row\.included_exposure_status\.includes\('estimate'\)[\s\S]*?Est\./);
   assert.match(dashboard, /No approved exposure data is available for this season/);
   assert.match(dashboard, /No approved exposure totals are available for this season/);
   const tabs = dashboard.slice(dashboard.indexOf('const TABS'), dashboard.indexOf('const METRICS'));

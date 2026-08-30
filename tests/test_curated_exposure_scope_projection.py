@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import argparse
 import inspect
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 import pipeline.__main__ as pipeline
 
@@ -90,6 +92,49 @@ class CuratedExposureScopeProjectionTests(unittest.TestCase):
         self.assertEqual(
             set(pipeline.CURATED_EXPOSURE_SCOPE_PROJECTION.values()),
             {"scope_unknown_included"},
+        )
+
+    def test_year2_successor_build_rejects_a_different_exposure_digest(self) -> None:
+        args = argparse.Namespace(
+            team="Bulls",
+            season="2025-26",
+            rebuild=True,
+            exposure_file_sha256="0" * 64,
+        )
+        with patch.object(pipeline, "resolve_team_key", return_value="bulls"):
+            with self.assertRaisesRegex(SystemExit, "approved contract for bulls"):
+                pipeline.build_curated(args)
+
+    def test_year2_successor_build_selects_the_reviewed_digest_by_default(self) -> None:
+        args = argparse.Namespace(
+            team="Bulls",
+            season="2025-26",
+            rebuild=True,
+            exposure_file_sha256="",
+        )
+        calls: list[tuple[str, str, str, str]] = []
+
+        def capture(team: str, season: str, pattern: str, digest: str = "") -> list[str]:
+            calls.append((team, season, pattern, digest))
+            if pattern == "%injury%":
+                return ["injury-version"]
+            raise RuntimeError("selection captured before any database mutation")
+
+        with (
+            patch.object(pipeline, "resolve_team_key", return_value="bulls"),
+            patch.object(pipeline, "latest_curated_source_version_ids", side_effect=capture),
+            self.assertRaisesRegex(RuntimeError, "selection captured"),
+        ):
+            pipeline.build_curated(args)
+
+        self.assertEqual(
+            calls[-1],
+            (
+                "Bulls",
+                "2025-26",
+                "%exposure%",
+                pipeline.V14_EXPOSURE_SHA256S["bulls"],
+            ),
         )
 
 

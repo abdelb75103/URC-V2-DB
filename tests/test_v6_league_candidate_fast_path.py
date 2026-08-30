@@ -19,7 +19,11 @@ SQL = MIGRATION.read_text(encoding="utf-8").lower()
 
 class V6LeagueCandidateFastPathTests(unittest.TestCase):
     def test_contract_binds_the_exact_migration_bytes(self) -> None:
-        contract = YEAR2_2025_26_RELEASE_CONTRACT.required_migration_contracts[-1]
+        contract = next(
+            item
+            for item in YEAR2_2025_26_RELEASE_CONTRACT.required_migration_contracts
+            if item.version == "20260823120000"
+        )
 
         self.assertEqual(contract.version, "20260823120000")
         self.assertEqual(contract.name, "urc_2025_26_v6_league_candidate_fast_path")

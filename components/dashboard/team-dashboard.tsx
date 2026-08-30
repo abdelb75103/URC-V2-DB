@@ -1481,6 +1481,7 @@ function ExposureTab({
     || monthlyRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)))
     || comparisonRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)));
   const hasExposureTotals = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value));
+  const usesEstimate = coverage.included_exposure_status.includes('estimate');
 
   if (!hasExposureData) {
     return (
@@ -1494,6 +1495,12 @@ function ExposureTab({
   return (
     <div className="space-y-5 sm:space-y-6">
       <SectionHeading title="Exposure" />
+      {usesEstimate && (
+        <div className="rounded-xl border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+          <p className="font-semibold">Temporary exposure estimate</p>
+          <p className="mt-1">{dashboard.limitations[0] ?? 'Season exposure uses a temporary league-mean estimate.'}</p>
+        </div>
+      )}
       <section aria-labelledby="total-exposure-heading">
         <h3 id="total-exposure-heading" className={`${PANEL_HEADING_CLASS} mb-3`}>Total Exposure</h3>
         {hasExposureTotals ? (
@@ -1592,6 +1599,9 @@ function ExposureComparison({
               <div key={row.comparison_id} className={`grid min-h-11 grid-cols-[minmax(72px,8rem)_minmax(0,1fr)_4.5rem] items-center gap-3 rounded-md px-2 text-sm hover:bg-muted/40 sm:min-h-8 sm:grid-cols-[minmax(100px,10rem)_minmax(0,1fr)_6rem] ${isViewer ? 'bg-muted/40' : ''}`}>
                 <span className="flex min-w-0 items-center gap-1.5">
                   <span className="truncate font-medium text-foreground">{isViewer && teamName ? teamName : row.team_alias}</span>
+                  {row.included_exposure_status.includes('estimate') && (
+                    <span className="shrink-0 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-950 dark:text-amber-100">Est.</span>
+                  )}
                 </span>
                 <span className="relative h-3 rounded-sm bg-muted" aria-hidden="true">
                   <span

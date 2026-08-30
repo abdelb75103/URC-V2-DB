@@ -196,6 +196,9 @@ YEAR2_ALLOWED_ANALYSIS_AUDIT_REASONS = frozenset({"explicit_source_exclusion"})
 
 V13_INTAKE_PROFILE_SCHEMA = "urc_2025_26_v13_signed_intake_profile_v1"
 V13_INTAKE_MANIFEST_SCHEMA = "urc_2025_26_v13_signed_intake_manifest_v1"
+V14_EXPOSURE_PROFILE_SCHEMA = "urc_2025_26_v14_exposure_profile_v1"
+V14_EXPOSURE_MANIFEST_SCHEMA = "urc_2025_26_v14_exposure_manifest_v1"
+V14_EXPOSURE_ROOT_SCHEMA = "urc_2025_26_v14_exposure_root_v1"
 V13_DATABASE_AUTHORISATION = {
     "database_action_authorised": True,
     "basis": (
@@ -246,6 +249,30 @@ V13_REVIEWED_V12_TEAMS = {
     "ulster": ("Ulster", "cbb18d92e8253414ed3abfcf02161e11b80259b258fbb8572827ae40b97c6dc9", "e17efcd5732d1853ce9f2e00c71498748a0d98f4e2ca45433d779441edafde34", "03c221fcf0c26f4fda33065fa42b49b91aba9ea08a2291f564c0e75819565a63"),
     "zebre": ("Zebre", "318bd3303fe5c91e9480ab204f938fa17de77dc7fe4757e3a353e398cfaed95a", "deceea12ad1ab587ae17ba3a669b78d3bff20f07021dee7a266d8f256cacef7f", "53cacfd494f5713de228f3ec071908b5e01998343c428d6505c2d194a7829920"),
 }
+V14_EXPOSURE_SHA256S = {
+    "bulls": "eb10d32f46e0eb85bf5f246b7a30f7778860a447cc5f633cdfc3f6c4c66c2ca3",
+    "cardiff": "0462c28deb1bdde6dad780b9e7410e74c6bf7b1bbbc1b9b56ed301353e775438",
+    "connacht": "db65fead17ddd81882fc7a7076b3a1a7f05eabe9a6224324f5e20b3e62b8c4e6",
+    "dragons": "d179be4b86753792e726b649c75a93bb8fa0b59da528d1e8f6272e7efd74b3f0",
+    "glasgow": "cc914cf335d506325148e263b6ead6eb968af9f06933f93e787030ce40e0fddb",
+    "leinster": "d003759fb23c70f94ee6cda8dd6ec3bdd22a7ece45b6efc57689f6043e922639",
+    "lions": "b9b756d0dbd2dd285baa8b3e7f600fdc3d141e302500a28257dc39dbf6d0cbb1",
+    "munster": "aacb57fd82c46b41f9479068bd4ada6966ca218052254fae28b4a411db663bf4",
+    "ospreys": "e99c4b44b2faba4d1e3bb76802f30c6817e9a89116a7edf6e97e31a02ca79c28",
+    "scarlets": "db6123174ebcbd65845a9f294aa44b23a39990d7aace0c6b3c6d843ba0b6b775",
+    "sharks": "9e5f3653d66c359f1b72586224edab6942edb771a6aaa7b4f82295d31bd1b722",
+    "stormers": "cce607106b672eb7be05cf955638f603b03cd543546776c4d3fec39691049b1e",
+    "ulster": "9ad6331f328f75af9a408ea5f8bdef6f093678f5d808592f0a47329a22e357d8",
+    "zebre": "26c058a659823e5c9f818b2525d3daab6c16fd3a4cd0722b7e9c82af0089c1fa",
+}
+V14_EXPOSURE_CANDIDATE_MANIFEST_SHA256 = "b292df743642e2c01365fc56f68b49446ec496c1765206013c52e570e297a3f8"
+V14_EXPOSURE_CANDIDATE_QC_SHA256 = "1d9036750a56e1e47725a483e3de019526ad570c9cb789ee36b270c55ae91d14"
+V14_EXPOSURE_TASK_APPROVAL_LOCATOR = (
+    "docs/evidence/urc_2025_26_exposure_successor_task_approval.json"
+)
+V14_EXPOSURE_TASK_APPROVAL_SHA256 = (
+    "4ea830e520b6a8ffa2d06dcab3111a8914d77ecce357df6ce3251680740440b6"
+)
 YEAR2_APPROVED_ROOTS_PATH = Path(__file__).with_name("approved_year2_roots.json")
 
 MISSING_VALUES = {"", "na", "n/a", "null", "none", "unknown", "unspecified/crossing"}
@@ -4012,8 +4039,13 @@ def validate_intake_profile_manifest(
         profile_document = json.loads(profile_path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
         raise SystemExit("intake profile evidence must be valid JSON") from exc
+    v14_exposure_profile = (
+        manifest.get("schema") == V14_EXPOSURE_MANIFEST_SCHEMA
+        and isinstance(profile_document, dict)
+        and profile_document.get("schema") == V14_EXPOSURE_PROFILE_SCHEMA
+    )
     v13_authorisation_required = (
-        season == "2025-26"
+        (season == "2025-26" and not v14_exposure_profile)
         or profile.get("profile_version") == "urc_2025_26_v13_signed_profile_v1"
         or manifest.get("schema") == V13_INTAKE_MANIFEST_SCHEMA
         or (
@@ -4052,10 +4084,38 @@ def validate_intake_profile_manifest(
             team,
             input_path,
         )
+    elif v14_exposure_profile:
+        authorisation = {
+            "database_action_authorised": True,
+            "project_ref": "eukkvswaxweenovqqgzr",
+            "database": "postgres",
+            "actions": ["ingestion", "processing", "build", "migration", "release"],
+        }
+        approval_line = clean_text(manifest.get("approval_line"))
+        approval_line_sha256 = hashlib.sha256(approval_line.encode()).hexdigest()
+        if (
+            season != "2025-26"
+            or clean_text(manifest.get("team_key")) not in V14_EXPOSURE_SHA256S
+            or input_sha256 != V14_EXPOSURE_SHA256S[clean_text(manifest.get("team_key"))]
+            or not approval_line
+            or manifest.get("approval_line_sha256") != approval_line_sha256
+            or profile.get("approval_line_sha256") != approval_line_sha256
+            or profile_document.get("approval_line_sha256") != approval_line_sha256
+            or any(
+                not all(key in document for key in (
+                    "mapping_path", "mapping_sha256", "mapping_version"
+                ))
+                for document in (profile, profile_document)
+            )
+            or any(document.get("authorisation") != authorisation for document in (
+                manifest, profile, profile_document
+            ))
+        ):
+            raise SystemExit("V14 exposure approval envelope is missing or inconsistent")
     bound_fields = (
         "team", "season", "profile_version", "decision", "mapping_path", "mapping_sha256",
         "mapping_version", "ai_review_status", "ai_reviewed_by", "ai_reviewed_at", "approved_by",
-        "approved_at", "approval_line_sha256", "unresolved_adjudication_ids",
+        "approved_at", "approval_requested_at", "approval_line_sha256", "unresolved_adjudication_ids",
         "approved_input_sha256s",
     )
     if not isinstance(profile_document, dict) or any(
@@ -4632,6 +4692,245 @@ def validate_v13_signed_root_for_ingest(
     return root_sha256
 
 
+def validate_v14_exposure_root_for_ingest(
+    signed_root_manifest_path: Path,
+    manifest_path: Path,
+    input_path: Path,
+    input_sha256: str,
+    team: str,
+    season: str,
+) -> str:
+    if season != "2025-26":
+        raise SystemExit("V14 exposure approval is only defined for 2025-26")
+    supplied_root = signed_root_manifest_path.absolute()
+    if supplied_root.is_symlink():
+        raise SystemExit("V14 exposure root manifest must not be a symlink")
+    root_path = supplied_root.resolve()
+    if root_path.name != "v14_exposure_root_manifest.json" or not root_path.is_file():
+        raise SystemExit("2025-26 exposure successor ingest requires its physical V14 root manifest")
+    try:
+        root = json.loads(root_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("V14 exposure root manifest must be valid JSON") from exc
+    if not isinstance(root, dict):
+        raise SystemExit("V14 exposure root manifest must be a JSON object")
+    package_root = root_path.parent
+    if stat.S_IMODE(package_root.lstat().st_mode) != 0o700:
+        raise SystemExit("V14 exposure package root must have mode 0700")
+    actual_outputs: dict[str, str] = {}
+    for path in sorted(package_root.rglob("*")):
+        relative = path.relative_to(package_root).as_posix()
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            raise SystemExit("V14 exposure package must not contain symlinks")
+        if stat.S_ISDIR(mode):
+            if stat.S_IMODE(mode) != 0o700:
+                raise SystemExit("V14 exposure package directories must have mode 0700")
+            continue
+        if not stat.S_ISREG(mode) or stat.S_IMODE(mode) != 0o600:
+            raise SystemExit("V14 exposure package files must be regular files with mode 0600")
+        if path != root_path:
+            actual_outputs[relative] = sha256_file(path)
+    if root.get("output_sha256s") != actual_outputs:
+        raise SystemExit("V14 exposure root output map does not close the physical package")
+    file_set_sha256 = hashlib.sha256(
+        json.dumps(actual_outputs, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    approval_line = clean_text(root.get("approval_line"))
+    approval_line_sha256 = hashlib.sha256(approval_line.encode()).hexdigest()
+    expected_authorisation = {
+        "database_action_authorised": True,
+        "project_ref": "eukkvswaxweenovqqgzr",
+        "database": "postgres",
+        "actions": ["ingestion", "processing", "build", "migration", "release"],
+    }
+    if (
+        root.get("schema") != V14_EXPOSURE_ROOT_SCHEMA
+        or root.get("season") != "2025-26"
+        or root.get("approved_by") != "Abdel Babiker"
+        or root.get("approval_ready") is not True
+        or root.get("ingest_ready") is not True
+        or not approval_line
+        or root.get("approval_line_sha256") != approval_line_sha256
+        or root.get("authorisation") != expected_authorisation
+        or root.get("root_file_set_sha256") != file_set_sha256
+    ):
+        raise SystemExit("V14 exposure root approval fields are missing or inconsistent")
+    expected_evidence = {
+        "candidate_manifest": {
+            "path": "evidence/exposure_scope_adjudication_manifest.json",
+            "sha256": V14_EXPOSURE_CANDIDATE_MANIFEST_SHA256,
+        },
+        "candidate_qc": {
+            "path": "evidence/exposure_scope_adjudication_qc.json",
+            "sha256": V14_EXPOSURE_CANDIDATE_QC_SHA256,
+        },
+    }
+    if root.get("candidate_evidence") != expected_evidence or any(
+        actual_outputs.get(binding["path"]) != binding["sha256"]
+        for binding in expected_evidence.values()
+    ):
+        raise SystemExit("V14 exposure root candidate evidence binding is invalid")
+    review_binding = root.get("fresh_ai_review_evidence")
+    if not isinstance(review_binding, dict) or set(review_binding) != {"path", "sha256"}:
+        raise SystemExit("V14 exposure root lacks fresh review evidence")
+    review_path = package_root / clean_text(review_binding.get("path"))
+    if actual_outputs.get(clean_text(review_binding.get("path"))) != review_binding.get("sha256"):
+        raise SystemExit("V14 exposure fresh review checksum is invalid")
+    try:
+        review = json.loads(review_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("V14 exposure fresh review evidence must be valid JSON") from exc
+    reviewer = review.get("reviewer") if isinstance(review, dict) else None
+    try:
+        review_completed_at = datetime.fromisoformat(
+            clean_text(review.get("completed_at")).replace("Z", "+00:00")
+        )
+    except (AttributeError, ValueError):
+        review_completed_at = None
+    if (
+        not isinstance(review, dict)
+        or review.get("schema") != "urc_2025_26_v14_exposure_fresh_review_v1"
+        or review.get("decision") != "PASS"
+        or review.get("season") != "2025-26"
+        or review.get("candidate_manifest_sha256") != V14_EXPOSURE_CANDIDATE_MANIFEST_SHA256
+        or review.get("candidate_qc_sha256") != V14_EXPOSURE_CANDIDATE_QC_SHA256
+        or not isinstance(reviewer, dict)
+        or reviewer.get("model") != "gpt-5.6-sol"
+        or reviewer.get("reasoning_effort") not in {"high", "xhigh"}
+        or reviewer.get("task") != "/root/year2_exposure_release_review"
+        or review_completed_at is None
+        or review_completed_at.tzinfo is None
+    ):
+        raise SystemExit("V14 exposure fresh review evidence is not an independent passing Sol review")
+    approval_binding = root.get("task_approval_evidence")
+    if approval_binding != {
+        "path": "evidence/task_approval.json",
+        "sha256": V14_EXPOSURE_TASK_APPROVAL_SHA256,
+    }:
+        raise SystemExit("V14 exposure root lacks task approval evidence")
+    approval_relative = clean_text(approval_binding.get("path"))
+    if actual_outputs.get(approval_relative) != approval_binding.get("sha256"):
+        raise SystemExit("V14 exposure task approval checksum is invalid")
+    approval, approval_requested_at = validate_v14_task_approval_evidence(
+        package_root / approval_relative,
+        approval_line=approval_line,
+    )
+    if (
+        review_completed_at < approval_requested_at
+        or root.get("approval_requested_at") != approval.get("requested_at")
+        or root.get("approved_at") != review.get("completed_at")
+    ):
+        raise SystemExit("V14 exposure root does not bind Abdel's conditional task approval")
+    team_inputs = root.get("team_inputs")
+    if not isinstance(team_inputs, dict) or set(team_inputs) != set(V14_EXPOSURE_SHA256S):
+        raise SystemExit("V14 exposure root must bind exactly 14 source-backed teams")
+    for team_key, expected_sha in V14_EXPOSURE_SHA256S.items():
+        binding = team_inputs.get(team_key)
+        expected_paths = {
+            "input": f"{team_key}/exposure_intake_final_clean_v10.csv",
+            "profile": f"{team_key}/v14_exposure_profile.json",
+            "manifest": f"{team_key}/v14_exposure_manifest.json",
+        }
+        if (
+            not isinstance(binding, dict)
+            or binding.get("input_sha256") != expected_sha
+            or any(binding.get(key) != value for key, value in expected_paths.items())
+            or actual_outputs.get(expected_paths["input"]) != expected_sha
+            or actual_outputs.get(expected_paths["profile"]) != binding.get("profile_sha256")
+            or actual_outputs.get(expected_paths["manifest"]) != binding.get("manifest_sha256")
+        ):
+            raise SystemExit(f"V14 exposure root team binding is invalid for {team_key}")
+        team_manifest_path = package_root / expected_paths["manifest"]
+        try:
+            team_manifest = json.loads(team_manifest_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"V14 exposure manifest is invalid for {team_key}") from exc
+        validate_intake_profile_manifest(
+            team_manifest,
+            team_manifest_path,
+            expected_sha,
+            V13_REVIEWED_V12_TEAMS[team_key][0],
+            season,
+            input_path=package_root / expected_paths["input"],
+        )
+    manifest_resolved = manifest_path.resolve()
+    input_resolved = input_path.resolve()
+    try:
+        relative_manifest = manifest_resolved.relative_to(package_root).as_posix()
+        relative_input = input_resolved.relative_to(package_root).as_posix()
+    except ValueError as exc:
+        raise SystemExit("V14 exposure team inputs must be inside the signed package") from exc
+    current_manifest = json.loads(manifest_resolved.read_text())
+    team_key = clean_text(current_manifest.get("team_key"))
+    display_team = V13_REVIEWED_V12_TEAMS.get(team_key, ("", "", "", ""))[0]
+    binding = team_inputs.get(team_key)
+    if (
+        not binding
+        or team != display_team
+        or relative_manifest != binding["manifest"]
+        or relative_input != binding["input"]
+        or input_sha256 != binding["input_sha256"]
+        or current_manifest.get("approval_line_sha256") != approval_line_sha256
+        or current_manifest.get("authorisation") != expected_authorisation
+    ):
+        raise SystemExit("current V14 exposure input is not an exact approved root member")
+    validate_intake_profile_manifest(
+        current_manifest, manifest_resolved, input_sha256, team, season,
+        input_path=input_resolved,
+    )
+    root_sha256 = sha256_file(root_path)
+    if not repository_file_matches_head(YEAR2_APPROVED_ROOTS_PATH):
+        raise SystemExit("approved Year2 root ledger must match its tracked HEAD bytes")
+    ledger = json.loads(YEAR2_APPROVED_ROOTS_PATH.read_text())
+    if root_sha256 not in ledger.get("approved_root_sha256s", []):
+        raise SystemExit("signed V14 exposure root is not present in the approved Year2 root ledger")
+    return root_sha256
+
+
+def validate_v14_task_approval_evidence(
+    path: Path,
+    *,
+    approval_line: str | None = None,
+) -> tuple[dict[str, Any], datetime]:
+    """Validate the immutable bytes of Abdel's exact conditional task instruction."""
+    if sha256_file(path) != V14_EXPOSURE_TASK_APPROVAL_SHA256:
+        raise SystemExit("V14 task approval evidence checksum mismatch")
+    try:
+        approval = json.loads(path.read_text())
+        requested_at = datetime.fromisoformat(
+            clean_text(approval.get("requested_at")).replace("Z", "+00:00")
+        )
+    except (OSError, json.JSONDecodeError, AttributeError, ValueError) as exc:
+        raise SystemExit("V14 exposure task approval evidence is invalid") from exc
+    expected_keys = {
+        "schema", "approved_by", "requested_at", "source_thread_id",
+        "source_item_id", "approval_statement", "candidate_manifest_sha256",
+        "candidate_qc_sha256", "authorisation", "conditions",
+    }
+    expected_authorisation = {
+        "database_action_authorised": True,
+        "project_ref": "eukkvswaxweenovqqgzr",
+        "database": "postgres",
+        "actions": ["ingestion", "processing", "build", "migration", "release"],
+    }
+    if (
+        not isinstance(approval, dict)
+        or set(approval) != expected_keys
+        or approval.get("schema") != "urc_2025_26_exposure_successor_task_approval_v1"
+        or approval.get("approved_by") != "Abdel Babiker"
+        or approval.get("source_thread_id") != "01a053f0-94b4-7c82-b509-82d4210c373e"
+        or approval.get("source_item_id") != "fco_01a053f0-9701-76c1-b47c-da06c93a5ccf"
+        or approval.get("candidate_manifest_sha256") != V14_EXPOSURE_CANDIDATE_MANIFEST_SHA256
+        or approval.get("candidate_qc_sha256") != V14_EXPOSURE_CANDIDATE_QC_SHA256
+        or approval.get("authorisation") != expected_authorisation
+        or requested_at.tzinfo is None
+        or (approval_line is not None and approval.get("approval_statement") != approval_line)
+    ):
+        raise SystemExit("V14 exposure task approval evidence is invalid")
+    return approval, requested_at
+
+
 def ingest(args: argparse.Namespace) -> None:
     path = Path(args.file)
     file_hash = sha256_file(path)
@@ -4643,14 +4942,15 @@ def ingest(args: argparse.Namespace) -> None:
         )
         if not signed_root_manifest:
             raise SystemExit("--signed-root-manifest is required for 2025-26 ingest")
-        validate_v13_signed_root_for_ingest(
-            Path(signed_root_manifest),
-            manifest_path,
-            path,
-            file_hash,
-            args.team,
-            args.season,
-        )
+        root_path = Path(signed_root_manifest)
+        if root_path.name == "v14_exposure_root_manifest.json":
+            validate_v14_exposure_root_for_ingest(
+                root_path, manifest_path, path, file_hash, args.team, args.season,
+            )
+        else:
+            validate_v13_signed_root_for_ingest(
+                root_path, manifest_path, path, file_hash, args.team, args.season,
+            )
     validate_intake_profile_manifest(
         source_manifest,
         manifest_path,
@@ -5765,11 +6065,24 @@ def assert_checksum_bound_migrations(
         )
 
 
-def assert_checksum_bound_release_migrations(contract: Any, operation: str) -> None:
-    """Fail closed unless local V6 migration bytes equal the registered rows."""
+def release_migration_contracts(contract: Any, include_league: bool = False) -> tuple[Any, ...]:
     contracts = tuple(contract.required_migration_contracts)
+    if include_league:
+        contracts += tuple(contract.league_required_migration_contracts)
+    return contracts
+
+
+def assert_checksum_bound_release_migrations(
+    contract: Any, operation: str, include_league: bool = False,
+) -> None:
+    """Fail closed unless local V6 migration bytes equal the registered rows."""
+    contracts = release_migration_contracts(contract, include_league)
     versions = tuple(contract.required_migrations)
-    if not contracts or {item.version for item in contracts} != set(versions):
+    expected_versions = set(versions) | (
+        {item.version for item in contract.league_required_migration_contracts}
+        if include_league else set()
+    )
+    if not contracts or {item.version for item in contracts} != expected_versions:
         raise SystemExit(f"{operation} lacks complete checksum-bound migration contracts")
     assert_checksum_bound_migrations(
         contracts,
@@ -7529,7 +7842,9 @@ def finalize_v6_league_release_local(args: argparse.Namespace) -> None:
     if not isinstance(reviewed_bundle, dict) or not isinstance(reviewed_manifest, dict):
         raise SystemExit("reviewed V6 preflight artefacts must be JSON objects")
     expected_contract = release_contract_for("2025-26", YEAR2_2025_26_RELEASE_TUPLE)
-    assert_checksum_bound_release_migrations(expected_contract, "V6 local finalisation")
+    assert_checksum_bound_release_migrations(
+        expected_contract, "V6 local finalisation", include_league=True,
+    )
 
     params = SqlParams()
     rows = query_sql(
@@ -7589,7 +7904,7 @@ def finalize_v6_league_release_local(args: argparse.Namespace) -> None:
         raise SystemExit("reviewed V6 preflight checksums do not match the approved release audit")
     expected_migrations = [
         {"version": item.version, "name": item.name, "sha256": item.sha256}
-        for item in expected_contract.required_migration_contracts
+        for item in release_migration_contracts(expected_contract, include_league=True)
     ]
     if reviewed_manifest.get("required_migrations") != expected_migrations:
         raise SystemExit("reviewed V6 preflight does not bind the exact migration contract")
@@ -8342,7 +8657,9 @@ def release_league(args: argparse.Namespace) -> None:
     if not preflight:
         required_migrations.append(REVIEWED_BUNDLE_PAYLOAD_VALIDATION_MIGRATION_VERSION)
     if analysis_version == "v6" and year2_release_contract is not None:
-        assert_checksum_bound_release_migrations(year2_release_contract, "V6 league release")
+        assert_checksum_bound_release_migrations(
+            year2_release_contract, "V6 league release", include_league=True,
+        )
     else:
         migration_rows = query_sql(
             "select version from supabase_migrations.schema_migrations "
@@ -8705,7 +9022,9 @@ def release_league(args: argparse.Namespace) -> None:
     manifest_required_migrations: list[object] = (
         [
             {"version": item.version, "name": item.name, "sha256": item.sha256}
-            for item in year2_release_contract.required_migration_contracts
+            for item in release_migration_contracts(
+                year2_release_contract, include_league=True,
+            )
         ]
         if analysis_version == "v6" and year2_release_contract is not None
         else list(required_migrations)
@@ -9110,7 +9429,9 @@ def release_league(args: argparse.Namespace) -> None:
         raise SystemExit("league payload generated_at is missing")
     v6_validation_migration: dict[str, str] | None = None
     if analysis_version == "v6" and year2_release_contract is not None:
-        validation_contract = year2_release_contract.required_migration_contracts[-1]
+        validation_contract = release_migration_contracts(
+            year2_release_contract, include_league=True,
+        )[-1]
         v6_validation_migration = {
             "version": validation_contract.version,
             "name": validation_contract.name,
@@ -11192,13 +11513,21 @@ def resolve_team_key(team: str) -> str:
     return rows[0]["team_key"]
 
 
-def latest_curated_source_version_ids(team: str, season: str, file_name_pattern: str) -> list[str]:
+def latest_curated_source_version_ids(
+    team: str,
+    season: str,
+    file_name_pattern: str,
+    file_sha256: str = "",
+) -> list[str]:
     """record_version ids for the latest version_number of every accepted
     source row in the source file matching file_name_pattern
     ('%injury%' / '%exposure%', verified against every live
     ingestion.source_files.file_name) for team/season. Read-only.
     """
     params = SqlParams()
+    sha_filter = (
+        f"and sf.file_sha256 = {params.text(file_sha256)}" if file_sha256 else ""
+    )
     rows = query_sql(
         f"""
         select rv.id
@@ -11207,6 +11536,7 @@ def latest_curated_source_version_ids(team: str, season: str, file_name_pattern:
         join ingestion.source_files sf on sf.id = sr.source_file_id
         where sf.team = {params.text(team)} and sf.season = {params.text(season)}
           and sf.file_name like {params.text(file_name_pattern)}
+          {sha_filter}
           and rv.version_number = (
             select max(rv2.version_number)
             from processing.record_versions rv2
@@ -11230,8 +11560,22 @@ def build_curated(args: argparse.Namespace) -> None:
         raise SystemExit("--team and --season are required")
     team_key = resolve_team_key(team)
 
+    exposure_file_sha256 = clean_text(getattr(args, "exposure_file_sha256", ""))
+    if exposure_file_sha256 and not re.fullmatch(r"[0-9a-f]{64}", exposure_file_sha256):
+        raise SystemExit("--exposure-file-sha256 must be a lowercase SHA-256 digest")
+    required_exposure_sha256 = (
+        V14_EXPOSURE_SHA256S.get(team_key) if season == "2025-26" else None
+    )
+    if required_exposure_sha256:
+        if exposure_file_sha256 and exposure_file_sha256 != required_exposure_sha256:
+            raise SystemExit(
+                f"2025-26 exposure SHA differs from the approved contract for {team_key}"
+            )
+        exposure_file_sha256 = required_exposure_sha256
     injury_ids = latest_curated_source_version_ids(team, season, "%injury%")
-    exposure_ids = latest_curated_source_version_ids(team, season, "%exposure%")
+    exposure_ids = latest_curated_source_version_ids(
+        team, season, "%exposure%", exposure_file_sha256
+    )
     if not injury_ids or not exposure_ids:
         raise SystemExit(
             f"no processing.record_versions found for team={team!r} season={season!r} "
@@ -11287,6 +11631,11 @@ def build_curated(args: argparse.Namespace) -> None:
     team_key_p = params.text(team_key)
     injury_pattern_p = params.text("%injury%")
     exposure_pattern_p = params.text("%exposure%")
+    exposure_sha_filter = (
+        f"and sf.file_sha256 = {params.text(exposure_file_sha256)}"
+        if exposure_file_sha256
+        else ""
+    )
     rebuild_flag = bool(getattr(args, "rebuild", False))
 
     supersede_sql = (
@@ -11319,6 +11668,7 @@ def build_curated(args: argparse.Namespace) -> None:
           raise exception 'build-curated requires exactly one processed injury source file for team=% season=%', {team_p}, {season_p};
         end if;
         if (select count(distinct sf.id) from ingestion.source_files sf where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}
+            {exposure_sha_filter}
             and exists (select 1 from ingestion.source_rows sr join processing.record_versions rv on rv.source_row_id = sr.id where sr.source_file_id = sf.id)) <> 1 then
           raise exception 'build-curated requires exactly one processed exposure source file for team=% season=%', {team_p}, {season_p};
         end if;
@@ -11328,6 +11678,7 @@ def build_curated(args: argparse.Namespace) -> None:
           join ingestion.source_rows sr on sr.id = rv.source_row_id
           join ingestion.source_files sf on sf.id = sr.source_file_id
           where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}
+            {exposure_sha_filter}
             and rv.version_number = (
               select max(rv2.version_number) from processing.record_versions rv2 where rv2.source_row_id = rv.source_row_id
             )
@@ -11357,6 +11708,7 @@ def build_curated(args: argparse.Namespace) -> None:
             "rule_version": CURATED_BUILD_RULE_VERSION,
             "source_version_set_hash": source_version_set_hash,
             "source_version_set_count": source_version_set_count,
+            "exposure_file_sha256": exposure_file_sha256 or None,
           })},
           now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
@@ -11471,6 +11823,7 @@ def build_curated(args: argparse.Namespace) -> None:
       join ingestion.source_rows sr on sr.id = rv.source_row_id
       join ingestion.source_files sf on sf.id = sr.source_file_id
       where sf.team = {team_p} and sf.season = {season_p} and sf.file_name like {exposure_pattern_p}
+        {exposure_sha_filter}
         and rv.version_number = (
           select max(rv2.version_number) from processing.record_versions rv2 where rv2.source_row_id = rv.source_row_id
         );
@@ -15437,6 +15790,7 @@ def main() -> None:
     build_curated_parser.add_argument("--team", required=True)
     build_curated_parser.add_argument("--season", default="2024-25")
     build_curated_parser.add_argument("--rebuild", action="store_true")
+    build_curated_parser.add_argument("--exposure-file-sha256", default="")
     build_curated_parser.set_defaults(func=build_curated)
 
     reconcile_curated_parser = subcommands.add_parser("reconcile-curated")
