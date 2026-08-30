@@ -24,7 +24,7 @@ insert into supabase_migrations.schema_migrations (version, name, statements)
 values (
   '20260830160000',
   'urc_2025_26_v6_exposure_successor_league_snapshot',
-  array['migration_sha256=41dbf5f4245e549cf7fbfeb67290d77cd3bd053e5038db042341ed94075d20ad']
+  array['migration_sha256=8d1d077c543b8cb4112fc9d8f06a9c23ee28acc4d717477483fb292d81593956']
 )
 on conflict (version) do nothing;
 
@@ -35,7 +35,7 @@ begin
     where version = '20260830160000'
       and name = 'urc_2025_26_v6_exposure_successor_league_snapshot'
       and statements = array[
-        'migration_sha256=41dbf5f4245e549cf7fbfeb67290d77cd3bd053e5038db042341ed94075d20ad'
+        'migration_sha256=8d1d077c543b8cb4112fc9d8f06a9c23ee28acc4d717477483fb292d81593956'
       ]
   ) then
     raise exception 'Year 2 exposure-successor league snapshot registration is invalid';

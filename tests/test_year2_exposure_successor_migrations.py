@@ -91,6 +91,53 @@ class Year2ExposureSuccessorMigrationTests(unittest.TestCase):
         self.assertNotIn("2024-25", placeholder)
         self.assertNotIn("2024-25", league)
 
+    def test_league_snapshot_uses_the_bounded_materialised_member_path(self) -> None:
+        sql = LEAGUE.read_text().lower()
+        pre_replacement = sql.split(
+            "create or replace view analysis.league_dashboard_release_candidates_analysis_window_v6",
+            maxsplit=1,
+        )[0]
+
+        self.assertEqual(sql.count("create temporary table _v6_"), 11)
+        for token in (
+            "current_setting('transaction_isolation') <> 'repeatable read'",
+            "set local statement_timeout = '5min'",
+            "set local lock_timeout = '5s'",
+            "reporting.team_release_payloads_v6",
+            "payload.payload_sha256 =",
+            "reporting.canonical_jsonb_sha256_v1(payload.dashboard_payload)",
+            "accepted_urc_2025_26_exposure_successor_evidence_v6",
+            "76872.2616717166666666::numeric",
+            "87854.0133391047619046::numeric",
+            "5490.8758336940476190::numeric",
+            "exposure_rows = 62481",
+            "exposed_players = 490",
+            "weeks = 44",
+            "includes_temporary_league_mean_estimates_for_two_teams",
+            "before update or delete",
+            "enable row level security",
+        ):
+            self.assertIn(token, sql)
+        self.assertNotIn(
+            "analysis.league_dashboard_payload_analysis_window_v6_enriched",
+            pre_replacement,
+        )
+        self.assertNotIn("set local statement_timeout = 0", sql)
+        self.assertNotIn("grant select", sql)
+
+    def test_league_snapshot_keeps_estimated_months_and_distance_unavailable(self) -> None:
+        sql = LEAGUE.read_text().lower()
+
+        for token in (
+            "'distance_km', null::numeric",
+            "month -> 'exposure_hours' is distinct from 'null'::jsonb",
+            "month -> 'distance_km' is distinct from 'null'::jsonb",
+            "month -> 'incidence_per_1000h' is distinct from 'null'::jsonb",
+            "month -> 'burden_per_1000h' is distinct from 'null'::jsonb",
+            "jsonb_array_length(dashboard -> 'limitations') = 3",
+        ):
+            self.assertIn(token, sql)
+
     def test_team_snapshot_is_private_immutable_and_state_bound(self) -> None:
         sql = TEAM_SNAPSHOT.read_text().lower()
 
