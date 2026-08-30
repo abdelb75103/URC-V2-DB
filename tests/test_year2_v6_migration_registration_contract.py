@@ -33,6 +33,10 @@ REPORTING_KEY_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_reporting_key_family_correction_migration.sql"
 ).read_text(encoding="utf-8")
+FAMILY_MAPPING_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_family_mapping_contract_correction_migration.sql"
+).read_text(encoding="utf-8")
 
 
 def registration_for(version: str) -> str:
@@ -44,6 +48,8 @@ def registration_for(version: str) -> str:
         return CUTOVER_REGISTRATION
     if version == "20260831100000":
         return REPORTING_KEY_REGISTRATION
+    if version == "20260831101000":
+        return FAMILY_MAPPING_REGISTRATION
     return REGISTRATION
 
 

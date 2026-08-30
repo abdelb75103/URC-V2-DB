@@ -15,6 +15,14 @@ REGISTRATION = (
     / "tools/sql/register_urc_2025_26_reporting_key_family_correction_migration.sql"
 )
 EVIDENCE = ROOT / "docs/evidence/urc_2025_26_reporting_key_family_correction.json"
+MAPPING_CONTRACT_MIGRATION = (
+    ROOT
+    / "supabase/migrations/20260831101000_urc_2025_26_family_mapping_contract_correction.sql"
+)
+MAPPING_CONTRACT_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_family_mapping_contract_correction_migration.sql"
+)
 
 
 class Year2ReportingKeyFamilyCorrectionTests(unittest.TestCase):
@@ -111,6 +119,28 @@ class Year2ReportingKeyFamilyCorrectionTests(unittest.TestCase):
             "year 2 reporting-key and family correction registration is invalid",
         ):
             self.assertIn(value, lower)
+
+    def test_public_mapping_identity_remains_frozen_in_additive_snapshot(self) -> None:
+        migration = MAPPING_CONTRACT_MIGRATION.read_text(encoding="utf-8")
+        registration = MAPPING_CONTRACT_REGISTRATION.read_text(encoding="utf-8")
+        self.assertEqual(
+            hashlib.sha256(MAPPING_CONTRACT_MIGRATION.read_bytes()).hexdigest(),
+            "a711d6bdd4af0618c2adafb6b30ca7be03f5251150db799bc43915b62e3fd39f",
+        )
+        for value in (
+            "analysis.injury_type_families_from_payload_v3",
+            "injury_type_family_2026-07-21_v1",
+            "snapshot_version = '20260831101000'",
+            "create or replace view analysis.team_dashboard_release_candidates_analysis_window_v6",
+            "candidate.dashboard - 'injury_type_families'",
+        ):
+            self.assertIn(value, migration)
+        self.assertEqual(
+            registration.count(
+                "migration_sha256=a711d6bdd4af0618c2adafb6b30ca7be03f5251150db799bc43915b62e3fd39f"
+            ),
+            2,
+        )
 
 
 if __name__ == "__main__":

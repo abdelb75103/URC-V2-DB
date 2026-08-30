@@ -174,6 +174,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260830155000",
         "20260830170000",
         "20260831100000",
+        "20260831101000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -245,6 +246,18 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
                 "classification_evidence_sha256=d9a8d41772ffadd89ad1b40ae3e8494586adc87a5beff372ddfa8307117cc172",
                 "candidate_snapshot_version=20260831100000",
+            ),
+        ),
+        MigrationContract(
+            version="20260831101000",
+            name="urc_2025_26_family_mapping_contract_correction",
+            sha256="a711d6bdd4af0618c2adafb6b30ca7be03f5251150db799bc43915b62e3fd39f",
+            registration_statements=(
+                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
+                "classification_evidence_sha256=d9a8d41772ffadd89ad1b40ae3e8494586adc87a5beff372ddfa8307117cc172",
+                "candidate_snapshot_version=20260831101000",
+                "family_mapping_version=injury_type_family_2026-07-21_v1",
             ),
         ),
     ),
