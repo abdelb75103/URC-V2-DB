@@ -11,6 +11,23 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-30: 2024-25 explicit-context exposure scope successor
+
+| Field | Value |
+|---|---|
+| Status | `accepted-local-candidate`: the deterministic source replay and independent row-boundary reconciliation pass. Live migration and release promotion are pending final fresh-context review and target attestation. |
+| Rule version | Cohort `analysis_window_2024-25_2026-08-30_v2`; analysis `v5`; classification `reporting_classification_2024-25_2026-08-27_v1`. |
+| Carry-forward | The explicit-context principle is shared with 2025-26. These six source-context mappings are `season-specific` to the 2024-25 source files. |
+| Evidence | `docs/evidence/urc_2024-25_exposure_scope_successor_2026-08-30.json`, SHA-256 `a56372cc531076ab00102413417fabd08d289fa296afed4f244b2db2d1132010`. |
+| Migration | Additive successor `20260830120000_urc_2024_25_exposure_scope_successor.sql`, SHA-256 `237a9379d93bf0171e5a605ccb76afdb93f302f69951048bfd2f794d200f1305`. |
+| Decision provenance | Abdel Babiker, 30 August 2026. |
+
+**Accepted boundary.** The successor excludes only 1,238 V5 exposure rows carrying exact reviewed source context: 423 academy or age-grade rows, 775 explicit non-URC match rows and 40 other named non-cohort rows. The exclusion is 1,444.576389 hours across Cardiff 341, Dragons 91, Edinburgh 391, Glasgow 40, Ospreys 235 and Scarlets 140 rows. Scarlets `Match Warm Up` stays included. Ospreys `SRC Match` is excluded independently of the competition field.
+
+**Lineage and integrity.** All 16 cleaned file hashes reproduce the accepted V5 denominator of 64,511 rows and 81,352.919497 hours. The successor retains 63,273 rows and 79,908.343109 hours. Source and curated rows remain immutable. The database successor records one append-only decision per excluded source row and derives corrected exposure, coverage, monthly denominators and rate fields from the retained V5 snapshot. Injuries, classifications, fixtures, match hours and unrelated payload fields do not change. The decision-rowset SHA-256 is `672f788e8fea5220fe30a8742eca6b1561a2ad092a545667a5ab50a697fa4086`; the retained-rowset SHA-256 is `5cd015547c05a3910e4743e8a3b705b4cf718982ec76df55b8fc4bf6625d3075`.
+
+**Rollback.** The current immutable release `urc-2024-25-v5-0445139ad3a3-a1` remains retained. Rollback is a new ordinary release from those retained predecessor bytes, never a mutation or re-approval of the historical release.
+
 ## 2026-08-30: Accepted 2025-26 zero-day and date-duration successor
 
 | Field | Value |

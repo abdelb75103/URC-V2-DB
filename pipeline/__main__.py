@@ -4797,7 +4797,21 @@ URC_2024_25_SUCCESSOR_CORRECTION_GUARD_MIGRATION_VERSION = "20260827160000"
 URC_2024_25_SETTING_PROFILE_SUCCESSOR_MIGRATION_VERSION = "20260827170000"
 URC_2024_25_SETTING_PROFILE_ASSERTION_MIGRATION_VERSION = "20260827171000"
 URC_2024_25_RECORDED_PROFILE_SUCCESSOR_MIGRATION_VERSION = "20260827172000"
+URC_2024_25_EXPOSURE_SCOPE_SUCCESSOR_MIGRATION_VERSION = "20260830120000"
 ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION = "analysis_window_2024-25_2026-07-25_v1"
+URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION = "analysis_window_2024-25_2026-08-30_v2"
+URC_2024_25_EXPOSURE_SCOPE_EVIDENCE_LOCATOR = (
+    "docs/evidence/urc_2024-25_exposure_scope_successor_2026-08-30.json"
+)
+URC_2024_25_EXPOSURE_SCOPE_EVIDENCE_SHA256 = (
+    "a56372cc531076ab00102413417fabd08d289fa296afed4f244b2db2d1132010"
+)
+URC_2024_25_EXPOSURE_SCOPE_MIGRATION_SHA256 = (
+    "237a9379d93bf0171e5a605ccb76afdb93f302f69951048bfd2f794d200f1305"
+)
+URC_2024_25_EXPOSURE_SCOPE_DECISION_ROWSET_SHA256 = (
+    "672f788e8fea5220fe30a8742eca6b1561a2ad092a545667a5ab50a697fa4086"
+)
 ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR = "docs/evidence/analysis_window_2024-25_v5.json"
 ANALYSIS_WINDOW_V5_EVIDENCE_SHA256 = "c9530c949c60ff4abe91753571dfed6dd9d1146f33cc466dfbbc7fdeddb8443d"
 ANALYSIS_WINDOW_V5_INJURY_AUDIT_LOCATOR = (
@@ -8092,6 +8106,7 @@ def release_league(args: argparse.Namespace) -> None:
         ("v4", "reporting_classification_2026-07-22_v2", "lineage_2024-25_2026-07-24_v1"),
         ("v5", "reporting_classification_2026-07-22_v2", ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION),
         ("v5", "reporting_classification_2024-25_2026-08-27_v1", ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION),
+        ("v5", "reporting_classification_2024-25_2026-08-27_v1", URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION),
     }
     if season == "2025-26":
         supported_release_variants.add(YEAR2_2025_26_RELEASE_TUPLE)
@@ -8213,7 +8228,9 @@ def release_league(args: argparse.Namespace) -> None:
         year2_release_contract.decision_recorded_at
         if analysis_version == "v6" and year2_release_contract is not None
         else (
-            "2026-07-25"
+            "2026-08-30"
+            if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION
+            else "2026-07-25"
             if analysis_version == "v5"
         else (
             "2026-07-24"
@@ -8242,18 +8259,33 @@ def release_league(args: argparse.Namespace) -> None:
 
     v5_evidence_sha256s: dict[str, str] = {}
     if analysis_version == "v5":
-        for locator in (
+        locators = [
             ANALYSIS_WINDOW_V5_INJURY_AUDIT_LOCATOR,
             ANALYSIS_WINDOW_V5_EXPOSURE_EVIDENCE_LOCATOR,
             ANALYSIS_WINDOW_V5_SQL_RECONCILIATION_LOCATOR,
             ANALYSIS_WINDOW_V5_CANDIDATE_PERFORMANCE_LOCATOR,
-        ):
+        ]
+        if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION:
+            locators.append(URC_2024_25_EXPOSURE_SCOPE_EVIDENCE_LOCATOR)
+        for locator in locators:
             evidence_path = Path(locator)
             if not evidence_path.is_file():
                 raise SystemExit(f"V5 row-level evidence is missing: {locator}")
             v5_evidence_sha256s[locator] = hashlib.sha256(
                 evidence_path.read_bytes()
             ).hexdigest()
+        if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION:
+            if v5_evidence_sha256s[URC_2024_25_EXPOSURE_SCOPE_EVIDENCE_LOCATOR] != (
+                URC_2024_25_EXPOSURE_SCOPE_EVIDENCE_SHA256
+            ):
+                raise SystemExit("2024-25 exposure-scope evidence SHA-256 mismatch")
+            successor_migration = Path(
+                "supabase/migrations/20260830120000_urc_2024_25_exposure_scope_successor.sql"
+            )
+            if hashlib.sha256(successor_migration.read_bytes()).hexdigest() != (
+                URC_2024_25_EXPOSURE_SCOPE_MIGRATION_SHA256
+            ):
+                raise SystemExit("2024-25 exposure-scope migration SHA-256 mismatch")
 
     provenance = run_provenance()
     dirty_release_override = (
@@ -8319,6 +8351,10 @@ def release_league(args: argparse.Namespace) -> None:
                 URC_2024_25_SETTING_PROFILE_ASSERTION_MIGRATION_VERSION,
                 URC_2024_25_RECORDED_PROFILE_SUCCESSOR_MIGRATION_VERSION,
             ])
+            if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION:
+                required_migrations.append(
+                    URC_2024_25_EXPOSURE_SCOPE_SUCCESSOR_MIGRATION_VERSION
+                )
     elif analysis_version == "v4":
         required_migrations = [
             INJURY_MASTER_LINEAGE_MIGRATION_VERSION,
@@ -8345,7 +8381,7 @@ def release_league(args: argparse.Namespace) -> None:
         assert_checksum_bound_release_migrations(year2_release_contract, "V6 league release")
     else:
         migration_rows = query_sql(
-            "select version from supabase_migrations.schema_migrations "
+            "select version, name, statements from supabase_migrations.schema_migrations "
             "where version = any(array["
             + ", ".join(f"'{version}'" for version in required_migrations)
             + "])"
@@ -8355,6 +8391,21 @@ def release_league(args: argparse.Namespace) -> None:
                 "release-league requires tracked migrations "
                 + ", ".join(required_migrations)
             )
+        if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION:
+            expected_registration = {
+                "version": URC_2024_25_EXPOSURE_SCOPE_SUCCESSOR_MIGRATION_VERSION,
+                "name": "urc_2024_25_exposure_scope_successor",
+                "statements": [
+                    "migration_sha256=" + URC_2024_25_EXPOSURE_SCOPE_MIGRATION_SHA256,
+                    "cohort_view_version=" + URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION,
+                    "decision_rowset_sha256="
+                    + URC_2024_25_EXPOSURE_SCOPE_DECISION_ROWSET_SHA256,
+                ],
+            }
+            if expected_registration not in migration_rows:
+                raise SystemExit(
+                    "2024-25 exposure-scope migration registration is not checksum-bound"
+                )
     if analysis_version == "v6" and year2_release_contract is not None:
         availability_params = SqlParams()
         availability_rows = query_sql(
@@ -8423,8 +8474,16 @@ def release_league(args: argparse.Namespace) -> None:
         elif analysis_version == "v5":
             if classification_view_version == "reporting_classification_2024-25_2026-08-27_v1":
                 semantic_cohort_view = "analysis.urc_2024_25_final_injury_classification_v1"
-                semantic_monthly_view = "analysis.urc_2024_25_league_monthly_v1"
-                semantic_summary_view = "analysis.analysis_window_league_summary_v5"
+                semantic_monthly_view = (
+                    "analysis.urc_2024_25_exposure_scope_league_monthly_v1"
+                    if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION
+                    else "analysis.urc_2024_25_league_monthly_v1"
+                )
+                semantic_summary_view = (
+                    "analysis.urc_2024_25_exposure_scope_league_summary_v1"
+                    if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION
+                    else "analysis.analysis_window_league_summary_v5"
+                )
                 semantic_monthly_is_fixed_season = True
             else:
                 semantic_cohort_view = "analysis.analysis_window_injury_cohort_v5"
@@ -8578,13 +8637,22 @@ def release_league(args: argparse.Namespace) -> None:
               and migration_version = {cohort_params.text(year2_release_contract.required_migrations[0])}
             """
         elif analysis_version == "v5":
-            cohort_adjudication_filter = f"""
-              and adjudication_ref = 'ANALYSIS-WINDOW-01'
-              and evidence_sha256 = {cohort_params.text(ANALYSIS_WINDOW_V5_EVIDENCE_SHA256)}
-              and evidence_locator = {cohort_params.text(ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR)}
-              and reviewer = 'Abdel Babiker'
-              and migration_version = {cohort_params.text(ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION)}
-            """
+            if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION:
+                cohort_adjudication_filter = f"""
+                  and adjudication_ref = 'EXPOSURE-SCOPE-2024-25-01'
+                  and evidence_sha256 = {cohort_params.text(URC_2024_25_EXPOSURE_SCOPE_EVIDENCE_SHA256)}
+                  and evidence_locator = {cohort_params.text(URC_2024_25_EXPOSURE_SCOPE_EVIDENCE_LOCATOR)}
+                  and reviewer = 'Abdel Babiker'
+                  and migration_version = {cohort_params.text(URC_2024_25_EXPOSURE_SCOPE_SUCCESSOR_MIGRATION_VERSION)}
+                """
+            else:
+                cohort_adjudication_filter = f"""
+                  and adjudication_ref = 'ANALYSIS-WINDOW-01'
+                  and evidence_sha256 = {cohort_params.text(ANALYSIS_WINDOW_V5_EVIDENCE_SHA256)}
+                  and evidence_locator = {cohort_params.text(ANALYSIS_WINDOW_V5_EVIDENCE_LOCATOR)}
+                  and reviewer = 'Abdel Babiker'
+                  and migration_version = {cohort_params.text(ANALYSIS_WINDOW_REPORTING_V5_MIGRATION_VERSION)}
+                """
         elif analysis_version == "v4":
             cohort_adjudication_filter = f"""
               and adjudication_ref = 'LINEAGE-01'
@@ -15284,6 +15352,7 @@ def main() -> None:
             "season_bound_2026-07-20_v1",
             "lineage_2024-25_2026-07-24_v1",
             ANALYSIS_WINDOW_V5_COHORT_VIEW_VERSION,
+            URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION,
             "analysis_window_2025-26_2026-08-15_v1",
         ],
     )

@@ -1,0 +1,128 @@
+{
+  "evidence_version": "exposure_scope_2024-25_2026-08-30_v1",
+  "predecessor": {
+    "bundle_sha256": "0445139ad3a36236eeb047b9f94a3188f55906b2dd76624585111030d3143288",
+    "cohort_view_version": "analysis_window_2024-25_2026-07-25_v1",
+    "release_id": "20f2b6ed-d3d3-4349-88b9-fc5c9f143eed"
+  },
+  "rule": "Exclude only source rows with exact reviewed academy, age-grade, named non-cohort or explicit non-URC match context. Preserve source and curated rows.",
+  "source_files": {
+    "benetton": {
+      "path": "data/intake/2024-25/benetton/benetton_exposure_cleaned_2024-25.csv",
+      "sha256": "60b2263beb4bc12ad9ed4990cfb6fdb908ed90190eeed29a6a6b7e4df2eb694e"
+    },
+    "bulls": {
+      "path": "data/intake/2024-25/bulls/bulls_exposure_cleaned_2024-25.csv",
+      "sha256": "75a04f73bb169fce594789fb7d975727c254eceb4158ecaa0db9e1b3b5f811d0"
+    },
+    "cardiff": {
+      "path": "data/intake/2024-25/cardiff/cardiff_exposure_cleaned_2024-25.csv",
+      "sha256": "9c24c5a223f7d4bc31914c709a22621965057c645e0993036c624c99c1d24e86"
+    },
+    "connacht": {
+      "path": "data/intake/2024-25/connacht/connacht_exposure_cleaned_2024-25.csv",
+      "sha256": "7db203843198afd4fa90fb4ab59716bf9d6e5a4c94043326823f8306f848aa84"
+    },
+    "dragons": {
+      "path": "data/intake/2024-25/dragons/dragons_exposure_cleaned_2024-25.csv",
+      "sha256": "dc88dc7416a9f2dcdc46575132c89f2393fb26e891e09c37084e8e0dc8a5e92e"
+    },
+    "edinburgh": {
+      "path": "data/intake/2024-25/edinburgh/edinburgh_exposure_cleaned_2024-25.csv",
+      "sha256": "f2dae263947036980ec64a42e47467a872b9f4d8c946c3a7fe31f1a8f90f5cd0"
+    },
+    "glasgow": {
+      "path": "data/intake/2024-25/glasgow/glasgow_exposure_cleaned_2024-25.csv",
+      "sha256": "1a7d31c7bdcce84846817bf4eb62c74bea1f8bb9b1e65410d5fdf270a0ea74fb"
+    },
+    "leinster": {
+      "path": "data/intake/2024-25/leinster/leinster_exposure_cleaned_2024-25.csv",
+      "sha256": "b15de4026e70a1cd5de75eb08161d30fcf9854fcd4e9bb07fd257e1c454f8a9f"
+    },
+    "lions": {
+      "path": "data/intake/2024-25/lions/lions_exposure_cleaned_2024-25.csv",
+      "sha256": "3667c5af1e3c237bf49289bc9f97cb6a710820a37b2dfa26c53cca851d551967"
+    },
+    "munster": {
+      "path": "data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
+      "sha256": "c8a09d4dfc1a14cb469c5929a563af3fd5f61f5700578478fe1553268084adc1"
+    },
+    "ospreys": {
+      "path": "data/intake/2024-25/ospreys/ospreys_exposure_cleaned_2024-25.csv",
+      "sha256": "83ee7c20d90bfbe12f643ee1e95fa8d9cb631eea5133463455f65efb082eb7fa"
+    },
+    "scarlets": {
+      "path": "data/intake/2024-25/scarlets/scarlets_exposure_cleaned_2024-25.csv",
+      "sha256": "a457a26a79f7490f57fffba28ceb26e461fefd669515b7be2c914fdf4b17cd71"
+    },
+    "sharks": {
+      "path": "data/intake/2024-25/sharks/sharks_exposure_cleaned_2024-25.csv",
+      "sha256": "4c9c7aed6b6006d385b7ce4dc2031787d7c5b987fb6ca1d5c0dfd12abef9f669"
+    },
+    "stormers": {
+      "path": "data/intake/2024-25/stormers/stormers_exposure_cleaned_2024-25.csv",
+      "sha256": "c1ddb4fcc9a6aa16e29bbe720af16ebf7a696d91830bac1e7f1b52105fe2b169"
+    },
+    "ulster": {
+      "path": "data/intake/2024-25/ulster/ulster_exposure_cleaned_2024-25.csv",
+      "sha256": "447d290f6caec3f2d7928f32151434020bd8c42b69557482516248d99961677e"
+    },
+    "zebre": {
+      "path": "data/intake/2024-25/zebre/zebre_exposure_cleaned_2024-25.csv",
+      "sha256": "522e97f0785c355f3f563b28533a3af382dc8cc3b9cd9c5baceec6d44af4d66c"
+    }
+  },
+  "successor": {
+    "cohort_view_version": "analysis_window_2024-25_2026-08-30_v2",
+    "decision_rowset_sha256": "672f788e8fea5220fe30a8742eca6b1561a2ad092a545667a5ab50a697fa4086",
+    "excluded_by_reason": {
+      "academy_or_age_grade": {
+        "hours": "567.251944",
+        "rows": 423
+      },
+      "explicit_non_urc_match": {
+        "hours": "816.526667",
+        "rows": 775
+      },
+      "other_named_non_cohort": {
+        "hours": "60.797778",
+        "rows": 40
+      }
+    },
+    "excluded_by_team": {
+      "cardiff": {
+        "hours": "363.778333",
+        "rows": 341
+      },
+      "dragons": {
+        "hours": "96.833333",
+        "rows": 91
+      },
+      "edinburgh": {
+        "hours": "524.938611",
+        "rows": 391
+      },
+      "glasgow": {
+        "hours": "60.797778",
+        "rows": 40
+      },
+      "ospreys": {
+        "hours": "254.391667",
+        "rows": 235
+      },
+      "scarlets": {
+        "hours": "143.836667",
+        "rows": 140
+      }
+    },
+    "excluded_hours": "1444.576389",
+    "excluded_rows": 1238,
+    "included_hours": "79908.343109",
+    "included_rows": 63273,
+    "retained_rowset_sha256": "5cd015547c05a3910e4743e8a3b705b4cf718982ec76df55b8fc4bf6625d3075"
+  },
+  "v5_replay": {
+    "hours": "81352.919497",
+    "rows": 64511
+  }
+}
