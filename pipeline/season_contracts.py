@@ -285,7 +285,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         ),
     ),
     release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
-    release_reason_code="league_dashboard_release_v6_reporting_correction",
+    release_reason_code="league_dashboard_release_v6",
     decision_recorded_at="2026-08-31",
     cohort_adjudication_ref="INJURY-LINEAGE-2025-26-2026-08-30-V2",
     cohort_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
