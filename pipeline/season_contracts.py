@@ -307,6 +307,16 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "retained_team_count=14",
             ),
         ),
+        MigrationContract(
+            version="20260831123000",
+            name="urc_2025_26_welsh_fixture_release_context_date",
+            sha256="19ce1c8db124b96fda83764416dbfb98a241ca16b0dc38cd4705efed642c40ae",
+            registration_statements=(
+                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-31_v3",
+                "decision_recorded_at=2026-08-31",
+            ),
+        ),
     ),
     release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
     release_reason_code="league_dashboard_release_v6",

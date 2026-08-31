@@ -49,6 +49,10 @@ WELSH_LEAGUE_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_welsh_fixture_league_candidate_snapshot_migration.sql"
 ).read_text(encoding="utf-8")
+WELSH_CONTEXT_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_welsh_fixture_release_context_date_migration.sql"
+).read_text(encoding="utf-8")
 
 
 def registration_for(version: str) -> str:
@@ -68,6 +72,8 @@ def registration_for(version: str) -> str:
         return WELSH_CANDIDATE_REGISTRATION
     if version == "20260831122000":
         return WELSH_LEAGUE_REGISTRATION
+    if version == "20260831123000":
+        return WELSH_CONTEXT_REGISTRATION
     return REGISTRATION
 
 
@@ -124,10 +130,10 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
             include_league=True,
         )
 
-        self.assertEqual(league_contracts[:-1], base_contracts)
+        self.assertEqual(league_contracts[:-2], base_contracts)
         self.assertEqual(
-            tuple(item.version for item in league_contracts[-1:]),
-            ("20260831122000",),
+            tuple(item.version for item in league_contracts[-2:]),
+            ("20260831122000", "20260831123000"),
         )
         self.assertFalse((
             ROOT / "tools/sql/register_urc_2025_26_exposure_successor_league_snapshot_migration.sql"

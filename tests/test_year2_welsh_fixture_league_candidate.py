@@ -14,6 +14,15 @@ MIGRATION = ROOT / "supabase/migrations" / f"{VERSION}_{NAME}.sql"
 REGISTRATION = (
     ROOT / "tools/sql/register_urc_2025_26_welsh_fixture_league_candidate_snapshot_migration.sql"
 )
+CONTEXT_VERSION = "20260831123000"
+CONTEXT_NAME = "urc_2025_26_welsh_fixture_release_context_date"
+CONTEXT_MIGRATION = (
+    ROOT / "supabase/migrations" / f"{CONTEXT_VERSION}_{CONTEXT_NAME}.sql"
+)
+CONTEXT_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_welsh_fixture_release_context_date_migration.sql"
+)
 
 
 class Year2WelshFixtureLeagueCandidateTests(unittest.TestCase):
@@ -54,10 +63,27 @@ class Year2WelshFixtureLeagueCandidateTests(unittest.TestCase):
         self.assertIn("league_candidate_snapshot_version = '20260831122000'", raw)
         self.assertEqual(registration.count(f"migration_sha256={sha256}"), 2)
         contract = YEAR2_2025_26_RELEASE_CONTRACT.league_required_migration_contracts
-        self.assertEqual(len(contract), 1)
+        self.assertEqual(len(contract), 2)
         self.assertEqual(contract[0].version, VERSION)
         self.assertEqual(contract[0].name, NAME)
         self.assertEqual(contract[0].sha256, sha256)
+
+    def test_context_date_accepts_only_the_corrected_tuple_on_review_date(self) -> None:
+        raw = CONTEXT_MIGRATION.read_text(encoding="utf-8")
+        registration = CONTEXT_REGISTRATION.read_text(encoding="utf-8")
+        sha256 = hashlib.sha256(CONTEXT_MIGRATION.read_bytes()).hexdigest()
+
+        for token in (
+            "injury_lineage_2025-26_2026-08-30_v2",
+            "injury_lineage_2025-26_2026-08-31_v3",
+            "reporting_classification_2025-26_2026-08-31_v3",
+            "decision_recorded_at = date '2026-08-31'",
+        ):
+            self.assertIn(token, raw)
+        self.assertEqual(registration.count(f"migration_sha256={sha256}"), 2)
+        context = YEAR2_2025_26_RELEASE_CONTRACT.league_required_migration_contracts
+        self.assertEqual(context[-1].version, CONTEXT_VERSION)
+        self.assertEqual(context[-1].sha256, sha256)
 
 
 if __name__ == "__main__":

@@ -127,7 +127,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         )
         self.assertEqual(
             tuple(item.version for item in contract.league_required_migration_contracts),
-            ("20260831122000",),
+            ("20260831122000", "20260831123000"),
         )
         self.assertEqual(
             contract.cohort_adjudication_ref,
