@@ -51,7 +51,7 @@ const syntheticModel = {
     trainingBurdenPer1000h: 72 + index * 2,
   })),
   comparisonBenchmarks: { allIncidencePer1000h: 8, allBurdenPer1000h: 120, matchIncidencePer1000h: 10, matchBurdenPer1000h: 200, trainingIncidencePer1000h: 5, trainingBurdenPer1000h: 100 },
-  seasonComparison: { priorSeason: "2024-25", status: "frozen", note: "Frozen approved release.", headline: [], settings: [] },
+  seasonComparison: { comparisonSeason: "2024-25", status: "frozen", note: "Frozen approved release.", headline: [], settings: [] },
   method: ["Released aggregate metrics only."],
   limitations: ["Not available values are not inferred."],
 };

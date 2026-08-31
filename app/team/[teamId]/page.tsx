@@ -41,17 +41,17 @@ export default async function TeamPage({
   }
 
   let dashboard;
-  let previousDashboard;
+  let comparisonDashboard;
   let comparisons: TeamComparisonRow[] = [];
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   let viewerComparisonId: string | null = null;
   try {
-    ({ dashboard, previousDashboard, comparisons, leagueMetrics, viewer_comparison_id: viewerComparisonId } =
+    ({ dashboard, comparisonDashboard, comparisons, leagueMetrics, viewer_comparison_id: viewerComparisonId } =
       await getTeamPageData(team.id, season));
   } catch {
     dashboard = undefined;
-    previousDashboard = undefined;
+    comparisonDashboard = undefined;
     comparisons = [];
     leagueMetrics = [];
     viewerComparisonId = null;
@@ -77,7 +77,7 @@ export default async function TeamPage({
   const teamColor = resolveTeamPalette(team);
   const reportModel = buildReportModel({
     current: dashboard,
-    prior: previousDashboard ?? null,
+    prior: comparisonDashboard ?? null,
     expectedScope: 'team',
     expectedSeason: season,
     subjectName: team.name,

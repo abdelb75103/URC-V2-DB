@@ -1600,10 +1600,10 @@ function comparisonValue(value: number | null, unit: string) {
   return value === null ? 'Not available' : `${fmt(value, unit === 'injuries' ? 0 : 1)} ${unit}`;
 }
 
-function SeasonComparisonRow({ metric, currentSeason, priorSeason }: {
+function SeasonComparisonRow({ metric, currentSeason, comparisonSeason }: {
   metric: SeasonComparisonMetric;
   currentSeason: string;
-  priorSeason: string;
+  comparisonSeason: string;
 }) {
   return (
     <tr className="border-t border-border/60 align-top">
@@ -1611,7 +1611,7 @@ function SeasonComparisonRow({ metric, currentSeason, priorSeason }: {
       <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground" aria-label={`${currentSeason}: ${comparisonValue(metric.currentValue, metric.unit)}`}>
         {comparisonValue(metric.currentValue, metric.unit)}
       </td>
-      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground" aria-label={`${priorSeason}: ${comparisonValue(metric.priorValue, metric.unit)}`}>
+      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground" aria-label={`${comparisonSeason}: ${comparisonValue(metric.priorValue, metric.unit)}`}>
         {comparisonValue(metric.priorValue, metric.unit)}
       </td>
       <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground">
@@ -1638,11 +1638,11 @@ function SeasonComparisonTab({ model }: { model: ReportModel }) {
           <tr>
             <th className="w-[28%] px-3 py-3 text-left font-medium">Metric</th>
             <th className="w-[22%] px-3 py-3 text-right font-medium">{model.season}</th>
-            <th className="w-[22%] px-3 py-3 text-right font-medium">{comparison.priorSeason}</th>
+            <th className="w-[22%] px-3 py-3 text-right font-medium">{comparison.comparisonSeason}</th>
             <th className="w-[28%] px-3 py-3 text-right font-medium">Delta or comparability</th>
           </tr>
         </thead>
-        <tbody>{rows.map((metric) => <SeasonComparisonRow key={metric.key} metric={metric} currentSeason={model.season} priorSeason={comparison.priorSeason} />)}</tbody>
+        <tbody>{rows.map((metric) => <SeasonComparisonRow key={metric.key} metric={metric} currentSeason={model.season} comparisonSeason={comparison.comparisonSeason} />)}</tbody>
       </table>
     </div>
   );
@@ -1652,7 +1652,7 @@ function SeasonComparisonTab({ model }: { model: ReportModel }) {
       <div>
         <SectionHeading title="Season Comparison" />
         <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          {model.scope === 'league' ? 'Pooled league values are compared with the prior pooled league release.' : `${model.subjectName} is compared only with its own prior approved release.`}
+          {model.scope === 'league' ? 'Pooled league values are compared between the two approved season releases.' : `${model.subjectName} is compared only with its own other approved season release.`}
           {' '}Deltas appear only when the released definitions and denominator status are comparable.
         </p>
       </div>

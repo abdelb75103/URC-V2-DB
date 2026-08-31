@@ -1,7 +1,7 @@
 import "server-only";
 import { Pool } from "pg";
 import { z } from "zod";
-import { previousDashboardSeason, type DashboardSeason } from "@/lib/dashboard-season";
+import { comparisonDashboardSeason, type DashboardSeason } from "@/lib/dashboard-season";
 import type {
   AnalyticsRow,
   Coverage,
@@ -713,8 +713,8 @@ async function approvedDashboardReleaseToken(
   pool: Pool,
   season: DashboardSeason
 ): Promise<string | null> {
-  const priorSeason = previousDashboardSeason(season);
-  const seasons = priorSeason ? [season, priorSeason] : [season];
+  const comparisonSeason = comparisonDashboardSeason(season);
+  const seasons = [season, comparisonSeason];
   const result = await approvedWebReaderQuery(pool,
     `select season, cache_token
      from reporting.latest_dashboard_cache_token_v2
@@ -732,8 +732,8 @@ async function approvedDashboardReleaseToken(
   }
   const currentToken = tokens.get(season);
   if (!currentToken) return null;
-  const priorToken = priorSeason ? tokens.get(priorSeason) ?? `missing:${priorSeason}` : "no-prior-season";
-  return `${season}:${currentToken}|${priorToken}`;
+  const comparisonToken = tokens.get(comparisonSeason) ?? `missing:${comparisonSeason}`;
+  return `${season}:${currentToken}|${comparisonToken}`;
 }
 
 async function loadStrictlyCachedDashboardPayload<T>(
@@ -960,7 +960,7 @@ function compareNullableNumbersDescending(left: number | null, right: number | n
 
 export type TeamPageData = {
   dashboard: DashboardData | undefined;
-  previousDashboard: DashboardData | undefined;
+  comparisonDashboard: DashboardData | undefined;
   comparisons: TeamComparisonRow[];
   leagueMetrics: SettingMetricRow[];
   /**
@@ -981,8 +981,8 @@ async function loadTeamPageData(
   season: DashboardSeason = "2024-25"
 ): Promise<TeamPageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, previousDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
-  const previousSeason = previousDashboardSeason(season);
+  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
+  const comparisonSeason = comparisonDashboardSeason(season);
 
   const result = await approvedWebReaderQuery(pool,
     `select
@@ -995,7 +995,7 @@ async function loadTeamPageData(
           from reporting.latest_team_dashboard_v6
           where team_key = $1 and season = $2
         ) team_row) as dashboard,
-       (select to_jsonb(previous_team_row) from (
+       (select to_jsonb(comparison_team_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, injury_type_families, severity_distribution,
@@ -1003,7 +1003,7 @@ async function loadTeamPageData(
                  limitations
           from reporting.latest_team_dashboard_v6
           where team_key = $1 and season = $3
-        ) previous_team_row) as previous_dashboard,
+        ) comparison_team_row) as comparison_dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
@@ -1019,20 +1019,20 @@ async function loadTeamPageData(
           from reporting.latest_league_dashboard_v6
           where season = $2
         ) league_metrics_row) as league_metrics`,
-    [teamId, season, previousSeason]
+    [teamId, season, comparisonSeason]
   );
   if (result.rows.length !== 1) throw new Error("expected one team page snapshot row");
 
   const snapshot = season === "2025-26"
     ? z.object({
         dashboard: v6TeamDashboardRowSchema.nullable(),
-        previous_dashboard: z.unknown().nullish(),
+        comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(v6ComparisonSourceRowSchema),
         league_metrics: v6LeagueMetricsSourceSchema.nullable(),
       }).strict().parse(result.rows[0])
     : z.object({
         dashboard: dashboardRowSchema.nullable(),
-        previous_dashboard: z.unknown().nullish(),
+        comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(comparisonSourceRowSchema),
         league_metrics: leagueMetricsSourceSchema.nullable(),
       }).parse(result.rows[0]);
@@ -1043,9 +1043,9 @@ async function loadTeamPageData(
     dashboard: snapshot.dashboard
       ? normalizeDashboardRow(snapshot.dashboard, "team")
       : undefined,
-    previousDashboard: snapshot.previous_dashboard && previousSeason
+    comparisonDashboard: snapshot.comparison_dashboard
       ? normalizeDashboardRow(
-          parseDashboardReaderRow(snapshot.previous_dashboard, previousSeason, "team"),
+          parseDashboardReaderRow(snapshot.comparison_dashboard, comparisonSeason, "team"),
           "team",
         )
       : undefined,
@@ -1062,9 +1062,9 @@ export async function getTeamPageData(
   season: DashboardSeason = "2024-25"
 ): Promise<TeamPageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, previousDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
+  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
   const releaseToken = await approvedDashboardReleaseToken(pool, season);
-  if (!releaseToken) return { dashboard: undefined, previousDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
+  if (!releaseToken) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
   return loadStrictlyCachedDashboardPayload(
     `team:${season}:${teamId}`,
     releaseToken,
@@ -1074,7 +1074,7 @@ export async function getTeamPageData(
 
 export type LeaguePageData = {
   dashboard: DashboardData | undefined;
-  previousDashboard: DashboardData | undefined;
+  comparisonDashboard: DashboardData | undefined;
   comparisons: TeamComparisonRow[];
   leagueMetrics: SettingMetricRow[];
 };
@@ -1084,8 +1084,8 @@ async function loadLeaguePageData(
   season: DashboardSeason = "2024-25"
 ): Promise<LeaguePageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, previousDashboard: undefined, comparisons: [], leagueMetrics: [] };
-  const previousSeason = previousDashboardSeason(season);
+  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [] };
+  const comparisonSeason = comparisonDashboardSeason(season);
 
   const result = await approvedWebReaderQuery(pool,
     `select
@@ -1098,7 +1098,7 @@ async function loadLeaguePageData(
           from reporting.latest_league_dashboard_v6
           where season = $1
         ) league_row) as dashboard,
-       (select to_jsonb(previous_league_row) from (
+       (select to_jsonb(comparison_league_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, injury_type_families, severity_distribution,
@@ -1106,7 +1106,7 @@ async function loadLeaguePageData(
                  limitations
           from reporting.latest_league_dashboard_v6
           where season = $2
-        ) previous_league_row) as previous_dashboard,
+        ) comparison_league_row) as comparison_dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
@@ -1115,19 +1115,19 @@ async function loadLeaguePageData(
            where season = $1
          ) comparison_row
        ), '[]'::jsonb) as comparisons`,
-    [season, previousSeason]
+    [season, comparisonSeason]
   );
   if (result.rows.length !== 1) throw new Error("expected one league page snapshot row");
 
   const snapshot = season === "2025-26"
     ? z.object({
         dashboard: v6LeagueDashboardRowSchema.nullable(),
-        previous_dashboard: z.unknown().nullish(),
+        comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(v6ComparisonSourceRowSchema),
       }).strict().parse(result.rows[0])
     : z.object({
         dashboard: dashboardRowSchema.nullable(),
-        previous_dashboard: z.unknown().nullish(),
+        comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(comparisonSourceRowSchema),
       }).parse(result.rows[0]);
 
@@ -1135,9 +1135,9 @@ async function loadLeaguePageData(
     dashboard: snapshot.dashboard
       ? normalizeDashboardRow(snapshot.dashboard, "league")
       : undefined,
-    previousDashboard: snapshot.previous_dashboard && previousSeason
+    comparisonDashboard: snapshot.comparison_dashboard
       ? normalizeDashboardRow(
-          parseDashboardReaderRow(snapshot.previous_dashboard, previousSeason, "league"),
+          parseDashboardReaderRow(snapshot.comparison_dashboard, comparisonSeason, "league"),
           "league",
         )
       : undefined,
@@ -1152,9 +1152,9 @@ export async function getLeaguePageData(
   season: DashboardSeason = "2024-25"
 ): Promise<LeaguePageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, previousDashboard: undefined, comparisons: [], leagueMetrics: [] };
+  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [] };
   const releaseToken = await approvedDashboardReleaseToken(pool, season);
-  if (!releaseToken) return { dashboard: undefined, previousDashboard: undefined, comparisons: [], leagueMetrics: [] };
+  if (!releaseToken) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [] };
   return loadStrictlyCachedDashboardPayload(
     `league:${season}`,
     releaseToken,

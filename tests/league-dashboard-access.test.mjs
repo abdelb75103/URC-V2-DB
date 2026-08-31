@@ -27,7 +27,7 @@ async function loadReportingForFixtureTest() {
   const zodUrl = pathToFileURL(require.resolve('zod')).href;
   const executable = source
     .replace('import "server-only";\n', '')
-    .replace('import { previousDashboardSeason, type DashboardSeason } from "@/lib/dashboard-season";', 'const previousDashboardSeason = (season) => season === "2025-26" ? "2024-25" : null;')
+    .replace('import { comparisonDashboardSeason, type DashboardSeason } from "@/lib/dashboard-season";', 'const comparisonDashboardSeason = (season) => season === "2025-26" ? "2024-25" : "2025-26";')
     .replace('import { Pool } from "pg";', `import pg from "${pgUrl}";\nconst { Pool } = pg;`)
     .replace('import { z } from "zod";', `import { z } from "${zodUrl}";`);
   const javascript = ts.transpileModule(executable, {
@@ -542,7 +542,7 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
     assert.equal(payloadQueryCount, 1, 'the two-season snapshot should reuse an unchanged composite token');
     priorReleaseToken = 'year-1-successor';
     await getLeaguePageData('2025-26');
-    assert.equal(payloadQueryCount, 2, 'a prior-season successor must invalidate the comparison snapshot');
+    assert.equal(payloadQueryCount, 2, 'a comparison-season successor must invalidate the comparison snapshot');
     assert.equal(pageData.dashboard?.season, '2025-26');
     assert.deepEqual(pageData.leagueMetrics.map((row) => row.setting), ['all', 'match', 'training', 'unknown']);
   } finally {

@@ -21,15 +21,15 @@ export default async function UrcOverallPage({
   const { season: seasonParameter } = await searchParams;
   const season = resolveDashboardSeason(seasonParameter);
   let dashboard;
-  let previousDashboard;
+  let comparisonDashboard;
   let comparisons: TeamComparisonRow[] = [];
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   try {
-    ({ dashboard, previousDashboard, comparisons, leagueMetrics } = await getLeaguePageData(season));
+    ({ dashboard, comparisonDashboard, comparisons, leagueMetrics } = await getLeaguePageData(season));
   } catch {
     dashboard = undefined;
-    previousDashboard = undefined;
+    comparisonDashboard = undefined;
     comparisons = [];
     leagueMetrics = [];
   }
@@ -53,7 +53,7 @@ export default async function UrcOverallPage({
 
   const reportModel = buildReportModel({
     current: dashboard,
-    prior: previousDashboard ?? null,
+    prior: comparisonDashboard ?? null,
     expectedScope: 'league',
     expectedSeason: season,
     subjectName: dashboard.team,

@@ -34,6 +34,13 @@ test('season comparison resolves only an approved supported predecessor', async 
   assert.equal(previousDashboardSeason('2025-26'), '2024-25');
 });
 
+test('report comparison resolves the other supported season in either direction', async () => {
+  const { comparisonDashboardSeason } = await loadDashboardSeason();
+
+  assert.equal(comparisonDashboardSeason('2024-25'), '2025-26');
+  assert.equal(comparisonDashboardSeason('2025-26'), '2024-25');
+});
+
 test('league and team routes resolve the query season before loading reporting data', async () => {
   const [leaguePage, teamPage] = await Promise.all([
     readFile(new URL('../app/urc/page.tsx', import.meta.url), 'utf8'),

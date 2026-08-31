@@ -164,7 +164,7 @@ function isRate(metric: Pick<HeadlineMetric, "key" | "unit" | "formula">): boole
 
 function comparisonMetric(current: HeadlineMetric, prior: HeadlineMetric | undefined, comparableWindow: boolean, comparableCoverage: boolean): SeasonComparisonMetric {
   const base = { key: current.key, label: current.label, unit: current.unit, currentValue: current.value, priorValue: prior?.value ?? null };
-  if (!prior) return { ...base, delta: null, deltaReason: "Not available in the prior approved release" };
+  if (!prior) return { ...base, delta: null, deltaReason: "Not available in the comparison release" };
   if (current.unit !== prior.unit || current.formula !== prior.formula) return { ...base, delta: null, deltaReason: "Metric definition changed" };
   if (!comparableWindow) return { ...base, delta: null, deltaReason: "Analysis windows are not comparable" };
   if (isRate(current) && (!comparableCoverage || !current.denominator || !prior.denominator)) {
@@ -256,11 +256,18 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
   const exportedAt = request.exportedAt ?? current.generated_at;
   if (Number.isNaN(Date.parse(exportedAt))) throw new Error("Report export timestamp is invalid");
   assertDashboardIdentity(current, expectedScope, expectedSeason, subjectName);
+  let comparisonRelease = current.prior_season;
   if (prior) {
-    if (!/^(approved|frozen)$/i.test(current.prior_season.status)) {
-      throw new Error("Prior release is not approved for comparison");
+    const directComparison = current.prior_season.season === prior.season;
+    const reverseComparison = prior.prior_season.season === current.season;
+    const approvalStatus = directComparison ? current.prior_season.status : prior.prior_season.status;
+    if ((!directComparison && !reverseComparison) || !/^(approved|frozen)$/i.test(approvalStatus)) {
+      throw new Error("Comparison release is not approved for comparison");
     }
-    assertDashboardIdentity(prior, expectedScope, current.prior_season.season, subjectName);
+    assertDashboardIdentity(prior, expectedScope, prior.season, subjectName);
+    comparisonRelease = directComparison
+      ? current.prior_season
+      : { season: prior.season, status: "approved", note: `Compared with the approved ${prior.season} release.` };
   }
 
   const comparableWindow = prior ? analysisWindowComparable(current, prior) : false;
@@ -332,9 +339,9 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
       trainingBurdenPer1000h: null,
     },
     seasonComparison: {
-      priorSeason: current.prior_season.season,
-      status: current.prior_season.status,
-      note: current.prior_season.note,
+      comparisonSeason: prior?.season ?? comparisonRelease.season,
+      status: comparisonRelease.status,
+      note: comparisonRelease.note,
       headline: current.headline.map((metric) => comparisonMetric(metric, priorHeadline.get(metric.key), comparableWindow, comparableCoverage)),
       settings: comparisonSettings,
     },

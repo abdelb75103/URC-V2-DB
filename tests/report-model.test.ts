@@ -26,6 +26,27 @@ test("builds a narrow team report model from approved current and prior payloads
   assert.equal(model.exportedAt, model.dataGeneratedAt);
 });
 
+test("compares the selected earlier season with the approved later season", () => {
+  const current = priorDashboardFixture({
+    prior_season: { season: "2023-24", status: "frozen", note: "Earlier release." },
+  });
+  const comparison = dashboardFixture();
+  const model = buildReportModel({
+    current,
+    prior: comparison,
+    expectedScope: "team",
+    expectedSeason: "2024-25",
+    subjectName: "Harbour RFC",
+    protectedTerms: ["Rivals RFC"],
+  });
+
+  const recorded = model.seasonComparison.headline.find((metric) => metric.key === "recorded");
+  assert.equal(model.seasonComparison.comparisonSeason, "2025-26");
+  assert.equal(recorded?.currentValue, 68);
+  assert.equal(recorded?.priorValue, 74);
+  assert.equal(recorded?.delta, -6);
+});
+
 test("rebuilds dashboard comparison rows with report-local anonymous labels", () => {
   const setting = (label: string) => ({
     setting: "match" as const,

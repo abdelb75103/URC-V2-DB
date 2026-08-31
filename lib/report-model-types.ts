@@ -109,7 +109,7 @@ export type SeasonComparisonMetric = {
 };
 
 export type SeasonComparisonModel = {
-  priorSeason: string;
+  comparisonSeason: string;
   status: string;
   note: string;
   headline: SeasonComparisonMetric[];

@@ -643,12 +643,12 @@ function ExposureLadder({ model, keyName, label, unit, colour, rowGap = 9 }: { m
     <Caption>{label} for every club in the released cohort, on a shared scale.</Caption>
   </View>;
 }
-function ComparisonTable({ metrics, limit = 6, sharedReason }: { metrics: readonly SeasonComparisonMetric[]; limit?: number; sharedReason?: string }) {
+function ComparisonTable({ metrics, currentLabel = "Selected", comparisonLabel = "Comparison", limit = 6, sharedReason }: { metrics: readonly SeasonComparisonMetric[]; currentLabel?: string; comparisonLabel?: string; limit?: number; sharedReason?: string }) {
   return <View>
     <View style={[styles.headRow, { marginBottom: 3 }]}>
       <Text style={[styles.columnHead, { flex: 1 }]}>Metric</Text>
-      <Text style={[styles.columnHead, { width: 44, textAlign: "right" }]}>Current</Text>
-      <Text style={[styles.columnHead, { width: 44, textAlign: "right" }]}>Prior</Text>
+      <Text style={[styles.columnHead, { width: 44, textAlign: "right" }]}>{currentLabel}</Text>
+      <Text style={[styles.columnHead, { width: 44, textAlign: "right" }]}>{comparisonLabel}</Text>
       <Text style={[styles.columnHead, { width: 118, paddingLeft: 8 }]}>Change</Text>
     </View>
     {metrics.slice(0, limit).map((m) => <View key={m.key} style={[styles.compactTableRow, { minHeight: 24, alignItems: "center" }]}>
@@ -809,11 +809,11 @@ function TeamComparison({ model, meta }: { model: ReportModel; meta: ReportMetad
 function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   const items = [...model.method, ...model.limitations];
   return <PageShell model={model} meta={meta} section="season-methodology">
-    <PageTitle title="Season comparison and method" note={`Current released values are compared with the approved ${model.seasonComparison.priorSeason} release where definitions permit.`} />
+    <PageTitle title="Season comparison and method" note={`The selected ${model.season} release is compared with the approved ${model.seasonComparison.comparisonSeason} release where definitions permit.`} />
     <View style={[styles.split, { height: 312 }]}>
       <View style={{ width: "58%", paddingHorizontal: 4 }}>
-        <Panel fill title={`${model.season} versus ${model.seasonComparison.priorSeason}`} note="Unavailable changes are explained rather than inferred.">
-          <ComparisonTable metrics={model.seasonComparison.headline} limit={7} />
+        <Panel fill title={`${model.season} versus ${model.seasonComparison.comparisonSeason}`} note="Unavailable differences are explained rather than inferred.">
+          <ComparisonTable metrics={model.seasonComparison.headline} currentLabel={model.season} comparisonLabel={model.seasonComparison.comparisonSeason} limit={7} />
           <View style={[styles.note, { marginTop: 9 }]}><Text>{model.seasonComparison.note || model.seasonComparison.status}</Text></View>
         </Panel>
       </View>
@@ -826,7 +826,7 @@ function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMe
         </Panel>
       </View>
     </View>
-    <View style={{ marginTop: 8, height: 256 }}><Panel fill title="Setting comparison" note="Match and training values from the approved prior-season comparison model."><ComparisonTable metrics={model.seasonComparison.settings} limit={6} sharedReason="Released setting definitions do not include comparable formula metadata" /></Panel></View>
+    <View style={{ marginTop: 8, height: 256 }}><Panel fill title="Setting comparison" note="Match and training values from both approved season releases."><ComparisonTable metrics={model.seasonComparison.settings} currentLabel={model.season} comparisonLabel={model.seasonComparison.comparisonSeason} limit={6} sharedReason="Released setting definitions do not include comparable formula metadata" /></Panel></View>
     <View style={{ marginTop: 8, height: 92 }}>
       <Panel fill title="Publication record" note="This information appears on every page for auditability.">
         <View style={[styles.split, { marginTop: 4 }]}>
