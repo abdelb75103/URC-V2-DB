@@ -1444,7 +1444,9 @@ function ExposureTab({
   teamName?: string;
 }) {
   type ExposureMeasure = 'hours' | 'distance' | 'hsr';
-  const [monthlyMeasure, setMonthlyMeasure] = useState<ExposureMeasure>('hours');
+  const [showMonthlyHours, setShowMonthlyHours] = useState(true);
+  const [showMonthlyDistance, setShowMonthlyDistance] = useState(true);
+  const [showMonthlyHsr, setShowMonthlyHsr] = useState(false);
   const [comparisonMeasure, setComparisonMeasure] = useState<ExposureMeasure>('hours');
   const coverage = dashboard.coverage;
   const previewMonths = new Map(exposurePreview?.monthly.map((row) => [row.month, row]) ?? []);
@@ -1543,11 +1545,21 @@ function ExposureTab({
         )}
       </section>
       <Panel contentClassName="p-4 sm:p-5">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h3 className={PANEL_HEADING_CLASS}>Monthly Exposure</h3>
-          <Segmented value={monthlyMeasure} options={options} onChange={setMonthlyMeasure} label="Choose monthly exposure measure" scrollable={false} />
+          <div className="flex flex-wrap gap-4" role="group" aria-label="Choose monthly exposure series">
+            <CheckToggle checked={showMonthlyHours} onChange={setShowMonthlyHours} label="Hours" swatch={teamColor?.mark ?? SETTING_COLORS.training} />
+            <CheckToggle checked={showMonthlyDistance} onChange={setShowMonthlyDistance} label="Distance" swatch={SETTING_COLORS.all} />
+            {exposurePreview && <CheckToggle checked={showMonthlyHsr} onChange={setShowMonthlyHsr} label="HSR" swatch="#f59e0b" />}
+          </div>
         </div>
-        <ExposureTrendChart rows={monthlyRows} measure={monthlyMeasure} totalHoursColor={teamColor?.mark} />
+        <ExposureTrendChart
+          rows={monthlyRows}
+          showHours={showMonthlyHours}
+          showDistance={showMonthlyDistance}
+          showHsr={showMonthlyHsr}
+          totalHoursColor={teamColor?.mark}
+        />
       </Panel>
       <ExposureComparison
         rows={comparisonRows}

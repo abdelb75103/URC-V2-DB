@@ -185,69 +185,62 @@ function IncidenceTooltip({
   );
 }
 
-type ExposureMeasure = 'hours' | 'distance' | 'hsr';
 type ExposureMonthlyRow = AnalyticsRow & {
   hsr_distance_km?: number;
   hsr_distance_denominator_km?: number;
   match_exposure_hours?: number;
   training_exposure_hours?: number;
-  distance_remainder_km?: number;
-  hsr_percentage?: number;
 };
-
-function exposureMeasureLabel(measure: ExposureMeasure) {
-  if (measure === 'hours') return 'Player-hours';
-  if (measure === 'distance') return 'Distance';
-  return 'HSR distance';
-}
-
-function exposureMeasureUnit(measure: ExposureMeasure) {
-  return measure === 'hours' ? 'player-hours' : 'km';
-}
 
 function MonthlyExposureTooltip({
   active,
   label,
   payload,
-  measure,
+  showHours,
+  showDistance,
+  showHsr,
+  hoursColor,
 }: {
   active?: boolean;
   label?: string;
   payload?: Array<{ payload?: ExposureMonthlyRow }>;
-  measure: ExposureMeasure;
+  showHours: boolean;
+  showDistance: boolean;
+  showHsr: boolean;
+  hoursColor: string;
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
-  const distance = row.distance_km ?? 0;
-  const hsrDistanceDenominator = row.hsr_distance_denominator_km ?? 0;
-  const hsrDistance = row.hsr_distance_km ?? 0;
-  const contributorText = contributingClubsText(row, measure);
-  const rows: TooltipRow[] = (measure === 'hours'
-    ? typeof row.match_exposure_hours === 'number' && typeof row.training_exposure_hours === 'number'
-      ? [
-          { label: 'Match', value: `${hours(row.match_exposure_hours)} player-hours`, color: SETTING_COLORS.match },
-          { label: 'Training', value: `${hours(row.training_exposure_hours)} player-hours`, color: SETTING_COLORS.training },
-          { label: 'Total', value: `${hours(row.exposure_hours)} player-hours` },
-        ]
-      : [{ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` }]
-    : measure === 'distance' && hsrDistanceDenominator > 0
-      ? [
-          { label: 'Total distance', value: `${number(distance)} km` },
-          { label: 'Distance with HSR data', value: `${number(hsrDistanceDenominator)} km`, color: SETTING_COLORS.all },
-          { label: 'HSR distance', value: `${number(hsrDistance)} km`, color: '#f59e0b' },
-          { label: 'HSR share', value: `${number(hsrDistanceDenominator > 0 ? hsrDistance / hsrDistanceDenominator * 100 : 0, 1)}%`, color: '#f59e0b' },
-        ]
-      : measure === 'distance'
-        ? [{ label: 'Total distance', value: `${number(distance)} km`, color: SETTING_COLORS.all }]
-        : [{ label: 'HSR distance', value: `${number(hsrDistance)} km`, color: '#f59e0b' }])
-    .concat(contributorText
-      ? [{ label: 'Contributing clubs', value: contributorText }]
-      : []);
+  const rows: TooltipRow[] = [];
+  if (showHours && typeof row.exposure_hours === 'number') {
+    if (typeof row.match_exposure_hours === 'number' && typeof row.training_exposure_hours === 'number') {
+      rows.push(
+        { label: 'Match', value: `${hours(row.match_exposure_hours)} player-hours`, color: SETTING_COLORS.match },
+        { label: 'Training', value: `${hours(row.training_exposure_hours)} player-hours`, color: SETTING_COLORS.training },
+        { label: 'Total hours', value: `${hours(row.exposure_hours)} player-hours` },
+      );
+    } else {
+      rows.push({ label: 'Hours', value: `${hours(row.exposure_hours)} player-hours`, color: hoursColor });
+    }
+    const hoursContributors = contributingClubsText(row, 'hours');
+    if (hoursContributors) rows.push({ label: 'Hours contributors', value: hoursContributors });
+  }
+  if (showDistance && typeof row.distance_km === 'number') {
+    rows.push({ label: 'Distance', value: `${number(row.distance_km)} km`, color: SETTING_COLORS.all });
+    const distanceContributors = contributingClubsText(row, 'distance');
+    if (distanceContributors) rows.push({ label: 'Distance contributors', value: distanceContributors });
+  }
+  if (showHsr && typeof row.hsr_distance_km === 'number') {
+    rows.push({ label: 'HSR distance', value: `${number(row.hsr_distance_km)} km`, color: '#f59e0b' });
+    if (typeof row.hsr_distance_denominator_km === 'number' && row.hsr_distance_denominator_km > 0) {
+      rows.push({
+        label: 'HSR share',
+        value: `${number(row.hsr_distance_km / row.hsr_distance_denominator_km * 100, 1)}%`,
+        color: '#f59e0b',
+      });
+    }
+  }
   return <TooltipCard title={label ?? row.month ?? 'Month'} rows={rows} />;
-}
-
-function formatHsrPercentage(value: unknown) {
-  return typeof value === 'number' && value > 0 ? `${number(value, 1)}%` : '';
 }
 
 export function MonthlyCasesChart({ rows }: { rows: MonthlySettingRow[] }) {
@@ -696,78 +689,123 @@ export function SeverityArc({
   );
 }
 
-export function ExposureTrendChart({ rows, measure = 'hours', totalHoursColor = SETTING_COLORS.training }: {
+export function ExposureTrendChart({
+  rows,
+  showHours = true,
+  showDistance = true,
+  showHsr = false,
+  totalHoursColor = SETTING_COLORS.training,
+}: {
   rows: ExposureMonthlyRow[];
-  measure?: ExposureMeasure;
+  showHours?: boolean;
+  showDistance?: boolean;
+  showHsr?: boolean;
   /** Club identity colour for the single-series player-hours bars only. */
   totalHoursColor?: string;
 }) {
   const data = useMemo(() => {
-    const sorted = sortSeasonMonths<ExposureMonthlyRow & { month: string }>(rows
+    const sorted = sortSeasonMonths<ExposureMonthlyRow & { month: string }>((rows
       .filter((row) => {
         if (!row.month) return false;
-        return hasReportedExposureValue(row, measure);
-      })
-      .map((row) => ({
-        ...row,
-        distance_remainder_km: Math.max(
-          (row.hsr_distance_denominator_km ?? row.distance_km ?? 0) - (row.hsr_distance_km ?? 0),
-          0,
-        ),
-        hsr_percentage: (row.hsr_distance_denominator_km ?? 0) > 0
-          ? (row.hsr_distance_km ?? 0) / (row.hsr_distance_denominator_km ?? 1) * 100
-          : 0,
+        return (showHours && hasReportedExposureValue(row, 'hours'))
+          || (showDistance && hasReportedExposureValue(row, 'distance'))
+          || (showHsr && hasReportedExposureValue(row, 'hsr'));
       })) as Array<ExposureMonthlyRow & { month: string }>);
     // The value filter above removes unavailable months. Keep reported zeroes,
     // because a source-backed zero is data rather than a missing month.
     const data = fromSeptember(sorted);
     return data;
-  }, [measure, rows]);
+  }, [rows, showDistance, showHours, showHsr]);
+  if (!showHours && !showDistance && !showHsr) {
+    return <ChartEmpty reason="Select at least one series to plot." />;
+  }
   if (!data.length) {
-    const description = `No monthly ${measure === 'hours' ? 'player-hours' : measure === 'distance' ? 'distance' : 'HSR distance'} are available.`;
-    return <ChartEmpty reason={description} />;
+    return <ChartEmpty reason="No monthly exposure is available for the selected series." />;
   }
 
-  const unit = exposureMeasureUnit(measure);
   return (
-    // The plot keeps its fixed height, but the unit and the pre-window note sit
-    // outside it: inside, they overflowed the box and landed on the panel below.
-    <div className="w-full min-w-0">
-    <div className="h-[286px] w-full min-w-0" aria-label={`Monthly ${exposureMeasureLabel(measure).toLowerCase()} chart`}>
+    <div className="h-[320px] w-full min-w-0" aria-label="Monthly exposure hours and distance chart">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart aria-label={`Monthly ${exposureMeasureLabel(measure).toLowerCase()} chart`} accessibilityLayer data={data} margin={{ top: 30, right: 10, bottom: 18, left: 16 }} barCategoryGap="24%">
+        <ComposedChart aria-label="Monthly exposure hours and distance chart" accessibilityLayer data={data} margin={{ top: 34, right: 16, bottom: 32, left: 12 }} barCategoryGap="24%">
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
-          <XAxis dataKey="month" tickFormatter={compactMonth} interval="preserveStartEnd" minTickGap={8} tick={{ fill: AXIS, fontSize: 10 }} tickLine={false} axisLine={AXIS_LINE} />
-          <YAxis tickFormatter={(value) => measure === 'hours' && value >= 1000 ? `${Math.round(value / 1000)}k` : number(value, 0)} tick={{ fill: AXIS, fontSize: 11 }} tickLine={false} axisLine={AXIS_LINE} width={42} />
-          <Tooltip content={<MonthlyExposureTooltip measure={measure} />} cursor={{ fill: 'hsl(var(--muted) / 0.5)' }} allowEscapeViewBox={{ x: false, y: false }} wrapperStyle={{ zIndex: 30 }} />
-          {measure === 'hours' && typeof data[0]?.match_exposure_hours === 'number' ? (
-            <>
-              <Legend verticalAlign="top" height={26} iconType="square" />
-              <Bar dataKey="match_exposure_hours" name="Match" stackId="hours" fill={SETTING_COLORS.match} isAnimationActive={false} />
-              <Bar dataKey="training_exposure_hours" name="Training" stackId="hours" fill={SETTING_COLORS.training} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-            </>
-          ) : measure === 'hours' ? (
-            <Bar dataKey="exposure_hours" name="Player-hours" fill={totalHoursColor} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-          ) : measure === 'distance' && typeof data[0]?.hsr_distance_denominator_km === 'number' ? (
-            <>
-              <Legend verticalAlign="top" height={26} iconType="square" />
-              {/* HSR sits on top of the stack so its share can be labelled above the
-                  whole bar, in the HSR colour, instead of inside the blue remainder. */}
-              <Bar dataKey="distance_remainder_km" name="Other reported distance" stackId="distance" fill={SETTING_COLORS.all} isAnimationActive={false} />
-              <Bar dataKey="hsr_distance_km" name="HSR distance" stackId="distance" fill="#f59e0b" radius={[3, 3, 0, 0]} isAnimationActive={false}>
-                <LabelList dataKey="hsr_percentage" position="top" formatter={formatHsrPercentage} fill="#f59e0b" fontSize={10} fontWeight={600} />
-              </Bar>
-            </>
-          ) : measure === 'distance' ? (
-            <Bar dataKey="distance_km" name="Total distance" fill={SETTING_COLORS.all} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-          ) : (
-            <Bar dataKey="hsr_distance_km" name="HSR distance" fill="#f59e0b" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          <XAxis
+            dataKey="month"
+            tickFormatter={compactMonth}
+            interval="preserveStartEnd"
+            minTickGap={8}
+            tick={{ fill: AXIS, fontSize: 10 }}
+            tickLine={false}
+            axisLine={AXIS_LINE}
+            label={{ value: 'Month', position: 'insideBottom', fill: AXIS, fontSize: 11, offset: -14 }}
+          />
+          {showHours && (
+            <YAxis
+              yAxisId="hours"
+              tickFormatter={(value) => value >= 1000 ? `${Math.round(value / 1000)}k` : number(value, 0)}
+              tick={{ fill: AXIS, fontSize: 11 }}
+              tickLine={false}
+              axisLine={AXIS_LINE}
+              label={{ value: 'Player-hours', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 11, offset: 4, style: Y_TITLE_STYLE }}
+            />
           )}
-        </BarChart>
+          {(showDistance || showHsr) && (
+            <YAxis
+              yAxisId="distance"
+              orientation="right"
+              tickFormatter={(value) => value >= 1000 ? `${number(value / 1000, 1)}k` : number(value, 0)}
+              tick={{ fill: AXIS, fontSize: 11 }}
+              tickLine={false}
+              axisLine={AXIS_LINE}
+              label={{ value: 'Distance (km)', angle: 90, position: 'insideRight', fill: AXIS, fontSize: 11, offset: 8, style: Y_TITLE_STYLE }}
+            />
+          )}
+          <Tooltip
+            content={<MonthlyExposureTooltip showHours={showHours} showDistance={showDistance} showHsr={showHsr} hoursColor={totalHoursColor} />}
+            cursor={{ fill: 'hsl(var(--muted) / 0.5)' }}
+            allowEscapeViewBox={{ x: false, y: false }}
+            wrapperStyle={{ zIndex: 30 }}
+          />
+          <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
+          {showHours && typeof data[0]?.match_exposure_hours === 'number' ? (
+            <>
+              <Bar yAxisId="hours" dataKey="match_exposure_hours" name="Match hours" stackId="hours" fill={SETTING_COLORS.match} isAnimationActive={false} />
+              <Bar yAxisId="hours" dataKey="training_exposure_hours" name="Training hours" stackId="hours" fill={SETTING_COLORS.training} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+            </>
+          ) : showHours ? (
+            <Bar yAxisId="hours" dataKey="exposure_hours" name="Hours" fill={totalHoursColor} radius={[3, 3, 0, 0]} maxBarSize={54} isAnimationActive={false} />
+          ) : null}
+          {showDistance && (
+            <Line
+              yAxisId="distance"
+              type="monotone"
+              dataKey="distance_km"
+              name="Distance"
+              stroke={SETTING_COLORS.all}
+              strokeWidth={2.5}
+              dot={{ r: 3, strokeWidth: 1.5 }}
+              activeDot={{ r: 5, strokeWidth: 2 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          )}
+          {showHsr && (
+            <Line
+              yAxisId="distance"
+              type="monotone"
+              dataKey="hsr_distance_km"
+              name="HSR distance"
+              stroke="#f59e0b"
+              strokeWidth={2.5}
+              strokeDasharray="5 4"
+              dot={{ r: 3, strokeWidth: 1.5 }}
+              activeDot={{ r: 5, strokeWidth: 2 }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          )}
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
-      <p className="mt-1 text-right text-[11px] text-muted-foreground">{unit}</p>
-      </div>
   );
 }
 

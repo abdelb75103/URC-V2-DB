@@ -784,7 +784,7 @@ test('overview and time line use only released overall-incidence values', async 
   assert.match(charts, /const hasOverallIncidence = data\.some\(\(row\) => typeof row\.overall_incidence_per_1000h === 'number'\)/);
 });
 
-test('exposure tab switches approved measures and gates provisional HSR behind the local preview', async () => {
+test('exposure tab combines monthly hours and distance while gating provisional HSR behind the local preview', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const tabConfig = await readFile(new URL('../lib/dashboard-tab.ts', import.meta.url), 'utf8');
@@ -811,10 +811,12 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   assert.match(exposureComparison, /border-dotted border-orange-400/);
   assert.match(exposureComparison, /ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League mean/);
   assert.match(exposureComparison, /ranked\.reduce\(\(sum, row\) => sum \+ \(metric\(row\) \?\? 0\), 0\) \/ ranked\.length/);
-  assert.match(dashboard, /monthlyMeasure[\s\S]*comparisonMeasure/);
-  assert.match(dashboard, /label="Choose monthly exposure measure"/);
+  assert.match(dashboard, /showMonthlyHours[\s\S]*showMonthlyDistance[\s\S]*comparisonMeasure/);
+  assert.match(dashboard, /aria-label="Choose monthly exposure series"/);
+  assert.match(dashboard, /<CheckToggle checked=\{showMonthlyHours\}[\s\S]*?label="Hours"/);
+  assert.match(dashboard, /<CheckToggle checked=\{showMonthlyDistance\}[\s\S]*?label="Distance"/);
   assert.match(dashboard, /label="Choose team comparison exposure measure"/);
-  assert.ok((dashboard.match(/scrollable=\{false\}/g) ?? []).length >= 2);
+  assert.ok((dashboard.match(/scrollable=\{false\}/g) ?? []).length >= 1);
   assert.match(dashboard, /scrollable \? 'overflow-x-auto' : 'flex-wrap overflow-visible'/);
   assert.match(dashboard, /distance_km/);
   assert.match(charts, /match_exposure_hours/);
@@ -826,7 +828,11 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   assert.match(charts, /fromSeptember\(sorted\)/);
   assert.match(charts, /const data = fromSeptember\(sorted\)/);
   assert.match(charts, /contributingClubsText/);
-  assert.match(charts, /<BarChart aria-label=\{`Monthly \$\{exposureMeasureLabel\(measure\)\.toLowerCase\(\)\} chart`\} accessibilityLayer/);
+  assert.match(charts, /<ComposedChart aria-label="Monthly exposure hours and distance chart" accessibilityLayer/);
+  assert.match(charts, /yAxisId="hours"[\s\S]*?dataKey="exposure_hours"[\s\S]*?name="Hours"/);
+  assert.match(charts, /yAxisId="distance"[\s\S]*?dataKey="distance_km"[\s\S]*?name="Distance"/);
+  assert.match(charts, /showHours && hasReportedExposureValue\(row, 'hours'\)[\s\S]*?showDistance && hasReportedExposureValue\(row, 'distance'\)/);
+  assert.match(charts, /Select at least one series to plot\./);
   assert.match(charts, /w-full min-w-0/);
   assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function LocationTab')), /overflow-[xy]-auto|max-h-\[/);
 });
