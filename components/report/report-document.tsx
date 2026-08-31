@@ -39,14 +39,14 @@ const SECTION_HEADS: Record<ReportSectionId, string> = {
   cover: "Cover", "season-pattern": "Season overview", "severity-contact": "Severity and mechanism",
   "injury-location": "Injury location", "common-injuries": "Common injuries",
   "impact-matrices": "Injury impact matrices", "injury-types": "Injury type", exposure: "Exposure",
-  "team-comparison": "Team comparison", "season-methodology": "Season comparison",
+  "team-comparison": "Team comparison", "season-methodology": "Season comparison", closing: "Closing",
 };
 type ReportMetadata = { version: string; sourceGeneratedAt: string; exportedAt: string };
 type SeasonComparisonVisuals = NonNullable<ReportModel["seasonComparisonVisuals"]>;
 
 const styles = StyleSheet.create({
   page: { backgroundColor: C.paper, color: C.ink, fontFamily: "Helvetica", fontSize: 8, paddingHorizontal: 30, paddingBottom: 34 },
-  cover: { backgroundColor: C.navy, color: C.white, fontFamily: "Helvetica", padding: 30 },
+  cover: { backgroundColor: C.navy, color: C.white, fontFamily: "Helvetica" },
   header: { height: 40, paddingTop: 18, flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 1, borderBottomColor: C.line, marginBottom: 12 },
   headerBrand: { flexDirection: "row", alignItems: "center" }, headerCrest: { width: 20, height: 20, objectFit: "contain", marginRight: 7 },
   eyebrow: { color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 7, letterSpacing: 1.4, textTransform: "uppercase" },
@@ -802,25 +802,29 @@ function DiagnosisDriversPdf({ comparison }: { comparison: SeasonComparisonVisua
 
 function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <Page size="A4" style={styles.cover}>
-    <View style={{ height: 38, flexDirection: "row", alignItems: "center" }}><Text style={styles.eyebrow}>United Rugby Championship</Text></View>
-    <View style={{ position: "absolute", right: -60, top: 145, width: 300, height: 300, borderRadius: 150, borderWidth: 34, borderColor: "#0C315D", opacity: .65 }} />
-    <View style={{ position: "absolute", right: 10, top: 215, width: 180, height: 180, borderRadius: 90, borderWidth: 2, borderColor: C.cyan, opacity: .28 }} />
-    <View style={{ flex: 1, justifyContent: "center" }}>
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <View style={{ width: "68%" }}>
-          <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 9, letterSpacing: 1.5 }}>TEAM PERFORMANCE REPORT</Text>
-          <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 38, lineHeight: 1.02, marginTop: 14 }}>{model.subjectName}</Text>
-          <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 28, lineHeight: 1.04 }}>Injury surveillance</Text>
-          <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 17, marginTop: 13 }}>{model.season} season</Text>
-        </View>
-        <View style={{ width: "32%", alignItems: "center" }}>{model.brand.crestDataUri && <Image src={model.brand.crestDataUri} style={{ width: 122, height: 122, objectFit: "contain" }} />}</View>
-      </View>
-      <View style={{ height: 1, backgroundColor: "#294565", marginTop: 32, marginBottom: 18 }} />
-      <View style={{ flexDirection: "row" }}>
-        <View style={{ width: "50%" }}><Text style={{ color: "#93A9C1", fontSize: 6.8, letterSpacing: 1 }}>ANALYSIS WINDOW</Text><Text style={{ color: C.white, fontSize: 10, marginTop: 5 }}>{formatDate(model.analysisWindow.start)} to {formatDate(model.analysisWindow.end)}</Text></View>
-        <View style={{ width: "25%" }}><Text style={{ color: "#93A9C1", fontSize: 6.8, letterSpacing: 1 }}>REPORT VERSION</Text><Text style={{ color: C.white, fontSize: 10, marginTop: 5 }}>v{meta.version}</Text></View>
-        <View style={{ width: "25%" }}><Text style={{ color: "#93A9C1", fontSize: 6.8, letterSpacing: 1 }}>EXPORTED</Text><Text style={{ color: C.white, fontSize: 10, marginTop: 5 }}>{formatDate(meta.exportedAt)}</Text></View>
-      </View>
+    {model.brand.heroDataUri && <Image fixed src={model.brand.heroDataUri} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+    <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: C.navy, opacity: model.brand.heroDataUri ? .2 : 1 }} />
+    <View style={{ position: "absolute", left: 0, top: 0, width: "61%", height: "100%", backgroundColor: C.navy, opacity: .76 }} />
+    <View style={{ position: "absolute", left: 0, top: 0, width: 6, height: "100%", backgroundColor: model.brand.accentColour }} />
+    <View style={{ height: 48, flexDirection: "row", alignItems: "center", marginHorizontal: 30, marginTop: 30 }}>
+      {model.brand.urcLogoDataUri && <Image src={model.brand.urcLogoDataUri} style={{ width: 31, height: 32, objectFit: "contain", marginRight: 10 }} />}
+      <View><Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 9, letterSpacing: 1.3 }}>URC INJURY SURVEILLANCE</Text><Text style={{ color: "#AFC1D4", fontSize: 6.5, marginTop: 3 }}>United Rugby Championship</Text></View>
+      <View style={{ flex: 1 }} />
+      <Text style={{ color: "#AFC1D4", fontSize: 5.8, letterSpacing: .7, marginRight: 8 }}>IN PARTNERSHIP WITH</Text>
+      {model.brand.partnerLogoDataUri && <Image src={model.brand.partnerLogoDataUri} style={{ width: 23, height: 32, objectFit: "contain" }} />}
+    </View>
+    {model.scope === "team" && model.brand.crestDataUri && <View style={{ position: "absolute", right: 31, top: 82, width: 84, height: 84, borderRadius: 8, backgroundColor: C.white, padding: 11, alignItems: "center", justifyContent: "center" }}><Image src={model.brand.crestDataUri} style={{ width: 62, height: 62, objectFit: "contain" }} /></View>}
+    <View style={{ flex: 1, width: "61%", justifyContent: "center", paddingRight: 18, marginLeft: 30 }}>
+      <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 8, letterSpacing: 1.5 }}>{model.scope === "league" ? "LEAGUE REPORT" : "TEAM PERFORMANCE REPORT"}</Text>
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 36, lineHeight: 1.02, marginTop: 14 }}>{model.subjectName}</Text>
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 25, lineHeight: 1.04, marginTop: 3 }}>Injury surveillance</Text>
+      <View style={{ width: 54, height: 3, backgroundColor: model.brand.accentColour, marginTop: 18 }} />
+      <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 16, marginTop: 13 }}>{model.season} season</Text>
+    </View>
+    <View style={{ width: "61%", borderTopWidth: 1, borderTopColor: "#36516E", paddingTop: 13, marginLeft: 30, marginBottom: 64, flexDirection: "row" }}>
+      <View style={{ width: "52%" }}><Text style={{ color: "#93A9C1", fontSize: 6.2, letterSpacing: .9 }}>ANALYSIS WINDOW</Text><Text style={{ color: C.white, fontSize: 8.5, marginTop: 4 }}>{formatDate(model.analysisWindow.start)} to {formatDate(model.analysisWindow.end)}</Text></View>
+      <View style={{ width: "21%" }}><Text style={{ color: "#93A9C1", fontSize: 6.2, letterSpacing: .9 }}>VERSION</Text><Text style={{ color: C.white, fontSize: 8.5, marginTop: 4 }}>v{meta.version}</Text></View>
+      <View style={{ width: "27%" }}><Text style={{ color: "#93A9C1", fontSize: 6.2, letterSpacing: .9 }}>EXPORTED</Text><Text style={{ color: C.white, fontSize: 8.5, marginTop: 4 }}>{formatDate(meta.exportedAt)}</Text></View>
     </View>
     <Footer model={model} meta={meta} cover />
   </Page>;
@@ -951,12 +955,34 @@ function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMe
   </PageShell>;
 }
 
+function ClosingPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
+  return <Page size="A4" style={styles.cover}>
+    {model.brand.heroDataUri && <Image fixed src={model.brand.heroDataUri} style={{ position: "absolute", left: -28, top: -24, width: "112%", height: "112%", objectFit: "cover" }} />}
+    <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: C.navy, opacity: model.brand.heroDataUri ? .7 : 1 }} />
+    <View style={{ position: "absolute", left: 0, bottom: 0, width: "100%", height: 7, backgroundColor: model.brand.accentColour }} />
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 72 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 30 }}>
+        {model.brand.urcLogoDataUri && <Image src={model.brand.urcLogoDataUri} style={{ width: 46, height: 47, objectFit: "contain" }} />}
+        <View style={{ width: 1, height: 42, backgroundColor: "#49627C", marginHorizontal: 17 }} />
+        <View style={{ alignItems: "center" }}><Text style={{ color: "#AFC1D4", fontSize: 5.8, letterSpacing: .8, marginBottom: 5 }}>IN PARTNERSHIP WITH</Text>{model.brand.partnerLogoDataUri && <Image src={model.brand.partnerLogoDataUri} style={{ width: 29, height: 42, objectFit: "contain" }} />}</View>
+      </View>
+      <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 8, letterSpacing: 1.7 }}>END OF REPORT</Text>
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 31, textAlign: "center", lineHeight: 1.03, marginTop: 14 }}>Injury surveillance</Text>
+      <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 16, textAlign: "center", marginTop: 8 }}>{model.subjectName} · {model.season}</Text>
+      <View style={{ width: 56, height: 3, backgroundColor: model.brand.accentColour, marginVertical: 23 }} />
+      {model.scope === "team" && model.brand.crestDataUri && <View style={{ width: 78, height: 78, borderRadius: 8, backgroundColor: C.white, padding: 11, alignItems: "center", justifyContent: "center" }}><Image src={model.brand.crestDataUri} style={{ width: 56, height: 56, objectFit: "contain" }} /></View>}
+    </View>
+    <Footer model={model} meta={meta} cover />
+  </Page>;
+}
+
 const sectionPages: Record<ReportSectionId, (model: ReportModel, meta: ReportMetadata) => ReactElement> = {
   cover: (m, x) => <CoverPage model={m} meta={x} />, "season-pattern": (m, x) => <SeasonPattern model={m} meta={x} />,
   "severity-contact": (m, x) => <SeverityContact model={m} meta={x} />, "injury-location": (m, x) => <InjuryLocation model={m} meta={x} />,
   "common-injuries": (m, x) => <CommonInjuries model={m} meta={x} />, "impact-matrices": (m, x) => <ImpactMatrices model={m} meta={x} />,
   "injury-types": (m, x) => <InjuryTypes model={m} meta={x} />, exposure: (m, x) => <Exposure model={m} meta={x} />,
   "team-comparison": (m, x) => <TeamComparison model={m} meta={x} />, "season-methodology": (m, x) => <SeasonMethodology model={m} meta={x} />,
+  closing: (m, x) => <ClosingPage model={m} meta={x} />,
 };
 export function enabledReportSections(sectionIds?: readonly ReportSectionId[]) { const requested = new Set(sectionIds ?? DEFAULT_REPORT_SECTION_IDS); return DEFAULT_REPORT_SECTION_IDS.filter((id) => requested.has(id)); }
 export function ReportDocument({ model, enabledSectionIds }: { model: ReportModel; enabledSectionIds?: readonly ReportSectionId[] }) { if (model.schemaVersion !== "urc-report-v1") throw new Error("Unsupported report model schema"); const meta = metadata(model); return <Document title={`${model.subjectName} injury surveillance report ${model.season}`} author="United Rugby Championship" subject={`Released aggregate injury surveillance metrics | ${meta.version}`} creator="URC injury surveillance" creationDate={new Date(meta.exportedAt)}>{enabledReportSections(enabledSectionIds).map((section) => cloneElement(sectionPages[section](model, meta), { key: section }))}</Document>; }

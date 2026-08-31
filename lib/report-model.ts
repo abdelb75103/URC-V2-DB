@@ -38,7 +38,7 @@ export type ReportModelRequest = {
   comparisonRows?: readonly ReportComparisonRow[];
   comparisonBenchmarks?: ReportComparisonBenchmarks;
   seasonComparisonVisuals?: SeasonComparisonData;
-  brand?: { crestDataUri: string | null; accentColour: string };
+  brand?: ReportModel["brand"];
 };
 
 const ALIAS_PATTERN = /\bTeam [A-Z]\b/;

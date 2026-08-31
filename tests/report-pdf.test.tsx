@@ -116,7 +116,7 @@ function renderPdf(sectionIds?: string[]) {
 
 test("the full document emits one A4 page for each stable section", () => {
   const result = renderPdf();
-  assert.equal(result.pages, 10);
+  assert.equal(result.pages, 11);
   assert.ok(result.bytes > 5_000);
   assert.match(result.text, /1,622 days\s*\/1,000 h/);
   assert.match(result.coverText, /Injury surveillance/);
@@ -127,6 +127,7 @@ test("the full document emits one A4 page for each stable section", () => {
   assert.match(result.comparisonText, /Time-loss injuries by month/);
   assert.match(result.comparisonText, /Diagnosis drivers/);
   assert.doesNotMatch(result.comparisonText, /Publication record/);
+  assert.match(result.text, /End of report/i);
 });
 
 test("filtering sections removes pages and recalculates the document", () => {

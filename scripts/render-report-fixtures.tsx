@@ -94,6 +94,9 @@ const source = `
   const leagueTraining = leagueSource.setting_metrics.find((row) => row.setting === "training");
   const comparisonBenchmarks = { allIncidencePer1000h: leagueAll?.incidence_per_1000h ?? null, allBurdenPer1000h: leagueAll?.burden_per_1000h ?? null, matchIncidencePer1000h: leagueMatch?.incidence_per_1000h ?? null, matchBurdenPer1000h: leagueMatch?.burden_per_1000h ?? null, trainingIncidencePer1000h: leagueTraining?.incidence_per_1000h ?? null, trainingBurdenPer1000h: leagueTraining?.burden_per_1000h ?? null };
   await mkdir(outputDirectory, { recursive: true });
+  const heroDataUri = "data:image/jpeg;base64," + (await readFile(path.join(process.cwd(), "public/images/report/urc-injury-surveillance-hero.jpg"))).toString("base64");
+  const urcLogoDataUri = "data:image/png;base64," + (await readFile(path.join(process.cwd(), "public/images/URC.png"))).toString("base64");
+  const partnerLogoDataUri = "data:image/png;base64," + (await readFile(path.join(process.cwd(), "public/images/UCDLogo.png"))).toString("base64");
   for (let index = 0; index < fixtures.length; index += 1) {
     const fixture = fixtures[index];
     const raw = JSON.parse(await readFile(path.join(reportingDirectory, fixture.file), "utf8"));
@@ -115,7 +118,7 @@ const source = `
       trainingBurdenPer1000h: row.trainingBurdenPer1000h,
     }));
     const denylist = protectedTerms.filter((term) => term !== fixture.subjectName);
-    const model = buildReportModel({ current, prior, expectedScope: fixture.scope, expectedSeason: current.season, subjectName: fixture.subjectName, protectedTerms: denylist, exportedAt: "2026-08-31T12:00:00Z", comparisonRows, comparisonBenchmarks, seasonComparisonVisuals: buildSeasonComparison(priorRaw, raw, fixture.scope), brand: { crestDataUri, accentColour: fixture.accentColour } });
+    const model = buildReportModel({ current, prior, expectedScope: fixture.scope, expectedSeason: current.season, subjectName: fixture.subjectName, protectedTerms: denylist, exportedAt: "2026-08-31T12:00:00Z", comparisonRows, comparisonBenchmarks, seasonComparisonVisuals: buildSeasonComparison(priorRaw, raw, fixture.scope), brand: { crestDataUri, accentColour: fixture.accentColour, heroDataUri, urcLogoDataUri, partnerLogoDataUri } });
     const output = path.join(outputDirectory, fixture.output);
     await writeFile(output, Buffer.from(await renderToBuffer(React.createElement(ReportDocument, { model }))));
     process.stdout.write(output + "\\n");

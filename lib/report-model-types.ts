@@ -11,6 +11,7 @@ export const DEFAULT_REPORT_SECTION_IDS = [
   "exposure",
   "team-comparison",
   "season-methodology",
+  "closing",
 ] as const;
 
 export type ReportSectionId = (typeof DEFAULT_REPORT_SECTION_IDS)[number];
@@ -123,7 +124,13 @@ export type ReportModel = {
   reportVersion: "1.0";
   exportedAt: string;
   dataGeneratedAt: string;
-  brand: { crestDataUri: string | null; accentColour: string };
+  brand: {
+    crestDataUri: string | null;
+    accentColour: string;
+    heroDataUri?: string | null;
+    urcLogoDataUri?: string | null;
+    partnerLogoDataUri?: string | null;
+  };
   scope: ReportScope;
   subjectName: string;
   season: string;

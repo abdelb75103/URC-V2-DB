@@ -148,7 +148,7 @@ test("refuses an unapproved prior release", () => {
 });
 
 test("keeps the stable section order when filtering", () => {
-  assert.deepEqual(DEFAULT_REPORT_SECTION_IDS, ["cover", "season-pattern", "severity-contact", "injury-location", "common-injuries", "impact-matrices", "injury-types", "exposure", "team-comparison", "season-methodology"]);
+  assert.deepEqual(DEFAULT_REPORT_SECTION_IDS, ["cover", "season-pattern", "severity-contact", "injury-location", "common-injuries", "impact-matrices", "injury-types", "exposure", "team-comparison", "season-methodology", "closing"]);
   assert.deepEqual(filterReportSectionIds(["season-methodology", "cover", "exposure"]), ["cover", "exposure", "season-methodology"]);
 });
 

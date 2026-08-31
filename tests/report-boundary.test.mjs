@@ -23,6 +23,14 @@ test('the PDF page scales to the available preview width', async () => {
   assert.match(preview, /<Page[\s\S]*?width=\{previewWidth\}/);
 });
 
+test('the preview renders every PDF page in one continuous scroll area', async () => {
+  const preview = await read('components/report/report-preview.tsx');
+
+  assert.match(preview, /max-h-\[calc\(100vh-12rem\)\] overflow-y-auto/);
+  assert.match(preview, /Array\.from\(\{ length: pageCount \}/);
+  assert.doesNotMatch(preview, /ChevronLeft|ChevronRight|Preview page controls/);
+});
+
 test('production report modules do not import fixture or preview data', async () => {
   const production = await Promise.all([
     'lib/report-model.ts',
