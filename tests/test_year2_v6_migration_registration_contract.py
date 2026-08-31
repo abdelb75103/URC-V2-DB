@@ -97,7 +97,7 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
             self.assertIn(f"'{item.version}',", registration)
             self.assertIn(f"'{item.name}'", registration)
 
-    def test_obsolete_league_snapshot_contract_is_not_active(self) -> None:
+    def test_corrected_league_snapshot_extends_only_the_league_gate(self) -> None:
         base_contracts = pipeline.release_migration_contracts(
             YEAR2_2025_26_RELEASE_CONTRACT
         )
@@ -106,7 +106,8 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
             include_league=True,
         )
 
-        self.assertEqual(league_contracts, base_contracts)
+        self.assertEqual(league_contracts[:-1], base_contracts)
+        self.assertEqual(league_contracts[-1].version, "20260831110000")
         self.assertFalse((
             ROOT / "tools/sql/register_urc_2025_26_exposure_successor_league_snapshot_migration.sql"
         ).exists())

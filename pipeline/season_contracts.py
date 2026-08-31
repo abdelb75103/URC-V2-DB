@@ -261,7 +261,19 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             ),
         ),
     ),
-    league_required_migration_contracts=(),
+    league_required_migration_contracts=(
+        MigrationContract(
+            version="20260831110000",
+            name="urc_2025_26_corrected_league_candidate_snapshot",
+            sha256="9175bf77c27196193374e45a01f2ec3290a7a4ac6da3e66dfd0d97cbb6b40845",
+            registration_statements=(
+                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
+                "team_member_count=16",
+                "candidate_snapshot_version=20260831110000",
+            ),
+        ),
+    ),
     release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
     release_reason_code="league_dashboard_release_v6_reporting_correction",
     decision_recorded_at="2026-08-31",
