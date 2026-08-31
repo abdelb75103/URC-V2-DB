@@ -35,6 +35,8 @@ import {
 } from '@/components/dashboard/chart-primitives';
 import type { TeamColorSet } from '@/lib/team-color';
 import { SUPPORTED_DASHBOARD_SEASONS, type DashboardSeason } from '@/lib/dashboard-season';
+import type { SeasonComparisonData } from '@/lib/season-comparison';
+import { SeasonComparison } from '@/components/dashboard/season-comparison';
 import {
   DASHBOARD_TABS,
   DEFAULT_DASHBOARD_TAB,
@@ -1994,6 +1996,7 @@ export function TeamDashboard({
   leagueMetrics = [],
   supplement,
   exposurePreview,
+  seasonComparison,
   viewerComparisonId = null,
   teamColor,
   season,
@@ -2006,6 +2009,7 @@ export function TeamDashboard({
   leagueMetrics?: SettingMetricRow[];
   supplement?: DashboardSupplement;
   exposurePreview?: ExposureReviewPreview;
+  seasonComparison?: SeasonComparisonData;
   /** The viewing team's own comparison row, resolved server-side (§1.0). */
   viewerComparisonId?: string | null;
   /**
@@ -2039,7 +2043,6 @@ export function TeamDashboard({
     ...family,
     subtypes: withoutFrontFacingUnknown(family.subtypes),
   }));
-  const scopeLabel = dashboard.scope === 'league' ? 'League-wide' : teamName;
   const usesExposureEstimate = dashboard.coverage.included_exposure_status.includes('estimate');
   const exposureEstimateNote = dashboard.limitations.find((item) => (
     /temporary/i.test(item) && /estimate/i.test(item)
@@ -2063,7 +2066,6 @@ export function TeamDashboard({
           >
             {teamName} Dashboard
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{scopeLabel} injury and exposure surveillance - {dashboard.season}</p>
           <SeasonSelector season={season} seasonPath={seasonPath} activeTab={activeTab} />
         </div>
       </header>
@@ -2112,6 +2114,9 @@ export function TeamDashboard({
             teamColor={teamColor}
             teamName={teamName}
           />
+        </TabsContent>
+        <TabsContent value="season-comparison">
+          <SeasonComparison comparison={seasonComparison} />
         </TabsContent>
         <TabsContent value="reports"><ReportsTab /></TabsContent>
       </Tabs>

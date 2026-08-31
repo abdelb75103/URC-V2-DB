@@ -5,6 +5,7 @@ export const DASHBOARD_TABS = [
   { value: 'location', label: 'Injury Location' },
   { value: 'types', label: 'Injury Types' },
   { value: 'exposure', label: 'Exposure' },
+  { value: 'season-comparison', label: 'Season Comparison' },
   { value: 'reports', label: 'Reports' },
 ] as const;
 
