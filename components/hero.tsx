@@ -13,6 +13,27 @@ export function Hero() {
         sizes="(max-width: 1024px) calc(100vw - 32px), 1024px"
         className="object-cover"
       />
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        preload="metadata"
+        poster="/images/urc-hero2.webp"
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover motion-reduce:hidden"
+      >
+        <source
+          src="/videos/urc-hero-loop.webm"
+          type="video/webm"
+          media="(prefers-reduced-motion: no-preference)"
+        />
+        <source
+          src="/videos/urc-hero-loop.mp4"
+          type="video/mp4"
+          media="(prefers-reduced-motion: no-preference)"
+        />
+      </video>
       {/* Blue tint + vignette layers */}
       <div className="absolute inset-0 bg-cyan-900/50" />
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/40" />
