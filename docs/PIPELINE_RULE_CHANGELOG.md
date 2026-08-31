@@ -15,20 +15,20 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `independently-reviewed-pending-live-application`: the aggregate audit, additive migrations and release integration have passed local contract tests. No database migration, release or deployment is recorded by this entry. |
+| Status | `applied-and-promoted`: independently reviewed migrations are checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`. Cardiff release `7cfaf888-773b-43e2-bb9b-f1486ad4823e`, Dragons release `b2e069a6-de05-438f-be7d-1441df6136de`, and league release `a2a5c5cd-86df-40c0-8dc0-12e62994c5d8` are approved. |
 | Rule version | Cohort `injury_lineage_2025-26_2026-08-31_v3`; decision `welsh_fixture_alias_exact_date_2026_08_31_v1`; analysis `v6`; classification remains `reporting_classification_2025-26_2026-08-31_v3`. |
 | Carry-forward | `team-specific`: Cardiff and Dragons require these official fixture-name mappings while their source labels remain `Cardiff` and `Dragons`. The exact-date evidence is `season-specific` to 2025-26. |
 | Evidence | `docs/evidence/urc_2025_26_welsh_fixture_alias_exact_date_correction.json`, SHA-256 `e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450`. |
-| Migrations | Row correction `20260831120000`, SHA-256 `457ab116338396172393db7156a9c56cd9c77e3a6c6f30ae6a1c6701d4a2d678`; team candidate successor `20260831121000`, SHA-256 `b2627d530759579077af62ebc65be2cc6707ceb6cd946461dc3f97c96c1e0474`. |
+| Migrations | Row correction `20260831120000`, SHA-256 `457ab116338396172393db7156a9c56cd9c77e3a6c6f30ae6a1c6701d4a2d678`; team candidate `20260831121000`, SHA-256 `b2627d530759579077af62ebc65be2cc6707ceb6cd946461dc3f97c96c1e0474`; league snapshot `20260831122000`, SHA-256 `11b7099a980301e3038541804ce2fbc0f4cafdde5c2ff1c446ca69a1dc0f7eaf`; release context `20260831123000`, SHA-256 `19ce1c8db124b96fda83764416dbfb98a241ca16b0dc38cd4705efed642c40ae`. |
 | Decision provenance | Abdel Babiker, 31 August 2026. |
 
 **Accepted rule.** Restore an excluded row only when it belongs to Cardiff or Dragons, is an injury with Match occasion, was excluded solely as `Fixture reconciliation unresolved`, and its injury date exactly equals an accepted official fixture date for that canonical team. This restores 19 Cardiff and 42 Dragons Time Loss injuries. Of the 61 rows, 51 have known duration and contribute 1,618 observed days lost.
 
 **Rejected automatic scope.** Eighteen rows one day from a fixture stay excluded pending separate adjudication: Cardiff 4, Dragons 9, Ospreys 2 and Scarlets 3. The other fourteen teams have zero exact-date rows within this defect. Source rows, master rows, fixtures, exposure and denominator values remain unchanged.
 
-**Expected successor.** The reviewed cohort contains 1,545 recorded injuries, 938 Time Loss injuries, 782 known-duration Time Loss injuries and 20,665 observed days lost. Cardiff match incidence becomes 50.0 per 1,000 hours and Dragons becomes 116.7 per 1,000 hours. The candidate snapshot changes only the Cardiff and Dragons dashboard bytes; the other fourteen team dashboards remain byte-identical to their approved predecessors.
+**Verified successor.** The released cohort contains 1,545 recorded injuries, 938 Time Loss injuries, 782 known-duration Time Loss injuries and 20,665 observed days lost. Cardiff match incidence is 50.0 per 1,000 hours and Dragons is 116.7 per 1,000 hours. The candidate snapshot changed only the Cardiff and Dragons dashboard bytes; the other fourteen team dashboards remained byte-identical to their approved predecessors.
 
-**Release boundary.** Team promotion is limited to Cardiff and Dragons. A later sealed league snapshot may reuse the fourteen unchanged approved team releases. The website reader remains on the existing approved league bundle until that complete successor is reviewed and promoted. No Vercel action is part of this correction.
+**Release verification.** League release `urc-2025-26-v6-b88504ae9033-a2` has member input SHA-256 `2a88814283b23348215a26fdf03175b2cf7f4f5ed96ed5876a141fb254786919`, league payload SHA-256 `2af81f7c0aa38f4a3d728b8dbb4e0c819cd4eedfd795dc19d785c16dc00bbda0`, bundle SHA-256 `b88504ae90339c61cd7e487b01447cb506d5c31445be39b10209657133c52331`, and 16-team parity export SHA-256 `be5955e45813a95a6dc0cfe2b32e655242640dd3ce6acc7133b0db82eb18dea5`. The reader serves one league row and 16 team rows; canonical payload hashes, family mapping, monthly null handling and private-relation grants all pass. The fourteen unchanged approved team releases were retained. No Vercel action ran.
 
 ---
 
