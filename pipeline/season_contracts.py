@@ -294,7 +294,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         MigrationContract(
             version="20260831130000",
             name="urc_2025_26_partial_exposure_reporting_successor",
-            sha256="96110b0074b2a7576d0b9ab14039388a000f0896265111df357d758cb9668ecd",
+            sha256="fba07c9ff3dafc5291abdaa6077e7ebd6326a8925104a77b4c63599b1a6b3e0a",
             registration_statements=(
                 "evidence_sha256=e79107210e2344026b7f895c40fc4a5dd1a34c538256a4fc25db89bbf6ca4e30",
                 "candidate_snapshot_version=20260831130000",

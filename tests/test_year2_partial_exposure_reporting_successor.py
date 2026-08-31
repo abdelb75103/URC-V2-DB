@@ -55,6 +55,9 @@ class Year2PartialExposureReportingSuccessorTests(unittest.TestCase):
             "team_dashboard_release_candidate_snapshot_v6_20260831130000",
             "Partial Year 2 exposure team candidate snapshot is immutable",
             "injury_lineage_snapshot_version",
+            "null::bigint as processing_eligible_injury_count",
+            "null::text as reporting_record_version_set_sha256",
+            "null::bigint as wrong_problem_type_rule_version_count",
         ):
             self.assertIn(token, raw)
         self.assertIn(
