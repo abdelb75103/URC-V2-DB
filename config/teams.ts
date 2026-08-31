@@ -42,13 +42,3 @@ export const teams: Team[] = [
 
 export const getTeamById = (id: string): Team | undefined =>
   teams.find((team) => team.id === id);
-
-export const dashboardTabs = [
-  { id: 'overview', name: 'Overview' },
-  { id: 'exposure', name: 'Exposure' },
-  { id: 'common-injuries', name: 'Common Injuries & Illnesses' },
-  { id: 'location', name: 'Injury by Location' },
-  { id: 'type-tissue', name: 'Injury by Type & Tissue' },
-];
-
-export const getTabById = (id: string) => dashboardTabs.find((tab) => tab.id === id);

@@ -81,12 +81,11 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("<ScopeChip", UI)
         self.assertNotIn("Data coverage & provenance", UI)
         self.assertNotIn("InferenceCoverageSummary", UI)
-        self.assertIn('aria-live="polite" className="sr-only"', CHARTS)
-        self.assertIn("grid items-start gap-4 sm:grid-cols-[184px_minmax(0,1fr)]", CHARTS)
+        self.assertIn('aria-label={ariaLabel}', CHARTS)
+        self.assertIn('aria-label={`${row.label}: ${count(row.value)} cases.`}', CHARTS)
         self.assertIn("CONTACT_RING_COLORS[row.key]", UI)
         self.assertNotIn("isFrontFacingUnknown(row)", UI)
-        self.assertNotIn("{selected?.label ?? centerLabel}", CHARTS)
-        self.assertIn('aria-label={`${centerLabel} breakdown chart`}', CHARTS)
+        self.assertIn("selected ? 'cases' : 'total cases'", CHARTS)
 
     def test_descriptive_and_rate_cohorts_are_not_mixed(self) -> None:
         self.assertIn("scoped_descriptive", PREVIEW)

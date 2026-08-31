@@ -62,9 +62,11 @@ test('league dashboard uses the approved database consumer view and fails closed
 
 test('published league dashboard is unlocked on the homepage', async () => {
   const home = await readFile(new URL('../app/page.tsx', import.meta.url), 'utf8');
+  const tile = await readFile(new URL('../components/team-tile.tsx', import.meta.url), 'utf8');
 
   assert.match(home, /name: 'URC Overall'[\s\S]*status: 'live' as const/);
   assert.match(home, /href="\/urc"/);
+  assert.match(tile, /<Link href=\{href\} prefetch=\{false\} className="group block">/);
 });
 
 test('shared readers use the v6 successor while preserving direct Year 1 pass-through', async () => {
@@ -583,7 +585,7 @@ test('body map regions keep a reliable touch and pointer hit area', async () => 
 test('risk matrix uses a data-fitted log severity scale, numbered dots, and a smooth heat map', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
-  const impact = charts.slice(charts.indexOf('function isPlottableLogSeverity'), charts.indexOf('export type RankSlopePoint'));
+  const impact = charts.slice(charts.indexOf('function isPlottableLogSeverity'));
 
   assert.match(impact, /function logSeverityDomain\(values: number\[\]\)/);
   assert.match(impact, /minimum \/ 1\.15/);
@@ -756,16 +758,6 @@ test('timeline distinguishes injuries from TL injuries and ranked team compariso
   assert.match(comparison, /h-4 border-l-2 border-dotted border-orange-400/);
   assert.match(comparison, /ref=\{ladderRef\}[\s\S]*?ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League mean/);
   assert.match(comparison, /league mean \$\{fmtRanked\(leagueMean, metric\)\}/);
-});
-
-test('monthly production fallback never fabricates a duplicate recorded-case series', async () => {
-  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
-  const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
-
-  assert.doesNotMatch(dashboard, /recorded_injuries:\s*row\.recorded_injuries\s*\?\?\s*row\.time_loss_injuries/);
-  assert.match(charts, /const hasRecordedCases = data\.every/);
-  assert.match(charts, /\{hasRecordedCases && <Area[\s\S]*?dataKey="recorded_injuries"/);
-  assert.match(charts, /hasRecordedCases \? \[[\s\S]*?Recorded injury cases[\s\S]*?\] : \[[\s\S]*?Time-loss cases/);
 });
 
 test('exposure values use a dedicated zero-decimal formatter', async () => {

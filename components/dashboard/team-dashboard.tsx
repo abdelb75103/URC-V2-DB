@@ -1,10 +1,19 @@
 'use client';
 
-import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useId,
+  useLayoutEffect,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import type {
   DashboardSupplement,
@@ -301,20 +310,53 @@ function SeasonSelector({ season, seasonPath, activeTab }: {
   seasonPath: string;
   activeTab: DashboardTab;
 }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [optimisticSeason, setOptimisticSeason] = useOptimistic(season);
   const tabParameter = activeTab === DEFAULT_DASHBOARD_TAB ? '' : `&tab=${activeTab}`;
+
+  const selectSeason = (event: ReactMouseEvent<HTMLAnchorElement>, option: DashboardSeason) => {
+    const modifiedClick = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+    if (modifiedClick || event.currentTarget.target === '_blank') return;
+
+    event.preventDefault();
+    if (option === optimisticSeason) return;
+
+    const href = `${seasonPath}?season=${option}${tabParameter}`;
+    startTransition(() => {
+      setOptimisticSeason(option);
+      router.push(href);
+    });
+  };
+
   return (
-    <nav aria-label="Choose season" className="mt-3 inline-flex rounded-md border border-border bg-background/50 p-1">
+    <nav
+      aria-label="Choose season"
+      aria-busy={isPending}
+      className="mt-3 inline-flex rounded-md border border-border bg-background/50 p-1"
+    >
       {SUPPORTED_DASHBOARD_SEASONS.map((option) => (
         <Link
           key={option}
           href={`${seasonPath}?season=${option}${tabParameter}`}
           prefetch={false}
-          aria-current={season === option ? 'page' : undefined}
-          className={`min-h-11 rounded px-3 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${season === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          aria-current={optimisticSeason === option ? 'page' : undefined}
+          aria-busy={isPending && optimisticSeason === option}
+          onClick={(event) => selectSeason(event, option)}
+          className={`relative min-h-11 rounded px-3 py-2 text-sm font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${optimisticSeason === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
         >
           {option}
+          {isPending && optimisticSeason === option && (
+            <span
+              aria-hidden="true"
+              className="absolute inset-x-2 bottom-1 h-0.5 rounded-full bg-primary-foreground/70 motion-safe:animate-pulse"
+            />
+          )}
         </Link>
       ))}
+      <span className="sr-only" role="status" aria-live="polite">
+        {isPending ? `Loading ${optimisticSeason} season` : ''}
+      </span>
     </nav>
   );
 }
@@ -816,29 +858,6 @@ function OverviewStat({ label, value, unit }: { label: string; value: string; un
   );
 }
 
-function CompactRanking({ rows }: { rows: InjuryProfileRow[] }) {
-  if (!rows.length) return <EmptyState />;
-  const max = Math.max(...rows.map((row) => row.time_loss_injuries), 1);
-  return (
-    <ol className="space-y-3">
-      {rows.map((row) => (
-        <li key={row.code} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-          <div className="min-w-0">
-            <div className="mb-1 flex justify-between gap-3 text-sm">
-              <span className="truncate text-foreground">{row.label}</span>
-              <span className="sr-only">{row.time_loss_injuries} injuries</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${(row.time_loss_injuries / max) * 100}%` }} />
-            </div>
-          </div>
-          <span className="min-w-8 text-right text-sm font-semibold tabular-nums text-foreground" aria-hidden="true">{row.time_loss_injuries}</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 function CommonInjuriesTab({ dashboard, profiles, supplement }: {
   dashboard: TeamDashboardData;
   profiles: InjuryProfileRow[];
@@ -909,7 +928,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
 
 /**
  * One ranked lane: the rows with a value for this metric, highest first. The
- * lanes, the colour map and the slope panel all read their selection from here,
+ * lanes, the colour map and the risk matrix all read their selection from here,
  * so they cannot drift apart when a sort changes.
  */
 function rankedForMetric(rows: InjuryProfileRow[], metric: ProfileMetric) {
@@ -1133,16 +1152,6 @@ function CommonInjuryCard({
         </div>
       </article>
     </li>
-  );
-}
-
-function ProfileValue({ label, value, unit }: { label: string; value: string; unit?: string }) {
-  return (
-    <div className="border-r border-border/50 p-4 last:border-r-0">
-      <p className="text-[10px] font-medium text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums text-foreground">{value}</p>
-      {unit && <p className="text-[10px] text-muted-foreground">{unit}</p>}
-    </div>
   );
 }
 

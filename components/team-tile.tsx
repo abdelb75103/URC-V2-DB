@@ -84,7 +84,7 @@ export function TeamTile({ team, href, featured = false }: TeamTileProps) {
   }
 
   return (
-    <Link href={href} className="group block">
+    <Link href={href} prefetch={false} className="group block">
       {inner}
     </Link>
   );

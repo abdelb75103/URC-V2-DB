@@ -663,7 +663,7 @@ const COMPARISON_KPI_UNITS: Record<string, string> = {
 };
 
 function ComparisonKpiCards({ comparison }: { comparison: SeasonComparisonVisuals }) {
-  return <View style={[styles.metricGrid, { marginTop: -1 }]}>{comparison.kpis.map((metric, index) => {
+  return <View style={[styles.metricGrid, { marginTop: -1 }]}>{comparison.kpis.map((metric) => {
     const improvement = metric.outcome_improvement_percent;
     const state = improvement === null ? "Not comparable" : improvement > 0 ? "Improved" : improvement < 0 ? "Increased" : "No change";
     const stateColour = improvement === null || improvement === 0 ? C.muted : improvement > 0 ? C.green : C.red;
