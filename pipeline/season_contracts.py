@@ -295,7 +295,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         MigrationContract(
             version="20260831122000",
             name="urc_2025_26_welsh_fixture_league_candidate_snapshot",
-            sha256="079b09f48c8c10742edfce03b7a230b0501dd523429b804d4d417d8c0c4c2f73",
+            sha256="11b7099a980301e3038541804ce2fbc0f4cafdde5c2ff1c446ca69a1dc0f7eaf",
             registration_statements=(
                 "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
                 "cohort_view_version=injury_lineage_2025-26_2026-08-31_v3",

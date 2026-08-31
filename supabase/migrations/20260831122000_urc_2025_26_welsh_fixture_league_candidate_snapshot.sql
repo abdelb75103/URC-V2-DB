@@ -42,6 +42,7 @@ with expected(
     case when team_key in ('cardiff', 'dragons')
       then '20260831121000' else '20260831101000' end
       as candidate_snapshot_version
+  from expected
 )
 select bound.*, payload.dashboard_payload as dashboard,
   payload.classification_evidence_sha256

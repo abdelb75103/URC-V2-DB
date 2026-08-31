@@ -46,7 +46,7 @@ values (
   '20260831122000',
   'urc_2025_26_welsh_fixture_league_candidate_snapshot',
   array[
-    'migration_sha256=079b09f48c8c10742edfce03b7a230b0501dd523429b804d4d417d8c0c4c2f73',
+    'migration_sha256=11b7099a980301e3038541804ce2fbc0f4cafdde5c2ff1c446ca69a1dc0f7eaf',
     'classification_view_version=reporting_classification_2025-26_2026-08-31_v3',
     'cohort_view_version=injury_lineage_2025-26_2026-08-31_v3',
     'cohort_evidence_sha256=e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450',
@@ -67,7 +67,7 @@ begin
     where version = '20260831122000'
       and name = 'urc_2025_26_welsh_fixture_league_candidate_snapshot'
       and statements = array[
-        'migration_sha256=079b09f48c8c10742edfce03b7a230b0501dd523429b804d4d417d8c0c4c2f73',
+        'migration_sha256=11b7099a980301e3038541804ce2fbc0f4cafdde5c2ff1c446ca69a1dc0f7eaf',
         'classification_view_version=reporting_classification_2025-26_2026-08-31_v3',
         'cohort_view_version=injury_lineage_2025-26_2026-08-31_v3',
         'cohort_evidence_sha256=e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450',

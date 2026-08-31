@@ -29,6 +29,7 @@ class Year2WelshFixtureLeagueCandidateTests(unittest.TestCase):
             "then '20260831121000' else '20260831101000' end",
             "then 'injury_lineage_2025-26_2026-08-31_v3'",
             "else 'injury_lineage_2025-26_2026-08-30_v2' end",
+            "from expected",
             "<> 2",
             "<> 14",
             "analysis.urc_2025_26_injury_fixture_corrected_rows_v2",
