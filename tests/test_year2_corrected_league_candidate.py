@@ -14,6 +14,14 @@ REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_corrected_league_candidate_snapshot_migration.sql"
 )
+CONTRACT_MIGRATION = (
+    ROOT
+    / "supabase/migrations/20260831111000_urc_2025_26_corrected_release_contract.sql"
+)
+CONTRACT_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_corrected_release_contract_migration.sql"
+)
 
 
 class Year2CorrectedLeagueCandidateTests(unittest.TestCase):
@@ -97,6 +105,29 @@ class Year2CorrectedLeagueCandidateTests(unittest.TestCase):
         ):
             self.assertIn(value, self.sql)
         self.assertNotRegex(self.sql, r"(?m)^\s*(update|delete\s+from|truncate)\b")
+
+    def test_additive_database_contract_accepts_only_the_corrected_route(self) -> None:
+        migration = CONTRACT_MIGRATION.read_text(encoding="utf-8")
+        registration = CONTRACT_REGISTRATION.read_text(encoding="utf-8")
+        self.assertEqual(
+            hashlib.sha256(CONTRACT_MIGRATION.read_bytes()).hexdigest(),
+            "3a62db419a073a1ffbf433c81db7f7a44f40f69a7ee967c9f49e2a813638e06a",
+        )
+        for value in (
+            "create table analysis.accepted_release_contracts_v2",
+            "reporting_classification_2025-26_2026-08-31_v3",
+            "injury_lineage_2025-26_2026-08-30_v2",
+            "create or replace function analysis.release_contract_candidates_available_v1",
+            "analysis.league_dashboard_release_candidate_snapshot_v6_20260831110000",
+            "before update or delete on analysis.accepted_release_contracts_v2",
+        ):
+            self.assertIn(value, migration)
+        self.assertEqual(
+            registration.count(
+                "migration_sha256=3a62db419a073a1ffbf433c81db7f7a44f40f69a7ee967c9f49e2a813638e06a"
+            ),
+            2,
+        )
 
 
 if __name__ == "__main__":

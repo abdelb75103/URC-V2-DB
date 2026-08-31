@@ -273,6 +273,16 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "candidate_snapshot_version=20260831110000",
             ),
         ),
+        MigrationContract(
+            version="20260831111000",
+            name="urc_2025_26_corrected_release_contract",
+            sha256="3a62db419a073a1ffbf433c81db7f7a44f40f69a7ee967c9f49e2a813638e06a",
+            registration_statements=(
+                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
+                "release_contract_table=analysis.accepted_release_contracts_v2",
+            ),
+        ),
     ),
     release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
     release_reason_code="league_dashboard_release_v6_reporting_correction",
