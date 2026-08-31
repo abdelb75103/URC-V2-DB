@@ -27,6 +27,7 @@ async function loadReportingForFixtureTest() {
   const zodUrl = pathToFileURL(require.resolve('zod')).href;
   const executable = source
     .replace('import "server-only";\n', '')
+    .replace('import { previousDashboardSeason, type DashboardSeason } from "@/lib/dashboard-season";', 'const previousDashboardSeason = (season) => season === "2025-26" ? "2024-25" : null;')
     .replace('import { Pool } from "pg";', `import pg from "${pgUrl}";\nconst { Pool } = pg;`)
     .replace('import { z } from "zod";', `import { z } from "${zodUrl}";`);
   const javascript = ts.transpileModule(executable, {
@@ -421,7 +422,7 @@ test('league and team page metrics include the released overall benchmark', asyn
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
         tokenQueryCount += 1;
-        return { rows: [{ cache_token: releaseToken }] };
+        return { rows: [{ season: '2024-25', cache_token: releaseToken }] };
       }
       payloadQueryCount += 1;
       return ({
@@ -452,7 +453,7 @@ test('league and team page metrics include the released overall benchmark', asyn
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
-        return { rows: [{ cache_token: 'release-a' }] };
+        return { rows: [{ season: '2024-25', cache_token: 'release-a' }] };
       }
       return {
         rows: [{
@@ -515,14 +516,21 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
     ...row,
     setting: 'all',
   }));
+  let currentReleaseToken = 'year-2-release';
+  let priorReleaseToken = 'year-1-release';
+  let payloadQueryCount = 0;
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
       if (sql.includes('approved_dashboard_reader_target_v2')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
-        return { rows: [{ cache_token: 'year-2-release' }] };
+        return { rows: [
+          { season: '2024-25', cache_token: priorReleaseToken },
+          { season: '2025-26', cache_token: currentReleaseToken },
+        ] };
       }
+      payloadQueryCount += 1;
       return { rows: [{ dashboard, comparisons: [] }] };
     },
   );
@@ -530,6 +538,11 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
   try {
     const { getLeaguePageData } = await loadReportingForFixtureTest();
     const pageData = await getLeaguePageData('2025-26');
+    await getLeaguePageData('2025-26');
+    assert.equal(payloadQueryCount, 1, 'the two-season snapshot should reuse an unchanged composite token');
+    priorReleaseToken = 'year-1-successor';
+    await getLeaguePageData('2025-26');
+    assert.equal(payloadQueryCount, 2, 'a prior-season successor must invalidate the comparison snapshot');
     assert.equal(pageData.dashboard?.season, '2025-26');
     assert.deepEqual(pageData.leagueMetrics.map((row) => row.setting), ['all', 'match', 'training', 'unknown']);
   } finally {
@@ -801,8 +814,9 @@ test('exposure tab combines monthly hours and distance while gating provisional 
   assert.match(dashboard, /No approved exposure totals are available for this season/);
   assert.ok(tabConfig.indexOf("value: 'types'") < tabConfig.indexOf("value: 'exposure'"));
   assert.ok(tabConfig.indexOf("value: 'exposure'") < tabConfig.indexOf("value: 'reports'"), 'Reports must follow Exposure');
-  assert.match(dashboard, /function ReportsTab[\s\S]*?PDF reports are coming soon\.[\s\S]*?League and team reports will be available to export from here\./);
-  assert.match(dashboard, /<TabsContent value="reports"><ReportsTab \/><\/TabsContent>/);
+  assert.match(dashboard, /const ReportPreview = dynamic\([\s\S]*?ssr: false/);
+  assert.match(dashboard, /function ReportsTab\(\{ model \}[\s\S]*?Preview and export a versioned PDF[\s\S]*?<ReportPreview model=\{model\} \/>/);
+  assert.match(dashboard, /<TabsContent value="reports"><ReportsTab model=\{reportModel\} \/><\/TabsContent>/);
   assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);
   assert.match(dashboard, /HSR distance/);
   const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));
@@ -834,5 +848,5 @@ test('exposure tab combines monthly hours and distance while gating provisional 
   assert.match(charts, /showHours && hasReportedExposureValue\(row, 'hours'\)[\s\S]*?showDistance && hasReportedExposureValue\(row, 'distance'\)/);
   assert.match(charts, /Select at least one series to plot\./);
   assert.match(charts, /w-full min-w-0/);
-  assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function LocationTab')), /overflow-[xy]-auto|max-h-\[/);
+  assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function ReportsTab')), /overflow-[xy]-auto|max-h-\[/);
 });

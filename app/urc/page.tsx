@@ -5,6 +5,10 @@ import { getLeaguePageData } from '@/lib/reporting';
 import { getDashboardSupplement } from '@/lib/reporting-preview';
 import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
 import { resolveDashboardSeason } from '@/lib/dashboard-season';
+import { buildReportModel } from '@/lib/report-model';
+import { reportProtectedTerms } from '@/lib/report-privacy';
+import { buildReportComparisonBenchmarks, buildReportComparisonRows } from '@/lib/report-comparison';
+import { loadReportBrand } from '@/lib/report-brand';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -17,13 +21,15 @@ export default async function UrcOverallPage({
   const { season: seasonParameter } = await searchParams;
   const season = resolveDashboardSeason(seasonParameter);
   let dashboard;
+  let previousDashboard;
   let comparisons: TeamComparisonRow[] = [];
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   try {
-    ({ dashboard, comparisons, leagueMetrics } = await getLeaguePageData(season));
+    ({ dashboard, previousDashboard, comparisons, leagueMetrics } = await getLeaguePageData(season));
   } catch {
     dashboard = undefined;
+    previousDashboard = undefined;
     comparisons = [];
     leagueMetrics = [];
   }
@@ -45,6 +51,23 @@ export default async function UrcOverallPage({
     );
   }
 
+  const reportModel = buildReportModel({
+    current: dashboard,
+    prior: previousDashboard ?? null,
+    expectedScope: 'league',
+    expectedSeason: season,
+    subjectName: dashboard.team,
+    protectedTerms: reportProtectedTerms(),
+    exportedAt: new Date().toISOString(),
+    comparisonRows: buildReportComparisonRows({
+      rows: comparisons,
+      scope: 'league',
+      subjectName: dashboard.team,
+    }),
+    comparisonBenchmarks: buildReportComparisonBenchmarks(leagueMetrics),
+    brand: await loadReportBrand(StaticImages.urcLogo, '#00B9D8'),
+  });
+
   return (
     <TeamDashboard
       dashboard={dashboard}
@@ -55,6 +78,7 @@ export default async function UrcOverallPage({
       supplement={supplement}
       season={season}
       seasonPath="/urc"
+      reportModel={reportModel}
     />
   );
 }

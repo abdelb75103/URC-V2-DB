@@ -7,6 +7,10 @@ import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@
 import { LockedShell } from '@/components/locked-shell';
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 import { resolveDashboardSeason } from '@/lib/dashboard-season';
+import { buildReportModel } from '@/lib/report-model';
+import { reportProtectedTerms } from '@/lib/report-privacy';
+import { buildReportComparisonBenchmarks, buildReportComparisonRows } from '@/lib/report-comparison';
+import { loadReportBrand } from '@/lib/report-brand';
 
 // Dashboard availability follows approved reporting releases at request time.
 export const dynamic = 'force-dynamic';
@@ -37,15 +41,17 @@ export default async function TeamPage({
   }
 
   let dashboard;
+  let previousDashboard;
   let comparisons: TeamComparisonRow[] = [];
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   let viewerComparisonId: string | null = null;
   try {
-    ({ dashboard, comparisons, leagueMetrics, viewer_comparison_id: viewerComparisonId } =
+    ({ dashboard, previousDashboard, comparisons, leagueMetrics, viewer_comparison_id: viewerComparisonId } =
       await getTeamPageData(team.id, season));
   } catch {
     dashboard = undefined;
+    previousDashboard = undefined;
     comparisons = [];
     leagueMetrics = [];
     viewerComparisonId = null;
@@ -68,6 +74,25 @@ export default async function TeamPage({
     );
   }
 
+  const teamColor = resolveTeamPalette(team);
+  const reportModel = buildReportModel({
+    current: dashboard,
+    prior: previousDashboard ?? null,
+    expectedScope: 'team',
+    expectedSeason: season,
+    subjectName: team.name,
+    protectedTerms: reportProtectedTerms(),
+    exportedAt: new Date().toISOString(),
+    comparisonRows: buildReportComparisonRows({
+      rows: comparisons,
+      scope: 'team',
+      subjectName: team.name,
+      viewerComparisonId,
+    }),
+    comparisonBenchmarks: buildReportComparisonBenchmarks(leagueMetrics),
+    brand: await loadReportBrand(team.crest, teamColor.mark),
+  });
+
   return (
     <TeamDashboard
       dashboard={dashboard}
@@ -77,9 +102,10 @@ export default async function TeamPage({
       leagueMetrics={leagueMetrics}
       supplement={supplement}
       viewerComparisonId={viewerComparisonId}
-      teamColor={resolveTeamPalette(team)}
+      teamColor={teamColor}
       season={season}
       seasonPath={`/team/${team.id}`}
+      reportModel={reportModel}
     />
   );
 }

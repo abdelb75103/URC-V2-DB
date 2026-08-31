@@ -27,6 +27,13 @@ test('dashboard season routing safely falls back to the frozen default', async (
   assert.equal(resolveDashboardSeason(['2025-26', '2024-25']), '2024-25');
 });
 
+test('season comparison resolves only an approved supported predecessor', async () => {
+  const { previousDashboardSeason } = await loadDashboardSeason();
+
+  assert.equal(previousDashboardSeason('2024-25'), null);
+  assert.equal(previousDashboardSeason('2025-26'), '2024-25');
+});
+
 test('league and team routes resolve the query season before loading reporting data', async () => {
   const [leaguePage, teamPage] = await Promise.all([
     readFile(new URL('../app/urc/page.tsx', import.meta.url), 'utf8'),

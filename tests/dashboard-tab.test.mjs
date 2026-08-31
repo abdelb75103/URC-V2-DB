@@ -13,7 +13,7 @@ async function loadDashboardTab() {
 
 test('dashboard tab routing accepts every visible tab', async () => {
   const { DASHBOARD_TABS, resolveDashboardTab } = await loadDashboardTab();
-  const values = ['overview', 'comparison', 'common', 'location', 'types', 'exposure', 'reports'];
+  const values = ['overview', 'comparison', 'common', 'location', 'types', 'exposure', 'season-comparison', 'reports'];
 
   assert.deepEqual(DASHBOARD_TABS.map((tab) => tab.value), values);
   for (const value of values) assert.equal(resolveDashboardTab(value), value);

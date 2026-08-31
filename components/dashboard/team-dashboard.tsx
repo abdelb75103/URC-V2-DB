@@ -34,6 +34,7 @@ import {
   profileColor,
 } from '@/components/dashboard/chart-primitives';
 import type { TeamColorSet } from '@/lib/team-color';
+import type { ReportModel, SeasonComparisonMetric } from '@/lib/report-model-types';
 import { SUPPORTED_DASHBOARD_SEASONS, type DashboardSeason } from '@/lib/dashboard-season';
 import {
   DASHBOARD_TABS,
@@ -86,6 +87,13 @@ const ComparisonScatterChart = dynamic(
 const ExposureTrendChart = dynamic(
   () => import('@/components/dashboard/charts').then((module) => module.ExposureTrendChart),
   { ssr: false, loading: () => <ChartLoading className="h-[303px]" /> },
+);
+const ReportPreview = dynamic(
+  () => import('@/components/report/report-preview').then((module) => module.ReportPreview),
+  {
+    ssr: false,
+    loading: () => <ChartLoading className="min-h-[calc(100vh-13rem)]" />,
+  },
 );
 
 type InjuryCardColor = { background: string; foreground: string };
@@ -1574,16 +1582,95 @@ function ExposureTab({
   );
 }
 
-function ReportsTab() {
+function ReportsTab({ model }: { model: ReportModel }) {
   return (
     <div className="space-y-5 sm:space-y-6">
-      <SectionHeading title="Reports" />
-      <EmptyState>
-        <div>
-          <p className="font-medium text-foreground">PDF reports are coming soon.</p>
-          <p className="mt-1">League and team reports will be available to export from here.</p>
+      <div>
+        <SectionHeading title="Reports" />
+        <p className="-mt-4 text-sm text-muted-foreground">
+          Preview and export a versioned PDF built from this dashboard&apos;s released values.
+        </p>
+      </div>
+      <ReportPreview model={model} />
+    </div>
+  );
+}
+
+function comparisonValue(value: number | null, unit: string) {
+  return value === null ? 'Not available' : `${fmt(value, unit === 'injuries' ? 0 : 1)} ${unit}`;
+}
+
+function SeasonComparisonRow({ metric, currentSeason, priorSeason }: {
+  metric: SeasonComparisonMetric;
+  currentSeason: string;
+  priorSeason: string;
+}) {
+  return (
+    <tr className="border-t border-border/60 align-top">
+      <th scope="row" className="px-3 py-3 text-left text-sm font-medium text-foreground">{metric.label}</th>
+      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground" aria-label={`${currentSeason}: ${comparisonValue(metric.currentValue, metric.unit)}`}>
+        {comparisonValue(metric.currentValue, metric.unit)}
+      </td>
+      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground" aria-label={`${priorSeason}: ${comparisonValue(metric.priorValue, metric.unit)}`}>
+        {comparisonValue(metric.priorValue, metric.unit)}
+      </td>
+      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground">
+        {metric.delta === null ? (
+          <span className="block text-xs leading-relaxed text-muted-foreground">{metric.deltaReason ?? 'Not available'}</span>
+        ) : (
+          <span aria-label={`Delta ${metric.delta >= 0 ? 'plus' : 'minus'} ${fmt(Math.abs(metric.delta))} ${metric.unit}`}>
+            {metric.delta > 0 ? '+' : ''}{fmt(metric.delta)} {metric.unit}
+          </span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function SeasonComparisonTab({ model }: { model: ReportModel }) {
+  const comparison = model.seasonComparison;
+  const settings = comparison.settings.filter((metric) => metric.key.startsWith('match-') || metric.key.startsWith('training-'));
+  const table = (rows: SeasonComparisonMetric[], label: string) => (
+    <div className="overflow-x-auto rounded-md border border-border/70">
+      <table className="w-full min-w-[760px] table-fixed">
+        <caption className="sr-only">{label}</caption>
+        <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
+          <tr>
+            <th className="w-[28%] px-3 py-3 text-left font-medium">Metric</th>
+            <th className="w-[22%] px-3 py-3 text-right font-medium">{model.season}</th>
+            <th className="w-[22%] px-3 py-3 text-right font-medium">{comparison.priorSeason}</th>
+            <th className="w-[28%] px-3 py-3 text-right font-medium">Delta or comparability</th>
+          </tr>
+        </thead>
+        <tbody>{rows.map((metric) => <SeasonComparisonRow key={metric.key} metric={metric} currentSeason={model.season} priorSeason={comparison.priorSeason} />)}</tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      <div>
+        <SectionHeading title="Season Comparison" />
+        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+          {model.scope === 'league' ? 'Pooled league values are compared with the prior pooled league release.' : `${model.subjectName} is compared only with its own prior approved release.`}
+          {' '}Deltas appear only when the released definitions and denominator status are comparable.
+        </p>
+      </div>
+      {model.estimateOrIncompleteCoverage && (
+        <div className="rounded-md border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" role="note">
+          Current-season exposure is estimated or incomplete. Rate deltas are withheld where denominator status differs.
         </div>
-      </EmptyState>
+      )}
+      <Panel title="Season headline">
+        {table(comparison.headline, 'Season headline comparison')}
+      </Panel>
+      <Panel title="Match and training">
+        {table(settings, 'Match and training comparison')}
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          Setting rows are shown side by side. Their released payload does not include formula metadata, so V1 does not calculate deltas.
+        </p>
+      </Panel>
+      <p className="text-xs leading-relaxed text-muted-foreground">{comparison.note}</p>
     </div>
   );
 }
@@ -1998,6 +2085,7 @@ export function TeamDashboard({
   teamColor,
   season,
   seasonPath,
+  reportModel,
 }: {
   dashboard: TeamDashboardData;
   crest: string;
@@ -2017,6 +2105,7 @@ export function TeamDashboard({
   season: DashboardSeason;
   /** Current league or team route, retained when a reader changes season. */
   seasonPath: string;
+  reportModel: ReportModel;
 }) {
   const searchParams = useSearchParams();
   const activeTab = resolveDashboardTab(searchParams.get('tab'));
@@ -2113,7 +2202,8 @@ export function TeamDashboard({
             teamName={teamName}
           />
         </TabsContent>
-        <TabsContent value="reports"><ReportsTab /></TabsContent>
+        <TabsContent value="season-comparison"><SeasonComparisonTab model={reportModel} /></TabsContent>
+        <TabsContent value="reports"><ReportsTab model={reportModel} /></TabsContent>
       </Tabs>
     </div>
   );

@@ -4,6 +4,11 @@ export type DashboardSeason = (typeof SUPPORTED_DASHBOARD_SEASONS)[number];
 
 export const DEFAULT_DASHBOARD_SEASON: DashboardSeason = '2024-25';
 
+export function previousDashboardSeason(season: DashboardSeason): DashboardSeason | null {
+  const index = SUPPORTED_DASHBOARD_SEASONS.indexOf(season);
+  return index > 0 ? SUPPORTED_DASHBOARD_SEASONS[index - 1] : null;
+}
+
 /** Returns a supported season before a route loads any reporting data. */
 export function resolveDashboardSeason(value: string | string[] | undefined): DashboardSeason {
   return typeof value === 'string' && SUPPORTED_DASHBOARD_SEASONS.includes(value as DashboardSeason)

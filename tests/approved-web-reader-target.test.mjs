@@ -13,6 +13,7 @@ async function loadTargetModule() {
   const zodUrl = pathToFileURL(require.resolve("zod")).href;
   const executable = source
     .replace('import "server-only";\n', "")
+    .replace('import { previousDashboardSeason, type DashboardSeason } from "@/lib/dashboard-season";', 'const previousDashboardSeason = (season) => season === "2025-26" ? "2024-25" : null;')
     .replace('import { Pool } from "pg";', `import pg from "${pgUrl}";\nconst { Pool } = pg;`)
     .replace('import { z } from "zod";', `import { z } from "${zodUrl}";`);
   const javascript = ts.transpileModule(executable, {
