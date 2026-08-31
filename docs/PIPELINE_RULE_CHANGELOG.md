@@ -15,11 +15,12 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `implemented-not-executed`: local additive migration, checksum registration, release-bound validation and public evidence are prepared only. No live database write, release, reader change or deployment has run. |
+| Status | `released`: live successor `urc-2025-26-v6-b2bae1158257-a2`, approved 31 August 2026. The served reader resolves one complete 16-team bundle. |
 | Rule version | `urc_2025_26_partial_exposure_reporting_v1`; analysis `v6`; classification remains `reporting_classification_2025-26_2026-08-31_v3`; injury cohort remains `injury_lineage_2025-26_2026-08-31_v3`. |
 | Carry-forward | `season-specific`: the active 2025-26 source availability and the two temporary estimates do not carry to a later season. The contributor-count presentation principle is reusable only through a separately versioned successor. |
 | Evidence | `docs/evidence/urc_2025_26_partial_exposure_reporting_v1.json`, SHA-256 `e79107210e2344026b7f895c40fc4a5dd1a34c538256a4fc25db89bbf6ca4e30`. |
-| Migration | Additive successor `20260831130000_urc_2025_26_partial_exposure_reporting_successor.sql`, checksum-bound by its matching registration script before any V6 team or league release. |
+| Migration | Additive successor `20260831130000_urc_2025_26_partial_exposure_reporting_successor.sql`, SHA-256 `fba07c9ff3dafc5291abdaa6077e7ebd6326a8925104a77b4c63599b1a6b3e0a`, checksum-bound before release. |
+| Released bundle | League payload SHA-256 `4eafb2dc32d155c69d968e833a354c145e08e0f13356b300234cefc1e2889c05`; bundle SHA-256 `b2bae1158257976b8e7da2385a7df065a2cd621492017bfb192a293ac16a1f41`. |
 | Decision provenance | Abdel Babiker, 31 August 2026. |
 
 **Accepted reporting rule.** Annual hours continue to pool all sixteen final active team releases, including the clearly labelled temporary season estimates for Benetton and Edinburgh. Annual distance is the sum of non-null source-backed contributors only. The payload exposes the source-backed team count, temporary-estimate team count, distance-contributor count and the two named pending source teams.
@@ -28,9 +29,9 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 **Activation gate.** The successor is intentionally unavailable until the active Zebre build retains all 624 October and 352 November source rows, restores the 953 valid included rows, retains the 23 clean-rule exclusions and keeps each included corrected session inside ordinary distance bounds. It also requires final active team releases for Zebre, Benetton and Edinburgh. The latter two releases recompute their temporary estimates from the corrected mean of the fourteen source-backed team totals. The league then pools only those immutable final team releases, not an unreviewed candidate or a direct JSON patch.
 
-**Boundary.** Source rows, source files, injury lineage, fixtures and the frozen 2024-25 season are untouched by this reporting successor. The new private team snapshot is immutable, bound to the corrected active-build and estimate state, and unavailable to website roles. Release remains blocked until the checksum registration, all three reviewed team releases and the ordinary final league preflight are complete.
+**Boundary.** Source rows, source files, injury lineage, fixtures and the frozen 2024-25 season are untouched by this reporting successor. The new private team snapshot is immutable, bound to the corrected active-build and estimate state, and unavailable to website roles. All 16 team candidates passed exact parity before the final league preflight and promotion.
 
-**Audit registration.** Additive migration `20260831132000` registers the successor's exact league release reason code. It changes audit vocabulary only and is checksum-bound before promotion.
+**Audit registration.** Additive migration `20260831132000`, SHA-256 `1786bfb98620220bd1857fca6d12d1283c44228fb4cb73e33e79bd029df0bde8`, registers the successor's exact league release reason code. It changes audit vocabulary only and was checksum-bound before promotion.
 
 ---
 

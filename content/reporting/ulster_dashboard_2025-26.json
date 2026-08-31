@@ -1,7 +1,7 @@
 {
   "team": "Ulster",
   "method": [
-    "Recorded injuries use the 1,484 dashboard-eligible V3 rows.",
+    "Recorded injuries use the 1,545 reviewed dashboard injury rows.",
     "Time-loss status uses final classification. Days lost use known time_loss_days only."
   ],
   "season": "2025-26",
@@ -191,9 +191,9 @@
     }
   ],
   "limitations": [
-    "V3 injury successor is bound to a private immutable lineage snapshot."
+    "V3 injury successor and Welsh exact-date fixture correction are bound to private immutable evidence."
   ],
-  "generated_at": "2026-08-30T23:12:44.004392+00:00",
+  "generated_at": "2026-08-31T14:38:56.752565+00:00",
   "injury_types": [
     {
       "key": "muscle_injury",
@@ -605,7 +605,7 @@
   ],
   "analysis_window": {
     "end": "2026-06-30",
-    "basis": "Private V3 injury successor with reviewed V6 exposure.",
+    "basis": "Private V3 injury successor with reviewed Welsh exact-date fixture correction and V6 exposure.",
     "start": "2025-09-01"
   },
   "injury_profiles": [
