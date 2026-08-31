@@ -11,6 +11,29 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-31: Two-season dashboard comparison reporting contract
+
+| Field | Value |
+|---|---|
+| Status | `live-database-local-review`: all four additive migrations are applied and checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`. The V4 production build is verified locally against the live database through `web_reader`. No Git push, merge, Vercel access, public deployment or production cutover ran. |
+| Rule version | Current browser contract `season_comparison_reporting_2026_08_31_v4`; retained predecessors V1 through V3. |
+| Carry-forward | `versioned-presentation`: the fixed 2024-25 to 2025-26 pair is season-specific. Formulae and accessibility behaviour require a separately versioned successor for another season pair. |
+| Migrations | Base `20260831140000_season_comparison_reporting_v1.sql`; presentation successor `20260831150000_season_comparison_presentation_v2.sql`; diagnosis successor `20260831160000_season_comparison_diagnosis_top_three_v3.sql`; concussion-family correction `20260831170000_season_comparison_concussion_family_v4.sql`. |
+| Migration SHA-256 | Base `77b1e1cb6bc19eb53e264742d2e950431f327960744f36588b2352ad46bfa60b`; V2 `85722743687a87ce76d0d927687a2113b9e27b11b9ada8da0da3741e474384c3`; V3 `4803835b90a840e321414f0965daf8958bf9b100db4fecfd7a8342c90b4902ea`; V4 `076434262d9d9d107744116612baf324f8f0b9417b4e87d2f19fe39f5c171758`. |
+| Decision provenance | Abdel Babiker, 31 August 2026. |
+
+**Comparison rule.** The team reader compares only the selected team's two approved payloads. The league reader joins the two approved league payloads, whose numerators and denominators were pooled before rates were calculated. It never averages team rates. The four headline changes use `100 * (2024-25 value - 2025-26 value) / 2024-25 value`; a missing or zero baseline is not comparable.
+
+**Retired severe-incidence presentation.** V1 derived severe incidence from known-duration Time Loss injuries with more than 28 days' absence and exposed its ascertainment limits. Abdel removed that panel from the comparison interface on 31 August 2026 because it was not useful for the intended medical, performance and coaching audience. V2 removes the entire `severe` object from the browser projection. The V1 database objects remain immutable historical predecessors and are no longer selectable by `web_reader`.
+
+**Monthly and diagnosis rules.** The comparison domain is September through June. An absent monthly injury row is zero only because the approved injury-count series omits zero-case team months; exposure is never zero-filled. V3 returns the top three front-facing diagnosis families for Overall, Match and Training in each season. Rank uses Time Loss count first, burden second and stable diagnosis label last. Unknown sentinels follow the shared front-facing suppression policy. Exact hamstring muscle injury labels are grouped as `Hamstring Injury`, and released concussion variants are grouped as `Concussion`, before ranking. V4 corrects the matcher to include every released `acute_concussion_*` code, including `acute_concussion_with_visual_symptoms`. Counts, incidence and burden are summed within each governed presentation family because every member shares the setting's released exposure denominator. Underlying released classifications remain unchanged.
+
+**Boundary.** V1 adds two private subordinate helpers, one pure security-definer JSON builder with a locked search path, two comparison views and a boolean target attestation. V2 adds one pure locked-path JSON presentation transformer, two successor views and target attestation V4. V3 adds private diagnosis-family helpers, one locked-path top-level builder, two successor views and target attestation V5. V4 adds the corrected private matcher and top-three helper, one top-level builder, two allowlisted views and target attestation V6. `web_reader` can select only the V4 comparison views and V6 attestation, and can execute only the V4 top-level builder. The migrations change no source row, cohort, denominator, immutable dashboard payload or approved release. The family mapping affects only the comparison presentation. The application remains server-side and read-only.
+
+**Live verification.** Approved-target proof passed before the V4 preflight, migration, checksum registration and post-write verification. Target attestation V6 is true. The current team contract returns 16 rows and the league contract returns one comparison with three diagnosis setting groups and no more than three ranked diagnoses per season in each group. Unknowns are suppressed, ranks are valid and every non-diagnosis comparison value is byte-equivalent to V3. The corrected league 2025-26 Overall concussion family contains 124 Time Loss injuries. `web_reader` has no select access to V3 and can select only the V4 views. The dark-only production build loaded both league and selected-team comparisons from the live database without browser console errors.
+
+---
+
 ## 2026-08-31: 2025-26 partial source-backed exposure reporting successor
 
 | Field | Value |
