@@ -44,5 +44,5 @@ test('the shared dashboard renders an accessible season selector on the current 
 
   assert.match(dashboard, /aria-label="Choose season"/);
   assert.match(dashboard, /SUPPORTED_DASHBOARD_SEASONS\.map/);
-  assert.match(dashboard, /href=\{`\$\{seasonPath\}\?season=\$\{option\}`\}/);
+  assert.match(dashboard, /href=\{`\$\{seasonPath\}\?season=\$\{option\}\$\{tabParameter\}`\}/);
 });

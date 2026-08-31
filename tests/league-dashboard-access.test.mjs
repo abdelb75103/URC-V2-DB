@@ -787,6 +787,7 @@ test('overview and time line use only released overall-incidence values', async 
 test('exposure tab switches approved measures and gates provisional HSR behind the local preview', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
+  const tabConfig = await readFile(new URL('../lib/dashboard-tab.ts', import.meta.url), 'utf8');
 
   assert.match(dashboard, /Total hours[\s\S]*Total distance/);
   assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
@@ -794,9 +795,8 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   assert.match(dashboard, /row\.included_exposure_status\.includes\('estimate'\)[\s\S]*?Est\./);
   assert.match(dashboard, /No approved exposure data is available for this season/);
   assert.match(dashboard, /No approved exposure totals are available for this season/);
-  const tabs = dashboard.slice(dashboard.indexOf('const TABS'), dashboard.indexOf('const METRICS'));
-  assert.ok(tabs.indexOf("['types', 'Injury Types']") < tabs.indexOf("['exposure', 'Exposure']"));
-  assert.ok(tabs.indexOf("['exposure', 'Exposure']") < tabs.indexOf("['reports', 'Reports']"), 'Reports must follow Exposure');
+  assert.ok(tabConfig.indexOf("value: 'types'") < tabConfig.indexOf("value: 'exposure'"));
+  assert.ok(tabConfig.indexOf("value: 'exposure'") < tabConfig.indexOf("value: 'reports'"), 'Reports must follow Exposure');
   assert.match(dashboard, /function ReportsTab[\s\S]*?PDF reports are coming soon\.[\s\S]*?League and team reports will be available to export from here\./);
   assert.match(dashboard, /<TabsContent value="reports"><ReportsTab \/><\/TabsContent>/);
   assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);

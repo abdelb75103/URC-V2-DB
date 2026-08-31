@@ -1,22 +1,18 @@
-'use client';
-
 import Image from 'next/image';
 import { StaticImages } from '@/lib/placeholder-images';
 
 export function Hero() {
   return (
     <div className="relative w-full h-80 sm:h-96 rounded-xl overflow-hidden mb-8 shadow-2xl">
-      <video
-        autoPlay
-        loop
-        muted
-        playsInline
-        preload="metadata"
-        className="absolute inset-0 w-full h-full object-cover"
-        aria-hidden="true"
-      >
-        <source src="/videos/URC%20Hero%20Vid.mp4" type="video/mp4" />
-      </video>
+      <Image
+        src="/images/urc-hero2.webp"
+        alt=""
+        fill
+        priority
+        unoptimized
+        sizes="(max-width: 1024px) calc(100vw - 32px), 1024px"
+        className="object-cover"
+      />
       {/* Blue tint + vignette layers */}
       <div className="absolute inset-0 bg-cyan-900/50" />
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-black/40" />

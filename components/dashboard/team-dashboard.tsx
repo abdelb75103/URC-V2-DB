@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import type {
   DashboardSupplement,
@@ -23,21 +25,22 @@ import {
 } from '@/components/dashboard/injury-type-dossier';
 import { resolveLocationView } from '@/lib/location-view';
 import { withoutFrontFacingUnknown } from '@/lib/dashboard-visibility';
+import type { ComparisonScatterRow } from '@/components/dashboard/charts';
 import {
-  ComparisonScatterChart,
-  ExposureTrendChart,
-  ImpactScatterChart,
   SETTING_COLORS,
   SEVERITY_BAND_COLORS,
-  SeasonTimelineChart,
-  SeverityArc,
   Sparkline,
   sortSeasonMonths,
   profileColor,
-  type ComparisonScatterRow,
-} from '@/components/dashboard/charts';
+} from '@/components/dashboard/chart-primitives';
 import type { TeamColorSet } from '@/lib/team-color';
 import { SUPPORTED_DASHBOARD_SEASONS, type DashboardSeason } from '@/lib/dashboard-season';
+import {
+  DASHBOARD_TABS,
+  DEFAULT_DASHBOARD_TAB,
+  resolveDashboardTab,
+  type DashboardTab,
+} from '@/lib/dashboard-tab';
 
 type ProfileMetric =
   | 'time_loss_injuries'
@@ -45,16 +48,6 @@ type ProfileMetric =
   | 'burden_per_1000h'
   | 'mean_severity_days';
 type Setting = InjuryProfileRow['setting'];
-
-const TABS = [
-  ['overview', 'Overview'],
-  ['comparison', 'Team Comparison'],
-  ['common', 'Common Injuries'],
-  ['location', 'Injury Location'],
-  ['types', 'Injury Types'],
-  ['exposure', 'Exposure'],
-  ['reports', 'Reports'],
-] as const;
 
 const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; longUnit: string }> = [
   { key: 'time_loss_injuries', label: 'Count', shortUnit: 'injuries', longUnit: 'time-loss injuries' },
@@ -65,6 +58,35 @@ const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; lon
 
 const SECTION_HEADING_CLASS = 'text-2xl font-semibold tracking-tight text-foreground sm:text-3xl';
 const PANEL_HEADING_CLASS = 'text-lg font-semibold leading-snug text-foreground';
+
+function ChartLoading({ className }: { className: string }) {
+  return (
+    <div role="status" className={`grid place-items-center rounded-md bg-muted/20 motion-safe:animate-pulse ${className}`}>
+      <span className="sr-only">Loading chart</span>
+    </div>
+  );
+}
+
+const SeasonTimelineChart = dynamic(
+  () => import('@/components/dashboard/charts').then((module) => module.SeasonTimelineChart),
+  { ssr: false, loading: () => <ChartLoading className="h-[320px] sm:min-w-[560px]" /> },
+);
+const SeverityArc = dynamic(
+  () => import('@/components/dashboard/charts').then((module) => module.SeverityArc),
+  { ssr: false, loading: () => <ChartLoading className="h-[300px]" /> },
+);
+const ImpactScatterChart = dynamic(
+  () => import('@/components/dashboard/charts').then((module) => module.ImpactScatterChart),
+  { ssr: false, loading: () => <ChartLoading className="h-[580px]" /> },
+);
+const ComparisonScatterChart = dynamic(
+  () => import('@/components/dashboard/charts').then((module) => module.ComparisonScatterChart),
+  { ssr: false, loading: () => <ChartLoading className="h-[420px]" /> },
+);
+const ExposureTrendChart = dynamic(
+  () => import('@/components/dashboard/charts').then((module) => module.ExposureTrendChart),
+  { ssr: false, loading: () => <ChartLoading className="h-[303px]" /> },
+);
 
 type InjuryCardColor = { background: string; foreground: string };
 
@@ -129,12 +151,21 @@ const CONTACT_RING_COLORS: Record<string, string> = {
   unknown: '#94a3b8',
 };
 
+const NUMBER_FORMATTERS = new Map<string, Intl.NumberFormat>();
+
+function numberFormatter(maximumFractionDigits: number, minimumFractionDigits: number) {
+  const key = `${minimumFractionDigits}:${maximumFractionDigits}`;
+  let formatter = NUMBER_FORMATTERS.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en-IE', { maximumFractionDigits, minimumFractionDigits });
+    NUMBER_FORMATTERS.set(key, formatter);
+  }
+  return formatter;
+}
+
 function fmt(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
-  return new Intl.NumberFormat('en-IE', {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: Number.isInteger(value) ? 0 : digits,
-  }).format(value);
+  return numberFormatter(digits, Number.isInteger(value) ? 0 : digits).format(value);
 }
 
 // Ranked lists draw bars from unrounded values, so a shared 1dp label made
@@ -150,10 +181,7 @@ const RANKED_LIST_DIGITS: Record<ProfileMetric, number> = {
 
 function fmtFixed(value: number | null | undefined, digits: number) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
-  return new Intl.NumberFormat('en-IE', {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  }).format(value);
+  return numberFormatter(digits, digits).format(value);
 }
 
 function fmtRanked(value: number | null | undefined, metric: ProfileMetric) {
@@ -258,13 +286,19 @@ function Segmented<T extends string>({
   );
 }
 
-function SeasonSelector({ season, seasonPath }: { season: DashboardSeason; seasonPath: string }) {
+function SeasonSelector({ season, seasonPath, activeTab }: {
+  season: DashboardSeason;
+  seasonPath: string;
+  activeTab: DashboardTab;
+}) {
+  const tabParameter = activeTab === DEFAULT_DASHBOARD_TAB ? '' : `&tab=${activeTab}`;
   return (
     <nav aria-label="Choose season" className="mt-3 inline-flex rounded-md border border-border bg-background/50 p-1">
       {SUPPORTED_DASHBOARD_SEASONS.map((option) => (
         <Link
           key={option}
-          href={`${seasonPath}?season=${option}`}
+          href={`${seasonPath}?season=${option}${tabParameter}`}
+          prefetch={false}
           aria-current={season === option ? 'page' : undefined}
           className={`min-h-11 rounded px-3 py-2 text-sm font-medium transition-[background-color,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${season === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
         >
@@ -1301,37 +1335,8 @@ function TeamComparisonTab({
   );
 }
 
-const COMPARISON_ANIMATION_MS = 900;
+const COMPARISON_ANIMATION_MS = 300;
 const COMPARISON_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
-
-/** Tween a number so a metric change is readable while it happens. */
-function useAnimatedNumber(value: number) {
-  const [display, setDisplay] = useState(value);
-  const displayRef = useRef(value);
-
-  useEffect(() => {
-    const from = displayRef.current;
-    if (from === value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      displayRef.current = value;
-      setDisplay(value);
-      return;
-    }
-    let frame = 0;
-    const start = performance.now();
-    const step = (now: number) => {
-      const progress = Math.min(1, (now - start) / COMPARISON_ANIMATION_MS);
-      const eased = 1 - (1 - progress) ** 3;
-      const current = from + (value - from) * eased;
-      displayRef.current = current;
-      setDisplay(current);
-      if (progress < 1) frame = requestAnimationFrame(step);
-    };
-    frame = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(frame);
-  }, [value]);
-
-  return display;
-}
 
 function ComparisonBarRow({
   row,
@@ -1364,7 +1369,6 @@ function ComparisonBarRow({
   onHover: (id?: string) => void;
   onSelect: (id: string) => void;
 }) {
-  const animatedValue = useAnimatedNumber(value);
   const metricRow = row[setting];
   const label = isViewer && viewerName ? viewerName : row.team_alias;
   const hasLeagueMean = typeof leagueMean === 'number' && Number.isFinite(leagueMean);
@@ -1387,7 +1391,7 @@ function ComparisonBarRow({
       </span>
       <span className="relative h-4 rounded-full bg-muted sm:h-5">
         <span
-          className={`block h-full rounded-full transition-[width,filter] ease-[cubic-bezier(0.22,1,0.36,1)] duration-[900ms] ${isViewer && viewerColor ? '' : 'bg-primary'} ${active ? 'brightness-125' : ''}`}
+          className={`block h-full rounded-full transition-[width,filter] ease-[cubic-bezier(0.22,1,0.36,1)] duration-300 ${isViewer && viewerColor ? '' : 'bg-primary'} ${active ? 'brightness-125' : ''}`}
           style={{ width: `${(value / max) * 100}%`, background: isViewer ? viewerColor : undefined }}
         />
         {hasLeagueMean && (
@@ -1398,7 +1402,7 @@ function ComparisonBarRow({
           />
         )}
       </span>
-      <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmtRanked(animatedValue, metric)}</span>
+      <span className="text-right font-semibold tabular-nums text-foreground sm:text-lg">{fmtRanked(value, metric)}</span>
     </button>
   );
 }
@@ -1970,6 +1974,15 @@ export function TeamDashboard({
   /** Current league or team route, retained when a reader changes season. */
   seasonPath: string;
 }) {
+  const searchParams = useSearchParams();
+  const activeTab = resolveDashboardTab(searchParams.get('tab'));
+  const selectTab = (value: string) => {
+    const nextTab = resolveDashboardTab(value);
+    const url = new URL(window.location.href);
+    if (nextTab === DEFAULT_DASHBOARD_TAB) url.searchParams.delete('tab');
+    else url.searchParams.set('tab', nextTab);
+    window.history.replaceState(null, '', url);
+  };
   const approvedProfiles = dashboard.injury_profiles ?? [];
   const profiles = withoutFrontFacingUnknown(supplement
     ? [
@@ -2007,7 +2020,7 @@ export function TeamDashboard({
             {teamName} Dashboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{scopeLabel} injury and exposure surveillance - {dashboard.season}</p>
-          <SeasonSelector season={season} seasonPath={seasonPath} />
+          <SeasonSelector season={season} seasonPath={seasonPath} activeTab={activeTab} />
         </div>
       </header>
 
@@ -2022,12 +2035,12 @@ export function TeamDashboard({
         </div>
       )}
 
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={selectTab}>
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
           <TabsList aria-label="Dashboard sections" className="mb-6 h-auto min-w-max justify-start bg-muted/80 p-1">
-            {TABS.map(([value, label]) => (
-              <TabsTrigger key={value} value={value} className="min-h-11 px-4">
-                {label}
+            {DASHBOARD_TABS.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="min-h-11 px-4">
+                {tab.label}
               </TabsTrigger>
             ))}
           </TabsList>
