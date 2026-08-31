@@ -293,33 +293,18 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     ),
     league_required_migration_contracts=(
         MigrationContract(
-            version="20260831110000",
-            name="urc_2025_26_corrected_league_candidate_snapshot",
-            sha256="9175bf77c27196193374e45a01f2ec3290a7a4ac6da3e66dfd0d97cbb6b40845",
+            version="20260831122000",
+            name="urc_2025_26_welsh_fixture_league_candidate_snapshot",
+            sha256="079b09f48c8c10742edfce03b7a230b0501dd523429b804d4d417d8c0c4c2f73",
             registration_statements=(
                 "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
-                "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-31_v3",
+                "cohort_evidence_sha256=e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450",
                 "team_member_count=16",
-                "candidate_snapshot_version=20260831110000",
-            ),
-        ),
-        MigrationContract(
-            version="20260831111000",
-            name="urc_2025_26_corrected_release_contract",
-            sha256="3a62db419a073a1ffbf433c81db7f7a44f40f69a7ee967c9f49e2a813638e06a",
-            registration_statements=(
-                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
-                "cohort_view_version=injury_lineage_2025-26_2026-08-30_v2",
-                "release_contract_table=analysis.accepted_release_contracts_v2",
-            ),
-        ),
-        MigrationContract(
-            version="20260831112000",
-            name="urc_2025_26_corrected_release_context_date",
-            sha256="a1e4e5d54c0f9092050e2581491f26785c4cf50709c9c960bb31829f3b446d2b",
-            registration_statements=(
-                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
-                "decision_recorded_at=2026-08-31",
+                "candidate_snapshot_version=20260831122000",
+                "release_contract_table=analysis.accepted_release_contracts_v4",
+                "corrected_teams=cardiff,dragons",
+                "retained_team_count=14",
             ),
         ),
     ),
