@@ -7,7 +7,7 @@ import {
   DEFAULT_REPORT_SECTION_IDS,
   type ReportDistributionRow, type ReportInjuryTypeFamily, type ReportMetric,
   type ReportModel, type ReportPatternRow, type ReportProfileRow,
-  type ReportSectionId, type ReportSettingMetric, type SeasonComparisonMetric,
+  type ReportSectionId, type ReportSettingMetric,
 } from "@/lib/report-model-types";
 
 export { DEFAULT_REPORT_SECTION_IDS } from "@/lib/report-model-types";
@@ -39,9 +39,10 @@ const SECTION_HEADS: Record<ReportSectionId, string> = {
   cover: "Cover", "season-pattern": "Season overview", "severity-contact": "Severity and mechanism",
   "injury-location": "Injury location", "common-injuries": "Common injuries",
   "impact-matrices": "Injury impact matrices", "injury-types": "Injury type", exposure: "Exposure",
-  "team-comparison": "Team comparison", "season-methodology": "Season comparison and method",
+  "team-comparison": "Team comparison", "season-methodology": "Season comparison",
 };
 type ReportMetadata = { version: string; sourceGeneratedAt: string; exportedAt: string };
+type SeasonComparisonVisuals = NonNullable<ReportModel["seasonComparisonVisuals"]>;
 
 const styles = StyleSheet.create({
   page: { backgroundColor: C.paper, color: C.ink, fontFamily: "Helvetica", fontSize: 8, paddingHorizontal: 30, paddingBottom: 34 },
@@ -138,18 +139,16 @@ function Sparkline({ values, colour }: { values: Array<number | null>; colour: s
   </Svg>;
 }
 function MetricCards({ model, dark = false, limit = 7, trend = true }: { model: ReportModel; dark?: boolean; limit?: number; trend?: boolean }) {
-  const metrics = model.snapshotMetrics.slice(0, limit), pattern = model.monthlyInjuryPattern, range = monthRange(pattern);
+  const metrics = model.snapshotMetrics.slice(0, limit), pattern = model.monthlyInjuryPattern;
   return <View style={styles.metricGrid}>{metrics.map((metric, index) => {
     const colour = metricColour(metric.key, index), series = trend ? metricSeries(metric, pattern) : [];
     const plotted = series.filter((value) => typeof value === "number" && Number.isFinite(value)).length;
     return <View key={metric.key} style={[styles.metricCell, { width: metrics.length > 4 ? "25%" : `${100 / metrics.length}%` }, metrics.length === 7 && index === 4 ? { marginLeft: "12.5%" } : {}]}>
-      <View style={[styles.metricCard, dark ? { backgroundColor: C.navy2, borderColor: "#294565" } : {}, trend ? { minHeight: 76 } : { minHeight: 52 }]}>
+      <View style={[styles.metricCard, dark ? { backgroundColor: C.navy2, borderColor: "#294565" } : {}, trend ? { minHeight: 68 } : { minHeight: 52 }]}>
         <Text style={[styles.metricLabel, dark ? { color: C.white } : {}]}>{metric.label}</Text>
         <Text style={[styles.metricValue, dark ? { color: C.white } : {}]}>{fmt(metric.value)}</Text>
         <Text style={[styles.metricUnit, dark ? { color: "#AFC1D4" } : {}]}>{metric.unit}</Text>
-        {trend && (plotted > 1
-          ? <><Sparkline values={series} colour={colour} /><Text style={[styles.metricUnit, { marginTop: 2 }]}>Monthly trend, {range}</Text></>
-          : <Text style={[styles.metricUnit, { marginTop: 10 }]}>Monthly trend not available</Text>)}
+        {trend && plotted > 1 && <Sparkline values={series} colour={colour} />}
         {!trend && <Text style={[styles.metricUnit, { marginTop: 6 }]}>Released season total</Text>}
       </View>
     </View>;
@@ -643,21 +642,161 @@ function ExposureLadder({ model, keyName, label, unit, colour, rowGap = 9 }: { m
     <Caption>{label} for every club in the released cohort, on a shared scale.</Caption>
   </View>;
 }
-function ComparisonTable({ metrics, currentLabel = "Selected", comparisonLabel = "Comparison", limit = 6, sharedReason }: { metrics: readonly SeasonComparisonMetric[]; currentLabel?: string; comparisonLabel?: string; limit?: number; sharedReason?: string }) {
+function finiteNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function comparisonDomain(values: Array<number | null>, zeroFloor = false): [number, number] {
+  const usable = values.filter(finiteNumber);
+  if (!usable.length) return [0, 1];
+  const low = Math.min(...usable), high = Math.max(...usable);
+  const span = Math.max(high - low, Math.abs(high) * 0.12, 0.5);
+  return [zeroFloor ? Math.max(0, low - span * 0.5) : low - span * 0.5, high + span * 0.5];
+}
+
+const SEASON_COLOURS = [C.blue, C.cyan] as const;
+const COMPARISON_KPI_UNITS: Record<string, string> = {
+  time_loss_incidence: "/1,000 h",
+  mean_severity: "days",
+  injury_burden: "days/1,000 h",
+  time_loss_injuries: "injuries",
+};
+
+function ComparisonKpiCards({ comparison }: { comparison: SeasonComparisonVisuals }) {
+  return <View style={[styles.metricGrid, { marginTop: -1 }]}>{comparison.kpis.map((metric, index) => {
+    const improvement = metric.outcome_improvement_percent;
+    const state = improvement === null ? "Not comparable" : improvement > 0 ? "Improved" : improvement < 0 ? "Increased" : "No change";
+    const stateColour = improvement === null || improvement === 0 ? C.muted : improvement > 0 ? C.green : C.red;
+    const digits = metric.key === "time_loss_injuries" || metric.key === "injury_burden" ? 0 : 1;
+    return <View key={metric.key} style={[styles.metricCell, { width: "25%" }]}>
+      <View style={[styles.metricCard, { minHeight: 100, padding: 8 }]}>
+        <Text style={styles.metricLabel}>{metric.label}</Text>
+        <Text style={{ color: stateColour, fontFamily: "Helvetica-Bold", fontSize: 15, marginTop: 6 }}>{improvement === null ? "N/A" : `${fmt(Math.abs(improvement), "", 1)}%`}</Text>
+        <Text style={{ color: stateColour, fontFamily: "Helvetica-Bold", fontSize: 6.5, marginTop: 1 }}>{state}</Text>
+        <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: C.rule, marginTop: 7, paddingTop: 6 }}>
+          {([metric.previous, metric.current] as const).map((season, seasonIndex) => <View key={seasonIndex} style={{ width: "50%", paddingRight: seasonIndex === 0 ? 3 : 0, paddingLeft: seasonIndex === 1 ? 4 : 0, borderLeftWidth: seasonIndex === 1 ? 1 : 0, borderLeftColor: C.rule }}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}><View style={[styles.legendDot, { width: 5, height: 5, borderRadius: 2.5, marginRight: 3, backgroundColor: SEASON_COLOURS[seasonIndex] }]} /><Text style={{ color: C.muted, fontFamily: "Helvetica-Bold", fontSize: 5.8 }}>{seasonIndex === 0 ? comparison.previous_season : comparison.current_season}</Text></View>
+            <Text style={{ color: C.ink, fontFamily: "Helvetica-Bold", fontSize: 8, marginTop: 3 }}>{fmt(season.value, "", digits)}</Text>
+            <Text style={{ color: C.muted, fontSize: 5.5, marginTop: 1 }}>{COMPARISON_KPI_UNITS[metric.key] ?? season.unit}</Text>
+          </View>)}
+        </View>
+      </View>
+    </View>;
+  })}</View>;
+}
+
+function SeasonImpactChart({ comparison, setting = "all", chartHeight = 190 }: { comparison: SeasonComparisonVisuals; setting?: "all" | "match" | "training"; chartHeight?: number }) {
+  const impact = comparison.impact.find((row) => row.setting === setting);
+  if (!impact) return <Text style={styles.panelNote}>No approved injury-impact values are available for this setting.</Text>;
+  const points = [
+    { season: comparison.previous_season, value: impact.previous, colour: SEASON_COLOURS[0] },
+    { season: comparison.current_season, value: impact.current, colour: SEASON_COLOURS[1] },
+  ];
+  const w = 517, h = chartHeight, left = 56, right = 20, top = 22, bottom = 42;
+  const plotW = w - left - right, plotH = h - top - bottom;
+  const [xLow, xHigh] = comparisonDomain(points.map((point) => point.value.time_loss_incidence_per_1000h), true);
+  const [yLow, yHigh] = comparisonDomain(points.map((point) => point.value.mean_severity_days), true);
+  const x = (value: number) => left + (value - xLow) / (xHigh - xLow) * plotW;
+  const y = (value: number) => top + plotH - (value - yLow) / (yHigh - yLow) * plotH;
+  const maxBurden = Math.max(0, ...points.map((point) => point.value.burden_per_1000h ?? 0));
+  const radius = (value: number | null) => finiteNumber(value) && maxBurden > 0 ? 9 + Math.sqrt(Math.max(value, 0) / maxBurden) * 14 : 9;
+  const plotted = points.map((point) => ({
+    ...point,
+    x: finiteNumber(point.value.time_loss_incidence_per_1000h) ? x(point.value.time_loss_incidence_per_1000h) : null,
+    y: finiteNumber(point.value.mean_severity_days) ? y(point.value.mean_severity_days) : null,
+    r: radius(point.value.burden_per_1000h),
+  }));
+  const first = plotted[0], second = plotted[1];
+  const connects = first.x !== null && first.y !== null && second.x !== null && second.y !== null;
+  const angle = connects ? Math.atan2((second.y ?? 0) - (first.y ?? 0), (second.x ?? 0) - (first.x ?? 0)) : 0;
+  const arrowX = (second.x ?? 0) - Math.cos(angle) * second.r;
+  const arrowY = (second.y ?? 0) - Math.sin(angle) * second.r;
+  const arrow = connects
+    ? `M ${arrowX} ${arrowY} L ${arrowX - Math.cos(angle - 0.55) * 7} ${arrowY - Math.sin(angle - 0.55) * 7} L ${arrowX - Math.cos(angle + 0.55) * 7} ${arrowY - Math.sin(angle + 0.55) * 7} Z`
+    : "";
   return <View>
-    <View style={[styles.headRow, { marginBottom: 3 }]}>
-      <Text style={[styles.columnHead, { flex: 1 }]}>Metric</Text>
-      <Text style={[styles.columnHead, { width: 44, textAlign: "right" }]}>{currentLabel}</Text>
-      <Text style={[styles.columnHead, { width: 44, textAlign: "right" }]}>{comparisonLabel}</Text>
-      <Text style={[styles.columnHead, { width: 118, paddingLeft: 8 }]}>Change</Text>
-    </View>
-    {metrics.slice(0, limit).map((m) => <View key={m.key} style={[styles.compactTableRow, { minHeight: 24, alignItems: "center" }]}>
-      <Text style={styles.compactLabel}>{m.label}</Text>
-      <Text style={[styles.compactNumber, { width: 44, color: C.navy, fontFamily: "Helvetica-Bold" }]}>{fmt(m.currentValue)}</Text>
-      <Text style={[styles.compactNumber, { width: 44 }]}>{fmt(m.priorValue)}</Text>
-      <Text style={{ width: 118, paddingLeft: 8, color: C.muted, fontSize: 6.5, lineHeight: 1.25 }}>{sharedReason && m.deltaReason === sharedReason ? "Not comparable*" : m.deltaReason ?? fmt(m.delta)}</Text>
+    <Svg viewBox={`0 0 ${w} ${h}`} style={{ height: h }}>
+      <Rect x={left} y={top} width={plotW} height={plotH} fill={C.white} stroke={C.line} strokeWidth={0.8} />
+      {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+        const xPosition = left + ratio * plotW, yPosition = top + plotH - ratio * plotH;
+        return <G key={ratio}>
+          <Line x1={xPosition} x2={xPosition} y1={top} y2={top + plotH} stroke={C.rule} strokeWidth={0.7} />
+          <Line x1={left} x2={left + plotW} y1={yPosition} y2={yPosition} stroke={C.rule} strokeWidth={0.7} />
+          <SvgText x={xPosition} y={top + plotH + 12} textAnchor="middle" fontSize={6.2} fill={C.muted}>{tickText(xLow + ratio * (xHigh - xLow))}</SvgText>
+          <SvgText x={left - 5} y={yPosition + 2.2} textAnchor="end" fontSize={6.2} fill={C.muted}>{tickText(yLow + ratio * (yHigh - yLow))}</SvgText>
+        </G>;
+      })}
+      {connects && <Line x1={first.x ?? 0} y1={first.y ?? 0} x2={arrowX} y2={arrowY} stroke={C.amber} strokeWidth={1.6} strokeDasharray="5 4" />}
+      {connects && <Path d={arrow} fill={C.amber} />}
+      {plotted.map((point, index) => point.x !== null && point.y !== null ? <G key={point.season}>
+        <Circle cx={point.x} cy={point.y} r={point.r} fill={point.colour} opacity={0.72} stroke={point.colour} strokeWidth={1.5} />
+        <SvgText x={point.x} y={index === 0 ? point.y - point.r - 6 : point.y + point.r + 10} textAnchor="middle" fontSize={7} fontWeight="bold" fill={point.colour}>{point.season}</SvgText>
+      </G> : null)}
+      <SvgText x={left + plotW / 2} y={h - 4} textAnchor="middle" fontSize={6.7} fontWeight="bold" fill={C.ink}>Time-loss injuries per 1,000 player-hours</SvgText>
+      <SvgText x={12} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 12 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Mean days lost per time-loss injury</SvgText>
+    </Svg>
+    <Legend items={[
+      { label: comparison.previous_season, colour: SEASON_COLOURS[0] },
+      { label: comparison.current_season, colour: SEASON_COLOURS[1] },
+      { label: "Circle area represents burden", colour: C.grey },
+    ]} />
+    <Caption>Incidence is on the horizontal axis and mean severity is on the vertical axis. The dashed arrow shows the sequence between approved releases, not causality.</Caption>
+  </View>;
+}
+
+function SeasonMonthlyBars({ comparison, chartHeight = 205 }: { comparison: SeasonComparisonVisuals; chartHeight?: number }) {
+  const rows = comparison.monthly, w = 517, h = chartHeight, left = 38, right = 12, top = 18, bottom = 35;
+  const plotW = w - left - right, plotH = h - top - bottom;
+  const scale = niceScale(Math.max(1, ...rows.flatMap((row) => [row.previous_time_loss_injuries, row.current_time_loss_injuries])));
+  const y = (value: number) => top + plotH - value / scale.top * plotH;
+  const slot = plotW / Math.max(rows.length, 1), barWidth = Math.min(15, slot * 0.3);
+  return <View>
+    <Svg viewBox={`0 0 ${w} ${h}`} style={{ height: h }}>
+      <Rect x={left} y={top} width={plotW} height={plotH} fill={C.white} stroke={C.line} strokeWidth={0.8} />
+      {scale.ticks.map((tick) => <G key={tick}>
+        <Line x1={left} x2={left + plotW} y1={y(tick)} y2={y(tick)} stroke={C.rule} strokeWidth={0.7} />
+        <SvgText x={left - 5} y={y(tick) + 2.2} textAnchor="end" fontSize={6.2} fill={C.muted}>{tickText(tick)}</SvgText>
+      </G>)}
+      {rows.map((row, index) => {
+        const centre = left + slot * index + slot / 2;
+        return <G key={row.month_key}>
+          <Rect x={centre - barWidth - 1} y={y(row.previous_time_loss_injuries)} width={barWidth} height={top + plotH - y(row.previous_time_loss_injuries)} fill={SEASON_COLOURS[0]} />
+          <Rect x={centre + 1} y={y(row.current_time_loss_injuries)} width={barWidth} height={top + plotH - y(row.current_time_loss_injuries)} fill={SEASON_COLOURS[1]} />
+          <SvgText x={centre} y={top + plotH + 12} textAnchor="middle" fontSize={6.2} fill={C.muted}>{row.label.toUpperCase()}</SvgText>
+        </G>;
+      })}
+      <SvgText x={left + plotW / 2} y={h - 3} textAnchor="middle" fontSize={6.7} fontWeight="bold" fill={C.ink}>Month</SvgText>
+      <SvgText x={8} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 8 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Time-loss injury count</SvgText>
+    </Svg>
+    <Legend items={[
+      { label: comparison.previous_season, colour: SEASON_COLOURS[0], shape: "bar" },
+      { label: comparison.current_season, colour: SEASON_COLOURS[1], shape: "bar" },
+    ]} />
+    <Caption>Paired bars compare monthly time-loss injury counts for the two approved releases.</Caption>
+  </View>;
+}
+
+function DiagnosisDriversPdf({ comparison }: { comparison: SeasonComparisonVisuals }) {
+  const allValues = comparison.diagnoses.flatMap((row) => [...row.previous, ...row.current].map((item) => item.time_loss_injuries));
+  const max = Math.max(1, ...allValues);
+  return <View style={[styles.split, { flex: 1 }]}>
+    {comparison.diagnoses.map((row, settingIndex) => <View key={row.setting} style={[styles.third, settingIndex > 0 ? { borderLeftWidth: 1, borderLeftColor: C.rule, paddingLeft: 7 } : {}, settingIndex < 2 ? { paddingRight: 7 } : {}]}>
+      <Text style={[styles.panelTitle, { textAlign: "center", marginBottom: 6 }]}>{row.label}</Text>
+      <View style={[styles.headRow, { marginBottom: 5 }]}>
+        <Text style={[styles.columnHead, { width: "50%", color: SEASON_COLOURS[0] }]}>{comparison.previous_season}</Text>
+        <Text style={[styles.columnHead, { width: "50%", textAlign: "right", color: SEASON_COLOURS[1] }]}>{comparison.current_season}</Text>
+      </View>
+      {[0, 1, 2].map((rank) => {
+        const previous = row.previous[rank], current = row.current[rank];
+        return <View key={rank} style={{ marginBottom: 8, minHeight: 47, borderBottomWidth: rank < 2 ? 1 : 0, borderBottomColor: C.rule, paddingBottom: 6 }}>
+          <Text style={{ color: C.muted, fontFamily: "Helvetica-Bold", fontSize: 6, textAlign: "center", marginBottom: 3 }}>RANK {rank + 1}</Text>
+          <View style={{ flexDirection: "row" }}>
+            <View style={{ width: "50%", paddingRight: 4 }}><Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.18, minHeight: 16 }}>{previous?.diagnosis ?? "Not available"}</Text><View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}><Text style={{ width: 15, fontFamily: "Helvetica-Bold", fontSize: 7 }}>{previous?.time_loss_injuries ?? 0}</Text><View style={{ flex: 1, height: 6, backgroundColor: C.track }}><View style={{ height: 6, width: `${(previous?.time_loss_injuries ?? 0) / max * 100}%`, backgroundColor: SEASON_COLOURS[0] }} /></View></View></View>
+            <View style={{ width: "50%", paddingLeft: 4 }}><Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.18, minHeight: 16, textAlign: "right" }}>{current?.diagnosis ?? "Not available"}</Text><View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}><View style={{ flex: 1, height: 6, backgroundColor: C.track }}><View style={{ height: 6, width: `${(current?.time_loss_injuries ?? 0) / max * 100}%`, backgroundColor: SEASON_COLOURS[1] }} /></View><Text style={{ width: 15, textAlign: "right", fontFamily: "Helvetica-Bold", fontSize: 7 }}>{current?.time_loss_injuries ?? 0}</Text></View></View>
+          </View>
+        </View>;
+      })}
     </View>)}
-    {sharedReason && <Caption>* {sharedReason}.</Caption>}
   </View>;
 }
 
@@ -688,28 +827,22 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
 }
 
 function SeasonPattern({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
+  const comparison = model.seasonComparisonVisuals;
   return <PageShell model={model} meta={meta} section="season-pattern">
-    <PageTitle title="Season overview" note="Headline measures, the monthly pattern and the setting split are brought together on the first analytical page." />
+    <PageTitle title="Season overview" note="Headline measures, the setting split and the approved season comparison are brought together on the first analytical page." />
     <MetricCards model={model} />
-    <View style={{ marginTop: 8 }}><Panel title="Monthly injury pattern" note="Case counts and incidence for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={215} /></Panel></View>
     <View style={{ marginTop: 8 }}><Panel title="Match and training" note="Released setting measures shown side by side."><SettingBench rows={model.matchTraining} /></Panel></View>
+    <View style={{ marginTop: 8, height: 247 }}><Panel fill title="Injury impact by season" note="Overall time-loss incidence, mean severity and burden for the two approved releases.">{comparison ? <SeasonImpactChart comparison={comparison} chartHeight={165} /> : <Text style={styles.panelNote}>No approved season comparison is available for this report.</Text>}</Panel></View>
   </PageShell>;
 }
 function SeverityContact({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="severity-contact">
-    <PageTitle title="Severity and mechanism" note="Case consequences and contact context are shown alongside the team setting split." />
-    <View style={[styles.split, { height: 300 }]}>
+    <PageTitle title="Monthly pattern, severity and mechanism" note="The monthly injury series leads into the released severity and contact profiles." />
+    <View style={{ height: 320 }}><Panel fill title="Monthly injury pattern" note="Case counts and incidence for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={244} /></Panel></View>
+    <View style={[styles.split, { marginTop: 8, height: 318 }]}>
       <View style={styles.third}><Panel fill title="Severity profile" note="All recorded injuries by released duration band."><HalfRing rows={model.severityDistribution} colours={SEVERITY_COLOURS} unitHead="Cases (share)" /></Panel></View>
       <View style={styles.third}><Panel fill title="Contact mechanism" note="Time-loss injuries by released mechanism."><HalfRing rows={model.contactDistribution} colours={CONTACT_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
       <View style={styles.third}><Panel fill title="Setting contrast" note="Match and training measures for the same window."><CompactSettingBench rows={model.matchTraining} /></Panel></View>
-    </View>
-    <View style={{ marginTop: 8, height: 320 }}>
-      <Panel fill title="Leading locations and injury types" note="Time-loss rankings from the released profile rows. Each category keeps one colour throughout the report.">
-        <View style={styles.split}>
-          <View style={styles.half}><RankedBars rows={overall(model.injuryProfile.bodyLocations)} limit={10} coloured heading="Body region" unit="Cases" rowGap={15} /></View>
-          <View style={styles.half}><RankedBars rows={overall(model.injuryProfile.injuryTypes)} limit={10} coloured heading="Injury type" unit="Cases" rowGap={15} /></View>
-        </View>
-      </Panel>
     </View>
   </PageShell>;
 }
@@ -807,35 +940,14 @@ function TeamComparison({ model, meta }: { model: ReportModel; meta: ReportMetad
   </PageShell>;
 }
 function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
-  const items = [...model.method, ...model.limitations];
+  const comparison = model.seasonComparisonVisuals;
   return <PageShell model={model} meta={meta} section="season-methodology">
-    <PageTitle title="Season comparison and method" note={`The selected ${model.season} release is compared with the approved ${model.seasonComparison.comparisonSeason} release where definitions permit.`} />
-    <View style={[styles.split, { height: 312 }]}>
-      <View style={{ width: "58%", paddingHorizontal: 4 }}>
-        <Panel fill title={`${model.season} versus ${model.seasonComparison.comparisonSeason}`} note="Unavailable differences are explained rather than inferred.">
-          <ComparisonTable metrics={model.seasonComparison.headline} currentLabel={model.season} comparisonLabel={model.seasonComparison.comparisonSeason} limit={7} />
-          <View style={[styles.note, { marginTop: 9 }]}><Text>{model.seasonComparison.note || model.seasonComparison.status}</Text></View>
-        </Panel>
-      </View>
-      <View style={{ width: "42%", paddingHorizontal: 4 }}>
-        <Panel fill title="Methodology and limitations" note="Released aggregate dashboard values only.">
-          {items.length
-            ? items.slice(0, 12).map((item, i) => <View key={`${i}-${item}`} style={styles.listItem}><View style={styles.bullet} /><Text style={{ flex: 1, fontSize: 6.8, lineHeight: 1.35 }}>{item}</Text></View>)
-            : <Text style={styles.panelNote}>Not available</Text>}
-          <View style={[styles.note, { marginTop: 8 }]}><Text>Not available values remain unavailable. They are not reconstructed for this report.</Text></View>
-        </Panel>
-      </View>
-    </View>
-    <View style={{ marginTop: 8, height: 256 }}><Panel fill title="Setting comparison" note="Match and training values from both approved season releases."><ComparisonTable metrics={model.seasonComparison.settings} currentLabel={model.season} comparisonLabel={model.seasonComparison.comparisonSeason} limit={6} sharedReason="Released setting definitions do not include comparable formula metadata" /></Panel></View>
-    <View style={{ marginTop: 8, height: 92 }}>
-      <Panel fill title="Publication record" note="This information appears on every page for auditability.">
-        <View style={[styles.split, { marginTop: 4 }]}>
-          <View style={styles.third}><Text style={styles.columnHead}>Report version</Text><Text style={[styles.metricValue, { fontSize: 14, marginTop: 6 }]}>v{meta.version}</Text></View>
-          <View style={styles.third}><Text style={styles.columnHead}>Source generated</Text><Text style={[styles.metricValue, { fontSize: 14, marginTop: 6 }]}>{formatDate(meta.sourceGeneratedAt)}</Text></View>
-          <View style={styles.third}><Text style={styles.columnHead}>Export date</Text><Text style={[styles.metricValue, { fontSize: 14, marginTop: 6 }]}>{formatDate(meta.exportedAt)}</Text></View>
-        </View>
-      </Panel>
-    </View>
+    <PageTitle title="Season comparison" note={comparison ? `Approved ${comparison.previous_season} and ${comparison.current_season} values are shown using the same measures as the dashboard.` : "No approved season comparison is available for this report."} />
+    {comparison ? <>
+      <View style={{ height: 111 }}><ComparisonKpiCards comparison={comparison} /></View>
+      <View style={{ marginTop: 8, height: 267 }}><Panel fill title="Time-loss injuries by month" note="Paired monthly counts for the two approved releases."><SeasonMonthlyBars comparison={comparison} chartHeight={190} /></Panel></View>
+      <View style={{ marginTop: 8, height: 292 }}><Panel fill title="Diagnosis drivers" note="The three leading diagnosis families by time-loss injury count for overall, match and training settings."><DiagnosisDriversPdf comparison={comparison} /></Panel></View>
+    </> : <View style={[styles.panel, { height: 180, justifyContent: "center", alignItems: "center" }]}><Text style={styles.panelNote}>No approved season comparison is available.</Text></View>}
   </PageShell>;
 }
 

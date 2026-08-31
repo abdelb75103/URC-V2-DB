@@ -3,7 +3,7 @@ import { getTeamById } from '@/config/teams';
 import { getTeamPageData } from '@/lib/reporting';
 import { resolveTeamPalette } from '@/lib/team-color';
 import { getDashboardSupplement } from '@/lib/reporting-preview';
-import type { DashboardSupplement, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
+import type { DashboardSupplement, SeasonComparisonData, SettingMetricRow, TeamComparisonRow } from '@/lib/reporting-types';
 import { LockedShell } from '@/components/locked-shell';
 import { TeamDashboard } from '@/components/dashboard/team-dashboard';
 import { resolveDashboardSeason } from '@/lib/dashboard-season';
@@ -33,7 +33,6 @@ export default async function TeamPage({
     return (
       <LockedShell
         title={`${team.name} Dashboard`}
-        subtitle="URC injury & exposure surveillance"
         crest={team.crest}
         accent={team.accent}
       />
@@ -46,14 +45,16 @@ export default async function TeamPage({
   let leagueMetrics: SettingMetricRow[] = [];
   let supplement: DashboardSupplement | undefined;
   let viewerComparisonId: string | null = null;
+  let seasonComparison: SeasonComparisonData | undefined;
   try {
-    ({ dashboard, comparisonDashboard, comparisons, leagueMetrics, viewer_comparison_id: viewerComparisonId } =
+    ({ dashboard, comparisonDashboard, comparisons, leagueMetrics, seasonComparison, viewer_comparison_id: viewerComparisonId } =
       await getTeamPageData(team.id, season));
   } catch {
     dashboard = undefined;
     comparisonDashboard = undefined;
     comparisons = [];
     leagueMetrics = [];
+    seasonComparison = undefined;
     viewerComparisonId = null;
   }
   try {
@@ -65,7 +66,6 @@ export default async function TeamPage({
     return (
       <LockedShell
         title={`${team.name} Dashboard`}
-        subtitle="URC injury & exposure surveillance"
         crest={team.crest}
         accent={team.accent}
         reason="This approved dashboard could not be loaded. Please try again later."
@@ -90,6 +90,7 @@ export default async function TeamPage({
       viewerComparisonId,
     }),
     comparisonBenchmarks: buildReportComparisonBenchmarks(leagueMetrics),
+    seasonComparisonVisuals: seasonComparison,
     brand: await loadReportBrand(team.crest, teamColor.mark),
   });
 
@@ -101,6 +102,7 @@ export default async function TeamPage({
       comparisons={comparisons}
       leagueMetrics={leagueMetrics}
       supplement={supplement}
+      seasonComparison={seasonComparison}
       viewerComparisonId={viewerComparisonId}
       teamColor={teamColor}
       season={season}

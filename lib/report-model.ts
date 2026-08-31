@@ -8,6 +8,7 @@ import type {
   InjuryTypeFamilyRow,
   SeverityRow,
   SettingMetricRow,
+  SeasonComparisonData,
 } from "@/lib/reporting-types";
 import {
   DEFAULT_REPORT_SECTION_IDS,
@@ -36,6 +37,7 @@ export type ReportModelRequest = {
   exportedAt?: string;
   comparisonRows?: readonly ReportComparisonRow[];
   comparisonBenchmarks?: ReportComparisonBenchmarks;
+  seasonComparisonVisuals?: SeasonComparisonData;
   brand?: { crestDataUri: string | null; accentColour: string };
 };
 
@@ -345,6 +347,7 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
       headline: current.headline.map((metric) => comparisonMetric(metric, priorHeadline.get(metric.key), comparableWindow, comparableCoverage)),
       settings: comparisonSettings,
     },
+    seasonComparisonVisuals: request.seasonComparisonVisuals ?? null,
     method: [...method],
     limitations: [...safeLimitations],
   };

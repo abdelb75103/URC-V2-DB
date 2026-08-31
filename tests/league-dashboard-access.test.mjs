@@ -140,7 +140,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   let queryText = '';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v2')) {
+      if (sql.includes('approved_dashboard_reader_target_v6')) {
         return { rows: [{ target_attested: true }] };
       }
       queryText = sql;
@@ -260,7 +260,7 @@ test('team comparison overall setting is a validated projection of released head
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => ({
-      ...(sql.includes('approved_dashboard_reader_target_v2')
+      ...(sql.includes('approved_dashboard_reader_target_v6')
         ? { rows: [{ target_attested: true }] }
         : { rows: [{
         team_key: 'fixture-team',
@@ -352,7 +352,7 @@ test('team comparisons preserve unavailable exposure and place it after known co
     setting_metrics: settingMetrics,
   });
   globalThis.__urcWebReaderPool = transactionMockPool(
-    async (sql) => (sql.includes('approved_dashboard_reader_target_v2')
+    async (sql) => (sql.includes('approved_dashboard_reader_target_v6')
       ? { rows: [{ target_attested: true }] }
       : { rows: [row('unavailable', null, null), row('known', 100, 40)] }),
   );
@@ -417,18 +417,22 @@ test('league and team page metrics include the released overall benchmark', asyn
   let releaseToken = 'release-a';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v2')) {
+      if (sql.includes('approved_dashboard_reader_target_v6')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
         tokenQueryCount += 1;
-        return { rows: [{ season: '2024-25', cache_token: releaseToken }] };
+        return { rows: [
+          { season: '2024-25', cache_token: `${releaseToken}-year-1` },
+          { season: '2025-26', cache_token: `${releaseToken}-year-2` },
+        ] };
       }
       payloadQueryCount += 1;
       return ({
       rows: [{
         dashboard,
         comparisons: [],
+        season_comparison: null,
       }],
       });
     },
@@ -449,17 +453,21 @@ test('league and team page metrics include the released overall benchmark', asyn
     assert.equal(pageData.leagueMetrics[0].burden_per_1000h, 93.75);
 
     globalThis.__urcWebReaderPool.query = async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v2')) {
+      if (sql.includes('approved_dashboard_reader_target_v6')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
-        return { rows: [{ season: '2024-25', cache_token: 'release-a' }] };
+        return { rows: [
+          { season: '2024-25', cache_token: 'release-a-year-1' },
+          { season: '2025-26', cache_token: 'release-a-year-2' },
+        ] };
       }
       return {
         rows: [{
           dashboard: { ...dashboard, team: 'Fixture Team' },
           comparisons: [],
           league_metrics: { coverage, headline, setting_metrics: settingMetrics },
+          season_comparison: null,
         }],
       };
     };
@@ -521,7 +529,7 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
   let payloadQueryCount = 0;
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v2')) {
+      if (sql.includes('approved_dashboard_reader_target_v6')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
@@ -531,7 +539,7 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
         ] };
       }
       payloadQueryCount += 1;
-      return { rows: [{ dashboard, comparisons: [] }] };
+      return { rows: [{ dashboard, comparisons: [], season_comparison: null }] };
     },
   );
 

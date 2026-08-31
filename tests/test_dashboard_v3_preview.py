@@ -13,6 +13,7 @@ PREVIEW = (ROOT / "tools/sql/dashboard_v3_preview.sql").read_text()
 RECONCILIATION = (ROOT / "tools/sql/dashboard_v3_reconciliation.sql").read_text()
 GENERATOR = (ROOT / "tools/generate-dashboard-v3-preview.mjs").read_text()
 UI = (ROOT / "components/dashboard/team-dashboard.tsx").read_text()
+DASHBOARD_TABS = (ROOT / "lib/dashboard-tab.ts").read_text()
 CHARTS = (ROOT / "components/dashboard/charts.tsx").read_text()
 INJURY_TYPE_DOSSIER = (ROOT / "components/dashboard/injury-type-dossier.tsx").read_text()
 PREVIEW_READER = (ROOT / "lib/reporting-preview.ts").read_text()
@@ -323,8 +324,9 @@ class DashboardV3PreviewTests(unittest.TestCase):
             "Team Comparison",
             "Exposure",
             "Common Injuries",
+            "Season Comparison",
         ):
-            self.assertIn(label, UI)
+            self.assertIn(label, UI + DASHBOARD_TABS)
         self.assertIn("<InjuryTypeRanking", UI)
         self.assertIn("<InjuryTypeDossier", UI)
         self.assertIn("availableSettings(classifiedFamilies", UI)

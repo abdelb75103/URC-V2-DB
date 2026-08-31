@@ -1,3 +1,5 @@
+import type { SeasonComparisonData } from "@/lib/reporting-types";
+
 export const DEFAULT_REPORT_SECTION_IDS = [
   "cover",
   "season-pattern",
@@ -149,6 +151,7 @@ export type ReportModel = {
   comparisonHeatmap: ReportComparisonRow[];
   comparisonBenchmarks: ReportComparisonBenchmarks;
   seasonComparison: SeasonComparisonModel;
+  seasonComparisonVisuals: SeasonComparisonData | null;
   method: string[];
   limitations: string[];
 };

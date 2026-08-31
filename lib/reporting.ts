@@ -10,12 +10,15 @@ import type {
   HeadlineMetric,
   InjuryProfileRow,
   InjuryTypeFamilyRow,
+  SeasonComparisonData,
   SeverityRow,
   SettingMetricRow,
   TeamComparisonRow,
 } from "@/lib/reporting-types";
 
 export type { DashboardData, TeamDashboardData } from "@/lib/reporting-types";
+
+const SEASON_COMPARISON_SEASONS = ["2024-25", "2025-26"] as const;
 
 const DASHBOARD_PAYLOAD_CACHE_MILLISECONDS = 300_000;
 const APPROVED_URC_PROJECT_REF = "eukkvswaxweenovqqgzr";
@@ -583,6 +586,112 @@ const v6LeagueMetricsSourceSchema = z.object({
   ]),
 }).strict();
 
+const seasonComparisonMetricSchema = z.object({
+  value: z.number().nullable(),
+  unit: z.string().min(1),
+}).strict();
+const seasonComparisonKpiSchema = z.object({
+  key: z.enum([
+    "time_loss_incidence",
+    "mean_severity",
+    "injury_burden",
+    "time_loss_injuries",
+  ]),
+  label: z.string(),
+  previous: seasonComparisonMetricSchema,
+  current: seasonComparisonMetricSchema,
+  outcome_improvement_percent: z.number().nullable(),
+}).strict();
+const seasonComparisonImpactValueSchema = z.object({
+  time_loss_incidence_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  time_loss_injuries: z.number().nullable(),
+  exposure_hours: z.number().nullable(),
+}).strict();
+const seasonComparisonImpactRowSchema = z.object({
+  setting: z.enum(["all", "match", "training"]),
+  label: z.string(),
+  previous: seasonComparisonImpactValueSchema,
+  current: seasonComparisonImpactValueSchema,
+}).strict();
+const seasonComparisonMonthSchema = z.object({
+  month_key: z.string().regex(/^\d{4}-\d{2}$/),
+  label: z.string(),
+  previous_time_loss_injuries: z.number(),
+  current_time_loss_injuries: z.number(),
+}).strict();
+const seasonComparisonDiagnosisSchema = z.object({
+  rank: z.number().int().min(1).max(3),
+  diagnosis: z.string(),
+  time_loss_injuries: z.number(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+}).strict();
+const seasonComparisonDiagnosisRowSchema = z.object({
+  setting: z.enum(["all", "match", "training"]),
+  label: z.string(),
+  previous: z.array(seasonComparisonDiagnosisSchema).max(3),
+  current: z.array(seasonComparisonDiagnosisSchema).max(3),
+}).strict();
+const seasonComparisonExposureSchema = z.object({
+  exposure_hours: z.number().nullable(),
+  status: z.enum(["available", "estimated", "incomplete", "unavailable"]),
+  qualification: z.string().nullable(),
+}).strict();
+const seasonComparisonReaderSchema = z.object({
+  rule_version: z.literal("season_comparison_reporting_2026_08_31_v4"),
+  scope: z.enum(["team", "league"]),
+  previous_season: z.literal("2024-25"),
+  current_season: z.literal("2025-26"),
+  kpis: z.tuple([
+    seasonComparisonKpiSchema.extend({ key: z.literal("time_loss_incidence") }).strict(),
+    seasonComparisonKpiSchema.extend({ key: z.literal("mean_severity") }).strict(),
+    seasonComparisonKpiSchema.extend({ key: z.literal("injury_burden") }).strict(),
+    seasonComparisonKpiSchema.extend({ key: z.literal("time_loss_injuries") }).strict(),
+  ]),
+  impact: z.tuple([
+    seasonComparisonImpactRowSchema.extend({ setting: z.literal("all") }).strict(),
+    seasonComparisonImpactRowSchema.extend({ setting: z.literal("match") }).strict(),
+    seasonComparisonImpactRowSchema.extend({ setting: z.literal("training") }).strict(),
+  ]),
+  monthly: z.tuple([
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2024-09"), label: z.literal("Sep") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2024-10"), label: z.literal("Oct") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2024-11"), label: z.literal("Nov") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2024-12"), label: z.literal("Dec") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2025-01"), label: z.literal("Jan") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2025-02"), label: z.literal("Feb") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2025-03"), label: z.literal("Mar") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2025-04"), label: z.literal("Apr") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2025-05"), label: z.literal("May") }).strict(),
+    seasonComparisonMonthSchema.extend({ month_key: z.literal("2025-06"), label: z.literal("Jun") }).strict(),
+  ]),
+  diagnoses: z.tuple([
+    seasonComparisonDiagnosisRowSchema.extend({ setting: z.literal("all") }).strict(),
+    seasonComparisonDiagnosisRowSchema.extend({ setting: z.literal("match") }).strict(),
+    seasonComparisonDiagnosisRowSchema.extend({ setting: z.literal("training") }).strict(),
+  ]),
+  exposure: z.object({
+    previous: seasonComparisonExposureSchema,
+    current: seasonComparisonExposureSchema,
+  }).strict(),
+}).strict().superRefine((comparison, context) => {
+  comparison.diagnoses.forEach((row, rowIndex) => {
+    (["previous", "current"] as const).forEach((season) => {
+      row[season].forEach((diagnosis, diagnosisIndex) => {
+        if (diagnosis.rank !== diagnosisIndex + 1) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "diagnosis ranks must be contiguous and ordered",
+            path: ["diagnoses", rowIndex, season, diagnosisIndex, "rank"],
+          });
+        }
+      });
+    });
+  });
+});
+
 type DashboardReaderRow =
   | z.infer<typeof dashboardRowSchema>
   | z.infer<typeof v6TeamDashboardRowSchema>
@@ -597,6 +706,17 @@ type ReaderCoverage =
   | z.infer<typeof coverageSchema>
   | z.infer<typeof v6TeamCoverageSchema>
   | z.infer<typeof v6LeagueCoverageSchema>;
+
+export function parseSeasonComparisonReaderRow(
+  raw: unknown,
+  scope: SeasonComparisonData["scope"],
+): SeasonComparisonData {
+  const comparison = seasonComparisonReaderSchema.parse(raw);
+  if (comparison.scope !== scope) {
+    throw new Error("season comparison reader scope does not match the requested dashboard");
+  }
+  return comparison;
+}
 
 export function parseDashboardReaderRow(
   raw: unknown,
@@ -686,7 +806,7 @@ async function approvedWebReaderQuery(
     transactionOpen = true;
     const attestation = await client.query(
       `select target_attested
-       from reporting.approved_dashboard_reader_target_v2`,
+       from reporting.approved_dashboard_reader_target_v6`,
     );
     if (
       attestation.rows.length !== 1
@@ -709,31 +829,29 @@ async function approvedWebReaderQuery(
   }
 }
 
-async function approvedDashboardReleaseToken(
-  pool: Pool,
-  season: DashboardSeason
-): Promise<string | null> {
-  const comparisonSeason = comparisonDashboardSeason(season);
-  const seasons = [season, comparisonSeason];
+/**
+ * A comparison depends on both immutable season releases. Every request reads
+ * both tokens before reusing a cached comparison, so either promotion or
+ * rollback invalidates the derived browser payload.
+ */
+async function approvedSeasonComparisonReleaseToken(pool: Pool): Promise<string | undefined> {
   const result = await approvedWebReaderQuery(pool,
     `select season, cache_token
      from reporting.latest_dashboard_cache_token_v2
      where season = any($1::text[])
-     order by season`,
-    [seasons]
+     order by case season
+       when '2024-25' then 1
+       when '2025-26' then 2
+     end`,
+    [SEASON_COMPARISON_SEASONS],
   );
-  const tokens = new Map<string, string>();
-  for (const row of result.rows) {
-    if (typeof row?.season !== "string" || typeof row?.cache_token !== "string") {
-      throw new Error("approved dashboard cache token has an invalid shape");
-    }
-    if (tokens.has(row.season)) throw new Error("approved dashboard cache token is duplicated");
-    tokens.set(row.season, row.cache_token);
-  }
-  const currentToken = tokens.get(season);
-  if (!currentToken) return null;
-  const comparisonToken = tokens.get(comparisonSeason) ?? `missing:${comparisonSeason}`;
-  return `${season}:${currentToken}|${comparisonToken}`;
+  if (result.rows.length !== SEASON_COMPARISON_SEASONS.length) return undefined;
+  const tokens = result.rows.map((row) => (
+    typeof row?.cache_token === "string" ? row.cache_token : null
+  ));
+  if (result.rows.some((row, index) => row?.season !== SEASON_COMPARISON_SEASONS[index])
+    || tokens.some((token) => token === null)) return undefined;
+  return SEASON_COMPARISON_SEASONS.map((season, index) => `${season}:${tokens[index]}`).join("|");
 }
 
 async function loadStrictlyCachedDashboardPayload<T>(
@@ -963,6 +1081,7 @@ export type TeamPageData = {
   comparisonDashboard: DashboardData | undefined;
   comparisons: TeamComparisonRow[];
   leagueMetrics: SettingMetricRow[];
+  seasonComparison: SeasonComparisonData | undefined;
   /**
    * The comparison_id of the team whose page this is, matched on the internal
    * team key while it is still in scope. A viewer already knows which club's
@@ -981,7 +1100,14 @@ async function loadTeamPageData(
   season: DashboardSeason = "2024-25"
 ): Promise<TeamPageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
+  if (!pool) return {
+    dashboard: undefined,
+    comparisonDashboard: undefined,
+    comparisons: [],
+    leagueMetrics: [],
+    seasonComparison: undefined,
+    viewer_comparison_id: null,
+  };
   const comparisonSeason = comparisonDashboardSeason(season);
 
   const result = await approvedWebReaderQuery(pool,
@@ -1018,7 +1144,10 @@ async function loadTeamPageData(
           select coverage, headline, setting_metrics
           from reporting.latest_league_dashboard_v6
           where season = $2
-        ) league_metrics_row) as league_metrics`,
+        ) league_metrics_row) as league_metrics,
+       (select comparison
+        from reporting.latest_team_season_comparison_v4
+        where team_key = $1) as season_comparison`,
     [teamId, season, comparisonSeason]
   );
   if (result.rows.length !== 1) throw new Error("expected one team page snapshot row");
@@ -1029,12 +1158,14 @@ async function loadTeamPageData(
         comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(v6ComparisonSourceRowSchema),
         league_metrics: v6LeagueMetricsSourceSchema.nullable(),
+        season_comparison: seasonComparisonReaderSchema.nullable(),
       }).strict().parse(result.rows[0])
     : z.object({
         dashboard: dashboardRowSchema.nullable(),
         comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(comparisonSourceRowSchema),
         league_metrics: leagueMetricsSourceSchema.nullable(),
+        season_comparison: seasonComparisonReaderSchema.nullable(),
       }).parse(result.rows[0]);
 
   const { rows, comparisonIdByTeamKey } = normalizeTeamComparisonsWithKeys(snapshot.comparisons, season);
@@ -1053,6 +1184,9 @@ async function loadTeamPageData(
     leagueMetrics: snapshot.league_metrics
       ? normalizeLeagueMetrics(parseLeagueMetricsReaderRow(snapshot.league_metrics, season))
       : [],
+    seasonComparison: snapshot.season_comparison
+      ? parseSeasonComparisonReaderRow(snapshot.season_comparison, "team")
+      : undefined,
     viewer_comparison_id: comparisonIdByTeamKey.get(teamId) ?? null,
   };
 }
@@ -1062,11 +1196,19 @@ export async function getTeamPageData(
   season: DashboardSeason = "2024-25"
 ): Promise<TeamPageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
-  const releaseToken = await approvedDashboardReleaseToken(pool, season);
-  if (!releaseToken) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [], viewer_comparison_id: null };
+  const unavailable = {
+    dashboard: undefined,
+    comparisonDashboard: undefined,
+    comparisons: [],
+    leagueMetrics: [],
+    seasonComparison: undefined,
+    viewer_comparison_id: null,
+  };
+  if (!pool) return unavailable;
+  const releaseToken = await approvedSeasonComparisonReleaseToken(pool);
+  if (!releaseToken) return unavailable;
   return loadStrictlyCachedDashboardPayload(
-    `team:${season}:${teamId}`,
+    `team:${season}:${teamId}:season-comparison`,
     releaseToken,
     () => loadTeamPageData(teamId, season)
   );
@@ -1077,6 +1219,7 @@ export type LeaguePageData = {
   comparisonDashboard: DashboardData | undefined;
   comparisons: TeamComparisonRow[];
   leagueMetrics: SettingMetricRow[];
+  seasonComparison: SeasonComparisonData | undefined;
 };
 
 /** Same single-statement snapshot guarantee as getTeamPageData(). */
@@ -1084,7 +1227,13 @@ async function loadLeaguePageData(
   season: DashboardSeason = "2024-25"
 ): Promise<LeaguePageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [] };
+  if (!pool) return {
+    dashboard: undefined,
+    comparisonDashboard: undefined,
+    comparisons: [],
+    leagueMetrics: [],
+    seasonComparison: undefined,
+  };
   const comparisonSeason = comparisonDashboardSeason(season);
 
   const result = await approvedWebReaderQuery(pool,
@@ -1112,9 +1261,11 @@ async function loadLeaguePageData(
          from (
            select team_key, team, coverage, headline, setting_metrics
            from reporting.latest_team_dashboard_v6
-           where season = $1
+          where season = $1
          ) comparison_row
-       ), '[]'::jsonb) as comparisons`,
+       ), '[]'::jsonb) as comparisons,
+       (select comparison
+        from reporting.latest_league_season_comparison_v4) as season_comparison`,
     [season, comparisonSeason]
   );
   if (result.rows.length !== 1) throw new Error("expected one league page snapshot row");
@@ -1124,11 +1275,13 @@ async function loadLeaguePageData(
         dashboard: v6LeagueDashboardRowSchema.nullable(),
         comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(v6ComparisonSourceRowSchema),
+        season_comparison: seasonComparisonReaderSchema.nullable(),
       }).strict().parse(result.rows[0])
     : z.object({
         dashboard: dashboardRowSchema.nullable(),
         comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(comparisonSourceRowSchema),
+        season_comparison: seasonComparisonReaderSchema.nullable(),
       }).parse(result.rows[0]);
 
   return {
@@ -1145,6 +1298,9 @@ async function loadLeaguePageData(
     leagueMetrics: snapshot.dashboard
       ? normalizeLeagueMetrics(parseLeagueMetricsReaderRow(snapshot.dashboard, season))
       : [],
+    seasonComparison: snapshot.season_comparison
+      ? parseSeasonComparisonReaderRow(snapshot.season_comparison, "league")
+      : undefined,
   };
 }
 
@@ -1152,11 +1308,18 @@ export async function getLeaguePageData(
   season: DashboardSeason = "2024-25"
 ): Promise<LeaguePageData> {
   const pool = webReaderPool();
-  if (!pool) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [] };
-  const releaseToken = await approvedDashboardReleaseToken(pool, season);
-  if (!releaseToken) return { dashboard: undefined, comparisonDashboard: undefined, comparisons: [], leagueMetrics: [] };
+  const unavailable = {
+    dashboard: undefined,
+    comparisonDashboard: undefined,
+    comparisons: [],
+    leagueMetrics: [],
+    seasonComparison: undefined,
+  };
+  if (!pool) return unavailable;
+  const releaseToken = await approvedSeasonComparisonReleaseToken(pool);
+  if (!releaseToken) return unavailable;
   return loadStrictlyCachedDashboardPayload(
-    `league:${season}`,
+    `league:${season}:season-comparison`,
     releaseToken,
     () => loadLeaguePageData(season)
   );

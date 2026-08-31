@@ -34,8 +34,10 @@ import {
   profileColor,
 } from '@/components/dashboard/chart-primitives';
 import type { TeamColorSet } from '@/lib/team-color';
-import type { ReportModel, SeasonComparisonMetric } from '@/lib/report-model-types';
+import type { ReportModel } from '@/lib/report-model-types';
 import { SUPPORTED_DASHBOARD_SEASONS, type DashboardSeason } from '@/lib/dashboard-season';
+import type { SeasonComparisonData } from '@/lib/season-comparison';
+import { SeasonComparison } from '@/components/dashboard/season-comparison';
 import {
   DASHBOARD_TABS,
   DEFAULT_DASHBOARD_TAB,
@@ -1596,85 +1598,6 @@ function ReportsTab({ model }: { model: ReportModel }) {
   );
 }
 
-function comparisonValue(value: number | null, unit: string) {
-  return value === null ? 'Not available' : `${fmt(value, unit === 'injuries' ? 0 : 1)} ${unit}`;
-}
-
-function SeasonComparisonRow({ metric, currentSeason, comparisonSeason }: {
-  metric: SeasonComparisonMetric;
-  currentSeason: string;
-  comparisonSeason: string;
-}) {
-  return (
-    <tr className="border-t border-border/60 align-top">
-      <th scope="row" className="px-3 py-3 text-left text-sm font-medium text-foreground">{metric.label}</th>
-      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground" aria-label={`${currentSeason}: ${comparisonValue(metric.currentValue, metric.unit)}`}>
-        {comparisonValue(metric.currentValue, metric.unit)}
-      </td>
-      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground" aria-label={`${comparisonSeason}: ${comparisonValue(metric.priorValue, metric.unit)}`}>
-        {comparisonValue(metric.priorValue, metric.unit)}
-      </td>
-      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground">
-        {metric.delta === null ? (
-          <span className="block text-xs leading-relaxed text-muted-foreground">{metric.deltaReason ?? 'Not available'}</span>
-        ) : (
-          <span aria-label={`Delta ${metric.delta >= 0 ? 'plus' : 'minus'} ${fmt(Math.abs(metric.delta))} ${metric.unit}`}>
-            {metric.delta > 0 ? '+' : ''}{fmt(metric.delta)} {metric.unit}
-          </span>
-        )}
-      </td>
-    </tr>
-  );
-}
-
-function SeasonComparisonTab({ model }: { model: ReportModel }) {
-  const comparison = model.seasonComparison;
-  const settings = comparison.settings.filter((metric) => metric.key.startsWith('match-') || metric.key.startsWith('training-'));
-  const table = (rows: SeasonComparisonMetric[], label: string) => (
-    <div className="overflow-x-auto rounded-md border border-border/70">
-      <table className="w-full min-w-[760px] table-fixed">
-        <caption className="sr-only">{label}</caption>
-        <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-          <tr>
-            <th className="w-[28%] px-3 py-3 text-left font-medium">Metric</th>
-            <th className="w-[22%] px-3 py-3 text-right font-medium">{model.season}</th>
-            <th className="w-[22%] px-3 py-3 text-right font-medium">{comparison.comparisonSeason}</th>
-            <th className="w-[28%] px-3 py-3 text-right font-medium">Delta or comparability</th>
-          </tr>
-        </thead>
-        <tbody>{rows.map((metric) => <SeasonComparisonRow key={metric.key} metric={metric} currentSeason={model.season} comparisonSeason={comparison.comparisonSeason} />)}</tbody>
-      </table>
-    </div>
-  );
-
-  return (
-    <div className="space-y-5 sm:space-y-6">
-      <div>
-        <SectionHeading title="Season Comparison" />
-        <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
-          {model.scope === 'league' ? 'Pooled league values are compared between the two approved season releases.' : `${model.subjectName} is compared only with its own other approved season release.`}
-          {' '}Deltas appear only when the released definitions and denominator status are comparable.
-        </p>
-      </div>
-      {model.estimateOrIncompleteCoverage && (
-        <div className="rounded-md border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100" role="note">
-          Current-season exposure is estimated or incomplete. Rate deltas are withheld where denominator status differs.
-        </div>
-      )}
-      <Panel title="Season headline">
-        {table(comparison.headline, 'Season headline comparison')}
-      </Panel>
-      <Panel title="Match and training">
-        {table(settings, 'Match and training comparison')}
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          Setting rows are shown side by side. Their released payload does not include formula metadata, so V1 does not calculate deltas.
-        </p>
-      </Panel>
-      <p className="text-xs leading-relaxed text-muted-foreground">{comparison.note}</p>
-    </div>
-  );
-}
-
 function ExposureComparison({
   rows,
   measure,
@@ -2081,6 +2004,7 @@ export function TeamDashboard({
   leagueMetrics = [],
   supplement,
   exposurePreview,
+  seasonComparison,
   viewerComparisonId = null,
   teamColor,
   season,
@@ -2094,6 +2018,7 @@ export function TeamDashboard({
   leagueMetrics?: SettingMetricRow[];
   supplement?: DashboardSupplement;
   exposurePreview?: ExposureReviewPreview;
+  seasonComparison?: SeasonComparisonData;
   /** The viewing team's own comparison row, resolved server-side (§1.0). */
   viewerComparisonId?: string | null;
   /**
@@ -2128,7 +2053,6 @@ export function TeamDashboard({
     ...family,
     subtypes: withoutFrontFacingUnknown(family.subtypes),
   }));
-  const scopeLabel = dashboard.scope === 'league' ? 'League-wide' : teamName;
   const usesExposureEstimate = dashboard.coverage.included_exposure_status.includes('estimate');
   const exposureEstimateNote = dashboard.limitations.find((item) => (
     /temporary/i.test(item) && /estimate/i.test(item)
@@ -2152,7 +2076,6 @@ export function TeamDashboard({
           >
             {teamName} Dashboard
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{scopeLabel} injury and exposure surveillance - {dashboard.season}</p>
           <SeasonSelector season={season} seasonPath={seasonPath} activeTab={activeTab} />
         </div>
       </header>
@@ -2202,7 +2125,9 @@ export function TeamDashboard({
             teamName={teamName}
           />
         </TabsContent>
-        <TabsContent value="season-comparison"><SeasonComparisonTab model={reportModel} /></TabsContent>
+        <TabsContent value="season-comparison">
+          <SeasonComparison comparison={seasonComparison} />
+        </TabsContent>
         <TabsContent value="reports"><ReportsTab model={reportModel} /></TabsContent>
       </Tabs>
     </div>

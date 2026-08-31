@@ -261,3 +261,86 @@ export type DashboardData = {
 };
 
 export type TeamDashboardData = DashboardData;
+
+/**
+ * A deliberately narrow, two-season view for the dashboard's season comparison
+ * tab. It contains only released aggregate values and never team-level league
+ * comparison rows or source-lineage fields.
+ */
+export type SeasonComparisonMetric = {
+  value: number | null;
+  unit: string;
+};
+
+export type SeasonComparisonKpi = {
+  key:
+    | "time_loss_incidence"
+    | "mean_severity"
+    | "injury_burden"
+    | "time_loss_injuries";
+  label: string;
+  previous: SeasonComparisonMetric;
+  current: SeasonComparisonMetric;
+  /** Null means the seasons cannot be compared because either value is unavailable or the baseline is zero. */
+  outcome_improvement_percent: number | null;
+};
+
+export type SeasonComparisonImpactValue = {
+  time_loss_incidence_per_1000h: number | null;
+  mean_severity_days: number | null;
+  burden_per_1000h: number | null;
+  time_loss_injuries: number | null;
+  exposure_hours: number | null;
+};
+
+export type SeasonComparisonImpactRow = {
+  setting: "all" | "match" | "training";
+  label: string;
+  previous: SeasonComparisonImpactValue;
+  current: SeasonComparisonImpactValue;
+};
+
+export type SeasonComparisonMonth = {
+  /** Canonical ISO month key, in September-to-June chronological order. */
+  month_key: string;
+  label: string;
+  previous_time_loss_injuries: number;
+  current_time_loss_injuries: number;
+};
+
+export type SeasonComparisonDiagnosis = {
+  rank: number;
+  diagnosis: string;
+  time_loss_injuries: number;
+  incidence_per_1000h: number | null;
+  burden_per_1000h: number | null;
+};
+
+export type SeasonComparisonDiagnosisRow = {
+  setting: "all" | "match" | "training";
+  label: string;
+  previous: SeasonComparisonDiagnosis[];
+  current: SeasonComparisonDiagnosis[];
+};
+
+export type SeasonComparisonExposureQualification = {
+  exposure_hours: number | null;
+  status: "available" | "estimated" | "incomplete" | "unavailable";
+  qualification: string | null;
+};
+
+export type SeasonComparisonData = {
+  rule_version: "season_comparison_reporting_2026_08_31_v4";
+  scope: "team" | "league";
+  previous_season: "2024-25";
+  current_season: "2025-26";
+  kpis: SeasonComparisonKpi[];
+  impact: SeasonComparisonImpactRow[];
+  monthly: SeasonComparisonMonth[];
+  diagnoses: SeasonComparisonDiagnosisRow[];
+  /** Page-level rate context for every rate shown in this comparison. */
+  exposure: {
+    previous: SeasonComparisonExposureQualification;
+    current: SeasonComparisonExposureQualification;
+  };
+};

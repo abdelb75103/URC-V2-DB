@@ -8,6 +8,36 @@ const workDirectory = path.join(process.cwd(), "tmp", "report-pdf-test");
 const bundledDocument = path.join(workDirectory, "report-document.mjs");
 const renderedPdf = path.join(workDirectory, "report.pdf");
 
+const syntheticComparison = {
+  rule_version: "season_comparison_reporting_2026_08_31_v4",
+  scope: "team",
+  previous_season: "2024-25",
+  current_season: "2025-26",
+  kpis: [
+    { key: "time_loss_incidence", label: "TL injury incidence", previous: { value: 10, unit: "TL injuries per 1,000 player-hours" }, current: { value: 8, unit: "TL injuries per 1,000 player-hours" }, outcome_improvement_percent: 20 },
+    { key: "mean_severity", label: "Mean severity", previous: { value: 30, unit: "days lost per injury" }, current: { value: 24, unit: "days lost per injury" }, outcome_improvement_percent: 20 },
+    { key: "injury_burden", label: "Injury burden", previous: { value: 300, unit: "days lost per 1,000 player-hours" }, current: { value: 192, unit: "days lost per 1,000 player-hours" }, outcome_improvement_percent: 36 },
+    { key: "time_loss_injuries", label: "Time-loss injuries", previous: { value: 40, unit: "TL injuries" }, current: { value: 32, unit: "TL injuries" }, outcome_improvement_percent: 20 },
+  ],
+  impact: ["all", "match", "training"].map((setting) => ({
+    setting,
+    label: setting === "all" ? "Overall" : setting[0].toUpperCase() + setting.slice(1),
+    previous: { time_loss_incidence_per_1000h: 10, mean_severity_days: 30, burden_per_1000h: 300, time_loss_injuries: 40, exposure_hours: 4_000 },
+    current: { time_loss_incidence_per_1000h: 8, mean_severity_days: 24, burden_per_1000h: 192, time_loss_injuries: 32, exposure_hours: 4_000 },
+  })),
+  monthly: ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((label, index) => ({ month_key: `2024-${String((index + 8) % 12 + 1).padStart(2, "0")}`, label, previous_time_loss_injuries: 5 + index % 3, current_time_loss_injuries: 3 + index % 4 })),
+  diagnoses: ["all", "match", "training"].map((setting) => ({
+    setting,
+    label: setting === "all" ? "Overall" : setting[0].toUpperCase() + setting.slice(1),
+    previous: ["Hamstring Injury", "Concussion", "Ankle Injury"].map((diagnosis, index) => ({ rank: index + 1, diagnosis, time_loss_injuries: 6 - index, incidence_per_1000h: 2 - index / 2, burden_per_1000h: 30 - index * 5 })),
+    current: ["Concussion", "Hamstring Injury", "Shoulder Injury"].map((diagnosis, index) => ({ rank: index + 1, diagnosis, time_loss_injuries: 5 - index, incidence_per_1000h: 1.8 - index / 2, burden_per_1000h: 25 - index * 5 })),
+  })),
+  exposure: {
+    previous: { exposure_hours: 4_000, status: "available", qualification: null },
+    current: { exposure_hours: 4_000, status: "available", qualification: null },
+  },
+};
+
 const syntheticModel = {
   schemaVersion: "urc-report-v1",
   reportVersion: "1.0",
@@ -52,6 +82,7 @@ const syntheticModel = {
   })),
   comparisonBenchmarks: { allIncidencePer1000h: 8, allBurdenPer1000h: 120, matchIncidencePer1000h: 10, matchBurdenPer1000h: 200, trainingIncidencePer1000h: 5, trainingBurdenPer1000h: 100 },
   seasonComparison: { comparisonSeason: "2024-25", status: "frozen", note: "Frozen approved release.", headline: [], settings: [] },
+  seasonComparisonVisuals: syntheticComparison,
   method: ["Released aggregate metrics only."],
   limitations: ["Not available values are not inferred."],
 };
@@ -77,7 +108,10 @@ function renderPdf(sectionIds?: string[]) {
   const text = execFileSync("pdftotext", [renderedPdf, "-"], { encoding: "utf8" });
   const coverText = execFileSync("pdftotext", ["-f", "1", "-l", "1", renderedPdf, "-"], { encoding: "utf8" });
   const overviewText = execFileSync("pdftotext", ["-f", "2", "-l", "2", renderedPdf, "-"], { encoding: "utf8" });
-  return { ...result, text, coverText, overviewText };
+  const comparisonText = result.pages >= 10
+    ? execFileSync("pdftotext", ["-f", "10", "-l", "10", renderedPdf, "-"], { encoding: "utf8" })
+    : "";
+  return { ...result, text, coverText, overviewText, comparisonText };
 }
 
 test("the full document emits one A4 page for each stable section", () => {
@@ -89,6 +123,10 @@ test("the full document emits one A4 page for each stable section", () => {
   assert.doesNotMatch(result.coverText, /Recorded injuries|Overall incidence|Burden/);
   assert.match(result.overviewText, /Season overview/);
   assert.match(result.overviewText, /Recorded injuries/);
+  assert.match(result.overviewText, /Injury impact by season/);
+  assert.match(result.comparisonText, /Time-loss injuries by month/);
+  assert.match(result.comparisonText, /Diagnosis drivers/);
+  assert.doesNotMatch(result.comparisonText, /Publication record/);
 });
 
 test("filtering sections removes pages and recalculates the document", () => {
