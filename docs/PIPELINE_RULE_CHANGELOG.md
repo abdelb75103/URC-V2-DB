@@ -30,6 +30,8 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 **Boundary.** Source rows, source files, injury lineage, fixtures and the frozen 2024-25 season are untouched by this reporting successor. The new private team snapshot is immutable, bound to the corrected active-build and estimate state, and unavailable to website roles. Release remains blocked until the checksum registration, all three reviewed team releases and the ordinary final league preflight are complete.
 
+**Audit registration.** Additive migration `20260831132000` registers the successor's exact league release reason code. It changes audit vocabulary only and is checksum-bound before promotion.
+
 ---
 
 ## 2026-08-31: Welsh exact-date fixture-alias cohort correction

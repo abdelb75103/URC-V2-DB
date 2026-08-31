@@ -179,6 +179,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260831120000",
         "20260831121000",
         "20260831130000",
+        "20260831132000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -313,6 +314,15 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "temporary_estimate_team_count=2",
                 "monthly_domain=2025-09_to_2026-06",
                 "release_contract_table=analysis.accepted_release_contracts_v5",
+            ),
+        ),
+        MigrationContract(
+            version="20260831132000",
+            name="urc_2025_26_partial_exposure_release_reason_code",
+            sha256="1786bfb98620220bd1857fca6d12d1283c44228fb4cb73e33e79bd029df0bde8",
+            registration_statements=(
+                "reason_code=league_dashboard_release_v6_partial_exposure_reporting",
+                "scope=audit_vocabulary_only",
             ),
         ),
     ),

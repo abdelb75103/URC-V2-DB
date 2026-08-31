@@ -57,6 +57,10 @@ PARTIAL_EXPOSURE_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_partial_exposure_reporting_successor_migration.sql"
 ).read_text(encoding="utf-8")
+PARTIAL_EXPOSURE_REASON_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_partial_exposure_release_reason_code_migration.sql"
+).read_text(encoding="utf-8")
 
 
 def registration_for(version: str) -> str:
@@ -76,6 +80,8 @@ def registration_for(version: str) -> str:
         return WELSH_CANDIDATE_REGISTRATION
     if version == "20260831130000":
         return PARTIAL_EXPOSURE_REGISTRATION
+    if version == "20260831132000":
+        return PARTIAL_EXPOSURE_REASON_REGISTRATION
     if version == "20260831122000":
         return WELSH_LEAGUE_REGISTRATION
     if version == "20260831123000":
