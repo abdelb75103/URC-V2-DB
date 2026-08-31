@@ -11,6 +11,27 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-31: Welsh exact-date fixture-alias cohort correction
+
+| Field | Value |
+|---|---|
+| Status | `independently-reviewed-pending-live-application`: the aggregate audit, additive migrations and release integration have passed local contract tests. No database migration, release or deployment is recorded by this entry. |
+| Rule version | Cohort `injury_lineage_2025-26_2026-08-31_v3`; decision `welsh_fixture_alias_exact_date_2026_08_31_v1`; analysis `v6`; classification remains `reporting_classification_2025-26_2026-08-31_v3`. |
+| Carry-forward | `team-specific`: Cardiff and Dragons require these official fixture-name mappings while their source labels remain `Cardiff` and `Dragons`. The exact-date evidence is `season-specific` to 2025-26. |
+| Evidence | `docs/evidence/urc_2025_26_welsh_fixture_alias_exact_date_correction.json`, SHA-256 `e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450`. |
+| Migrations | Row correction `20260831120000`, SHA-256 `457ab116338396172393db7156a9c56cd9c77e3a6c6f30ae6a1c6701d4a2d678`; team candidate successor `20260831121000`, SHA-256 `b2627d530759579077af62ebc65be2cc6707ceb6cd946461dc3f97c96c1e0474`. |
+| Decision provenance | Abdel Babiker, 31 August 2026. |
+
+**Accepted rule.** Restore an excluded row only when it belongs to Cardiff or Dragons, is an injury with Match occasion, was excluded solely as `Fixture reconciliation unresolved`, and its injury date exactly equals an accepted official fixture date for that canonical team. This restores 19 Cardiff and 42 Dragons Time Loss injuries. Of the 61 rows, 51 have known duration and contribute 1,618 observed days lost.
+
+**Rejected automatic scope.** Eighteen rows one day from a fixture stay excluded pending separate adjudication: Cardiff 4, Dragons 9, Ospreys 2 and Scarlets 3. The other fourteen teams have zero exact-date rows within this defect. Source rows, master rows, fixtures, exposure and denominator values remain unchanged.
+
+**Expected successor.** The reviewed cohort contains 1,545 recorded injuries, 938 Time Loss injuries, 782 known-duration Time Loss injuries and 20,665 observed days lost. Cardiff match incidence becomes 50.0 per 1,000 hours and Dragons becomes 116.7 per 1,000 hours. The candidate snapshot changes only the Cardiff and Dragons dashboard bytes; the other fourteen team dashboards remain byte-identical to their approved predecessors.
+
+**Release boundary.** Team promotion is limited to Cardiff and Dragons. A later sealed league snapshot may reuse the fourteen unchanged approved team releases. The website reader remains on the existing approved league bundle until that complete successor is reviewed and promoted. No Vercel action is part of this correction.
+
+---
+
 ## 2026-08-30: 2024-25 explicit-context exposure scope successor
 
 | Field | Value |

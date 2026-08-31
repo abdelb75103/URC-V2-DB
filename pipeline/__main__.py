@@ -8932,7 +8932,7 @@ def release_league(args: argparse.Namespace) -> None:
         semantic = semantic_rows[0]
         estimated_year2_monthly_gap = (
             analysis_version == "v6"
-            and cohort_view_version == "injury_lineage_2025-26_2026-08-30_v2"
+            and year2_release_contract is not None
         )
         if estimated_year2_monthly_gap and not decimal_values_close(
             semantic["monthly_exposure_hours"],
@@ -8962,11 +8962,13 @@ def release_league(args: argparse.Namespace) -> None:
                 "rule_evidence_sha256": year2_release_contract.classification_rule_evidence_sha256,
                 "successor_version_id": "2f419706-8c36-58dd-b4cb-e92162e782b8",
                 "successor_classification_evidence_sha256": "36013e4249b0997ef5e3c6067226c61c2d9321dd58825de25000ca528d70d247",
-                "recorded_injuries": 1484,
-                "time_loss_injuries": 877,
+                "recorded_injuries": 1545,
+                "time_loss_injuries": 938,
                 "medical_attention_injuries": 607,
                 "review_required_rows": 0,
-                "application_scope": "authoritative_successor_lineage",
+                "application_scope": (
+                    "authoritative_successor_lineage_plus_exact_date_fixture_correction"
+                ),
             }]
         else:
             rule_params = SqlParams()
@@ -9022,6 +9024,7 @@ def release_league(args: argparse.Namespace) -> None:
                 year2_release_contract.cohort_adjudication_ref,
                 year2_release_contract.cohort_evidence_locator,
                 year2_release_contract.cohort_evidence_sha256,
+                year2_release_contract.cohort_migration_version,
                 year2_release_contract.required_migrations,
             )):
                 raise SystemExit("V6 release contract lacks immutable cohort evidence")
@@ -9033,7 +9036,7 @@ def release_league(args: argparse.Namespace) -> None:
                 "evidence_sha256": year2_release_contract.cohort_evidence_sha256,
                 "evidence_locator": year2_release_contract.cohort_evidence_locator,
                 "reviewer": "Abdel Babiker",
-                "migration_version": "20260830170000",
+                "migration_version": year2_release_contract.cohort_migration_version,
             }]
         elif analysis_version == "v5":
             if cohort_view_version == URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION:
@@ -15813,6 +15816,7 @@ def main() -> None:
             URC_2024_25_EXPOSURE_SCOPE_COHORT_VIEW_VERSION,
             "analysis_window_2025-26_2026-08-15_v1",
             "injury_lineage_2025-26_2026-08-30_v2",
+            "injury_lineage_2025-26_2026-08-31_v3",
         ],
     )
     league_release_parser.add_argument(

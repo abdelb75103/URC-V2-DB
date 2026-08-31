@@ -37,6 +37,14 @@ FAMILY_MAPPING_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_family_mapping_contract_correction_migration.sql"
 ).read_text(encoding="utf-8")
+WELSH_FIXTURE_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_welsh_fixture_alias_correction_migration.sql"
+).read_text(encoding="utf-8")
+WELSH_CANDIDATE_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_welsh_fixture_candidate_successor_migration.sql"
+).read_text(encoding="utf-8")
 
 
 def registration_for(version: str) -> str:
@@ -50,6 +58,10 @@ def registration_for(version: str) -> str:
         return REPORTING_KEY_REGISTRATION
     if version == "20260831101000":
         return FAMILY_MAPPING_REGISTRATION
+    if version == "20260831120000":
+        return WELSH_FIXTURE_REGISTRATION
+    if version == "20260831121000":
+        return WELSH_CANDIDATE_REGISTRATION
     return REGISTRATION
 
 

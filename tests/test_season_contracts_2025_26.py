@@ -88,7 +88,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         )
         self.assertEqual(
             contract.cohort_view_version,
-            "injury_lineage_2025-26_2026-08-30_v2",
+            "injury_lineage_2025-26_2026-08-31_v3",
         )
         self.assertEqual(
             contract.league_candidate_view,
@@ -103,9 +103,18 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
             "analysis.league_team_dashboard_release_candidates_analysis_window_v6",
         )
         self.assertEqual(contract.member_view, "analysis.league_member_releases_v6")
-        self.assertEqual(contract.injury_cohort_view, "analysis.urc_2025_26_injury_successor_cohort_v1")
-        self.assertEqual(contract.league_monthly_view, "analysis.urc_2025_26_injury_successor_league_monthly_v1")
-        self.assertEqual(contract.league_summary_view, "analysis.urc_2025_26_injury_successor_league_summary_v1")
+        self.assertEqual(
+            contract.injury_cohort_view,
+            "analysis.urc_2025_26_injury_fixture_corrected_cohort_v2",
+        )
+        self.assertEqual(
+            contract.league_monthly_view,
+            "analysis.urc_2025_26_injury_fixture_corrected_league_monthly_v2",
+        )
+        self.assertEqual(
+            contract.league_summary_view,
+            "analysis.urc_2025_26_injury_fixture_corrected_league_summary_v2",
+        )
         self.assertEqual(
             contract.required_migrations,
             (
@@ -113,17 +122,20 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
                 "20260822010000", "20260822020000", "20260822030000",
                 "20260822220611", "20260823120000", "20260830150000",
                 "20260830155000", "20260830170000", "20260831100000",
-                "20260831101000",
+                "20260831101000", "20260831120000", "20260831121000",
             ),
         )
         self.assertEqual(
             tuple(item.version for item in contract.league_required_migration_contracts),
             ("20260831110000", "20260831111000", "20260831112000"),
         )
-        self.assertEqual(contract.cohort_adjudication_ref, "INJURY-LINEAGE-2025-26-2026-08-30-V2")
+        self.assertEqual(
+            contract.cohort_adjudication_ref,
+            "WELSH-FIXTURE-ALIAS-EXACT-DATE-2025-26-V1",
+        )
         self.assertEqual(
             contract.cohort_evidence_locator,
-            "docs/evidence/urc_2025_26_injury_reporting_cutover.json",
+            "docs/evidence/urc_2025_26_welsh_fixture_alias_exact_date_correction.json",
         )
         self.assertEqual(
             contract.classification_rule_evidence_locator,
@@ -293,7 +305,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         expected_hashes.update(
             {
                 "urc_2025_26_fixture_preparation.json": fixture_contract_for("2025-26").evidence_sha256,
-                "urc_2025_26_injury_reporting_cutover.json": contract.cohort_evidence_sha256,
+                "urc_2025_26_welsh_fixture_alias_exact_date_correction.json": contract.cohort_evidence_sha256,
                 "urc_2025_26_reporting_key_family_correction.json": contract.classification_rule_evidence_sha256,
                 "urc_2025_26_exposure_successor_v6.json": contract.exposure_coverage_evidence_sha256,
                 "urc_2025_26_injury_eligibility_bridge.json": contract.injury_eligibility_evidence_sha256,

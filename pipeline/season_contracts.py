@@ -33,7 +33,7 @@ FROZEN_2024_25_RELEASE_TUPLES = frozenset(
 YEAR2_2025_26_RELEASE_TUPLE: ReleaseTuple = (
     "v6",
     "reporting_classification_2025-26_2026-08-31_v3",
-    "injury_lineage_2025-26_2026-08-30_v2",
+    "injury_lineage_2025-26_2026-08-31_v3",
 )
 
 
@@ -94,6 +94,7 @@ class ReleaseContract:
     cohort_adjudication_ref: str | None = None
     cohort_evidence_locator: str | None = None
     cohort_evidence_sha256: str | None = None
+    cohort_migration_version: str | None = None
     classification_rule_evidence_locator: str | None = None
     classification_rule_evidence_sha256: str | None = None
     exposure_coverage_evidence_locator: str | None = None
@@ -158,9 +159,9 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     team_candidate_view="analysis.team_dashboard_release_candidates_analysis_window_v6",
     league_team_candidate_view="analysis.league_team_dashboard_release_candidates_analysis_window_v6",
     member_view="analysis.league_member_releases_v6",
-    injury_cohort_view="analysis.urc_2025_26_injury_successor_cohort_v1",
-    league_monthly_view="analysis.urc_2025_26_injury_successor_league_monthly_v1",
-    league_summary_view="analysis.urc_2025_26_injury_successor_league_summary_v1",
+    injury_cohort_view="analysis.urc_2025_26_injury_fixture_corrected_cohort_v2",
+    league_monthly_view="analysis.urc_2025_26_injury_fixture_corrected_league_monthly_v2",
+    league_summary_view="analysis.urc_2025_26_injury_fixture_corrected_league_summary_v2",
     required_migrations=(
         "20260815010000",
         "20260815020000",
@@ -175,6 +176,8 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260830170000",
         "20260831100000",
         "20260831101000",
+        "20260831120000",
+        "20260831121000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -260,6 +263,33 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "family_mapping_version=injury_type_family_2026-07-21_v1",
             ),
         ),
+        MigrationContract(
+            version="20260831120000",
+            name="urc_2025_26_welsh_fixture_alias_correction",
+            sha256="457ab116338396172393db7156a9c56cd9c77e3a6c6f30ae6a1c6701d4a2d678",
+            registration_statements=(
+                "decision_version=welsh_fixture_alias_exact_date_2026_08_31_v1",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-31_v3",
+                "evidence_sha256=e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450",
+                "reason_code=fixture_team_alias_exact_date_restoration",
+                "restored_cardiff_rows=19",
+                "restored_dragons_rows=42",
+                "restored_other_team_rows=0",
+            ),
+        ),
+        MigrationContract(
+            version="20260831121000",
+            name="urc_2025_26_welsh_fixture_candidate_successor",
+            sha256="b2627d530759579077af62ebc65be2cc6707ceb6cd946461dc3f97c96c1e0474",
+            registration_statements=(
+                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
+                "cohort_view_version=injury_lineage_2025-26_2026-08-31_v3",
+                "cohort_evidence_sha256=e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450",
+                "candidate_snapshot_version=20260831121000",
+                "changed_teams=cardiff,dragons",
+                "unchanged_team_count=14",
+            ),
+        ),
     ),
     league_required_migration_contracts=(
         MigrationContract(
@@ -296,9 +326,10 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
     release_reason_code="league_dashboard_release_v6",
     decision_recorded_at="2026-08-31",
-    cohort_adjudication_ref="INJURY-LINEAGE-2025-26-2026-08-30-V2",
-    cohort_evidence_locator="docs/evidence/urc_2025_26_injury_reporting_cutover.json",
-    cohort_evidence_sha256="1941f341fa3d49d523ae0093016b8cb79aea07da94edd33c5255edf1ef021988",
+    cohort_adjudication_ref="WELSH-FIXTURE-ALIAS-EXACT-DATE-2025-26-V1",
+    cohort_evidence_locator="docs/evidence/urc_2025_26_welsh_fixture_alias_exact_date_correction.json",
+    cohort_evidence_sha256="e9bfde5a965bc7921bbe2434088781b68bb837f0ef1b3c1505bd18c8d90a2450",
+    cohort_migration_version="20260831120000",
     classification_rule_evidence_locator="docs/evidence/urc_2025_26_reporting_key_family_correction.json",
     classification_rule_evidence_sha256="d9a8d41772ffadd89ad1b40ae3e8494586adc87a5beff372ddfa8307117cc172",
     exposure_coverage_evidence_locator=(

@@ -1,0 +1,110 @@
+{
+  "evidence_version": "urc_2025_26_welsh_fixture_alias_exact_date_correction_v1",
+  "season": "2025-26",
+  "decision_recorded_at": "2026-08-31",
+  "decision_reviewer": "Abdel Babiker",
+  "approved_target": {
+    "project_ref": "eukkvswaxweenovqqgzr",
+    "database": "postgres"
+  },
+  "predecessor": {
+    "league_release_id": "8172599f-8526-4df0-a8ae-ffc17dddc13c",
+    "league_release_label": "urc-2025-26-v6-a2542f5c2824-a3",
+    "analysis_version": "v6",
+    "classification_view_version": "reporting_classification_2025-26_2026-08-31_v3",
+    "cohort_view_version": "injury_lineage_2025-26_2026-08-30_v2"
+  },
+  "successor": {
+    "analysis_version": "v6",
+    "classification_view_version": "reporting_classification_2025-26_2026-08-31_v3",
+    "cohort_view_version": "injury_lineage_2025-26_2026-08-31_v3",
+    "decision_version": "welsh_fixture_alias_exact_date_2026_08_31_v1"
+  },
+  "cause": {
+    "cardiff": {
+      "canonical_team_label": "Cardiff",
+      "official_fixture_label": "Cardiff Rugby",
+      "matching_source_rows": 0,
+      "audited_source_rows": 58
+    },
+    "dragons": {
+      "canonical_team_label": "Dragons",
+      "official_fixture_label": "Dragons RFC",
+      "matching_source_rows": 0,
+      "audited_source_rows": 158
+    },
+    "control_teams": {
+      "ospreys": {
+        "matching_source_rows": 154,
+        "audited_source_rows": 154
+      },
+      "scarlets": {
+        "matching_source_rows": 257,
+        "audited_source_rows": 257
+      }
+    }
+  },
+  "accepted_rule": "Restore a row only when it belongs to Cardiff or Dragons, is an injury with Occasion category Match, was excluded solely as Fixture reconciliation unresolved, and its injury date exactly equals an accepted official fixture date for that canonical team.",
+  "accepted_delta": {
+    "recorded_injuries": 61,
+    "time_loss_injuries": 61,
+    "known_duration_time_loss_injuries": 51,
+    "observed_days_lost": 1618,
+    "teams": {
+      "cardiff": {
+        "recorded_injuries": 19,
+        "time_loss_injuries": 19,
+        "known_duration_time_loss_injuries": 13,
+        "observed_days_lost": 460
+      },
+      "dragons": {
+        "recorded_injuries": 42,
+        "time_loss_injuries": 42,
+        "known_duration_time_loss_injuries": 38,
+        "observed_days_lost": 1158
+      }
+    }
+  },
+  "all_team_exact_date_audit": {
+    "benetton": 0,
+    "bulls": 0,
+    "cardiff": 19,
+    "connacht": 0,
+    "dragons": 42,
+    "edinburgh": 0,
+    "glasgow": 0,
+    "leinster": 0,
+    "lions": 0,
+    "munster": 0,
+    "ospreys": 0,
+    "scarlets": 0,
+    "sharks": 0,
+    "stormers": 0,
+    "ulster": 0,
+    "zebre": 0
+  },
+  "excluded_from_automatic_correction": {
+    "rule": "A one-day difference is not exact fixture evidence and requires separate adjudication.",
+    "one_day_candidates": {
+      "cardiff": 4,
+      "dragons": 9,
+      "ospreys": 2,
+      "scarlets": 3
+    },
+    "total": 18
+  },
+  "expected_successor_totals": {
+    "recorded_injuries": 1545,
+    "time_loss_injuries": 938,
+    "known_duration_time_loss_injuries": 782,
+    "observed_days_lost": 20665
+  },
+  "integrity_boundary": {
+    "source_rows_mutated": false,
+    "master_rows_mutated": false,
+    "exposure_changed": false,
+    "fixture_dates_changed": false,
+    "other_team_payloads_expected_to_change": false,
+    "direct_identifiers_in_evidence": false
+  }
+}
