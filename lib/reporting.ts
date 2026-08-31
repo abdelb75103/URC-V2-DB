@@ -274,6 +274,38 @@ const v6MonthlyRowSchema = z.object({
   overall_incidence_per_1000h: z.number().nullable(),
   incidence_per_1000h: z.number().nullable(), burden_per_1000h: z.number().nullable(),
 }).strict();
+const v6ReportedLeagueMonthlyRowSchema = v6MonthlyRowSchema.extend({
+  exposure_contributor_count: z.number().int().min(0).max(16),
+  distance_contributor_count: z.number().int().min(0).max(16),
+}).strict().superRefine((row, context) => {
+  const hasExposure = typeof row.exposure_hours === "number";
+  const hasDistance = typeof row.distance_km === "number";
+  if (hasExposure !== (row.exposure_contributor_count > 0)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["exposure_hours"],
+      message: "Exposure value must be numeric exactly when contributors are present",
+    });
+  }
+  if (hasDistance !== (row.distance_contributor_count > 0)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["distance_km"],
+      message: "Distance value must be numeric exactly when contributors are present",
+    });
+  }
+  if ((row.exposure_contributor_count < 16 || row.exposure_hours === 0) && [
+    row.overall_incidence_per_1000h,
+    row.incidence_per_1000h,
+    row.burden_per_1000h,
+  ].some((value) => value !== null)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["incidence_per_1000h"],
+      message: "Rates must be null when the month has an incomplete exposure denominator",
+    });
+  }
+});
 const v6CategoryRowSchema = z.object({
   key: z.string(), label: z.string(), time_loss_injuries: z.number(), days_lost: z.number(),
   exposure_hours: z.number().nullable(), incidence_per_1000h: z.number().nullable(),
@@ -400,6 +432,48 @@ const v6LeagueCoverageSchema = z.object({
   ...v6CoverageCommonShape,
   teams_included: z.literal(16),
 }).strict();
+const v6ReportedLeagueCoverageSchema = v6LeagueCoverageSchema.extend({
+  source_backed_team_count: z.number().int().min(0).max(16),
+  temporary_estimate_team_count: z.number().int().min(0).max(16),
+  distance_contributor_count: z.number().int().min(0).max(16),
+  pending_source_teams: z.array(z.string()).max(16),
+}).strict().superRefine((coverage, context) => {
+  if (coverage.source_backed_team_count + coverage.temporary_estimate_team_count !== 16) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["source_backed_team_count"],
+      message: "Source-backed and temporary-estimate teams must total 16",
+    });
+  }
+  if (coverage.pending_source_teams.length !== coverage.temporary_estimate_team_count) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pending_source_teams"],
+      message: "Pending source teams must match the temporary-estimate count",
+    });
+  }
+  if (coverage.distance_contributor_count > coverage.source_backed_team_count) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["distance_contributor_count"],
+      message: "Distance contributors cannot exceed the source-backed team count",
+    });
+  }
+  if (new Set(coverage.pending_source_teams).size !== coverage.pending_source_teams.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["pending_source_teams"],
+      message: "Pending source teams must be unique",
+    });
+  }
+  if ((typeof coverage.distance_km === "number") !== (coverage.distance_contributor_count > 0)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["distance_km"],
+      message: "Distance value must be numeric exactly when contributors are present",
+    });
+  }
+});
 
 const v6DashboardShape = {
   team: z.string(),
@@ -442,10 +516,49 @@ const v6TeamDashboardRowSchema = z.object({
   ...v6DashboardShape,
   coverage: v6TeamCoverageSchema,
 }).strict();
-const v6LeagueDashboardRowSchema = z.object({
+const v6LegacyLeagueDashboardRowSchema = z.object({
   ...v6DashboardShape,
   coverage: v6LeagueCoverageSchema,
 }).strict();
+const v6ReportedLeagueDashboardRowSchema = z.object({
+  ...v6DashboardShape,
+  coverage: v6ReportedLeagueCoverageSchema,
+  monthly: z.array(v6ReportedLeagueMonthlyRowSchema),
+}).strict().superRefine((dashboard, context) => {
+  const expectedMonths = [
+    "2025-09", "2025-10", "2025-11", "2025-12", "2026-01",
+    "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
+  ];
+  if (dashboard.monthly.length !== expectedMonths.length
+    || dashboard.monthly.some((row, index) => row.month !== expectedMonths[index])) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["monthly"],
+      message: "Reported league months must be the ordered September to June domain",
+    });
+  }
+  dashboard.monthly.forEach((row, index) => {
+    if (row.exposure_contributor_count > dashboard.coverage.source_backed_team_count
+      || row.distance_contributor_count > dashboard.coverage.source_backed_team_count) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["monthly", index],
+        message: "Monthly contributors cannot exceed the source-backed team count",
+      });
+    }
+    if (row.distance_contributor_count > dashboard.coverage.distance_contributor_count) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["monthly", index, "distance_contributor_count"],
+        message: "Monthly distance contributors cannot exceed the season distance contributor count",
+      });
+    }
+  });
+});
+const v6LeagueDashboardRowSchema = z.union([
+  v6ReportedLeagueDashboardRowSchema,
+  v6LegacyLeagueDashboardRowSchema,
+]);
 const v6ComparisonSourceRowSchema = z.object({
   team_key: z.string(),
   team: z.string(),
@@ -459,7 +572,7 @@ const v6ComparisonSourceRowSchema = z.object({
   ]),
 }).strict();
 const v6LeagueMetricsSourceSchema = z.object({
-  coverage: v6LeagueCoverageSchema,
+  coverage: z.union([v6ReportedLeagueCoverageSchema, v6LeagueCoverageSchema]),
   headline: v6HeadlineSchema,
   setting_metrics: z.tuple([
     v6SettingMetricSchema.extend({ setting: z.literal("all") }).strict(),

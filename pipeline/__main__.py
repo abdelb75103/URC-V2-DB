@@ -86,6 +86,13 @@ YEAR2_INJURY_ELIGIBILITY_BRIDGE_RULE_VERSION = "urc_2025_26_injury_eligibility_b
 INPUT_REPRESENTATION_CORRECTION_RULE_VERSION = "input_representation_correction_2026-07-13_v1"
 EXPOSURE_PROCESSING_RULE_VERSION = "exposure_processing_2026-07-07_v1"
 URC_OPPONENT_FUZZY_CUTOFF = 0.78
+ZEBRE_EXPOSURE_CORRECTED_CANDIDATE_SHA256 = (
+    "b5ea70e63052da8672012eb4bcecf1925eaa891db912495a01e2c74115c29394"
+)
+ZEBRE_EXPOSURE_REGISTERED_SOURCE_SHA256 = (
+    "26c058a659823e5c9f818b2525d3daab6c16fd3a4cd0722b7e9c82af0089c1fa"
+)
+ZEBRE_EXPOSURE_CORRECTION_REASON = "input_representation_correction"
 
 # The team-name to league-alias map is protected research metadata. It lives in a
 # Git-ignored local file (backed up in UCD-managed storage), never in code or Git.
@@ -2541,6 +2548,334 @@ def reconcile_registered_intake_rows(
     return reconciled
 
 
+ZEBRE_EXPOSURE_CORRECTION_FIELDS = frozenset(
+    {"distance total", "distance_total_m_clean", "exclusion_reason", "cleaning_action"}
+)
+ZEBRE_EXPOSURE_CORRECTION_IDENTITY_FIELDS = tuple(
+    ["player_uid", *EXPOSURE_LOCATOR_FIELDS]
+)
+ZEBRE_EXPOSURE_EXPECTED_RECONCILIATION = {
+    "rows_requiring_distance_reparse": 976,
+    "expected_new_inclusions_after_reparse": 953,
+    "expected_existing_qc_exclusions_after_reparse": 23,
+    "expected_recovered_hours": "1077.65694485",
+    "expected_recovered_distance_km": "4003.98395238",
+    "expected_corrected_season_hours": "4403.34861145",
+    "expected_corrected_season_distance_km": "15988.84882329",
+}
+
+
+def _bridge_path(value: object, anchor: Path) -> Path:
+    raw = Path(clean_cell(value))
+    candidates = [raw]
+    if not raw.is_absolute():
+        candidates.extend(
+            [anchor.parent / raw, Path(__file__).resolve().parent.parent / raw]
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    raise SystemExit(f"registered-source bridge evidence file is unavailable: {raw.name}")
+
+
+def _bridge_decimal_matches(actual: object, expected: str) -> bool:
+    try:
+        return Decimal(str(actual)).quantize(Decimal("0.00000001")) == Decimal(expected)
+    except (InvalidOperation, ValueError):
+        return False
+
+
+def _validate_zebre_exposure_bridge(
+    *,
+    args: argparse.Namespace,
+    path: Path,
+    rows: list[dict[str, str]],
+    candidate_sha256: str,
+    registered_source_file_sha256: str,
+    manifest_path: Path,
+    adapter_qc_path: Path,
+) -> dict[str, object]:
+    """Validate every non-database binding before the registered-source query."""
+
+    if (
+        args.team != "Zebre"
+        or args.season != "2025-26"
+        or candidate_sha256 != ZEBRE_EXPOSURE_CORRECTED_CANDIDATE_SHA256
+        or registered_source_file_sha256 != ZEBRE_EXPOSURE_REGISTERED_SOURCE_SHA256
+        or args.version_number != 102
+        or args.step_version != INPUT_REPRESENTATION_CORRECTION_RULE_VERSION
+    ):
+        raise SystemExit("Zebre registered-source correction binding is not exact")
+    if len(rows) != 6694:
+        raise SystemExit("Zebre corrected candidate must contain exactly 6694 rows")
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        adapter_qc = json.loads(adapter_qc_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("Zebre registered-source bridge evidence must be valid JSON") from exc
+    if not isinstance(manifest, dict) or not isinstance(adapter_qc, dict):
+        raise SystemExit("Zebre registered-source bridge evidence must be JSON objects")
+
+    manifest_sha256 = sha256_file(manifest_path)
+    adapter_qc_sha256 = sha256_file(adapter_qc_path)
+    if (
+        manifest.get("schema") != "urc_2025_26_zebre_exposure_source_correction_manifest_v1"
+        or manifest.get("candidate_sha256") != candidate_sha256
+        or manifest.get("predecessor_sha256") != registered_source_file_sha256
+        or manifest.get("matched_locators") != 976
+        or manifest.get("duplicate_locators") != 0
+        or manifest.get("recovered_rows") != 953
+        or manifest.get("retained_exclusions") != 23
+        or not _bridge_decimal_matches(manifest.get("recovered_hours"), "1077.65694485")
+        or not _bridge_decimal_matches(manifest.get("recovered_distance_km"), "4003.98395238")
+        or not _bridge_decimal_matches(manifest.get("corrected_season_hours"), "4403.34861145")
+        or not _bridge_decimal_matches(manifest.get("corrected_season_distance_km"), "15988.84882329")
+        or manifest.get("qc_sha256") != adapter_qc_sha256
+        or manifest.get("database_accessed") is not False
+    ):
+        raise SystemExit("Zebre correction manifest does not bind the exact candidate")
+    if _bridge_path(manifest.get("candidate_path"), manifest_path) != path.resolve():
+        raise SystemExit("Zebre correction manifest candidate path does not match the input")
+
+    profile_path = _bridge_path(manifest.get("profile_path"), manifest_path)
+    mapping_path = _bridge_path(manifest.get("mapping_path"), manifest_path)
+    if (
+        manifest.get("profile_sha256") != sha256_file(profile_path)
+        or manifest.get("mapping_sha256") != sha256_file(mapping_path)
+    ):
+        raise SystemExit("Zebre correction manifest has an evidence checksum mismatch")
+    try:
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("Zebre correction profile and mapping must be valid JSON") from exc
+    if not isinstance(profile, dict) or not isinstance(mapping, dict):
+        raise SystemExit("Zebre correction profile and mapping must be JSON objects")
+
+    try:
+        approved_at = datetime.fromisoformat(
+            clean_cell(profile.get("approved_at")).replace("Z", "+00:00")
+        )
+        approval_timestamp_valid = (
+            approved_at.tzinfo is not None
+            and approved_at.astimezone(UTC) <= datetime.now(UTC) + timedelta(minutes=5)
+        )
+    except ValueError:
+        approval_timestamp_valid = False
+    profile_inputs = profile.get("inputs", [])
+    if not isinstance(profile_inputs, list):
+        raise SystemExit("Zebre correction profile inputs must be a JSON list")
+    approved_input_sha256s = profile.get("approved_input_sha256s", [])
+    if not isinstance(approved_input_sha256s, list):
+        raise SystemExit("Zebre correction profile approved inputs must be a JSON list")
+    if not all(isinstance(item, str) for item in approved_input_sha256s):
+        raise SystemExit("Zebre correction profile approved inputs must be strings")
+    approved_inputs = {
+        *{
+            clean_cell(item.get("sha256"))
+            for item in profile_inputs
+            if isinstance(item, dict) and clean_cell(item.get("sha256"))
+        },
+        ZEBRE_EXPOSURE_REGISTERED_SOURCE_SHA256,
+        ZEBRE_EXPOSURE_CORRECTED_CANDIDATE_SHA256,
+    }
+    profile_reconciliation = profile.get("reconciliation")
+    if (
+        profile.get("schema") != "urc_2025_26_source_correction_profile_v1"
+        or profile.get("team") != "Zebre"
+        or profile.get("team_key") != "zebre"
+        or profile.get("season") != "2025-26"
+        or profile.get("decision") != "adapter_required"
+        or profile.get("approval_ready") is not True
+        or profile.get("profile_reapproval_required") is True
+        or profile.get("approved_by") != "Abdel Babiker"
+        or not approval_timestamp_valid
+        or profile.get("database_action_authorised") is not True
+        or profile.get("unresolved_adjudication_ids") != []
+        or profile.get("mapping_sha256") != sha256_file(mapping_path)
+        or set(approved_input_sha256s) != approved_inputs
+        or not isinstance(profile_reconciliation, dict)
+        or any(
+            not _bridge_decimal_matches(profile_reconciliation.get(key), value)
+            if key.startswith("expected_")
+            else profile_reconciliation.get(key) != value
+            for key, value in ZEBRE_EXPOSURE_EXPECTED_RECONCILIATION.items()
+        )
+    ):
+        raise SystemExit("Zebre correction profile approval envelope is not exact")
+    mapping_source_scope = mapping.get("source_scope")
+    if not isinstance(mapping_source_scope, dict):
+        raise SystemExit("Zebre correction mapping source scope is not an object")
+    mapping_source_file_hashes = mapping_source_scope.get("file_sha256s", [])
+    if not isinstance(mapping_source_file_hashes, list):
+        raise SystemExit("Zebre correction mapping source file hashes must be a JSON list")
+    if not all(isinstance(item, str) for item in mapping_source_file_hashes):
+        raise SystemExit("Zebre correction mapping source file hashes must be strings")
+    if (
+        mapping.get("schema") != "urc_2025_26_source_correction_mapping_v1"
+        or mapping.get("team") != "Zebre"
+        or mapping.get("team_key") != "zebre"
+        or mapping.get("season") != "2025-26"
+        or mapping.get("mapping_version") != profile.get("mapping_version")
+        or set(mapping_source_file_hashes)
+        != {
+            "9bddcf317a4a51158beddefb30fc3ae02b3715417ae2c88748b345c19e7243b4",
+            "20055ff071efe8360a133bf36ae0bd872cef3fae2bb2a93295ad3c999a6418ab",
+        }
+    ):
+        raise SystemExit("Zebre correction mapping is not the approved mapping")
+
+    qc_reconciliation = adapter_qc.get("profile_reconciliation")
+    if (
+        adapter_qc.get("schema") != "urc_2025_26_zebre_exposure_source_correction_qc_v1"
+        or adapter_qc.get("profile_sha256") != manifest.get("profile_sha256")
+        or adapter_qc.get("mapping_sha256") != manifest.get("mapping_sha256")
+        or adapter_qc.get("predecessor_sha256") != registered_source_file_sha256
+        or adapter_qc.get("output_sha256") != candidate_sha256
+        or adapter_qc.get("predecessor_rows") != 6694
+        or adapter_qc.get("matched_locators") != 976
+        or adapter_qc.get("duplicate_locators") != 0
+        or adapter_qc.get("patched_rows") != 976
+        or adapter_qc.get("recovered_rows") != 953
+        or adapter_qc.get("retained_exclusions") != 23
+        or adapter_qc.get("impossible_source_distance_rows") != 1
+        or not _bridge_decimal_matches(adapter_qc.get("recovered_hours"), "1077.65694485")
+        or not _bridge_decimal_matches(adapter_qc.get("recovered_distance_km"), "4003.98395238")
+        or not _bridge_decimal_matches(adapter_qc.get("corrected_season_hours"), "4403.34861145")
+        or not _bridge_decimal_matches(adapter_qc.get("corrected_season_distance_km"), "15988.84882329")
+        or adapter_qc.get("database_accessed") is not False
+        or not isinstance(qc_reconciliation, dict)
+        or qc_reconciliation.get("status") != "matched"
+        or qc_reconciliation.get("mismatches") != {}
+    ):
+        raise SystemExit("Zebre correction QC does not match the approved reconciliation")
+    expected_qc_path = _bridge_path(manifest.get("qc_path"), manifest_path)
+    if expected_qc_path != adapter_qc_path.resolve():
+        raise SystemExit("Zebre correction QC path does not match the manifest")
+
+    return {
+        "registered_source_file_sha256": registered_source_file_sha256,
+        "manifest_path": manifest_path.resolve(),
+        "manifest_sha256": manifest_sha256,
+        "adapter_qc_path": adapter_qc_path.resolve(),
+        "adapter_qc_sha256": adapter_qc_sha256,
+        "profile_path": profile_path,
+        "profile_sha256": manifest["profile_sha256"],
+        "mapping_path": mapping_path,
+        "mapping_sha256": manifest["mapping_sha256"],
+    }
+
+
+def _exposure_status_from_action(action: object) -> str:
+    if action == "include":
+        return "included_pending_protocol"
+    if action == "exclude_from_primary":
+        return "excluded_from_primary"
+    raise SystemExit("Zebre correction contains an invalid cleaning action")
+
+
+def reconcile_registered_exposure_rows(
+    corrected_rows: list[dict[str, str]],
+    registered_rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, str]], dict[int, list[dict[str, object]]]]:
+    """Compare one candidate to registered source_values without changing SQL."""
+
+    if len(corrected_rows) != 6694 or len(registered_rows) != 6694:
+        raise SystemExit("registered Zebre exposure source must contain exactly 6694 rows")
+    expected_row_numbers = list(range(2, 6696))
+    try:
+        candidate_row_numbers = [
+            int(row.get("standardised_row_number", "0")) for row in corrected_rows
+        ]
+        registered_row_numbers = [
+            int(row.get("source_row_number", "0")) for row in registered_rows
+        ]
+    except (TypeError, ValueError) as exc:
+        raise SystemExit("registered Zebre exposure rows have invalid source locators") from exc
+    if candidate_row_numbers != expected_row_numbers or registered_row_numbers != expected_row_numbers:
+        raise SystemExit("registered Zebre exposure rows are not an ordered one-to-one source")
+
+    reconciled = [dict(row) for row in corrected_rows]
+    correction_events: dict[int, list[dict[str, object]]] = defaultdict(list)
+    distance_changes = exclusion_changes = action_changes = 0
+    for corrected, registered in zip(reconciled, registered_rows, strict=True):
+        source_values = registered.get("source_values")
+        if not isinstance(source_values, dict):
+            raise SystemExit("registered Zebre exposure row is missing source_values")
+        for field in ZEBRE_EXPOSURE_CORRECTION_IDENTITY_FIELDS:
+            if clean_cell(corrected.get(field)) != clean_cell(source_values.get(field)):
+                raise SystemExit("corrected Zebre exposure row changed an immutable locator or identity")
+        for field in set(corrected) | set(source_values):
+            if field in ZEBRE_EXPOSURE_CORRECTION_FIELDS:
+                continue
+            if clean_cell(corrected.get(field)) != clean_cell(source_values.get(field)):
+                raise SystemExit("corrected Zebre exposure row changed a disallowed field")
+
+        try:
+            row_number = int(registered["source_row_number"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise SystemExit("registered Zebre exposure row has an invalid source locator") from exc
+        old_distance = clean_cell(source_values.get("distance_total_m_clean"))
+        new_distance = clean_cell(corrected.get("distance_total_m_clean"))
+        old_distance_total = clean_cell(source_values.get("distance total"))
+        new_distance_total = clean_cell(corrected.get("distance total"))
+        distance_changed = old_distance != new_distance or old_distance_total != new_distance_total
+        if distance_changed:
+            if old_distance == new_distance or old_distance_total == new_distance_total:
+                raise SystemExit("corrected Zebre exposure distance fields changed inconsistently")
+            distance_changes += 1
+            correction_events[row_number].append(
+                {
+                    "field_name": "distance_total_m_clean",
+                    "old_value": old_distance,
+                    "new_value": new_distance,
+                    "action": "correct",
+                    "reason_code": ZEBRE_EXPOSURE_CORRECTION_REASON,
+                    "rationale": "Approved checksum-bound decimal-comma distance correction; registered source is immutable.",
+                    "review_status": "adjudicated",
+                }
+            )
+
+        old_reasons = [clean_cell(value) for value in clean_cell(source_values.get("exclusion_reason")).split(";") if value]
+        new_reasons = [clean_cell(value) for value in clean_cell(corrected.get("exclusion_reason")).split(";") if value]
+        if old_reasons != new_reasons:
+            exclusion_changes += 1
+            correction_events[row_number].append(
+                {
+                    "field_name": "exclusion_reasons",
+                    "old_value": old_reasons,
+                    "new_value": new_reasons,
+                    "action": "rederive_after_correction",
+                    "reason_code": ZEBRE_EXPOSURE_CORRECTION_REASON,
+                    "rationale": "Exposure exclusion reasons were rederived by the unchanged cleaner after the approved distance correction.",
+                    "review_status": "adjudicated",
+                }
+            )
+
+        old_action = clean_cell(source_values.get("cleaning_action"))
+        new_action = clean_cell(corrected.get("cleaning_action"))
+        if old_action != new_action:
+            action_changes += 1
+            correction_events[row_number].append(
+                {
+                    "field_name": "analysis_eligibility_status",
+                    "old_value": _exposure_status_from_action(old_action),
+                    "new_value": _exposure_status_from_action(new_action),
+                    "action": "rederive_after_correction",
+                    "reason_code": ZEBRE_EXPOSURE_CORRECTION_REASON,
+                    "rationale": "Primary exposure eligibility was rederived by the unchanged cleaner after the approved distance correction.",
+                    "review_status": "adjudicated",
+                }
+            )
+
+    if distance_changes != 976 or exclusion_changes != 976 or action_changes != 953:
+        raise SystemExit("registered Zebre exposure correction change counts do not reconcile")
+    if len(correction_events) != 976:
+        raise SystemExit("registered Zebre exposure correction locators are not unique")
+    return reconciled, correction_events
+
+
 def duplicate_source_row_numbers(
     rows: list[dict[str, str]], columns: list[str], excluded_row_numbers: set[int] | None = None
 ) -> set[int]:
@@ -2725,6 +3060,48 @@ def process_exposure(args: argparse.Namespace) -> None:
             f"{observed_label}"
         )
     file_hash = sha256_file(path)
+    registered_source_file_sha256 = clean_text(
+        getattr(args, "registered_source_file_sha256", "")
+    )
+    registered_file_hash = registered_source_file_sha256 or file_hash
+    bridge_metadata: dict[str, object] | None = None
+    bridge_events: dict[int, list[dict[str, object]]] = {}
+    manifest_path: Path | None = None
+    adapter_qc_path: Path | None = None
+    adapter_qc_sha256: str | None = None
+    if registered_source_file_sha256:
+        manifest_arg = clean_text(getattr(args, "manifest", ""))
+        adapter_qc_arg = clean_text(getattr(args, "adapter_qc_file", ""))
+        if not manifest_arg or not adapter_qc_arg:
+            raise SystemExit(
+                "--manifest and --adapter-qc-file are required with --registered-source-file-sha256"
+            )
+        manifest_path = Path(manifest_arg)
+        adapter_qc_path = Path(adapter_qc_arg)
+        bridge_metadata = _validate_zebre_exposure_bridge(
+            args=args,
+            path=path,
+            rows=rows,
+            candidate_sha256=file_hash,
+            registered_source_file_sha256=registered_source_file_sha256,
+            manifest_path=manifest_path,
+            adapter_qc_path=adapter_qc_path,
+        )
+        bridge_params = SqlParams()
+        registered_rows = query_sql(
+            f"""
+            select sr.source_row_number, sr.source_values
+            from ingestion.source_rows sr
+            join ingestion.source_files sf on sf.id = sr.source_file_id
+            where sf.team = {bridge_params.text(args.team)}
+              and sf.season = {bridge_params.text(args.season)}
+              and sf.file_sha256 = {bridge_params.text(registered_source_file_sha256)}
+            order by sr.source_row_number
+            """,
+            bridge_params.values,
+        )
+        rows, bridge_events = reconcile_registered_exposure_rows(rows, registered_rows)
+        adapter_qc_sha256 = str(bridge_metadata["adapter_qc_sha256"])
     version_number = args.version_number
     included_rows = sum(1 for row in rows if row.get("cleaning_action") == "include")
     excluded_rows = sum(1 for row in rows if row.get("cleaning_action") == "exclude_from_primary")
@@ -2736,11 +3113,18 @@ def process_exposure(args: argparse.Namespace) -> None:
     output_states: list[dict[str, object]] = []
     params = SqlParams()
     provenance = run_provenance()
-    standing_adjudications = fetch_standing_eligibility_adjudications(args.team, args.season, file_hash)
+    standing_adjudications = fetch_standing_eligibility_adjudications(
+        args.team, args.season, registered_file_hash
+    )
     reapplied_adjudication_rows = 0
 
     for index, row in enumerate(rows, start=2):
-        raw_id = raw_record_id(args.team, args.season, file_hash, index)
+        source_row_number = (
+            int(row["standardised_row_number"])
+            if registered_source_file_sha256
+            else index
+        )
+        raw_id = raw_record_id(args.team, args.season, registered_file_hash, source_row_number)
         exclusion_reasons = [
             reason for reason in row.get("exclusion_reason", "").split(";") if reason
         ]
@@ -2774,7 +3158,9 @@ def process_exposure(args: argparse.Namespace) -> None:
             },
         }
         reapply_events: list[dict[str, object]] = []
-        if apply_standing_adjudication(state, reapply_events, standing_adjudications.get(index)):
+        if apply_standing_adjudication(
+            state, reapply_events, standing_adjudications.get(source_row_number)
+        ):
             reapplied_adjudication_rows += 1
             eligibility = clean_text(str(state["analysis_eligibility_status"]))
         output_states.append(state)
@@ -2804,6 +3190,19 @@ def process_exposure(args: argparse.Namespace) -> None:
                 where sr.raw_record_id = {params.text(raw_id)};
                 """
             )
+        for event in bridge_events.get(source_row_number, []):
+            event_sql.append(
+                f"""
+                insert into audit.record_events
+                  (step_run_id, source_row_id, field_name, old_value, new_value, action, reason_code, rationale, rule_version, review_status)
+                select step.id, sr.id, {params.text(event["field_name"])}, {params.jsonb(event["old_value"])},
+                  {params.jsonb(event["new_value"])}, {params.text(event["action"])},
+                  {params.text(event["reason_code"])}, {params.text(event["rationale"])},
+                  {params.text(args.step_version)}, {params.text(event["review_status"])}
+                from ingestion.source_rows sr, current_step step
+                where sr.raw_record_id = {params.text(raw_id)};
+                """
+            )
         for event in reapply_events:
             event_sql.append(
                 f"""
@@ -2820,10 +3219,40 @@ def process_exposure(args: argparse.Namespace) -> None:
 
     output_hash = sha256_json(output_states)
     exposure_reason_codes = sorted(reason_counts)
+    if bridge_metadata is not None:
+        exposure_reason_codes.append(ZEBRE_EXPOSURE_CORRECTION_REASON)
     reason_code_sql = "".join(
         f"insert into audit.reason_codes (code, description) values ({params.text(reason)}, {params.text('Exposure exclusion reason emitted by the versioned cleaning protocol.')}) on conflict (code) do update set description = excluded.description;"
         for reason in exposure_reason_codes
     )
+    run_parameters: dict[str, object] = {
+        "file": path.name,
+        "step": args.step_name,
+        "step_version": args.step_version,
+        "version_number": version_number,
+        "reporting_grain": reporting_grain,
+    }
+    if bridge_metadata is not None:
+        run_parameters.update(
+            {
+                "bridge": "registered_source_correction",
+                "candidate_sha256": file_hash,
+                "processing_artifact_sha256": file_hash,
+                "registered_source_file_sha256": registered_file_hash,
+                "manifest_path": str(bridge_metadata["manifest_path"]),
+                "manifest_sha256": bridge_metadata["manifest_sha256"],
+                "adapter_qc_path": str(bridge_metadata["adapter_qc_path"]),
+                "adapter_qc_sha256": bridge_metadata["adapter_qc_sha256"],
+                "profile_path": str(bridge_metadata["profile_path"]),
+                "profile_sha256": bridge_metadata["profile_sha256"],
+                "mapping_path": str(bridge_metadata["mapping_path"]),
+                "mapping_sha256": bridge_metadata["mapping_sha256"],
+                "source_row_count": 6694,
+                "patched_rows": 976,
+                "newly_included_rows": 953,
+                "retained_exclusions": 23,
+            }
+        )
     if reapplied_adjudication_rows and not query_sql(
         "select 1 from audit.reason_codes where code = 'adjudication_reapplied'"
     ):
@@ -2843,10 +3272,10 @@ def process_exposure(args: argparse.Namespace) -> None:
 
       do $$
       begin
-        if (select count(*) from ingestion.source_rows sr join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)}) <> {len(rows)} then
+        if (select count(*) from ingestion.source_rows sr join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(registered_file_hash)}) <> {len(rows)} then
           raise exception 'process-exposure requires every source row to be registered';
         end if;
-        if exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(file_hash)} and rv.version_number = {version_number}) then
+        if exists (select 1 from processing.record_versions rv join ingestion.source_rows sr on sr.id = rv.source_row_id join ingestion.source_files sf on sf.id = sr.source_file_id where sf.team = {params.text(args.team)} and sf.season = {params.text(args.season)} and sf.file_sha256 = {params.text(registered_file_hash)} and rv.version_number = {version_number}) then
           raise exception 'process-exposure version already exists';
         end if;
       end $$;
@@ -2858,13 +3287,7 @@ def process_exposure(args: argparse.Namespace) -> None:
         values (
           'process-exposure', {params.text(args.team)}, {params.text(args.season)}, 'succeeded',
           {params.text(file_hash)}, {params.text(output_hash)},
-          {params.jsonb({
-            'file': path.name,
-            'step': args.step_name,
-            'step_version': args.step_version,
-            'version_number': version_number,
-            'reporting_grain': reporting_grain,
-          })},
+          {params.jsonb(run_parameters)},
           now(), {params.text(provenance['code_version'])}, {params.text(provenance['dependency_lock_hash'])}, {params.text(provenance['operator'])}
         )
         returning id
@@ -7496,17 +7919,53 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
         "analysis_window_start", "analysis_window_end",
     }
     coverage_optional = {"exposure_grain", "teams_included"}
+    reported_league_coverage_keys = {
+        "source_backed_team_count", "temporary_estimate_team_count",
+        "distance_contributor_count", "pending_source_teams",
+    }
+    has_reported_league_coverage = isinstance(coverage, dict) and bool(
+        set(coverage) & reported_league_coverage_keys
+    )
     if (
         not isinstance(coverage, dict)
         or not coverage_required <= set(coverage)
-        or not set(coverage) <= coverage_required | coverage_optional
+        or not set(coverage) <= (
+            coverage_required
+            | coverage_optional
+            | reported_league_coverage_keys
+        )
     ):
         raise SystemExit(f"V6 {label} has incomplete coverage")
     expected_coverage_keys = coverage_required | (
-        {"teams_included"} if payload["team"] == "URC Overall" else {"exposure_grain"}
+        {"teams_included"}
+        if payload["team"] == "URC Overall"
+        else {"exposure_grain"}
     )
+    if has_reported_league_coverage:
+        expected_coverage_keys |= reported_league_coverage_keys
     if set(coverage) != expected_coverage_keys:
         raise SystemExit(f"V6 {label} has an invalid coverage shape")
+    if has_reported_league_coverage:
+        if payload["team"] != "URC Overall":
+            raise SystemExit(f"V6 {label} reported coverage is league-only")
+        source_backed_team_count = coverage.get("source_backed_team_count")
+        temporary_estimate_team_count = coverage.get("temporary_estimate_team_count")
+        distance_contributor_count = coverage.get("distance_contributor_count")
+        pending_source_teams = coverage.get("pending_source_teams")
+        if (
+            not all(isinstance(value, int) and 0 <= value <= 16 for value in (
+                source_backed_team_count, temporary_estimate_team_count,
+                distance_contributor_count,
+            ))
+            or source_backed_team_count + temporary_estimate_team_count != 16
+            or distance_contributor_count > source_backed_team_count
+            or not isinstance(pending_source_teams, list)
+            or pending_source_teams != ["Benetton", "Edinburgh"]
+            or len(pending_source_teams) != temporary_estimate_team_count
+            or (coverage.get("distance_km") is not None)
+              != (distance_contributor_count > 0)
+        ):
+            raise SystemExit(f"V6 {label} has invalid reported league coverage")
     if coverage.get("analysis_window_start") != "2025-09-01" or coverage.get("analysis_window_end") != "2026-06-30":
         raise SystemExit(f"V6 {label} coverage window differs from the release contract")
     headline = payload.get("headline")
@@ -7590,12 +8049,57 @@ def assert_v6_public_dashboard_contract(payload: object, label: str) -> None:
         },
     }
     for section, expected_keys in section_contracts.items():
+        if section == "monthly" and has_reported_league_coverage:
+            expected_keys = expected_keys | {
+                "exposure_contributor_count", "distance_contributor_count",
+            }
         rows = payload.get(section)
         if not isinstance(rows, list) or any(
             not isinstance(row, dict) or set(row) != expected_keys
             for row in rows
         ):
             raise SystemExit(f"V6 {label} {section} has an invalid public shape")
+    if has_reported_league_coverage:
+        expected_months = tuple(
+            f"{year:04d}-{month:02d}"
+            for year, month in (
+                (2025, 9), (2025, 10), (2025, 11), (2025, 12),
+                (2026, 1), (2026, 2), (2026, 3), (2026, 4),
+                (2026, 5), (2026, 6),
+            )
+        )
+        monthly_rows = payload["monthly"]
+        if tuple(row.get("month") for row in monthly_rows) != expected_months:
+            raise SystemExit(f"V6 {label} reported monthly domain is not September to June")
+        for row in monthly_rows:
+            exposure_contributor_count = row.get("exposure_contributor_count")
+            distance_contributor_count = row.get("distance_contributor_count")
+            rate_is_ineligible = (
+                exposure_contributor_count < 16
+                or row.get("exposure_hours") in (None, 0)
+            )
+            if (
+                not isinstance(exposure_contributor_count, int)
+                or not isinstance(distance_contributor_count, int)
+                or not 0 <= exposure_contributor_count <= source_backed_team_count
+                or not 0 <= distance_contributor_count <= source_backed_team_count
+                or distance_contributor_count > coverage["distance_contributor_count"]
+                or (row.get("exposure_hours") is not None)
+                  != (exposure_contributor_count > 0)
+                or (row.get("distance_km") is not None)
+                  != (distance_contributor_count > 0)
+                or (
+                    rate_is_ineligible
+                    and any(
+                        row.get(field) is not None
+                        for field in (
+                            "overall_incidence_per_1000h", "incidence_per_1000h",
+                            "burden_per_1000h",
+                        )
+                    )
+                )
+            ):
+                raise SystemExit(f"V6 {label} has invalid reported monthly coverage")
     for section, key_field in (("setting_split", "key"), ("setting_metrics", "setting")):
         rows = payload[section]
         actual_grid = tuple((row.get(key_field), row.get("label")) for row in rows)
@@ -8934,14 +9438,6 @@ def release_league(args: argparse.Namespace) -> None:
             analysis_version == "v6"
             and year2_release_contract is not None
         )
-        if estimated_year2_monthly_gap and not decimal_values_close(
-            semantic["monthly_exposure_hours"],
-            Decimal("76872.2616717166666666"),
-        ):
-            raise SystemExit(
-                f"{semantic_mismatch_error}: source-backed monthly exposure differs "
-                "from the reviewed 14-team total"
-            )
         first_mismatch = first_release_payload_mismatch(
             dashboard,
             semantic,
@@ -14100,6 +14596,13 @@ def add_exposure_cli_parsers(subcommands: Any) -> None:
     process_exposure_parser.add_argument("--step-name", default="exposure_cleaning")
     process_exposure_parser.add_argument("--step-version", default=EXPOSURE_PROCESSING_RULE_VERSION)
     process_exposure_parser.add_argument("--version-number", type=int, default=101)
+    process_exposure_parser.add_argument(
+        "--registered-source-file-sha256",
+        default="",
+        help="bind an approved corrected candidate to an already registered immutable source",
+    )
+    process_exposure_parser.add_argument("--manifest", default="")
+    process_exposure_parser.add_argument("--adapter-qc-file", default="")
     process_exposure_parser.set_defaults(func=process_exposure)
 
 

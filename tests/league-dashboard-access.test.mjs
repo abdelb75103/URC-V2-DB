@@ -789,7 +789,11 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const tabConfig = await readFile(new URL('../lib/dashboard-tab.ts', import.meta.url), 'utf8');
 
-  assert.match(dashboard, /Total hours[\s\S]*Total distance/);
+  assert.match(dashboard, /Estimated total hours[\s\S]*Reported distance/);
+  assert.match(dashboard, /Estimated exposure/);
+  assert.match(dashboard, /Monthly trend shows reported source-backed values/);
+  assert.match(dashboard, /14 source-backed clubs \+ 2 temporary estimates|sourceBackedTeamCount/);
+  assert.match(dashboard, /Awaiting source-backed exposure from/);
   assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
   assert.match(dashboard, /Temporary exposure estimate/);
   assert.match(dashboard, /row\.included_exposure_status\.includes\('estimate'\)[\s\S]*?Est\./);
@@ -816,11 +820,12 @@ test('exposure tab switches approved measures and gates provisional HSR behind t
   assert.match(charts, /match_exposure_hours/);
   assert.match(charts, /hsr_distance_km|hsr_percentage/);
   assert.match(charts, /HSR share/);
-  assert.match(charts, /firstReportedMonth/);
+  assert.doesNotMatch(charts, /firstReportedMonth/);
   // Monthly charts drop pre-September months first (decision, 25 July 2026,
   // site-wide), then still open on the club's own first reported month.
   assert.match(charts, /fromSeptember\(sorted\)/);
-  assert.match(charts, /inWindow\.slice\(firstReportedMonth\)/);
+  assert.match(charts, /const data = fromSeptember\(sorted\)/);
+  assert.match(charts, /contributingClubsText/);
   assert.match(charts, /<BarChart aria-label=\{`Monthly \$\{exposureMeasureLabel\(measure\)\.toLowerCase\(\)\} chart`\} accessibilityLayer/);
   assert.match(charts, /w-full min-w-0/);
   assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function LocationTab')), /overflow-[xy]-auto|max-h-\[/);

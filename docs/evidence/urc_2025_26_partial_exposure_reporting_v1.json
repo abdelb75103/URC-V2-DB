@@ -1,0 +1,45 @@
+{
+  "evidence_version": "urc_2025_26_partial_exposure_reporting_v1",
+  "season": "2025-26",
+  "decision_date": "2026-08-31",
+  "scope": "League exposure presentation after the corrected active Zebre October and November build is released.",
+  "source_backed_teams": 14,
+  "temporary_estimate_teams": [
+    "Benetton",
+    "Edinburgh"
+  ],
+  "corrected_zebre_gate": {
+    "october_source_rows": 624,
+    "november_source_rows": 352,
+    "included_rows": 953,
+    "clean_rule_exclusions": 23
+  },
+  "reporting_contract": {
+    "season_hours": "Sum all sixteen final active team releases; Benetton and Edinburgh retain explicitly labelled temporary season estimates.",
+    "season_distance": "Sum only final active team releases with a non-null source-backed distance value.",
+    "monthly_domain": [
+      "2025-09",
+      "2025-10",
+      "2025-11",
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06"
+    ],
+    "monthly_values": "Report a monthly hours or distance sum when one or more source-backed teams contribute, with its contributor count.",
+    "monthly_rates": "Null unless all sixteen teams contribute a positive monthly exposure denominator.",
+    "missing_june": "No zero is inferred for a team or league month without a reported value."
+  },
+  "activation_prerequisites": [
+    "The active Zebre build contains included corrected October and November exposure rows.",
+    "Approved final active team releases exist for Zebre, Benetton and Edinburgh.",
+    "All sixteen active team releases remain bound to their active curated builds."
+  ],
+  "exclusions": [
+    "This rule does not fabricate source exposure, monthly exposure, distance, fixtures or injury data.",
+    "This rule does not alter the frozen 2024-25 season."
+  ]
+}

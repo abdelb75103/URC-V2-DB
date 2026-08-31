@@ -109,11 +109,11 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         )
         self.assertEqual(
             contract.league_monthly_view,
-            "analysis.urc_2025_26_injury_fixture_corrected_league_monthly_v2",
+            "analysis.urc_2025_26_partial_reporting_league_monthly_v3",
         )
         self.assertEqual(
             contract.league_summary_view,
-            "analysis.urc_2025_26_injury_fixture_corrected_league_summary_v2",
+            "analysis.urc_2025_26_partial_reporting_league_summary_v3",
         )
         self.assertEqual(
             contract.required_migrations,
@@ -123,6 +123,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
                 "20260822220611", "20260823120000", "20260830150000",
                 "20260830155000", "20260830170000", "20260831100000",
                 "20260831101000", "20260831120000", "20260831121000",
+                "20260831130000",
             ),
         )
         self.assertEqual(
@@ -143,7 +144,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
         )
         self.assertEqual(
             contract.exposure_coverage_evidence_locator,
-            "docs/evidence/urc_2025_26_exposure_successor_v6.json",
+            "docs/evidence/urc_2025_26_partial_exposure_reporting_v1.json",
         )
         self.assertNotEqual(contract.analysis_version, "v5")
 
@@ -307,7 +308,7 @@ class SeasonContracts2025_26Tests(unittest.TestCase):
                 "urc_2025_26_fixture_preparation.json": fixture_contract_for("2025-26").evidence_sha256,
                 "urc_2025_26_welsh_fixture_alias_exact_date_correction.json": contract.cohort_evidence_sha256,
                 "urc_2025_26_reporting_key_family_correction.json": contract.classification_rule_evidence_sha256,
-                "urc_2025_26_exposure_successor_v6.json": contract.exposure_coverage_evidence_sha256,
+                "urc_2025_26_partial_exposure_reporting_v1.json": contract.exposure_coverage_evidence_sha256,
                 "urc_2025_26_injury_eligibility_bridge.json": contract.injury_eligibility_evidence_sha256,
             }
         )

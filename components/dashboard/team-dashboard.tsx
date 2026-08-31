@@ -380,6 +380,10 @@ function OverviewTab({
   const [includeZeroDay, setIncludeZeroDay] = useState(true);
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
+  const usesReportedLeagueContract = dashboard.scope === 'league'
+    && typeof dashboard.coverage.source_backed_team_count === 'number';
+  const usesTemporaryExposureEstimate = usesReportedLeagueContract
+    && (dashboard.coverage.temporary_estimate_team_count ?? 0) > 0;
 
   const headline = Object.fromEntries(dashboard.headline.map((row) => [row.key, row.value]));
   const settingMetrics = supplement?.rate_setting_metrics ?? dashboard.setting_metrics;
@@ -517,11 +521,14 @@ function OverviewTab({
           <Sparkline values={burdenTrend} color="#ef7189" ariaLabel="Burden by month" />
         </StatTile>
         <StatTile
-          label="Exposure"
+          label={usesTemporaryExposureEstimate ? 'Estimated exposure' : 'Exposure'}
           value={fmtHours(filtered ? active?.exposure_hours : dashboard.coverage.hours)}
           unit="player-hours"
         >
           <Sparkline values={trend.map((row) => row.exposure_hours)} color="#42d8b4" ariaLabel="Exposure hours by month" />
+          {usesReportedLeagueContract && (
+            <p className="mt-1 text-[10px] text-muted-foreground">Monthly trend shows reported source-backed values.</p>
+          )}
         </StatTile>
       </div>
 
@@ -1485,6 +1492,17 @@ function ExposureTab({
     || monthlyRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)))
     || comparisonRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)));
   const hasExposureTotals = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value));
+  const sourceBackedTeamCount = coverage.source_backed_team_count;
+  const temporaryEstimateTeamCount = coverage.temporary_estimate_team_count;
+  const distanceContributorCount = coverage.distance_contributor_count;
+  const pendingSourceTeams = coverage.pending_source_teams ?? [];
+  const usesReportedLeagueContract = dashboard.scope === 'league'
+    && typeof sourceBackedTeamCount === 'number'
+    && typeof temporaryEstimateTeamCount === 'number';
+  const hoursLabel = usesReportedLeagueContract && temporaryEstimateTeamCount > 0
+    ? 'Estimated total hours'
+    : 'Total hours';
+  const distanceLabel = usesReportedLeagueContract ? 'Reported distance' : 'Total distance';
 
   if (!hasExposureData) {
     return (
@@ -1502,12 +1520,26 @@ function ExposureTab({
         <h3 id="total-exposure-heading" className={`${PANEL_HEADING_CLASS} mb-3`}>Total Exposure</h3>
         {hasExposureTotals ? (
           <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
-            <OverviewStat label="Total hours" value={fmtHours(totalHours)} unit="player-hours" />
-            <OverviewStat label="Total distance" value={fmt(totalDistance)} unit="km" />
+            <OverviewStat label={hoursLabel} value={fmtHours(totalHours)} unit="player-hours" />
+            <OverviewStat label={distanceLabel} value={fmt(totalDistance)} unit="km" />
             {exposurePreview && <OverviewStat label="HSR distance" value={fmt(totalHsr)} unit="km" />}
           </div>
         ) : (
           <EmptyState>No approved exposure totals are available for this season.</EmptyState>
+        )}
+        {usesReportedLeagueContract && (
+          <div className="mt-3 rounded-lg border border-border/70 bg-card/50 px-4 py-3 text-sm text-muted-foreground" role="note">
+            <p>
+              {sourceBackedTeamCount} source-backed clubs + {temporaryEstimateTeamCount} temporary estimates.
+              {typeof distanceContributorCount === 'number' && ` Distance is reported by ${distanceContributorCount} of 16 clubs.`}
+            </p>
+            {pendingSourceTeams.length > 0 && (
+              <p className="mt-1">
+                Awaiting source-backed exposure from {new Intl.ListFormat('en-IE', { style: 'long', type: 'conjunction' }).format(pendingSourceTeams)}.
+                {' '}Total hours include temporary estimates. Distance and monthly bars show reported values only.
+              </p>
+            )}
+          </div>
         )}
       </section>
       <Panel contentClassName="p-4 sm:p-5">

@@ -160,8 +160,8 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     league_team_candidate_view="analysis.league_team_dashboard_release_candidates_analysis_window_v6",
     member_view="analysis.league_member_releases_v6",
     injury_cohort_view="analysis.urc_2025_26_injury_fixture_corrected_cohort_v2",
-    league_monthly_view="analysis.urc_2025_26_injury_fixture_corrected_league_monthly_v2",
-    league_summary_view="analysis.urc_2025_26_injury_fixture_corrected_league_summary_v2",
+    league_monthly_view="analysis.urc_2025_26_partial_reporting_league_monthly_v3",
+    league_summary_view="analysis.urc_2025_26_partial_reporting_league_summary_v3",
     required_migrations=(
         "20260815010000",
         "20260815020000",
@@ -178,6 +178,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260831101000",
         "20260831120000",
         "20260831121000",
+        "20260831130000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -290,6 +291,30 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "unchanged_team_count=14",
             ),
         ),
+        MigrationContract(
+            version="20260831130000",
+            name="urc_2025_26_partial_exposure_reporting_successor",
+            sha256="96110b0074b2a7576d0b9ab14039388a000f0896265111df357d758cb9668ecd",
+            registration_statements=(
+                "evidence_sha256=e79107210e2344026b7f895c40fc4a5dd1a34c538256a4fc25db89bbf6ca4e30",
+                "candidate_snapshot_version=20260831130000",
+                "corrected_team=zebre",
+                "registered_source_file_sha256=26c058a659823e5c9f818b2525d3daab6c16fd3a4cd0722b7e9c82af0089c1fa",
+                "correction_candidate_sha256=b5ea70e63052da8672012eb4bcecf1925eaa891db912495a01e2c74115c29394",
+                "corrected_record_version=102",
+                "correction_step_version=input_representation_correction_2026-07-13_v1",
+                "correction_source_row_count=6694",
+                "correction_patched_rows=976",
+                "correction_mapping_sha256=eddb583ddca717e2489d483fd0e8189b0e916ace34c4669bbcdbfb1507cb8dc1",
+                "recomputed_estimate_teams=benetton,edinburgh",
+                "corrected_zebre_included_rows=953",
+                "corrected_zebre_clean_rule_exclusions=23",
+                "source_backed_team_count=14",
+                "temporary_estimate_team_count=2",
+                "monthly_domain=2025-09_to_2026-06",
+                "release_contract_table=analysis.accepted_release_contracts_v5",
+            ),
+        ),
     ),
     league_required_migration_contracts=(
         MigrationContract(
@@ -318,8 +343,8 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             ),
         ),
     ),
-    release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
-    release_reason_code="league_dashboard_release_v6",
+    release_rule_version="league_dashboard_release_2026-08-31_v6_partial_exposure_reporting",
+    release_reason_code="league_dashboard_release_v6_partial_exposure_reporting",
     decision_recorded_at="2026-08-31",
     cohort_adjudication_ref="WELSH-FIXTURE-ALIAS-EXACT-DATE-2025-26-V1",
     cohort_evidence_locator="docs/evidence/urc_2025_26_welsh_fixture_alias_exact_date_correction.json",
@@ -328,10 +353,10 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
     classification_rule_evidence_locator="docs/evidence/urc_2025_26_reporting_key_family_correction.json",
     classification_rule_evidence_sha256="d9a8d41772ffadd89ad1b40ae3e8494586adc87a5beff372ddfa8307117cc172",
     exposure_coverage_evidence_locator=(
-        "docs/evidence/urc_2025_26_exposure_successor_v6.json"
+        "docs/evidence/urc_2025_26_partial_exposure_reporting_v1.json"
     ),
     exposure_coverage_evidence_sha256=(
-        "66ba0a272de96510106a68c74046d4bf59ab04570ed38d83cbb98665f51c3ce1"
+        "e79107210e2344026b7f895c40fc4a5dd1a34c538256a4fc25db89bbf6ca4e30"
     ),
     injury_eligibility_evidence_locator=(
         "docs/evidence/urc_2025_26_injury_eligibility_bridge.json"

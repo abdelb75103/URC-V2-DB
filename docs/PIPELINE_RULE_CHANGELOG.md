@@ -11,6 +11,27 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-08-31: 2025-26 partial source-backed exposure reporting successor
+
+| Field | Value |
+|---|---|
+| Status | `implemented-not-executed`: local additive migration, checksum registration, release-bound validation and public evidence are prepared only. No live database write, release, reader change or deployment has run. |
+| Rule version | `urc_2025_26_partial_exposure_reporting_v1`; analysis `v6`; classification remains `reporting_classification_2025-26_2026-08-31_v3`; injury cohort remains `injury_lineage_2025-26_2026-08-31_v3`. |
+| Carry-forward | `season-specific`: the active 2025-26 source availability and the two temporary estimates do not carry to a later season. The contributor-count presentation principle is reusable only through a separately versioned successor. |
+| Evidence | `docs/evidence/urc_2025_26_partial_exposure_reporting_v1.json`, SHA-256 `e79107210e2344026b7f895c40fc4a5dd1a34c538256a4fc25db89bbf6ca4e30`. |
+| Migration | Additive successor `20260831130000_urc_2025_26_partial_exposure_reporting_successor.sql`, checksum-bound by its matching registration script before any V6 team or league release. |
+| Decision provenance | Abdel Babiker, 31 August 2026. |
+
+**Accepted reporting rule.** Annual hours continue to pool all sixteen final active team releases, including the clearly labelled temporary season estimates for Benetton and Edinburgh. Annual distance is the sum of non-null source-backed contributors only. The payload exposes the source-backed team count, temporary-estimate team count, distance-contributor count and the two named pending source teams.
+
+**Monthly rule.** The public league domain is always September 2025 through June 2026. Each month reports a non-null hours or distance sum whenever one or more source-backed teams report that measure, with its own contributor count. A monthly overall incidence, Time Loss incidence or burden is null unless all sixteen teams contribute a positive exposure denominator. A missing June value remains missing: no team or league zero is inferred from a lack of source exposure.
+
+**Activation gate.** The successor is intentionally unavailable until the active Zebre build retains all 624 October and 352 November source rows, restores the 953 valid included rows, retains the 23 clean-rule exclusions and keeps each included corrected session inside ordinary distance bounds. It also requires final active team releases for Zebre, Benetton and Edinburgh. The latter two releases recompute their temporary estimates from the corrected mean of the fourteen source-backed team totals. The league then pools only those immutable final team releases, not an unreviewed candidate or a direct JSON patch.
+
+**Boundary.** Source rows, source files, injury lineage, fixtures and the frozen 2024-25 season are untouched by this reporting successor. The new private team snapshot is immutable, bound to the corrected active-build and estimate state, and unavailable to website roles. Release remains blocked until the checksum registration, all three reviewed team releases and the ordinary final league preflight are complete.
+
+---
+
 ## 2026-08-31: Welsh exact-date fixture-alias cohort correction
 
 | Field | Value |

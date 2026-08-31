@@ -129,8 +129,8 @@ class IncompleteExposureReportingV6Tests(unittest.TestCase):
         self.assertIn(
             {
                 "role": "incomplete_exposure_reporting",
-                "locator": "docs/evidence/urc_2025_26_exposure_successor_v6.json",
-                "sha256": "66ba0a272de96510106a68c74046d4bf59ab04570ed38d83cbb98665f51c3ce1",
+                "locator": "docs/evidence/urc_2025_26_partial_exposure_reporting_v1.json",
+                "sha256": "e79107210e2344026b7f895c40fc4a5dd1a34c538256a4fc25db89bbf6ca4e30",
             },
             records,
         )

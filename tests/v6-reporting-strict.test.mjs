@@ -182,6 +182,79 @@ test("2025-26 reader preserves unavailable coverage and monthly exposure as null
   assert.equal(parsed.monthly[0].distance_km, null);
 });
 
+test("2025-26 league reader accepts the strict reported-exposure contract", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const reported = validDashboard("league");
+  Object.assign(reported.coverage, {
+    source_backed_team_count: 14,
+    temporary_estimate_team_count: 2,
+    distance_contributor_count: 14,
+    pending_source_teams: ["Benetton", "Edinburgh"],
+  });
+  const months = ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06"];
+  reported.monthly = months.map((month) => ({
+    ...reported.monthly[0],
+    month,
+    exposure_contributor_count: month === "2026-06" ? 10 : 14,
+    distance_contributor_count: month === "2026-06" ? 10 : 14,
+    overall_incidence_per_1000h: null,
+    incidence_per_1000h: null,
+    burden_per_1000h: null,
+  }));
+
+  const parsed = parseDashboardReaderRow(reported, "2025-26", "league");
+  assert.equal(parsed.coverage.distance_contributor_count, 14);
+  assert.deepEqual(parsed.coverage.pending_source_teams, ["Benetton", "Edinburgh"]);
+  assert.equal(parsed.monthly[0].exposure_contributor_count, 14);
+
+  const unsafeRate = structuredClone(reported);
+  unsafeRate.monthly[0].incidence_per_1000h = 2.5;
+  assert.throws(() => parseDashboardReaderRow(unsafeRate, "2025-26", "league"), /incomplete exposure denominator/i);
+
+  const missingCount = structuredClone(reported);
+  delete missingCount.monthly[0].distance_contributor_count;
+  assert.throws(() => parseDashboardReaderRow(missingCount, "2025-26", "league"));
+
+  const contradictoryValue = structuredClone(reported);
+  contradictoryValue.monthly[0].distance_contributor_count = 0;
+  assert.throws(() => parseDashboardReaderRow(contradictoryValue, "2025-26", "league"), /distance value/i);
+
+  const tooManyContributors = structuredClone(reported);
+  tooManyContributors.monthly[0].exposure_contributor_count = 15;
+  assert.throws(() => parseDashboardReaderRow(tooManyContributors, "2025-26", "league"), /source-backed team count/i);
+
+  const tooManySeasonDistanceContributors = structuredClone(reported);
+  tooManySeasonDistanceContributors.coverage.distance_contributor_count = 15;
+  assert.throws(() => parseDashboardReaderRow(tooManySeasonDistanceContributors, "2025-26", "league"), /source-backed team count/i);
+
+  const tooManyMonthlyDistanceContributors = structuredClone(reported);
+  tooManyMonthlyDistanceContributors.coverage.distance_contributor_count = 9;
+  assert.throws(() => parseDashboardReaderRow(tooManyMonthlyDistanceContributors, "2025-26", "league"), /season distance contributor count/i);
+
+  const zeroDenominatorRate = structuredClone(reported);
+  zeroDenominatorRate.coverage.source_backed_team_count = 16;
+  zeroDenominatorRate.coverage.temporary_estimate_team_count = 0;
+  zeroDenominatorRate.coverage.pending_source_teams = [];
+  zeroDenominatorRate.monthly[0].exposure_contributor_count = 16;
+  zeroDenominatorRate.monthly[0].exposure_hours = 0;
+  zeroDenominatorRate.monthly[0].incidence_per_1000h = 2.5;
+  assert.throws(() => parseDashboardReaderRow(zeroDenominatorRate, "2025-26", "league"), /incomplete exposure denominator/i);
+
+  const duplicatePending = structuredClone(reported);
+  duplicatePending.coverage.pending_source_teams = ["Benetton", "Benetton"];
+  assert.throws(() => parseDashboardReaderRow(duplicatePending, "2025-26", "league"), /unique/i);
+
+  const wrongMonthOrder = structuredClone(reported);
+  [wrongMonthOrder.monthly[0], wrongMonthOrder.monthly[1]] = [wrongMonthOrder.monthly[1], wrongMonthOrder.monthly[0]];
+  assert.throws(() => parseDashboardReaderRow(wrongMonthOrder, "2025-26", "league"), /September to June/i);
+
+  assert.equal(parseDashboardReaderRow(validDashboard("league"), "2025-26", "league").coverage.teams_included, 16);
+
+  const invalidTeam = validDashboard("team");
+  invalidTeam.monthly[0].exposure_contributor_count = 1;
+  assert.throws(() => parseDashboardReaderRow(invalidTeam, "2025-26", "team"), /unrecognized_keys/i);
+});
+
 test("2025-26 reader requires monthly recorded injuries", async () => {
   const { parseDashboardReaderRow } = await loadReportingModule();
   const withoutRecorded = validDashboard();
@@ -235,8 +308,9 @@ test("exposure UI does not add preview figures to unavailable coverage", async (
   assert.doesNotMatch(dashboard, /\(row\.distance_km \?\? 0\) \+ \(preview\?\.additional_distance_km \?\? 0\)/);
   assert.match(dashboard, /const totalHours = addPreviewToKnownValue\(\s*coverage\.hours,/);
   assert.match(dashboard, /const totalDistance = addPreviewToKnownValue\(\s*coverage\.distance_km,/);
-  assert.match(dashboard, /label="Total hours" value=\{fmtHours\(totalHours\)\}/);
-  assert.match(dashboard, /label="Total distance" value=\{fmt\(totalDistance\)\}/);
+  assert.match(dashboard, /hoursLabel[\s\S]*?'Estimated total hours'/);
+  assert.match(dashboard, /distanceLabel[\s\S]*?'Reported distance'/);
+  assert.match(dashboard, /Awaiting source-backed exposure from/);
 });
 
 test("2025-26 reader requires explicit nullable keys and complete ordered nested grids", async () => {

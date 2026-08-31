@@ -25,6 +25,10 @@ export type Coverage = {
   training_hours?: number;
   distance_km: number | null;
   teams_included?: number;
+  source_backed_team_count?: number;
+  temporary_estimate_team_count?: number;
+  distance_contributor_count?: number;
+  pending_source_teams?: string[];
   coverage_windows?: CoverageWindow[];
   included_exposure_status: string;
   scope_status?: string;
@@ -38,6 +42,8 @@ export type AnalyticsRow = {
   month?: string;
   exposure_hours?: number | null;
   distance_km?: number | null;
+  exposure_contributor_count?: number;
+  distance_contributor_count?: number;
   time_loss_injuries: number;
   recorded_injuries?: number;
   days_lost: number;

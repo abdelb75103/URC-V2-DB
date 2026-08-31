@@ -25,6 +25,7 @@ import {
   ZAxis,
 } from 'recharts';
 import type { AnalyticsRow, InjuryProfileRow, MonthlySettingRow } from '@/lib/reporting-types';
+import { contributingClubsText, hasReportedExposureValue } from '@/lib/exposure-chart';
 import {
   PROFILE_COLORS,
   SETTING_COLORS,
@@ -220,7 +221,8 @@ function MonthlyExposureTooltip({
   const distance = row.distance_km ?? 0;
   const hsrDistanceDenominator = row.hsr_distance_denominator_km ?? 0;
   const hsrDistance = row.hsr_distance_km ?? 0;
-  const rows: TooltipRow[] = measure === 'hours'
+  const contributorText = contributingClubsText(row, measure);
+  const rows: TooltipRow[] = (measure === 'hours'
     ? typeof row.match_exposure_hours === 'number' && typeof row.training_exposure_hours === 'number'
       ? [
           { label: 'Match', value: `${hours(row.match_exposure_hours)} player-hours`, color: SETTING_COLORS.match },
@@ -237,7 +239,10 @@ function MonthlyExposureTooltip({
         ]
       : measure === 'distance'
         ? [{ label: 'Total distance', value: `${number(distance)} km`, color: SETTING_COLORS.all }]
-        : [{ label: 'HSR distance', value: `${number(hsrDistance)} km`, color: '#f59e0b' }];
+        : [{ label: 'HSR distance', value: `${number(hsrDistance)} km`, color: '#f59e0b' }])
+    .concat(contributorText
+      ? [{ label: 'Contributing clubs', value: contributorText }]
+      : []);
   return <TooltipCard title={label ?? row.month ?? 'Month'} rows={rows} />;
 }
 
@@ -701,9 +706,7 @@ export function ExposureTrendChart({ rows, measure = 'hours', totalHoursColor = 
     const sorted = sortSeasonMonths<ExposureMonthlyRow & { month: string }>(rows
       .filter((row) => {
         if (!row.month) return false;
-        if (measure === 'hours') return typeof row.exposure_hours === 'number';
-        if (measure === 'distance') return typeof row.distance_km === 'number';
-        return typeof row.hsr_distance_km === 'number';
+        return hasReportedExposureValue(row, measure);
       })
       .map((row) => ({
         ...row,
@@ -715,13 +718,10 @@ export function ExposureTrendChart({ rows, measure = 'hours', totalHoursColor = 
           ? (row.hsr_distance_km ?? 0) / (row.hsr_distance_denominator_km ?? 1) * 100
           : 0,
       })) as Array<ExposureMonthlyRow & { month: string }>);
-    // Pre-September months go first, then the leading unreported months, so a club
-    // whose reporting starts later still opens on its own first reported month.
-    const inWindow = fromSeptember(sorted);
-    const firstReportedMonth = inWindow.findIndex((row) => (
-      measure === 'hours' ? (row.exposure_hours ?? 0) : measure === 'distance' ? (row.distance_km ?? 0) : (row.hsr_distance_km ?? 0)
-    ) > 0);
-    return firstReportedMonth < 0 ? [] : inWindow.slice(firstReportedMonth);
+    // The value filter above removes unavailable months. Keep reported zeroes,
+    // because a source-backed zero is data rather than a missing month.
+    const data = fromSeptember(sorted);
+    return data;
   }, [measure, rows]);
   if (!data.length) {
     const description = `No monthly ${measure === 'hours' ? 'player-hours' : measure === 'distance' ? 'distance' : 'HSR distance'} are available.`;

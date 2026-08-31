@@ -113,6 +113,41 @@ class V6PublicPayloadContractTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "12-cell contact"):
             assert_v6_public_dashboard_contract(missing_contact, "fixture")
 
+    def test_accepts_reported_partial_league_exposure_and_rejects_partial_rates(self) -> None:
+        reported = dashboard()
+        reported["coverage"].update({  # type: ignore[index]
+            "included_exposure_status": "14_source_backed_teams_plus_2_temporary_league_mean_estimates",
+            "source_backed_team_count": 14,
+            "temporary_estimate_team_count": 2,
+            "distance_contributor_count": 14,
+            "pending_source_teams": ["Benetton", "Edinburgh"],
+        })
+        reported["monthly"] = [
+            {
+                "month": month,
+                "exposure_hours": 100,
+                "distance_km": 50,
+                "exposure_contributor_count": 14,
+                "distance_contributor_count": 14,
+                "recorded_injuries": 1,
+                "time_loss_injuries": 1,
+                "days_lost": 2,
+                "overall_incidence_per_1000h": None,
+                "incidence_per_1000h": None,
+                "burden_per_1000h": None,
+            }
+            for month in (
+                "2025-09", "2025-10", "2025-11", "2025-12", "2026-01",
+                "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
+            )
+        ]
+        assert_v6_public_dashboard_contract(reported, "fixture")
+
+        unsafe_rate = copy.deepcopy(reported)
+        unsafe_rate["monthly"][0]["incidence_per_1000h"] = 10  # type: ignore[index]
+        with self.assertRaisesRegex(SystemExit, "reported monthly coverage"):
+            assert_v6_public_dashboard_contract(unsafe_rate, "fixture")
+
     def test_rejects_extra_nested_public_fields_and_wrong_headline_formula(self) -> None:
         with_extra_coverage = dashboard()
         with_extra_coverage["coverage"]["candidate_build_id"] = "private"  # type: ignore[index]
