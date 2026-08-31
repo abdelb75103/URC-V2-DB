@@ -283,6 +283,15 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
                 "release_contract_table=analysis.accepted_release_contracts_v2",
             ),
         ),
+        MigrationContract(
+            version="20260831112000",
+            name="urc_2025_26_corrected_release_context_date",
+            sha256="a1e4e5d54c0f9092050e2581491f26785c4cf50709c9c960bb31829f3b446d2b",
+            registration_statements=(
+                "classification_view_version=reporting_classification_2025-26_2026-08-31_v3",
+                "decision_recorded_at=2026-08-31",
+            ),
+        ),
     ),
     release_rule_version="league_dashboard_release_2026-08-31_v6_reporting_correction",
     release_reason_code="league_dashboard_release_v6",

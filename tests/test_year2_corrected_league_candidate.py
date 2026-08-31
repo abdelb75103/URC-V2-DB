@@ -22,6 +22,14 @@ CONTRACT_REGISTRATION = (
     ROOT
     / "tools/sql/register_urc_2025_26_corrected_release_contract_migration.sql"
 )
+CONTEXT_DATE_MIGRATION = (
+    ROOT
+    / "supabase/migrations/20260831112000_urc_2025_26_corrected_release_context_date.sql"
+)
+CONTEXT_DATE_REGISTRATION = (
+    ROOT
+    / "tools/sql/register_urc_2025_26_corrected_release_context_date_migration.sql"
+)
 
 
 class Year2CorrectedLeagueCandidateTests(unittest.TestCase):
@@ -125,6 +133,28 @@ class Year2CorrectedLeagueCandidateTests(unittest.TestCase):
         self.assertEqual(
             registration.count(
                 "migration_sha256=3a62db419a073a1ffbf433c81db7f7a44f40f69a7ee967c9f49e2a813638e06a"
+            ),
+            2,
+        )
+
+    def test_release_context_accepts_the_exact_correction_date(self) -> None:
+        migration = CONTEXT_DATE_MIGRATION.read_text(encoding="utf-8")
+        registration = CONTEXT_DATE_REGISTRATION.read_text(encoding="utf-8")
+        self.assertEqual(
+            hashlib.sha256(CONTEXT_DATE_MIGRATION.read_bytes()).hexdigest(),
+            "a1e4e5d54c0f9092050e2581491f26785c4cf50709c9c960bb31829f3b446d2b",
+        )
+        for value in (
+            "reporting_classification_2025-26_2026-08-31_v3",
+            "injury_lineage_2025-26_2026-08-30_v2",
+            "decision_recorded_at = date '2026-08-31'",
+            "reporting_classification_2026-07-22_v2",
+            "decision_recorded_at = date '2026-08-15'",
+        ):
+            self.assertIn(value, migration)
+        self.assertEqual(
+            registration.count(
+                "migration_sha256=a1e4e5d54c0f9092050e2581491f26785c4cf50709c9c960bb31829f3b446d2b"
             ),
             2,
         )

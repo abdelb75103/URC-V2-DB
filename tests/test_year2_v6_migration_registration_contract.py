@@ -106,10 +106,10 @@ class Year2V6MigrationRegistrationContractTests(unittest.TestCase):
             include_league=True,
         )
 
-        self.assertEqual(league_contracts[:-2], base_contracts)
+        self.assertEqual(league_contracts[:-3], base_contracts)
         self.assertEqual(
-            tuple(item.version for item in league_contracts[-2:]),
-            ("20260831110000", "20260831111000"),
+            tuple(item.version for item in league_contracts[-3:]),
+            ("20260831110000", "20260831111000", "20260831112000"),
         )
         self.assertFalse((
             ROOT / "tools/sql/register_urc_2025_26_exposure_successor_league_snapshot_migration.sql"
