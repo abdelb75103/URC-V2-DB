@@ -2,7 +2,7 @@ export const SUPPORTED_DASHBOARD_SEASONS = ['2024-25', '2025-26'] as const;
 
 export type DashboardSeason = (typeof SUPPORTED_DASHBOARD_SEASONS)[number];
 
-export const DEFAULT_DASHBOARD_SEASON: DashboardSeason = '2024-25';
+export const DEFAULT_DASHBOARD_SEASON: DashboardSeason = '2025-26';
 
 export function previousDashboardSeason(season: DashboardSeason): DashboardSeason | null {
   const index = SUPPORTED_DASHBOARD_SEASONS.indexOf(season);

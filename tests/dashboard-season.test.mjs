@@ -19,12 +19,12 @@ test('dashboard season routing accepts only the two supported seasons', async ()
   assert.equal(resolveDashboardSeason('2025-26'), '2025-26');
 });
 
-test('dashboard season routing safely falls back to the frozen default', async () => {
+test('dashboard season routing defaults to the current season', async () => {
   const { resolveDashboardSeason } = await loadDashboardSeason();
 
-  assert.equal(resolveDashboardSeason(undefined), '2024-25');
-  assert.equal(resolveDashboardSeason('2023-24'), '2024-25');
-  assert.equal(resolveDashboardSeason(['2025-26', '2024-25']), '2024-25');
+  assert.equal(resolveDashboardSeason(undefined), '2025-26');
+  assert.equal(resolveDashboardSeason('2023-24'), '2025-26');
+  assert.equal(resolveDashboardSeason(['2025-26', '2024-25']), '2025-26');
 });
 
 test('season comparison resolves only an approved supported predecessor', async () => {
