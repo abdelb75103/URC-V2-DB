@@ -11,7 +11,7 @@ import type {
   SeasonComparisonData,
 } from "@/lib/reporting-types";
 import {
-  DEFAULT_REPORT_SECTION_IDS,
+  orderedReportSectionIds,
   type ReportMetric,
   type ReportModel,
   type ReportComparisonRow,
@@ -55,8 +55,7 @@ const FORBIDDEN_KEYS = new Set([
 ]);
 
 export function filterReportSectionIds(sectionIds: readonly ReportSectionId[] | undefined): ReportSectionId[] {
-  const enabled = new Set(sectionIds ?? DEFAULT_REPORT_SECTION_IDS);
-  return DEFAULT_REPORT_SECTION_IDS.filter((sectionId) => enabled.has(sectionId));
+  return orderedReportSectionIds(sectionIds);
 }
 
 function assertDashboardIdentity(

@@ -4,7 +4,8 @@ import {
 } from "@react-pdf/renderer";
 import { cloneElement, type ComponentType, type ReactElement, type ReactNode } from "react";
 import {
-  DEFAULT_REPORT_SECTION_IDS,
+  orderedReportSectionIds,
+  REPORT_SECTION_LABELS,
   type ReportDistributionRow, type ReportInjuryTypeFamily, type ReportMetric,
   type ReportModel, type ReportPatternRow, type ReportProfileRow,
   type ReportSectionId, type ReportSettingMetric,
@@ -35,12 +36,6 @@ const SEVERITY_COLOURS: Record<string, string> = {
   greater_than_twenty_eight_days: C.coral, unknown_or_censored: C.purple,
 };
 const CONTACT_COLOURS: Record<string, string> = { contact: C.purple, non_contact: C.orange, unknown: C.grey };
-const SECTION_HEADS: Record<ReportSectionId, string> = {
-  cover: "Cover", "season-pattern": "Season overview", "severity-contact": "Severity and mechanism",
-  "injury-location": "Injury location", "common-injuries": "Common injuries",
-  "impact-matrices": "Injury impact matrices", "injury-types": "Injury type", exposure: "Exposure",
-  "team-comparison": "Team comparison", "season-methodology": "Season comparison", closing: "Closing",
-};
 type ReportMetadata = { version: string; sourceGeneratedAt: string; exportedAt: string };
 type SeasonComparisonVisuals = NonNullable<ReportModel["seasonComparisonVisuals"]>;
 
@@ -107,7 +102,7 @@ function readableOn(hex: string): string {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? C.ink : C.white;
 }
 
-function Header({ model, section }: { model: ReportModel; section: ReportSectionId }) { return <View style={styles.header}><View style={styles.headerBrand}>{model.brand.crestDataUri && <Image src={model.brand.crestDataUri} style={styles.headerCrest} />}<Text style={styles.eyebrow}>URC injury surveillance</Text></View><Text style={styles.headerLabel}>{SECTION_HEADS[section]}</Text></View>; }
+function Header({ model, section }: { model: ReportModel; section: ReportSectionId }) { return <View style={styles.header}><View style={styles.headerBrand}>{model.brand.crestDataUri && <Image src={model.brand.crestDataUri} style={styles.headerCrest} />}<Text style={styles.eyebrow}>URC injury surveillance</Text></View><Text style={styles.headerLabel}>{REPORT_SECTION_LABELS[section]}</Text></View>; }
 function Footer({ model, meta, cover = false }: { model: ReportModel; meta: ReportMetadata; cover?: boolean }) { return <View fixed style={[styles.footer, cover ? styles.coverFooter : {}]}><Text>{model.subjectName} | {model.season} | v{meta.version}</Text><Text>Source {formatDate(meta.sourceGeneratedAt)} | Exported {formatDate(meta.exportedAt)}</Text><Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} /></View>; }
 function PageShell({ model, meta, section, children }: { model: ReportModel; meta: ReportMetadata; section: ReportSectionId; children: ReactNode }) { return <Page size="A4" style={styles.page}><Header model={model} section={section} />{children}<Footer model={model} meta={meta} /></Page>; }
 function PageTitle({ title, note }: { title: string; note: string }) { return <View><Text style={styles.title}>{title}</Text><Text style={styles.standfirst}>{note}</Text></View>; }
@@ -984,5 +979,5 @@ const sectionPages: Record<ReportSectionId, (model: ReportModel, meta: ReportMet
   "team-comparison": (m, x) => <TeamComparison model={m} meta={x} />, "season-methodology": (m, x) => <SeasonMethodology model={m} meta={x} />,
   closing: (m, x) => <ClosingPage model={m} meta={x} />,
 };
-export function enabledReportSections(sectionIds?: readonly ReportSectionId[]) { const requested = new Set(sectionIds ?? DEFAULT_REPORT_SECTION_IDS); return DEFAULT_REPORT_SECTION_IDS.filter((id) => requested.has(id)); }
-export function ReportDocument({ model, enabledSectionIds }: { model: ReportModel; enabledSectionIds?: readonly ReportSectionId[] }) { if (model.schemaVersion !== "urc-report-v1") throw new Error("Unsupported report model schema"); const meta = metadata(model); return <Document title={`${model.subjectName} injury surveillance report ${model.season}`} author="United Rugby Championship" subject={`Released aggregate injury surveillance metrics | ${meta.version}`} creator="URC injury surveillance" creationDate={new Date(meta.exportedAt)}>{enabledReportSections(enabledSectionIds).map((section) => cloneElement(sectionPages[section](model, meta), { key: section }))}</Document>; }
+export function enabledReportSections(sectionIds?: readonly ReportSectionId[]) { return orderedReportSectionIds(sectionIds); }
+export function ReportDocument({ model, enabledSectionIds }: { model: ReportModel; enabledSectionIds?: readonly ReportSectionId[] }) { if (model.schemaVersion !== "urc-report-v1") throw new Error("Unsupported report model schema"); const meta = metadata(model); return <Document title={`${model.subjectName} injury surveillance report ${model.season}`} author="United Rugby Championship" subject={`Released aggregate injury surveillance metrics | ${meta.version}`} creator="URC injury surveillance" language="en-IE" creationDate={new Date(meta.exportedAt)}>{enabledReportSections(enabledSectionIds).map((section) => cloneElement(sectionPages[section](model, meta), { key: section }))}</Document>; }

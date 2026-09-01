@@ -14,7 +14,7 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 import type {
   DashboardSupplement,
   ExposureReviewPreview,
@@ -24,6 +24,7 @@ import type {
   TeamDashboardData,
   TeamComparisonRow,
 } from '@/lib/reporting-types';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BodyMap, locationHeatColor, type LocationMetric } from '@/components/dashboard/body-map';
@@ -43,7 +44,13 @@ import {
   profileColor,
 } from '@/components/dashboard/chart-primitives';
 import type { TeamColorSet } from '@/lib/team-color';
-import type { ReportModel } from '@/lib/report-model-types';
+import {
+  DEFAULT_REPORT_SECTION_IDS,
+  orderedReportSectionIds,
+  REPORT_SECTION_LABELS,
+  type ReportModel,
+  type ReportSectionId,
+} from '@/lib/report-model-types';
 import { SUPPORTED_DASHBOARD_SEASONS, type DashboardSeason } from '@/lib/dashboard-season';
 import type { SeasonComparisonData } from '@/lib/season-comparison';
 import { SeasonComparison } from '@/components/dashboard/season-comparison';
@@ -1594,6 +1601,34 @@ function ExposureTab({
 }
 
 function ReportsTab({ model }: { model: ReportModel }) {
+  const [enabledSectionIds, setEnabledSectionIds] = useState<ReportSectionId[]>([...DEFAULT_REPORT_SECTION_IDS]);
+  const removeButtonRefs = useRef(new Map<ReportSectionId, HTMLButtonElement>());
+  const restoreButtonRefs = useRef(new Map<ReportSectionId, HTMLButtonElement>());
+  const pendingRestoredFocusRef = useRef<ReportSectionId | null>(null);
+  const hiddenSectionIds = DEFAULT_REPORT_SECTION_IDS.filter((sectionId) => !enabledSectionIds.includes(sectionId));
+
+  const removeSection = (sectionId: ReportSectionId) => {
+    setEnabledSectionIds((current) => orderedReportSectionIds(current.filter((currentId) => currentId !== sectionId)));
+    window.requestAnimationFrame(() => restoreButtonRefs.current.get(sectionId)?.focus());
+  };
+
+  const restoreSection = (sectionId: ReportSectionId) => {
+    pendingRestoredFocusRef.current = sectionId;
+    setEnabledSectionIds((current) => orderedReportSectionIds([...current, sectionId]));
+  };
+
+  const restoreAllSections = () => {
+    pendingRestoredFocusRef.current = hiddenSectionIds[0] ?? null;
+    setEnabledSectionIds([...DEFAULT_REPORT_SECTION_IDS]);
+  };
+
+  const focusRestoredSection = () => {
+    const sectionId = pendingRestoredFocusRef.current;
+    if (!sectionId) return;
+    pendingRestoredFocusRef.current = null;
+    window.requestAnimationFrame(() => removeButtonRefs.current.get(sectionId)?.focus());
+  };
+
   return (
     <div className="space-y-5 sm:space-y-6">
       <div>
@@ -1602,7 +1637,38 @@ function ReportsTab({ model }: { model: ReportModel }) {
           Preview and export a versioned PDF built from this dashboard&apos;s released values.
         </p>
       </div>
-      <ReportPreview model={model} />
+      <ReportPreview
+        model={model}
+        enabledSectionIds={enabledSectionIds}
+        onPreviewReady={focusRestoredSection}
+        sectionControls={hiddenSectionIds.length > 0 ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-background/70 p-2" aria-label="Restore report sections">
+            <span className="px-1 text-sm text-muted-foreground">Hidden sections ({hiddenSectionIds.length})</span>
+            {hiddenSectionIds.map((sectionId) => (
+              <Button key={sectionId} ref={(node) => { if (node) restoreButtonRefs.current.set(sectionId, node); else restoreButtonRefs.current.delete(sectionId); }} type="button" variant="outline" size="sm" onClick={() => restoreSection(sectionId)} className="min-h-11 focus-visible:ring-2 focus-visible:ring-ring">
+                Add {REPORT_SECTION_LABELS[sectionId]}
+              </Button>
+            ))}
+            <Button type="button" variant="ghost" size="sm" onClick={restoreAllSections} className="min-h-11 focus-visible:ring-2 focus-visible:ring-ring">Restore all</Button>
+          </div>
+        ) : null}
+        renderPageAction={({ sectionId }) => (
+          <Button
+            key={sectionId}
+            ref={(node) => { if (node) removeButtonRefs.current.set(sectionId, node); else removeButtonRefs.current.delete(sectionId); }}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => removeSection(sectionId)}
+            aria-label={`Remove ${REPORT_SECTION_LABELS[sectionId]} from PDF`}
+            title={`Remove ${REPORT_SECTION_LABELS[sectionId]} from PDF`}
+            className="min-h-11 min-w-11 border-red-400/60 bg-red-950/90 px-2 text-red-100 shadow-sm hover:bg-red-900 hover:text-white focus-visible:ring-2 focus-visible:ring-red-400 sm:px-3"
+          >
+            <X className="size-4 sm:hidden" aria-hidden="true" />
+            <span className="hidden sm:inline">Remove</span>
+          </Button>
+        )}
+      />
     </div>
   );
 }
@@ -2137,7 +2203,7 @@ export function TeamDashboard({
         <TabsContent value="season-comparison">
           <SeasonComparison comparison={seasonComparison} />
         </TabsContent>
-        <TabsContent value="reports"><ReportsTab model={reportModel} /></TabsContent>
+        <TabsContent value="reports"><ReportsTab key={`${reportModel.scope}:${reportModel.subjectName}:${reportModel.season}:${reportModel.exportedAt}`} model={reportModel} /></TabsContent>
       </Tabs>
     </div>
   );

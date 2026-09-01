@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { assertReportModelPrivacy, buildReportModel, DEFAULT_REPORT_SECTION_IDS, filterReportSectionIds } from "../lib/report-model";
+import { REPORT_SECTION_LABELS } from "../lib/report-model-types";
 import { dashboardFixture, priorDashboardFixture } from "./report-fixtures";
 import { buildReportComparisonRows } from "../lib/report-comparison";
 import type { TeamComparisonRow } from "../lib/reporting-types";
@@ -147,9 +148,25 @@ test("refuses an unapproved prior release", () => {
   assert.throws(() => buildReportModel({ current, prior: priorDashboardFixture(), expectedScope: "team", expectedSeason: "2025-26", subjectName: "Harbour RFC", protectedTerms: ["Rivals RFC"] }), /not approved/);
 });
 
-test("keeps the stable section order when filtering", () => {
+test("restores enabled sections in canonical order", () => {
   assert.deepEqual(DEFAULT_REPORT_SECTION_IDS, ["cover", "season-pattern", "severity-contact", "injury-location", "common-injuries", "impact-matrices", "injury-types", "exposure", "team-comparison", "season-methodology", "closing"]);
-  assert.deepEqual(filterReportSectionIds(["season-methodology", "cover", "exposure"]), ["cover", "exposure", "season-methodology"]);
+  assert.deepEqual(REPORT_SECTION_LABELS, {
+    cover: "Cover",
+    "season-pattern": "Season overview",
+    "severity-contact": "Severity and mechanism",
+    "injury-location": "Injury location",
+    "common-injuries": "Common injuries",
+    "impact-matrices": "Injury impact matrices",
+    "injury-types": "Injury type",
+    exposure: "Exposure",
+    "team-comparison": "Team comparison",
+    "season-methodology": "Season comparison",
+    closing: "Closing",
+  });
+  assert.deepEqual(
+    filterReportSectionIds(["season-methodology", "cover", "exposure", "cover"]),
+    ["cover", "exposure", "season-methodology"],
+  );
 });
 
 test("rejects protected team text before it can reach a team report model", () => {

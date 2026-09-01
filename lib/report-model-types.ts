@@ -15,6 +15,26 @@ export const DEFAULT_REPORT_SECTION_IDS = [
 ] as const;
 
 export type ReportSectionId = (typeof DEFAULT_REPORT_SECTION_IDS)[number];
+
+export const REPORT_SECTION_LABELS: Record<ReportSectionId, string> = {
+  cover: "Cover",
+  "season-pattern": "Season overview",
+  "severity-contact": "Severity and mechanism",
+  "injury-location": "Injury location",
+  "common-injuries": "Common injuries",
+  "impact-matrices": "Injury impact matrices",
+  "injury-types": "Injury type",
+  exposure: "Exposure",
+  "team-comparison": "Team comparison",
+  "season-methodology": "Season comparison",
+  closing: "Closing",
+};
+
+export function orderedReportSectionIds(sectionIds?: readonly ReportSectionId[]): ReportSectionId[] {
+  const selected = new Set(sectionIds ?? DEFAULT_REPORT_SECTION_IDS);
+  return DEFAULT_REPORT_SECTION_IDS.filter((sectionId) => selected.has(sectionId));
+}
+
 export type ReportScope = "team" | "league";
 
 export type ReportMetric = {

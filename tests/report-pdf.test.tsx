@@ -106,12 +106,13 @@ function renderPdf(sectionIds?: string[]) {
   const output = execFileSync("node", ["--input-type=module", "--eval", program], { encoding: "utf8", maxBuffer: 2_000_000 });
   const result = JSON.parse(output) as { pages: number; bytes: number };
   const text = execFileSync("pdftotext", [renderedPdf, "-"], { encoding: "utf8" });
-  const coverText = execFileSync("pdftotext", ["-f", "1", "-l", "1", renderedPdf, "-"], { encoding: "utf8" });
-  const overviewText = execFileSync("pdftotext", ["-f", "2", "-l", "2", renderedPdf, "-"], { encoding: "utf8" });
+  const pageText = (page: number) => execFileSync("pdftotext", ["-f", String(page), "-l", String(page), renderedPdf, "-"], { encoding: "utf8" });
+  const coverText = pageText(1);
+  const overviewText = pageText(2);
   const comparisonText = result.pages >= 10
     ? execFileSync("pdftotext", ["-f", "10", "-l", "10", renderedPdf, "-"], { encoding: "utf8" })
     : "";
-  return { ...result, text, coverText, overviewText, comparisonText };
+  return { ...result, text, pageText, coverText, overviewText, comparisonText };
 }
 
 test("the full document emits one A4 page for each stable section", () => {
@@ -130,9 +131,13 @@ test("the full document emits one A4 page for each stable section", () => {
   assert.match(result.text, /End of report/i);
 });
 
-test("filtering sections removes pages and recalculates the document", () => {
-  const result = renderPdf(["cover", "season-methodology"]);
-  assert.equal(result.pages, 2);
+test("selected sections render in canonical PDF order", () => {
+  const result = renderPdf(["season-methodology", "cover", "team-comparison"]);
+  assert.equal(result.pages, 3);
+  assert.match(result.pageText(1), /Injury surveillance/);
+  assert.match(result.pageText(2), /Team comparison/);
+  assert.match(result.pageText(3), /Season comparison/);
+  assert.doesNotMatch(result.pageText(2), /Season comparison/);
 });
 
 test("rendered document metadata and source model do not contain protected sentinels", () => {

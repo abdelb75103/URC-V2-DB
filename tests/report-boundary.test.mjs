@@ -9,10 +9,17 @@ test('the preview reuses one generated PDF for display and download', async () =
 
   assert.equal(preview.match(/\.toBlob\(\)/g)?.length, 1);
   assert.equal(preview.match(/URL\.createObjectURL/g)?.length, 1);
-  assert.match(preview, /<Document file=\{blobUrl\}/);
-  assert.match(preview, /link\.href = blobUrl/);
+  assert.match(preview, /<Document file=\{currentPdf\.url\}/);
+  assert.match(preview, /link\.href = currentPdf\.url/);
   assert.match(preview, /link\.download = downloadFileName/);
   assert.doesNotMatch(preview, /window\.print|print\(\)/);
+  assert.match(preview, /if \(!sections\.length\) return/);
+  assert.match(preview, /disabled=\{!currentPdf \|\| loadingPreview\}/);
+  assert.match(preview, /renderedPdf\?\.key === generationKey/);
+  assert.match(preview, /loadedPreview\?\.key === generationKey/);
+  assert.match(preview, /generationQueueRef\.current = generationQueueRef\.current\.then/);
+  assert.match(preview, /window\.setTimeout\([\s\S]*?, 150\)/);
+  assert.match(preview, /requestAnimationFrame\(\(\) => \{ if \(generationKeyRef\.current === generationKey\) onPreviewReady\?\.\(\); \}\)/);
 });
 
 test('the PDF page scales to the available preview width', async () => {
@@ -26,9 +33,24 @@ test('the PDF page scales to the available preview width', async () => {
 test('the preview renders every PDF page in one continuous scroll area', async () => {
   const preview = await read('components/report/report-preview.tsx');
 
-  assert.match(preview, /max-h-\[calc\(100vh-12rem\)\] overflow-y-auto/);
-  assert.match(preview, /Array\.from\(\{ length: pageCount \}/);
+  assert.match(preview, /max-h-\[calc\(100vh-12rem\)\][^\"]*overflow-y-auto/);
+  assert.match(preview, /reportPreviewPages\(sections\)\.slice\(0, pageCount\)/);
+  assert.match(preview, /className="relative max-w-full"[\s\S]*?<Page[\s\S]*?renderPageAction\(page\)/);
+  assert.doesNotMatch(preview, /reportPreviewPages\(sections\)\.map/);
   assert.doesNotMatch(preview, /ChevronLeft|ChevronRight|Preview page controls/);
+});
+
+test('the preview exposes accessible updating and empty states', async () => {
+  const preview = await read('components/report/report-preview.tsx');
+
+  assert.match(preview, /role="status" aria-live="polite" aria-atomic="true"/);
+  assert.match(preview, /role="region" tabIndex=\{0\} aria-label="Scrollable PDF report pages" aria-busy=\{generating \|\| loadingPreview\}/);
+  assert.match(preview, /aria-describedby="report-preview-status"/);
+  assert.match(preview, /No report sections selected/);
+  assert.match(preview, /0 pages\. Restore a section/);
+  assert.match(preview, /TextLayer\.css/);
+  assert.doesNotMatch(preview, /renderTextLayer=\{false\}/);
+  assert.doesNotMatch(preview, /<section[^>]*aria-busy/);
 });
 
 test('production report modules do not import fixture or preview data', async () => {
