@@ -49,8 +49,8 @@ class SettingProfileSuccessorTests(unittest.TestCase):
         for name in ("showInjuries", "showTlInjuries", "showOverallIncidence", "showTlIncidence"):
             self.assertIn(name, self.ui)
             self.assertIn(name, self.charts)
-        self.assertIn('ariaLabel="Injuries by month"', self.ui)
-        self.assertIn('ariaLabel="Overall incidence by month"', self.ui)
+        self.assertIn('ariaLabel="Injuries By Month"', self.ui)
+        self.assertIn('ariaLabel="Incidence By Month"', self.ui)
         self.assertIn("effectiveSeveritySetting", self.ui)
         self.assertIn("effectiveContactSetting", self.ui)
 

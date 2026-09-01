@@ -27,6 +27,100 @@ test("builds a narrow team report model from approved current and prior payloads
   assert.equal(model.exportedAt, model.dataGeneratedAt);
 });
 
+test("uses released diagnosis families for report common injuries", () => {
+  const current = dashboardFixture({
+    diagnosis_families: [
+      {
+        code: "concussion",
+        label: "Concussion",
+        setting: "training",
+        recorded_injuries: 17,
+        time_loss_injuries: 17,
+        known_duration_time_loss_injuries: 17,
+        days_lost: 217,
+        exposure_hours: 1_000,
+        incidence_per_1000h: 17,
+        burden_per_1000h: 217,
+        mean_severity_days: 12.8,
+        subtypes: [{
+          code: "dx_concussion",
+          label: "Concussion",
+          recorded_injuries: 12,
+          time_loss_injuries: 12,
+          known_duration_time_loss_injuries: 12,
+          days_lost: 140,
+        }],
+      },
+      {
+        code: "hamstring_muscle_injury",
+        label: "Hamstring Muscle Injury",
+        setting: "training",
+        recorded_injuries: 1,
+        time_loss_injuries: 1,
+        known_duration_time_loss_injuries: 1,
+        days_lost: 10,
+        exposure_hours: 1_000,
+        incidence_per_1000h: 1,
+        burden_per_1000h: 10,
+        mean_severity_days: 10,
+        subtypes: [],
+      },
+      {
+        code: "unknown_diagnosis",
+        label: "Unknown Diagnosis",
+        setting: "training",
+        recorded_injuries: 8,
+        time_loss_injuries: 8,
+        known_duration_time_loss_injuries: 8,
+        days_lost: 80,
+        exposure_hours: 1_000,
+        incidence_per_1000h: 8,
+        burden_per_1000h: 80,
+        mean_severity_days: 10,
+        subtypes: [],
+      },
+    ],
+    injury_profiles: [
+      ...dashboardFixture().injury_profiles,
+      { dimension: "diagnosis", code: "hamstring_tendon", label: "Hamstring Tendon Injury", setting: "training", recorded_injuries: 9, time_loss_injuries: 9, days_lost: 90, exposure_hours: 1_000, incidence_per_1000h: 9, burden_per_1000h: 90, mean_severity_days: 10 },
+      { dimension: "diagnosis", code: "hamstring_trigger", label: "Hamstring Trigger Point", setting: "training", recorded_injuries: 4, time_loss_injuries: 4, days_lost: 20, exposure_hours: 1_000, incidence_per_1000h: 4, burden_per_1000h: 20, mean_severity_days: 5 },
+    ],
+  });
+  const model = buildReportModel({ current, prior: null, expectedScope: "team", expectedSeason: "2025-26", subjectName: "Harbour RFC", protectedTerms: ["Rivals RFC"] });
+
+  assert.deepEqual(model.injuryProfile.diagnoses.map((row) => [row.label, row.timeLossInjuries]), [
+    ["Concussion", 17],
+    ["Hamstring Muscle Injury", 1],
+  ]);
+});
+
+test("keeps an authoritative empty diagnosis family release empty", () => {
+  const model = buildReportModel({
+    current: dashboardFixture({ diagnosis_families: [] }),
+    prior: null,
+    expectedScope: "team",
+    expectedSeason: "2025-26",
+    subjectName: "Harbour RFC",
+    protectedTerms: ["Rivals RFC"],
+  });
+
+  assert.deepEqual(model.injuryProfile.diagnoses, []);
+});
+
+test("keeps approved league identity validation separate from its display name", () => {
+  const current = { ...dashboardFixture(), scope: "league" as const, team: "URC Overall" };
+  const model = buildReportModel({
+    current,
+    prior: null,
+    expectedScope: "league",
+    expectedSeason: "2025-26",
+    subjectName: "URC Overall",
+    displaySubjectName: "United Rugby Championship",
+    protectedTerms: ["Rivals RFC"],
+  });
+  assert.equal(model.subjectName, "United Rugby Championship");
+});
+
 test("compares the selected earlier season with the approved later season", () => {
   const current = priorDashboardFixture({
     prior_season: { season: "2023-24", status: "frozen", note: "Earlier release." },

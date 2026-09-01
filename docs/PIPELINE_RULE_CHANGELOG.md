@@ -11,6 +11,29 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-09-01: Cross-season diagnosis-family adjudication and separate illness reporting
+
+| Field | Value |
+|---|---|
+| Status | `applied-and-verified-reporting-successor`: checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`; the V7 dashboard readers and V5 comparison readers are verified. Source rows, lineage and approved releases remain unchanged. |
+| Rule version | `diagnosis_family_adjudication_2026_09_01_v1`; reporting reader `v7`; season comparison `v5`. |
+| Carry-forward | `versioned-classification`: the explicit-root rule carries forward; the row mappings and the 2024-25/2025-26 cohort evidence are season-specific. |
+| Evidence | `docs/evidence/diagnosis-families/diagnosis_family_adjudication_v1.json`, file SHA-256 `cd319a12ab9fd73885c4e851bda11c2c277603a5e74665bd68bcb472738139dd`, injury mapping-row SHA-256 `196f9c6765dfe83b2b205614aa61b4f5c3d53a85bc32983dabb1bdfdb5910f8e`, complete injury-ledger SHA-256 `7f3666de1309157843bade735bf79c4b30c39c75cc1542ef96f3254d5a840af5`; 2025-26 illness inventory SHA-256 `6708f730cfa0faac40799b3eeafb99edd0e3e2e3c9a25de245daaaca1da3ef8d`, illness mapping-row SHA-256 `8c195664f215ab59dc52f0cceaee7cfe0d08b7d839f6475d088dbc0827c7c9f4`, illness-ledger SHA-256 `32e6b9622da98723f8702294e1becc0e39f50a12872aeac6fa93c37c30cd1c92`. |
+| Migrations | Reporting successor `20260901010000`, SHA-256 `b2d6af31bad2a49d26be8fe135c304fdc5a9c55a888f56cd26a5e32249cc903d`; private-view execution correction `20260901020000`, SHA-256 `f9d0cdce9b30e1bbe12dc6caacb2b37d60d1107833063281a158f0a1cc00b4b2`; materialised reader boundary `20260901021000`, SHA-256 `eb015ecaa8ca3db1d4992f4c4d3498ff5f5aa65aac60f16693b780104443e5d0`. |
+| Decision provenance | Abdel Babiker, 1 September 2026. |
+
+**Diagnosis-family rule.** An explicit root diagnosis determines the reporting family. Grade, laterality, symptoms, imaging, history and associated findings do not displace that root; a different primary tissue or pathology does. A compound label with no dominant root remains its own identity group. The governed ledger contains 974 mappings: 780 accepted deterministic mappings, 122 identity groups and 72 out-of-scope illness mappings, with no unresolved human-review rows.
+
+**Season reconciliation.** The current 2025-26 injury cohort remains 1,545 recorded injuries, including the 61 restored Welsh match injuries, with 938 Time Loss injuries, 782 known-duration Time Loss injuries and 20,665 observed days lost. Its family partition is 1,464 mapped injuries plus 81 internal Unknown rows. The Unknown rows comprise 19 illness-labelled source conflicts and 62 genuinely unresolved `Unknown` or `Unknown diagnosis` rows; together they contain 73 Time Loss injuries and 1,042 observed days. The 2024-25 injury cohort remains 1,662, partitioned as 1,658 mapped injuries plus four internal Unknown rows. Unknown rows remain available for reconciliation and are suppressed from front-facing rankings. The released 2024-25 severity distribution remains byte-identical at its published classified subset of 1,518 recorded injuries, 787 Time Loss injuries and 17,575 days; it is not expanded into an unapproved residual band.
+
+**Illness boundary and metrics.** Illness is a separate Overall-only reporting cohort, not a subtraction from the injury cohort: 392 included illness rows in 2024-25 and 439 in 2025-26. The complete 2025-26 inventory contains 113 source labels, adjudicated into 50 illness groups, with 202 known-duration cases and 927 observed days. The illness tab reports count, incidence, burden and complete-case mean severity from released rows. Incidence is recorded illnesses per 1,000 released player-hours; burden is observed illness days per 1,000 released player-hours; severity is observed illness days divided by known-duration illness cases. Illness is not attributed to Match or Training. Reviewed presentation aliases remove source-only terminal qualifiers such as laterality and `N/A` without changing the governed identity groups or their counts.
+
+**Publication boundary.** The successor replaces diagnosis rows in `injury_profiles`, adds `diagnosis_families`, `illness_profiles` and `illness_summary`, adds the approved 2025-26 setting-specific severity and qualified preliminary monthly series, and advances the season-comparison diagnosis ranking to the governed family rows. All other predecessor dashboard fields remain exact. Source rows, lineage, approved releases and denominators are unchanged; no release promotion or Vercel action is part of this reporting-only successor.
+
+**Live verification.** Approved-target proof passed before every preflight, migration, checksum registration and post-write read. The core verifier reconciles 32 team payloads, two league payloads, 16 team comparisons and one league comparison. Dashboard reads return 1,662 injuries and 392 illnesses for 2024-25, and 1,545 injuries and 439 illnesses for 2025-26. The 2025-26 Training concussion family is 17 recorded injuries, 17 Time Loss injuries and 217 days lost; the live league comparison also returns 17. Real `web_reader` calls passed all four V7/V5 team and league paths before the final reader-boundary registration. The V7 readers now select from private one-time materialised aggregate payloads, avoiding nested private-relation and helper-function permissions. Only the approved V7 dashboards, V5 comparisons and top-level comparison builder are exposed; private snapshots, mappings and helpers remain inaccessible.
+
+---
+
 ## 2026-08-31: Two-season dashboard comparison reporting contract
 
 | Field | Value |

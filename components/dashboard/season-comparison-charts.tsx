@@ -1,6 +1,16 @@
 'use client';
 
-import { useId, type ReactNode, type SVGProps } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  XAxis,
+  YAxis,
+} from 'recharts';
 
 export type ComparisonSeasonPoint = {
   season: string;
@@ -20,8 +30,7 @@ export type ComparisonMonthlyPoint = {
 const OLD_COLOUR = 'hsl(var(--chart-3))';
 const CURRENT_COLOUR = 'hsl(var(--chart-1))';
 const GRID_COLOUR = 'hsl(var(--border))';
-const TEXT_COLOUR = 'hsl(var(--foreground))';
-const MUTED_COLOUR = 'hsl(var(--muted-foreground))';
+const AXIS_COLOUR = 'hsl(var(--muted-foreground))';
 const ACCENT_COLOUR = 'hsl(var(--chart-2))';
 
 function finite(value: number | null | undefined): value is number {
@@ -49,7 +58,7 @@ function domainFor(values: Array<number | null>, zeroFloor = false): [number, nu
 
 function SeasonLegend({ burden = false }: { burden?: boolean }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold" aria-label="Chart legend">
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-semibold" aria-label="Chart Legend">
       <span className="flex items-center gap-1.5 text-blue-300">
         <span className="h-2.5 w-2.5 rounded-full bg-blue-400" aria-hidden="true" />
         2024-25
@@ -61,173 +70,268 @@ function SeasonLegend({ burden = false }: { burden?: boolean }) {
       {burden && (
         <span className="flex items-center gap-1.5 text-muted-foreground">
           <span className="grid h-4 w-4 place-items-center rounded-full border border-muted-foreground/70" aria-hidden="true" />
-          Circle area: Burden
+          Circle Area: Burden
         </span>
       )}
     </div>
   );
 }
 
-function scale(value: number, low: number, high: number, start: number, size: number): number {
-  if (high === low) return start + size / 2;
-  return start + ((value - low) / (high - low)) * size;
+type InteractiveDatum = { interactionKey: string };
+
+function useInteractiveTooltip<T extends InteractiveDatum>(resetKey: string) {
+  const [preview, setPreview] = useState<T>();
+  const [pinned, setPinned] = useState<T>();
+  const dismiss = useCallback(() => {
+    setPreview(undefined);
+    setPinned(undefined);
+  }, []);
+
+  useEffect(() => dismiss(), [dismiss, resetKey]);
+  useEffect(() => {
+    if (!pinned) return;
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismiss();
+    };
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => document.removeEventListener('keydown', dismissOnEscape);
+  }, [dismiss, pinned]);
+
+  return {
+    active: pinned ?? preview,
+    pinned,
+    preview: (datum: T) => setPreview(datum),
+    clearPreview: () => setPreview(undefined),
+    pin: (datum: T) => setPinned(datum),
+    dismiss,
+  };
 }
 
-function SvgText({
-  children,
-  ...props
-}: SVGProps<SVGTextElement> & { children: string }) {
-  return <text {...props}>{children}</text>;
-}
+type ImpactPlotPoint = ComparisonSeasonPoint & {
+  interactionKey: string;
+  radius: number | null;
+  seasonIndex: number;
+};
 
-function ChartShell({
-  title,
-  description,
-  labelledBy,
-  viewBox,
-  className,
-  children,
-}: {
-  title: string;
-  description: string;
-  labelledBy: string;
-  viewBox: string;
-  className: string;
-  children: ReactNode;
+type ScatterShapeProps = {
+  cx?: number;
+  cy?: number;
+  payload?: ImpactPlotPoint;
+};
+
+function ImpactPoint({
+  cx,
+  cy,
+  payload,
+  activeKey,
+  pinnedKey,
+  tooltipId,
+  onPreview,
+  onClearPreview,
+  onPin,
+  onDismiss,
+}: ScatterShapeProps & {
+  activeKey?: string;
+  pinnedKey?: string;
+  tooltipId: string;
+  onPreview: (point: ImpactPlotPoint) => void;
+  onClearPreview: () => void;
+  onPin: (point: ImpactPlotPoint) => void;
+  onDismiss: () => void;
 }) {
+  if (cx === undefined || cy === undefined || !payload) return null;
+  const colour = payload.seasonIndex === 0 ? OLD_COLOUR : CURRENT_COLOUR;
+  const selected = pinnedKey === payload.interactionKey;
+  const active = activeKey === payload.interactionKey;
+  const exact = `${payload.season}: ${formatNumber(payload.timeLossInjuries, 0)} injuries, ${formatNumber(payload.exposureHours, 0)} player-hours, incidence ${formatNumber(payload.incidence)}, severity ${formatNumber(payload.severity)} days, burden ${formatNumber(payload.burden, 0)} days per 1,000 player-hours${payload.radius === null ? '. Bubble area unavailable because the approved burden value is missing.' : ''}`;
+  const accessibleLabel = `${exact}. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
+  const visualRadius = payload.radius ?? 7;
+
   return (
-    <svg
-      className={className}
-      viewBox={viewBox}
-      role="img"
-      aria-labelledby={`${labelledBy}-title ${labelledBy}-description`}
-      focusable="false"
-    >
-      <title id={`${labelledBy}-title`}>{title}</title>
-      <desc id={`${labelledBy}-description`}>{description}</desc>
-      {children}
-    </svg>
+    <g>
+      {active && (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={Math.max(visualRadius + 4, 15)}
+          fill="none"
+          stroke="hsl(var(--foreground))"
+          strokeWidth={selected ? 2 : 1.5}
+          pointerEvents="none"
+        />
+      )}
+      {payload.radius === null ? (
+        <rect
+          x={cx - 7}
+          y={cy - 7}
+          width={14}
+          height={14}
+          fill="transparent"
+          stroke={colour}
+          strokeWidth={2}
+          strokeDasharray="3 2"
+          pointerEvents="none"
+        />
+      ) : (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={visualRadius}
+          fill={colour}
+          fillOpacity={0.72}
+          stroke={colour}
+          strokeWidth={2}
+          pointerEvents="none"
+        />
+      )}
+      <text
+        x={cx}
+        y={cy - visualRadius - 9}
+        textAnchor="middle"
+        fill={colour}
+        fontSize={12}
+        fontWeight={700}
+        stroke="hsl(var(--card))"
+        strokeWidth={4}
+        paintOrder="stroke"
+        pointerEvents="none"
+      >
+        {payload.season}
+      </text>
+      <circle
+        cx={cx}
+        cy={cy}
+        r={Math.max(22, visualRadius)}
+        fill="transparent"
+        tabIndex={0}
+        role="button"
+        aria-label={accessibleLabel}
+        aria-describedby={tooltipId}
+        aria-pressed={selected}
+        data-impact-target={payload.interactionKey}
+        className="outline-none"
+        onMouseEnter={() => onPreview(payload)}
+        onMouseLeave={onClearPreview}
+        onFocus={() => onPreview(payload)}
+        onBlur={onClearPreview}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onPin(payload);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onDismiss();
+          }
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onPin(payload);
+          }
+        }}
+      />
+    </g>
+  );
+}
+
+function ImpactTooltip({ id, point, pinned }: { id: string; point?: ImpactPlotPoint; pinned: boolean }) {
+  if (!point) {
+    return <div id={id} role="tooltip" aria-live="polite" className="sr-only">Focus or hover over a season point to view its values.</div>;
+  }
+  return (
+    <div id={id} role="tooltip" aria-live="polite" className="rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="font-semibold text-foreground">{point.season}</p>
+        {pinned && <span className="text-xs text-muted-foreground">Pinned. Press Escape to dismiss.</span>}
+      </div>
+      <dl className="mt-2 grid gap-x-5 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-5">
+        <div><dt className="text-muted-foreground">Injuries</dt><dd className="font-semibold tabular-nums">{formatNumber(point.timeLossInjuries, 0)}</dd></div>
+        <div><dt className="text-muted-foreground">Player-Hours</dt><dd className="font-semibold tabular-nums">{formatNumber(point.exposureHours, 0)}</dd></div>
+        <div><dt className="text-muted-foreground">Incidence</dt><dd className="font-semibold tabular-nums">{formatNumber(point.incidence)} /1,000 h</dd></div>
+        <div><dt className="text-muted-foreground">Mean Severity</dt><dd className="font-semibold tabular-nums">{formatNumber(point.severity)} days</dd></div>
+        <div><dt className="text-muted-foreground">Burden</dt><dd className="font-semibold tabular-nums">{formatNumber(point.burden, 0)} days/1,000 h</dd></div>
+      </dl>
+    </div>
   );
 }
 
 export function ImpactBubbles({ seasons }: { seasons: ComparisonSeasonPoint[] }) {
   const id = useId().replace(/:/g, '');
-  const labelId = `impact-${id}`;
-  const width = 520;
-  const height = 350;
-  const margin = { top: 38, right: 22, bottom: 62, left: 62 };
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-  const [xLow, xHigh] = domainFor(seasons.map((row) => row.incidence), true);
-  const [yLow, yHigh] = domainFor(seasons.map((row) => row.severity));
-  const x = (value: number) => scale(value, xLow, xHigh, margin.left, innerWidth);
-  const y = (value: number) => margin.top + innerHeight - scale(value, yLow, yHigh, 0, innerHeight);
+  const tooltipId = `impact-tooltip-${id}`;
   const burdens = seasons.map((row) => row.burden).filter(finite);
   const maxBurden = Math.max(...burdens, 0);
-  const radius = (value: number | null) => {
-    if (!finite(value)) return null;
-    if (maxBurden <= 0) return 0;
-    return Math.sqrt(Math.max(value, 0) / maxBurden) * 30;
-  };
-  const ticks = 5;
-  const points = seasons.map((row) => ({
-    ...row,
-    plottable: finite(row.incidence) && finite(row.severity),
-    x: finite(row.incidence) ? x(row.incidence) : margin.left + innerWidth / 2,
-    y: finite(row.severity) ? y(row.severity) : margin.top + innerHeight / 2,
-    radius: radius(row.burden),
-  }));
-  const first = points[0];
-  const second = points[1];
-  const pointsDiffer = first && second
-    && finite(first.incidence) && finite(second.incidence)
-    && finite(first.severity) && finite(second.severity)
-    && (first.x !== second.x || first.y !== second.y);
-  const angle = pointsDiffer && first && second
-    ? Math.atan2(second.y - first.y, second.x - first.x)
-    : 0;
+  const data = useMemo<ImpactPlotPoint[]>(() => seasons
+    .filter((row) => finite(row.incidence) && finite(row.severity))
+    .map((row, seasonIndex) => ({
+      ...row,
+      interactionKey: row.season,
+      seasonIndex,
+      radius: finite(row.burden) && maxBurden > 0
+        ? Math.sqrt(Math.max(row.burden, 0) / maxBurden) * 32
+        : null,
+    })), [maxBurden, seasons]);
+  const resetKey = data.map((row) => `${row.interactionKey}-${row.incidence}-${row.severity}-${row.burden}`).join('|');
+  const interaction = useInteractiveTooltip<ImpactPlotPoint>(resetKey);
+  const xDomain = domainFor(data.map((row) => row.incidence), true);
+  const yDomain = domainFor(data.map((row) => row.severity), true);
+  const renderPoint = useCallback((shapeProps: ScatterShapeProps) => (
+    <ImpactPoint
+      {...shapeProps}
+      activeKey={interaction.active?.interactionKey}
+      pinnedKey={interaction.pinned?.interactionKey}
+      tooltipId={tooltipId}
+      onPreview={interaction.preview}
+      onClearPreview={interaction.clearPreview}
+      onPin={interaction.pin}
+      onDismiss={interaction.dismiss}
+    />
+  ), [interaction, tooltipId]);
 
   return (
-    <div className="space-y-3">
-      <ChartShell
-        title="Injury Impact By Season"
-        description="The horizontal axis shows time-loss injuries per 1,000 player-hours. The vertical axis shows mean days lost per time-loss injury. Circle area represents burden. A dashed arrow shows the sequence from 2024-25 to 2025-26, not causality."
-        labelledBy={labelId}
-        viewBox={`0 0 ${width} ${height}`}
-        className="block h-[300px] w-full sm:h-[350px]"
-      >
-        <defs>
-          <marker id={`${labelId}-arrow`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
-            <path d="M 0 0 L 8 4 L 0 8 z" fill={ACCENT_COLOUR} />
-          </marker>
-        </defs>
-        <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} fill="transparent" stroke={GRID_COLOUR} />
-        {Array.from({ length: ticks }, (_, index) => {
-          const ratio = index / (ticks - 1);
-          const xPosition = margin.left + ratio * innerWidth;
-          const yPosition = margin.top + innerHeight - ratio * innerHeight;
-          return (
-            <g key={index}>
-              <line x1={xPosition} y1={margin.top} x2={xPosition} y2={margin.top + innerHeight} stroke={GRID_COLOUR} strokeWidth="1" />
-              <line x1={margin.left} y1={yPosition} x2={margin.left + innerWidth} y2={yPosition} stroke={GRID_COLOUR} strokeWidth="1" />
-              <SvgText x={xPosition} y={margin.top + innerHeight + 20} textAnchor="middle" fill={MUTED_COLOUR} fontSize="10">{formatNumber(xLow + ratio * (xHigh - xLow))}</SvgText>
-              <SvgText x={margin.left - 9} y={yPosition + 4} textAnchor="end" fill={MUTED_COLOUR} fontSize="10">{formatNumber(yLow + ratio * (yHigh - yLow))}</SvgText>
-            </g>
-          );
-        })}
-        <SvgText x={margin.left + innerWidth / 2} y={height - 11} textAnchor="middle" fill={TEXT_COLOUR} fontSize="10" fontWeight="600">TL injuries per 1,000 player-hours</SvgText>
-        <SvgText x="15" y={margin.top + innerHeight / 2} textAnchor="middle" transform={`rotate(-90 15 ${margin.top + innerHeight / 2})`} fill={TEXT_COLOUR} fontSize="10" fontWeight="600">Mean days lost per TL injury</SvgText>
-        {pointsDiffer && first && second && (
-          <line
-            x1={first.x + Math.cos(angle) * (first.radius ?? 0)}
-            y1={first.y + Math.sin(angle) * (first.radius ?? 0)}
-            x2={second.x - Math.cos(angle) * ((second.radius ?? 0) + 7)}
-            y2={second.y - Math.sin(angle) * ((second.radius ?? 0) + 7)}
-            stroke={ACCENT_COLOUR}
-            strokeWidth="2"
-            strokeDasharray="5 4"
-            markerEnd={`url(#${labelId}-arrow)`}
-            aria-hidden="true"
-          />
-        )}
-        {points.map((point, index) => {
-          if (!point.plottable) return null;
-          const labelY = index === 0
-            ? Math.max(margin.top + 14, point.y - (point.radius ?? 0) - 8)
-            : Math.min(margin.top + innerHeight - 4, point.y + (point.radius ?? 0) + 16);
-          const exact = `${point.season}: ${formatNumber(point.timeLossInjuries, 0)} time-loss injuries, ${formatNumber(point.exposureHours, 0)} player-hours, incidence ${formatNumber(point.incidence)}, severity ${formatNumber(point.severity)} days, burden ${formatNumber(point.burden, 0)} days per 1,000 player-hours${point.radius === null ? '. Bubble area unavailable because the approved burden value is missing.' : ''}`;
-          return (
-            <g key={point.season} aria-label={exact} tabIndex={0}>
-              <title>{exact}</title>
-              {point.radius !== null ? (
-                <circle
-                  cx={point.x}
-                  cy={point.y}
-                  r={point.radius}
-                  fill={index === 0 ? OLD_COLOUR : CURRENT_COLOUR}
-                  fillOpacity="0.7"
-                  stroke={index === 0 ? OLD_COLOUR : CURRENT_COLOUR}
-                  strokeWidth="2"
-                />
-              ) : (
-                <rect
-                  x={point.x - 6}
-                  y={point.y - 6}
-                  width="12"
-                  height="12"
-                  fill="transparent"
-                  stroke={index === 0 ? OLD_COLOUR : CURRENT_COLOUR}
-                  strokeWidth="2"
-                  strokeDasharray="3 2"
-                />
-              )}
-              <SvgText x={point.x} y={labelY} textAnchor="middle" fill={index === 0 ? OLD_COLOUR : CURRENT_COLOUR} fontSize="12" fontWeight="700" stroke="hsl(var(--card))" strokeWidth="4" paintOrder="stroke">{point.season}</SvgText>
-            </g>
-          );
-        })}
-      </ChartShell>
+    <section className="min-w-0 space-y-3" aria-label="Injury Impact By Season. The horizontal axis shows injury incidence. The vertical axis shows mean severity. Circle area represents burden. Focus a point to preview it, then press Enter or Space to pin it.">
+      <div className="h-[390px] w-full min-w-0 sm:h-[460px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
+        <ResponsiveContainer width="100%" height="100%">
+          <ScatterChart accessibilityLayer margin={{ top: 54, right: 38, bottom: 54, left: 32 }}>
+            <defs>
+              <marker id={`impact-arrow-${id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto">
+                <path d="M 0 0 L 8 4 L 0 8 z" fill={ACCENT_COLOUR} />
+              </marker>
+            </defs>
+            <CartesianGrid stroke={GRID_COLOUR} strokeDasharray="3 5" />
+            <XAxis
+              type="number"
+              dataKey="incidence"
+              domain={xDomain}
+              tick={{ fill: AXIS_COLOUR, fontSize: 11 }}
+              tickFormatter={(value: number) => formatNumber(value)}
+              tickLine={false}
+              axisLine={{ stroke: AXIS_COLOUR }}
+              label={{ value: 'Injury Incidence, Injuries /1,000 h', position: 'bottom', offset: 18, fill: AXIS_COLOUR, fontSize: 12 }}
+            />
+            <YAxis
+              type="number"
+              dataKey="severity"
+              domain={yDomain}
+              width={72}
+              tick={{ fill: AXIS_COLOUR, fontSize: 11 }}
+              tickFormatter={(value: number) => formatNumber(value)}
+              tickLine={false}
+              axisLine={{ stroke: AXIS_COLOUR }}
+              label={{ value: 'Mean Severity, Days', angle: -90, position: 'insideLeft', offset: -6, fill: AXIS_COLOUR, fontSize: 12, style: { textAnchor: 'middle' } }}
+            />
+            <Scatter
+              data={data}
+              isAnimationActive={false}
+              line={{ stroke: ACCENT_COLOUR, strokeWidth: 2, strokeDasharray: '5 4', markerEnd: `url(#impact-arrow-${id})` }}
+              lineType="joint"
+              shape={renderPoint}
+            />
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+      <ImpactTooltip id={tooltipId} point={interaction.active} pinned={Boolean(interaction.pinned)} />
       <SeasonLegend burden />
-    </div>
+      <p className="sr-only">A dashed arrow shows the sequence from 2024-25 to 2025-26, not causality.</p>
+    </section>
   );
 }
 
@@ -238,70 +342,197 @@ function monthLabel(month: string): string {
   return DISPLAY_MONTHS.find((item) => item.toLowerCase() === lower || item.toLowerCase().startsWith(lower.slice(0, 3))) ?? month;
 }
 
-export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) {
-  const id = useId().replace(/:/g, '');
-  const labelId = `monthly-${id}`;
-  const width = 520;
-  const height = 310;
-  const margin = { top: 20, right: 16, bottom: 52, left: 46 };
-  const innerWidth = width - margin.left - margin.right;
-  const innerHeight = height - margin.top - margin.bottom;
-  const values = monthly.flatMap((row) => [row.prior, row.current]).filter(finite);
-  const yMax = Math.ceil((Math.max(...values, 0) * 1.15) / 5) * 5 || 5;
-  const y = (value: number) => margin.top + innerHeight - (value / yMax) * innerHeight;
-  const groupWidth = innerWidth / Math.max(monthly.length, 1);
-  const barWidth = Math.min(15, groupWidth * 0.3);
-  const exactMonthly = monthly.map((row) => `${monthLabel(row.month)}: ${formatNumber(row.prior, 0)} time-loss injuries in 2024-25; ${formatNumber(row.current, 0)} in 2025-26`).join('. ');
+type MonthlyPlotPoint = ComparisonMonthlyPoint & {
+  priorPlot: number;
+  currentPlot: number;
+};
+
+type MonthlySelection = InteractiveDatum & {
+  month: string;
+  season: string;
+  value: number | null;
+  colour: string;
+};
+
+type BarShapeProps = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  payload?: MonthlyPlotPoint;
+};
+
+function MonthlyBar({
+  x,
+  y,
+  width,
+  height,
+  payload,
+  series,
+  season,
+  colour,
+  activeKey,
+  pinnedKey,
+  tooltipId,
+  onPreview,
+  onClearPreview,
+  onPin,
+  onDismiss,
+}: BarShapeProps & {
+  series: 'prior' | 'current';
+  season: string;
+  colour: string;
+  activeKey?: string;
+  pinnedKey?: string;
+  tooltipId: string;
+  onPreview: (selection: MonthlySelection) => void;
+  onClearPreview: () => void;
+  onPin: (selection: MonthlySelection) => void;
+  onDismiss: () => void;
+}) {
+  if (x === undefined || y === undefined || width === undefined || height === undefined || !payload) return null;
+  const interactionKey = `${payload.month}-${series}`;
+  const value = payload[series];
+  const selection = { interactionKey, month: monthLabel(payload.month), season, value, colour };
+  const selected = pinnedKey === interactionKey;
+  const active = activeKey === interactionKey;
+  const targetHeight = Math.max(44, height);
+  const targetWidth = Math.max(44, width);
+  const accessibleLabel = `${selection.month} ${season}: ${formatNumber(value, 0)} injuries. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
 
   return (
-    <div className="space-y-3">
-      <ChartShell
-        title="Monthly Time-Loss Injury Counts By Season"
-        description={`Paired vertical bars compare September through June. ${exactMonthly}`}
-        labelledBy={labelId}
-        viewBox={`0 0 ${width} ${height}`}
-        className="block h-[280px] w-full sm:h-[310px]"
-      >
-      <rect x={margin.left} y={margin.top} width={innerWidth} height={innerHeight} fill="transparent" stroke={GRID_COLOUR} />
-      {Array.from({ length: 5 }, (_, index) => {
-        const value = (yMax * index) / 4;
-        const yPosition = y(value);
-        return (
-          <g key={index}>
-            <line x1={margin.left} y1={yPosition} x2={margin.left + innerWidth} y2={yPosition} stroke={GRID_COLOUR} strokeWidth="1" />
-            <SvgText x={margin.left - 8} y={yPosition + 4} textAnchor="end" fill={MUTED_COLOUR} fontSize="10">{formatNumber(value, 0)}</SvgText>
-          </g>
-        );
-      })}
-      {monthly.map((row, index) => {
-        const centre = margin.left + groupWidth * (index + 0.5);
-        const valuesForMonth: Array<[number | null, string, string]> = [
-          [row.prior, '2024-25', OLD_COLOUR],
-          [row.current, '2025-26', CURRENT_COLOUR],
-        ];
-        return (
-          <g key={`${row.month}-${index}`}>
-            <SvgText x={centre} y={margin.top + innerHeight + 19} textAnchor="middle" fill={MUTED_COLOUR} fontSize="10">{monthLabel(row.month)}</SvgText>
-            {valuesForMonth.map(([value, season, colour], seriesIndex) => (
-              <rect
-                key={season}
-                x={centre + (seriesIndex === 0 ? -barWidth - 1.5 : 1.5)}
-                y={finite(value) ? y(value) : y(0)}
-                width={barWidth}
-                height={finite(value) ? Math.max(0, margin.top + innerHeight - y(value)) : 0}
-                rx="2"
-                fill={colour}
-                aria-label={`${monthLabel(row.month)} ${season}: ${formatNumber(value, 0)} time-loss injuries`}
-              />
-            ))}
-          </g>
-        );
-      })}
-      <SvgText x={margin.left + innerWidth / 2} y={height - 10} textAnchor="middle" fill={TEXT_COLOUR} fontSize="10" fontWeight="600">Month</SvgText>
-      <SvgText x="14" y={margin.top + innerHeight / 2} textAnchor="middle" transform={`rotate(-90 14 ${margin.top + innerHeight / 2})`} fill={TEXT_COLOUR} fontSize="10" fontWeight="600">Time-loss injury count</SvgText>
-      </ChartShell>
-      <SeasonLegend />
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={Math.max(height, value === 0 ? 2 : 0)}
+        rx={2}
+        fill={colour}
+        stroke={active ? 'hsl(var(--foreground))' : colour}
+        strokeWidth={active ? 2 : 0}
+        pointerEvents="none"
+      />
+      <rect
+        x={x + width / 2 - targetWidth / 2}
+        y={y + height - targetHeight}
+        width={targetWidth}
+        height={targetHeight}
+        fill="transparent"
+        tabIndex={0}
+        role="button"
+        aria-label={accessibleLabel}
+        aria-describedby={tooltipId}
+        aria-pressed={selected}
+        data-monthly-target={interactionKey}
+        className="outline-none"
+        onMouseEnter={() => onPreview(selection)}
+        onMouseLeave={onClearPreview}
+        onFocus={() => onPreview(selection)}
+        onBlur={onClearPreview}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onPin(selection);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            onDismiss();
+          }
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onPin(selection);
+          }
+        }}
+      />
+    </g>
+  );
+}
+
+function MonthlyTooltip({ id, selection, pinned }: { id: string; selection?: MonthlySelection; pinned: boolean }) {
+  if (!selection) {
+    return <div id={id} role="tooltip" aria-live="polite" className="sr-only">Focus or hover over a monthly bar to view its value.</div>;
+  }
+  return (
+    <div id={id} role="tooltip" aria-live="polite" className="rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-semibold text-foreground">{selection.month} · {selection.season}</p>
+        {pinned && <span className="text-xs text-muted-foreground">Pinned. Press Escape to dismiss.</span>}
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Injuries: <span className="font-semibold tabular-nums text-foreground">{formatNumber(selection.value, 0)}</span>
+      </p>
     </div>
+  );
+}
+
+export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) {
+  const id = useId().replace(/:/g, '');
+  const tooltipId = `monthly-tooltip-${id}`;
+  const data = useMemo<MonthlyPlotPoint[]>(() => monthly.map((row) => ({
+    ...row,
+    priorPlot: finite(row.prior) ? row.prior : 0,
+    currentPlot: finite(row.current) ? row.current : 0,
+  })), [monthly]);
+  const values = monthly.flatMap((row) => [row.prior, row.current]).filter(finite);
+  const yMax = Math.ceil((Math.max(...values, 0) * 1.15) / 5) * 5 || 5;
+  const resetKey = data.map((row) => `${row.month}-${row.prior}-${row.current}`).join('|');
+  const interaction = useInteractiveTooltip<MonthlySelection>(resetKey);
+  const commonShapeProps = {
+    activeKey: interaction.active?.interactionKey,
+    pinnedKey: interaction.pinned?.interactionKey,
+    tooltipId,
+    onPreview: interaction.preview,
+    onClearPreview: interaction.clearPreview,
+    onPin: interaction.pin,
+    onDismiss: interaction.dismiss,
+  };
+
+  return (
+    <section className="min-w-0 space-y-3" aria-label="Injuries By Month. Paired bars compare injuries from September through June. Focus a bar to preview it, then press Enter or Space to pin it.">
+      <div className="h-[350px] w-full min-w-0 sm:h-[420px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart accessibilityLayer data={data} margin={{ top: 24, right: 24, bottom: 48, left: 20 }} barGap={4} barCategoryGap="24%">
+            <CartesianGrid stroke={GRID_COLOUR} strokeDasharray="3 5" vertical={false} />
+            <XAxis
+              dataKey="month"
+              tickFormatter={monthLabel}
+              tick={{ fill: AXIS_COLOUR, fontSize: 11 }}
+              tickLine={false}
+              axisLine={{ stroke: AXIS_COLOUR }}
+              label={{ value: 'Month', position: 'bottom', offset: 18, fill: AXIS_COLOUR, fontSize: 12 }}
+            />
+            <YAxis
+              domain={[0, yMax]}
+              tick={{ fill: AXIS_COLOUR, fontSize: 11 }}
+              tickFormatter={(value: number) => formatNumber(value, 0)}
+              tickLine={false}
+              axisLine={{ stroke: AXIS_COLOUR }}
+              width={58}
+              label={{ value: 'Injury Count', angle: -90, position: 'insideLeft', offset: -2, fill: AXIS_COLOUR, fontSize: 12, style: { textAnchor: 'middle' } }}
+            />
+            <Bar
+              dataKey="priorPlot"
+              name="2024-25"
+              fill={OLD_COLOUR}
+              isAnimationActive={false}
+              maxBarSize={30}
+              shape={(shapeProps: unknown) => <MonthlyBar {...shapeProps as BarShapeProps} {...commonShapeProps} series="prior" season="2024-25" colour={OLD_COLOUR} />}
+            />
+            <Bar
+              dataKey="currentPlot"
+              name="2025-26"
+              fill={CURRENT_COLOUR}
+              isAnimationActive={false}
+              maxBarSize={30}
+              shape={(shapeProps: unknown) => <MonthlyBar {...shapeProps as BarShapeProps} {...commonShapeProps} series="current" season="2025-26" colour={CURRENT_COLOUR} />}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <MonthlyTooltip id={tooltipId} selection={interaction.active} pinned={Boolean(interaction.pinned)} />
+      <SeasonLegend />
+    </section>
   );
 }
 

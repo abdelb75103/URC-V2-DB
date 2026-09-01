@@ -136,6 +136,112 @@ function validDashboard(scope = "team") {
   };
 }
 
+function diagnosisFamilies() {
+  return [{
+    code: "concussion",
+    label: "Concussion",
+    setting: "training",
+    recorded_injuries: 17,
+    time_loss_injuries: 17,
+    known_duration_time_loss_injuries: 17,
+    days_lost: 217,
+    exposure_hours: 1_000,
+    incidence_per_1000h: 17,
+    burden_per_1000h: 217,
+    mean_severity_days: 12.8,
+    subtypes: [{
+      code: "dx_concussion",
+      label: "Concussion",
+      recorded_injuries: 12,
+      time_loss_injuries: 12,
+      known_duration_time_loss_injuries: 12,
+      days_lost: 140,
+    }],
+  }];
+}
+
+function illnessProfiles() {
+  return [{
+    code: "influenza",
+    label: "Influenza",
+    setting: "all",
+    recorded_illnesses: 6,
+    known_duration_illnesses: 5,
+    days_lost: 18,
+    exposure_hours: 1_000,
+    incidence_per_1000h: 6,
+    burden_per_1000h: 18,
+    mean_severity_days: 3.6,
+  }];
+}
+
+function illnessSummary() {
+  return {
+    setting: "all",
+    recorded_illnesses: 6,
+    known_duration_illnesses: 5,
+    days_lost: 18,
+    exposure_hours: 1_000,
+    incidence_per_1000h: 6,
+    burden_per_1000h: 18,
+    mean_severity_days: 3.6,
+    qualification: "Overall illness metrics use approved included illness rows and released total player-hours. Illness is not attributed to Match or Training.",
+  };
+}
+
+test("V7 diagnosis families preserve the released training concussion family", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const row = validDashboard();
+  row.diagnosis_families = diagnosisFamilies();
+  row.illness_profiles = illnessProfiles();
+  row.illness_summary = illnessSummary();
+  row.injury_profiles[1].known_duration_time_loss_injuries = 1;
+  assert.equal(
+    parseDashboardReaderRow(row, "2025-26", "team").injury_profiles[1]
+      .known_duration_time_loss_injuries,
+    1,
+  );
+  assert.deepEqual(
+    parseDashboardReaderRow(row, "2025-26", "team").diagnosis_families?.map(({ label, time_loss_injuries, days_lost }) => [label, time_loss_injuries, days_lost]),
+    [["Concussion", 17, 217]],
+  );
+
+  const missingIllnessProfiles = structuredClone(row);
+  delete missingIllnessProfiles.illness_profiles;
+  assert.throws(() => parseDashboardReaderRow(missingIllnessProfiles, "2025-26", "team"));
+
+  const missingIllnessSummary = structuredClone(row);
+  delete missingIllnessSummary.illness_summary;
+  assert.throws(() => parseDashboardReaderRow(missingIllnessSummary, "2025-26", "team"));
+
+  const unexpectedSubtype = structuredClone(row);
+  unexpectedSubtype.diagnosis_families[0].subtypes[0].unexpected = true;
+  assert.throws(() => parseDashboardReaderRow(unexpectedSubtype, "2025-26", "team"));
+
+  const invalidDuration = structuredClone(row);
+  invalidDuration.diagnosis_families[0].known_duration_time_loss_injuries = 18;
+  assert.throws(() => parseDashboardReaderRow(invalidDuration, "2025-26", "team"), /Known-duration/);
+});
+
+test("V7 illness profiles preserve released values and reject invalid duration evidence", async () => {
+  const { illnessProfileDisplayLabel, parseDashboardReaderRow } = await loadReportingModule();
+  const row = validDashboard();
+  row.diagnosis_families = diagnosisFamilies();
+  row.illness_profiles = illnessProfiles();
+  row.illness_summary = illnessSummary();
+  assert.deepEqual(
+    parseDashboardReaderRow(row, "2025-26", "team").illness_profiles?.map(({ label, recorded_illnesses, days_lost }) => [label, recorded_illnesses, days_lost]),
+    [["Influenza", 6, 18]],
+  );
+  assert.equal(parseDashboardReaderRow(row, "2025-26", "team").illness_summary?.burden_per_1000h, 18);
+  assert.equal(illnessProfileDisplayLabel("Vasovagal Syncope [N/A]"), "Vasovagal syncope");
+  assert.equal(illnessProfileDisplayLabel("ENT Illness including dental (excl sinusitis - see MPAL) [Right]"), "ENT or dental illness");
+  assert.equal(illnessProfileDisplayLabel("Folliculitis"), "Folliculitis");
+  const invalidDuration = structuredClone(row);
+  invalidDuration.illness_profiles[0].known_duration_illnesses = 7;
+  assert.throws(() => parseDashboardReaderRow(invalidDuration, "2025-26", "team"), /Known-duration illnesses/);
+});
+
 test("2025-26 reader rejects unexpected fields at every public nesting boundary", async () => {
   const { parseDashboardReaderRow } = await loadReportingModule();
   assert.equal(parseDashboardReaderRow(validDashboard(), "2025-26", "team").season, "2025-26");
@@ -166,6 +272,48 @@ test("2025-26 reader rejects unexpected fields at every public nesting boundary"
     mutate(row);
     assert.throws(() => parseDashboardReaderRow(row, "2025-26", "team"), /unrecognized_keys/i);
   }
+});
+
+test("2025-26 reader accepts only a qualified contributor-aligned league preliminary series", async () => {
+  const { parseDashboardReaderRow } = await loadReportingModule();
+  const months = [
+    "2025-09", "2025-10", "2025-11", "2025-12", "2026-01",
+    "2026-02", "2026-03", "2026-04", "2026-05", "2026-06",
+  ];
+  const qualification = "Preliminary contributor-aligned rate. Includes only teams with positive source-backed exposure in this month; not the official 16-team rate.";
+  const row = validDashboard("league");
+  Object.assign(row.coverage, {
+    source_backed_team_count: 14,
+    temporary_estimate_team_count: 2,
+    distance_contributor_count: 14,
+    pending_source_teams: ["Benetton", "Edinburgh"],
+  });
+  row.monthly = months.map((month) => ({
+    month, exposure_hours: 100, distance_km: 10,
+    exposure_contributor_count: 14, distance_contributor_count: 14,
+    recorded_injuries: 2, time_loss_injuries: 1, days_lost: 3,
+    overall_incidence_per_1000h: null,
+    incidence_per_1000h: null, burden_per_1000h: null,
+  }));
+  row.preliminary_monthly_rates = months.map((month) => ({
+    month, contributor_count: 14, exposure_hours: 100,
+    time_loss_injuries: 1, days_lost: 3,
+    incidence_per_1000h: 10, burden_per_1000h: 30,
+    qualification,
+  }));
+
+  assert.equal(parseDashboardReaderRow(row, "2025-26", "league").season, "2025-26");
+
+  const tooManyContributors = structuredClone(row);
+  tooManyContributors.preliminary_monthly_rates[0].contributor_count = 15;
+  assert.throws(
+    () => parseDashboardReaderRow(tooManyContributors, "2025-26", "league"),
+    /Preliminary contributors cannot exceed source-backed teams/,
+  );
+
+  const team = validDashboard("team");
+  team.preliminary_monthly_rates = row.preliminary_monthly_rates;
+  assert.throws(() => parseDashboardReaderRow(team, "2025-26", "team"));
 });
 
 test("2025-26 reader preserves unavailable coverage and monthly exposure as null", async () => {
@@ -309,8 +457,8 @@ test("exposure UI does not add preview figures to unavailable coverage", async (
   assert.doesNotMatch(dashboard, /\(row\.distance_km \?\? 0\) \+ \(preview\?\.additional_distance_km \?\? 0\)/);
   assert.match(dashboard, /const totalHours = addPreviewToKnownValue\(\s*coverage\.hours,/);
   assert.match(dashboard, /const totalDistance = addPreviewToKnownValue\(\s*coverage\.distance_km,/);
-  assert.match(dashboard, /hoursLabel[\s\S]*?'Estimated total hours'/);
-  assert.match(dashboard, /distanceLabel[\s\S]*?'Reported distance'/);
+  assert.match(dashboard, /hoursLabel[\s\S]*?'Estimated Total Hours'/);
+  assert.match(dashboard, /distanceLabel[\s\S]*?'Reported Distance'/);
   assert.match(dashboard, /Awaiting source-backed exposure from/);
 });
 

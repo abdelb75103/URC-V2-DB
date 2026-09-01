@@ -67,6 +67,17 @@ export type SeveritySettingRow = SeverityRow & {
   setting: 'all' | 'match' | 'training';
 };
 
+export type PreliminaryMonthlyRateRow = {
+  month: string;
+  contributor_count: number;
+  exposure_hours: number;
+  time_loss_injuries: number;
+  days_lost: number;
+  incidence_per_1000h: number;
+  burden_per_1000h: number;
+  qualification: string;
+};
+
 export type SettingMetricRow = {
   setting: 'all' | 'match' | 'training' | 'unknown';
   label: string;
@@ -89,12 +100,73 @@ export type InjuryProfileRow = {
   setting: 'all' | 'match' | 'training' | 'unknown';
   recorded_injuries?: number;
   time_loss_injuries: number;
+  known_duration_time_loss_injuries?: number;
   days_lost: number;
   exposure_hours: number | null;
   incidence_per_1000h: number | null;
   burden_per_1000h: number | null;
   mean_severity_days: number | null;
 };
+
+export type DiagnosisFamilySubtype = {
+  code: string;
+  label: string;
+  recorded_injuries: number;
+  time_loss_injuries: number;
+  known_duration_time_loss_injuries: number;
+  days_lost: number;
+};
+
+export type DiagnosisFamilyRow = {
+  code: string;
+  label: string;
+  setting: InjuryProfileRow['setting'];
+  recorded_injuries: number;
+  time_loss_injuries: number;
+  known_duration_time_loss_injuries: number;
+  days_lost: number;
+  exposure_hours: number | null;
+  incidence_per_1000h: number | null;
+  burden_per_1000h: number | null;
+  mean_severity_days: number | null;
+  subtypes: DiagnosisFamilySubtype[];
+};
+
+export type IllnessProfileRow = {
+  code: string;
+  label: string;
+  setting: InjuryProfileRow['setting'];
+  recorded_illnesses: number;
+  known_duration_illnesses: number;
+  days_lost: number;
+  exposure_hours: number | null;
+  incidence_per_1000h: number | null;
+  burden_per_1000h: number | null;
+  mean_severity_days: number | null;
+};
+
+export type IllnessSummary = Omit<IllnessProfileRow, 'code' | 'label'> & {
+  setting: 'all';
+  qualification: 'Overall illness metrics use approved included illness rows and released total player-hours. Illness is not attributed to Match or Training.';
+};
+
+/** The reporting view adjudicates families. Clients only reshape its released rows. */
+export function diagnosisFamilyProfiles(rows: readonly DiagnosisFamilyRow[] | null | undefined): InjuryProfileRow[] {
+  return (rows ?? []).map((row) => ({
+    dimension: 'diagnosis',
+    code: row.code,
+    label: row.label,
+    setting: row.setting,
+    recorded_injuries: row.recorded_injuries,
+    time_loss_injuries: row.time_loss_injuries,
+    known_duration_time_loss_injuries: row.known_duration_time_loss_injuries,
+    days_lost: row.days_lost,
+    exposure_hours: row.exposure_hours,
+    incidence_per_1000h: row.incidence_per_1000h,
+    burden_per_1000h: row.burden_per_1000h,
+    mean_severity_days: row.mean_severity_days,
+  }));
+}
 
 export type InjuryTypeFamilyRow = Omit<InjuryProfileRow, 'dimension'> & {
   dimension: 'injury_type_family';
@@ -247,8 +319,16 @@ export type DashboardData = {
   body_locations: AnalyticsRow[];
   injury_types: AnalyticsRow[];
   injury_profiles: InjuryProfileRow[];
+  /** Optional until every historical public payload has the V7 projection. */
+  diagnosis_families?: DiagnosisFamilyRow[] | null;
+  /** Optional until every historical public payload has the V7 projection. */
+  illness_profiles?: IllnessProfileRow[] | null;
+  /** Optional until every historical public payload has the V7 projection. */
+  illness_summary?: IllnessSummary | null;
   injury_type_families: InjuryTypeFamilyRow[];
   severity_distribution: SeverityRow[];
+  /** League-only contributor-aligned rates. Null when no safe preliminary series exists. */
+  preliminary_monthly_rates?: PreliminaryMonthlyRateRow[] | null;
   // Optional: releases published before the 2026-07-26 contact-ring change do
   // not carry this key.
   contact_distribution?: DistributionRow[];
@@ -330,7 +410,9 @@ export type SeasonComparisonExposureQualification = {
 };
 
 export type SeasonComparisonData = {
-  rule_version: "season_comparison_reporting_2026_08_31_v4";
+  rule_version:
+    | "season_comparison_reporting_2026_08_31_v4"
+    | "season_comparison_reporting_2026_09_01_v5";
   scope: "team" | "league";
   previous_season: "2024-25";
   current_season: "2025-26";

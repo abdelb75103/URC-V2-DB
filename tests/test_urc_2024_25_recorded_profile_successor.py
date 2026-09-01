@@ -60,7 +60,7 @@ class RecordedProfileSuccessorTests(unittest.TestCase):
         self.assertIn("displayIndex: index + 1", self.charts)
         tooltip = self.charts.split("function ImpactTooltip", 1)[1].split("function formatAxisTick", 1)[0]
         self.assertNotIn("Recorded injuries", tooltip)
-        self.assertIn("Total days lost", self.charts)
+        self.assertIn("Total Days Lost", self.charts)
         self.assertIn("recharts-wrapper:focus", self.charts)
 
     def test_release_requires_the_successor(self):

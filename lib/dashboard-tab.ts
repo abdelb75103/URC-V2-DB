@@ -2,6 +2,7 @@ export const DASHBOARD_TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'comparison', label: 'Team Comparison' },
   { value: 'common', label: 'Common Injuries' },
+  { value: 'illnesses', label: 'Illnesses' },
   { value: 'location', label: 'Injury Location' },
   { value: 'types', label: 'Injury Types' },
   { value: 'exposure', label: 'Exposure' },

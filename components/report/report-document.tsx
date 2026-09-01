@@ -121,6 +121,16 @@ function Caption({ children }: { children: ReactNode }) { return <Text style={st
 
 function metricColour(key: string, index: number): string { if (/burden/i.test(key)) return C.coral; if (/incidence/i.test(key)) return /overall/i.test(key) ? C.cyan : C.amber; if (/severity/i.test(key)) return C.purple; if (/exposure|hour/i.test(key)) return C.mint; if (/time.loss/i.test(key)) return C.amber; return PALETTE[index % PALETTE.length]; }
 function metricSeries(metric: ReportMetric, rows: readonly ReportPatternRow[]): Array<number | null> { if (/overall.incidence/i.test(metric.key)) return rows.map((r) => r.overallIncidencePer1000h); if (/incidence/i.test(metric.key)) return rows.map((r) => r.incidencePer1000h); if (/burden/i.test(metric.key)) return rows.map((r) => r.burdenPer1000h); if (/time.loss/i.test(metric.key)) return rows.map((r) => r.timeLossInjuries); if (/recorded/i.test(metric.key)) return rows.map((r) => r.recordedInjuries); return rows.map(() => null); }
+function metricLabel(metric: ReportMetric): string {
+  if (/recorded/i.test(metric.key)) return "Overall Injuries";
+  if (/time.*loss.*injur/i.test(metric.key)) return "Injuries";
+  if (/overall.*incidence/i.test(metric.key)) return "Overall Incidence";
+  if (/incidence/i.test(metric.key)) return "Incidence";
+  if (/mean.*severity|severity.*mean/i.test(metric.key)) return "Mean Severity";
+  if (/median.*severity|severity.*median/i.test(metric.key)) return "Median Severity";
+  if (/burden/i.test(metric.key)) return "Burden";
+  return metric.label;
+}
 function Sparkline({ values, colour }: { values: Array<number | null>; colour: string }) {
   const data = values.map((value, index) => ({ value, index })).filter((p): p is { value: number; index: number } => typeof p.value === "number" && Number.isFinite(p.value));
   if (data.length < 2) return null;
@@ -140,7 +150,7 @@ function MetricCards({ model, dark = false, limit = 7, trend = true }: { model: 
     const plotted = series.filter((value) => typeof value === "number" && Number.isFinite(value)).length;
     return <View key={metric.key} style={[styles.metricCell, { width: metrics.length > 4 ? "25%" : `${100 / metrics.length}%` }, metrics.length === 7 && index === 4 ? { marginLeft: "12.5%" } : {}]}>
       <View style={[styles.metricCard, dark ? { backgroundColor: C.navy2, borderColor: "#294565" } : {}, trend ? { minHeight: 68 } : { minHeight: 52 }]}>
-        <Text style={[styles.metricLabel, dark ? { color: C.white } : {}]}>{metric.label}</Text>
+        <Text style={[styles.metricLabel, dark ? { color: C.white } : {}]}>{metricLabel(metric)}</Text>
         <Text style={[styles.metricValue, dark ? { color: C.white } : {}]}>{fmt(metric.value)}</Text>
         <Text style={[styles.metricUnit, dark ? { color: "#AFC1D4" } : {}]}>{metric.unit}</Text>
         {trend && plotted > 1 && <Sparkline values={series} colour={colour} />}
@@ -185,10 +195,10 @@ function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatte
       <SvgText x={w - 2} y={top - 9} textAnchor="end" fontSize={6.8} fill={C.ink}>Injuries per 1,000 player-hours</SvgText>
     </Svg>
     <Legend items={[
-      { label: "Recorded injuries", colour: C.cyan, shape: "bar" },
-      { label: "Time-loss injuries", colour: C.amber, shape: "bar" },
-      { label: "Overall incidence", colour: C.cyan, shape: "line" },
-      { label: "Time-loss incidence", colour: C.amber, shape: "line" },
+      { label: "Overall Injuries", colour: C.cyan, shape: "bar" },
+      { label: "Time Loss Injuries", colour: C.amber, shape: "bar" },
+      { label: "Overall Incidence", colour: C.cyan, shape: "line" },
+      { label: "Time Loss Incidence", colour: C.amber, shape: "line" },
     ]} />
     <Caption>Bars read against the left axis in cases. Lines read against the right axis in injuries per 1,000 player-hours.</Caption>
   </View>;
@@ -226,8 +236,8 @@ function SettingBench({ rows }: { rows: readonly ReportSettingMetric[] }) {
     <View style={styles.darkPanel}>
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 12, letterSpacing: 0.3 }}>{r.label}</Text>
       <Text style={{ color: colours[r.setting] ?? C.blue, fontFamily: "Helvetica-Bold", fontSize: 21, marginTop: 6 }}>{r.timeLossInjuries}</Text>
-      <Text style={{ color: "#C0D0E0", fontSize: 6.8, marginTop: 1 }}>time-loss injuries</Text>
-      {([["Recorded injuries", r.recordedInjuries, "cases"], ["Time-loss incidence", r.incidencePer1000h, "/1,000 h"], ["Burden", r.burdenPer1000h, "days/1,000 h"], ["Mean severity", r.meanSeverityDays, "days"], ["Exposure", r.exposureHours, "hours"]] as const).map(([label, amount, unit]) =>
+      <Text style={{ color: "#C0D0E0", fontSize: 6.8, marginTop: 1 }}>injuries</Text>
+      {([["Overall Injuries", r.recordedInjuries, "cases"], ["Incidence", r.incidencePer1000h, "/1,000 h"], ["Burden", r.burdenPer1000h, "days/1,000 h"], ["Mean Severity", r.meanSeverityDays, "days"], ["Exposure", r.exposureHours, "hours"]] as const).map(([label, amount, unit]) =>
         <View key={label} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", borderTopWidth: 1, borderTopColor: "#294565", paddingTop: 5, marginTop: 5 }}>
           <Text style={{ color: "#C0D0E0", fontSize: 6.8 }}>{label}</Text>
           <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 6.8, paddingLeft: 8 }}>{fmt(amount, unit)}</Text>
@@ -240,9 +250,9 @@ function CompactSettingBench({ rows }: { rows: readonly ReportSettingMetric[] })
   return <View>{rows.map((r) => <View key={r.setting} style={{ backgroundColor: C.navy, borderRadius: 4, padding: 9, marginBottom: 7 }}>
     <View style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between" }}>
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 10.5 }}>{r.label}</Text>
-      <Text style={{ color: colours[r.setting] ?? C.blue, fontFamily: "Helvetica-Bold", fontSize: 16 }}>{r.timeLossInjuries} TL</Text>
+      <Text style={{ color: colours[r.setting] ?? C.blue, fontFamily: "Helvetica-Bold", fontSize: 16 }}>{r.timeLossInjuries} Injuries</Text>
     </View>
-    {([["Incidence", r.incidencePer1000h, "/1,000 h"], ["Burden", r.burdenPer1000h, "days/1,000 h"], ["Mean severity", r.meanSeverityDays, "days"]] as const).map(([label, value, unit]) =>
+    {([["Incidence", r.incidencePer1000h, "/1,000 h"], ["Burden", r.burdenPer1000h, "days/1,000 h"], ["Mean Severity", r.meanSeverityDays, "days"]] as const).map(([label, value, unit]) =>
       <View key={label} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", borderTopWidth: 1, borderTopColor: "#294565", paddingTop: 4, marginTop: 4 }}>
         <Text style={{ color: "#C0D0E0", fontSize: 6.5 }}>{label}</Text>
         <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 6.5, paddingLeft: 6 }}>{fmt(value, unit)}</Text>
@@ -289,7 +299,7 @@ function bodyHeat(value: number, max: number) { if (value <= 0) return NO_CASE_F
 function bodyHeatLegend(max: number): LegendItem[] {
   const buckets = new Map<string, number[]>();
   for (let value = 1; value <= max; value += 1) { const colour = bodyHeat(value, max); buckets.set(colour, [...(buckets.get(colour) ?? []), value]); }
-  const items: LegendItem[] = [{ label: "No time-loss cases", colour: NO_CASE_FILL, shape: "swatch" }];
+  const items: LegendItem[] = [{ label: "No Injuries", colour: NO_CASE_FILL, shape: "swatch" }];
   for (const [colour, values] of buckets) {
     const low = values[0], high = values[values.length - 1];
     items.push({ label: low === high ? `${low} case${low === 1 ? "" : "s"}` : `${low} to ${high} cases`, colour, shape: "swatch" });
@@ -310,7 +320,7 @@ function BodyMapPdf({ rows, chartHeight = 300 }: { rows: readonly ReportProfileR
   return <View>
     <Svg viewBox="0 0 270 422" style={{ height: chartHeight }}>{figure(BODY_PATHS, 5, "Front")}{figure(BACK_PATHS, 140, "Back")}</Svg>
     <Legend items={bodyHeatLegend(max)} />
-    <Caption>Shading is the time-loss case count for each region, from 0 to {max} cases.</Caption>
+    <Caption>Shading is the injury count for each region, from 0 to {max} cases.</Caption>
   </View>;
 }
 
@@ -340,8 +350,8 @@ function MirroredBars({ rows, limit = 9, rowGap = 6, heading }: { rows: readonly
         <Text style={{ width: 34, paddingLeft: 6, color: C.ink, fontSize: 6.8 }}>{training}</Text>
       </View>;
     })}
-    <Legend items={[{ label: "Match time-loss injuries", colour: C.cyan, shape: "bar" }, { label: "Training time-loss injuries", colour: C.mint, shape: "bar" }]} />
-    <Caption>Both sides use one shared scale of 0 to {tickText(max)} time-loss cases. Match reads right to left, training reads left to right.</Caption>
+    <Legend items={[{ label: "Match Injuries", colour: C.cyan, shape: "bar" }, { label: "Training Injuries", colour: C.mint, shape: "bar" }]} />
+    <Caption>Both sides use one shared scale of 0 to {tickText(max)} injuries. Match reads right to left, training reads left to right.</Caption>
   </View>;
 }
 
@@ -422,8 +432,8 @@ function ImpactMatrix({ rows, chartHeight = 250 }: { rows: readonly ReportProfil
       {points.map((point, i) => { const spot = labels[i]; if (!spot.offset) return null; const angle = Math.atan2(spot.y - point.y, spot.x - point.x); return <Line key={`leader-${data[i].code}`} x1={point.x + Math.cos(angle) * radius} y1={point.y + Math.sin(angle) * radius} x2={spot.x - Math.cos(angle) * 4.5} y2={spot.y - Math.sin(angle) * 4.5} stroke={C.muted} strokeWidth={0.5} />; })}
       {data.map((r, i) => <Circle key={r.code} cx={points[i].x} cy={points[i].y} r={radius} fill={profileColour(r.code)} stroke={C.white} strokeWidth={1.2} />)}
       {data.map((r, i) => { const spot = labels[i], fill = profileColour(r.code); return <SvgText key={`n-${r.code}`} x={spot.x} y={spot.y + 2.3} textAnchor="middle" fontSize={6.5} fontWeight="bold" fill={spot.offset ? fill : readableOn(fill)}>{i + 1}</SvgText>; })}
-      <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Mean severity (days, logarithmic)</SvgText>
-      <SvgText x={left + plotW / 2} y={h - 5} textAnchor="middle" fontSize={6.8} fill={C.ink}>Time-loss incidence per 1,000 player-hours</SvgText>
+      <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Mean Severity (days, logarithmic)</SvgText>
+      <SvgText x={left + plotW / 2} y={h - 5} textAnchor="middle" fontSize={6.8} fill={C.ink}>Incidence per 1,000 player-hours</SvgText>
       </Svg>
     </View>
     <View style={{ width: "38%", paddingHorizontal: 4 }}>
@@ -457,7 +467,7 @@ function FamilyRanking({ rows, rowGap = 10 }: { rows: readonly ReportInjuryTypeF
       </View>
       <View style={{ height: 8, backgroundColor: C.track, marginTop: 3 }}><View style={{ height: 8, width: `${r.timeLossInjuries / max * 100}%`, backgroundColor: profileColour(r.code) }} /></View>
     </View>)}
-    <Caption>Bars are time-loss cases on a shared scale of 0 to {tickText(max)}.</Caption>
+    <Caption>Bars are injuries on a shared scale of 0 to {tickText(max)}.</Caption>
   </View>;
 }
 function FamilyDossier({ rows }: { rows: readonly ReportInjuryTypeFamily[] }) {
@@ -467,7 +477,7 @@ function FamilyDossier({ rows }: { rows: readonly ReportInjuryTypeFamily[] }) {
     <View style={styles.darkPanel}>
       <Text style={{ color: C.cyan, fontSize: 6.8, letterSpacing: 1, fontFamily: "Helvetica-Bold" }}>LEADING FAMILY</Text>
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 16, marginTop: 5 }}>{lead.label}</Text>
-      <View style={{ flexDirection: "row", marginTop: 10 }}>{([["Time-loss injuries", lead.timeLossInjuries, "cases"], ["Incidence", lead.incidencePer1000h, "per 1,000 h"], ["Burden", lead.burdenPer1000h, "days per 1,000 h"], ["Mean severity", lead.meanSeverityDays, "days"]] as const).map(([label, value, unit]) =>
+      <View style={{ flexDirection: "row", marginTop: 10 }}>{([["Injuries", lead.timeLossInjuries, "cases"], ["Incidence", lead.incidencePer1000h, "per 1,000 h"], ["Burden", lead.burdenPer1000h, "days per 1,000 h"], ["Mean Severity", lead.meanSeverityDays, "days"]] as const).map(([label, value, unit]) =>
         <View key={label} style={{ width: "25%", paddingRight: 6 }}>
           <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 12 }}>{fmt(value)}</Text>
           <Text style={{ color: "#C0D0E0", fontSize: 6.5, marginTop: 2, lineHeight: 1.2 }}>{label}</Text>
@@ -576,8 +586,8 @@ function ComparisonScatter({ model, chartHeight = 275 }: { model: ReportModel; c
           <SvgText x={sx + 19 * side} y={sy - 12} textAnchor={flip ? "end" : "start"} fontSize={8} fontWeight="bold" fill={model.brand.accentColour}>{model.subjectName}</SvgText>
         </G>;
       })()}
-      <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Training time-loss incidence (per 1,000 player-hours)</SvgText>
-      <SvgText x={left + plotW / 2} y={h - 5} textAnchor="middle" fontSize={6.8} fill={C.ink}>Match time-loss incidence (injuries per 1,000 player-hours)</SvgText>
+      <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Training Incidence (per 1,000 player-hours)</SvgText>
+      <SvgText x={left + plotW / 2} y={h - 5} textAnchor="middle" fontSize={6.8} fill={C.ink}>Match Incidence (injuries per 1,000 player-hours)</SvgText>
     </Svg>
     <Legend items={[{ label: model.subjectName, colour: model.brand.accentColour }, { label: "Anonymous club", colour: C.blue }, { label: `League mean, match ${fmt(meanX)} and training ${fmt(meanY)}`, colour: C.coral, shape: "line" }]} />
     <Caption>Bubble area is exposure hours, from the smallest club to {fmt(maxExposure, "hours", 0)}.</Caption>
@@ -656,16 +666,22 @@ const COMPARISON_KPI_UNITS: Record<string, string> = {
   injury_burden: "days/1,000 h",
   time_loss_injuries: "injuries",
 };
+const COMPARISON_KPI_LABELS: Record<string, string> = {
+  time_loss_incidence: "Injury Incidence",
+  mean_severity: "Mean Severity",
+  injury_burden: "Injury Burden",
+  time_loss_injuries: "Injuries",
+};
 
 function ComparisonKpiCards({ comparison }: { comparison: SeasonComparisonVisuals }) {
   return <View style={[styles.metricGrid, { marginTop: -1 }]}>{comparison.kpis.map((metric) => {
     const improvement = metric.outcome_improvement_percent;
-    const state = improvement === null ? "Not comparable" : improvement > 0 ? "Improved" : improvement < 0 ? "Increased" : "No change";
+    const state = improvement === null ? "Not comparable" : improvement > 0 ? "Decreased" : improvement < 0 ? "Increased" : "No change";
     const stateColour = improvement === null || improvement === 0 ? C.muted : improvement > 0 ? C.green : C.red;
     const digits = metric.key === "time_loss_injuries" || metric.key === "injury_burden" ? 0 : 1;
     return <View key={metric.key} style={[styles.metricCell, { width: "25%" }]}>
       <View style={[styles.metricCard, { minHeight: 100, padding: 8 }]}>
-        <Text style={styles.metricLabel}>{metric.label}</Text>
+        <Text style={styles.metricLabel}>{COMPARISON_KPI_LABELS[metric.key] ?? metric.label}</Text>
         <Text style={{ color: stateColour, fontFamily: "Helvetica-Bold", fontSize: 15, marginTop: 6 }}>{improvement === null ? "N/A" : `${fmt(Math.abs(improvement), "", 1)}%`}</Text>
         <Text style={{ color: stateColour, fontFamily: "Helvetica-Bold", fontSize: 6.5, marginTop: 1 }}>{state}</Text>
         <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: C.rule, marginTop: 7, paddingTop: 6 }}>
@@ -727,8 +743,8 @@ function SeasonImpactChart({ comparison, setting = "all", chartHeight = 190 }: {
         <Circle cx={point.x} cy={point.y} r={point.r} fill={point.colour} opacity={0.72} stroke={point.colour} strokeWidth={1.5} />
         <SvgText x={point.x} y={index === 0 ? point.y - point.r - 6 : point.y + point.r + 10} textAnchor="middle" fontSize={7} fontWeight="bold" fill={point.colour}>{point.season}</SvgText>
       </G> : null)}
-      <SvgText x={left + plotW / 2} y={h - 4} textAnchor="middle" fontSize={6.7} fontWeight="bold" fill={C.ink}>Time-loss injuries per 1,000 player-hours</SvgText>
-      <SvgText x={12} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 12 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Mean days lost per time-loss injury</SvgText>
+      <SvgText x={left + plotW / 2} y={h - 4} textAnchor="middle" fontSize={6.7} fontWeight="bold" fill={C.ink}>Incidence per 1,000 player-hours</SvgText>
+      <SvgText x={12} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 12 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Mean Severity in days</SvgText>
     </Svg>
     <Legend items={[
       { label: comparison.previous_season, colour: SEASON_COLOURS[0] },
@@ -761,13 +777,13 @@ function SeasonMonthlyBars({ comparison, chartHeight = 205 }: { comparison: Seas
         </G>;
       })}
       <SvgText x={left + plotW / 2} y={h - 3} textAnchor="middle" fontSize={6.7} fontWeight="bold" fill={C.ink}>Month</SvgText>
-      <SvgText x={8} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 8 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Time-loss injury count</SvgText>
+      <SvgText x={8} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 8 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Injury Count</SvgText>
     </Svg>
     <Legend items={[
       { label: comparison.previous_season, colour: SEASON_COLOURS[0], shape: "bar" },
       { label: comparison.current_season, colour: SEASON_COLOURS[1], shape: "bar" },
     ]} />
-    <Caption>Paired bars compare monthly time-loss injury counts for the two approved releases.</Caption>
+    <Caption>Paired bars compare monthly injury counts for the two approved releases.</Caption>
   </View>;
 }
 
@@ -828,40 +844,40 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
 function SeasonPattern({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   const comparison = model.seasonComparisonVisuals;
   return <PageShell model={model} meta={meta} section="season-pattern">
-    <PageTitle title="Season overview" note="Headline measures, the setting split and the approved season comparison are brought together on the first analytical page." />
+    <PageTitle title="Season Overview" note="Headline measures, the setting split and the approved season comparison are brought together on the first analytical page." />
     <MetricCards model={model} />
-    <View style={{ marginTop: 8 }}><Panel title="Match and training" note="Released setting measures shown side by side."><SettingBench rows={model.matchTraining} /></Panel></View>
-    <View style={{ marginTop: 8, height: 247 }}><Panel fill title="Injury impact by season" note="Overall time-loss incidence, mean severity and burden for the two approved releases.">{comparison ? <SeasonImpactChart comparison={comparison} chartHeight={165} /> : <Text style={styles.panelNote}>No approved season comparison is available for this report.</Text>}</Panel></View>
+    <View style={{ marginTop: 8 }}><Panel title="Match And Training" note="Released setting measures shown side by side."><SettingBench rows={model.matchTraining} /></Panel></View>
+    <View style={{ marginTop: 8, height: 247 }}><Panel fill title="Injury Impact By Season" note="Overall incidence, mean severity and burden for the two approved releases.">{comparison ? <SeasonImpactChart comparison={comparison} chartHeight={165} /> : <Text style={styles.panelNote}>No approved season comparison is available for this report.</Text>}</Panel></View>
   </PageShell>;
 }
 function SeverityContact({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="severity-contact">
-    <PageTitle title="Monthly pattern, severity and mechanism" note="The monthly injury series leads into the released severity and contact profiles." />
-    <View style={{ height: 320 }}><Panel fill title="Monthly injury pattern" note="Case counts and incidence for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={244} /></Panel></View>
+    <PageTitle title="Monthly Pattern, Severity And Mechanism" note="The monthly injury series leads into the released severity and contact profiles." />
+    <View style={{ height: 320 }}><Panel fill title="Monthly Injury Pattern" note="Case counts and incidence for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={244} /></Panel></View>
     <View style={[styles.split, { marginTop: 8, height: 318 }]}>
-      <View style={styles.third}><Panel fill title="Severity profile" note="All recorded injuries by released duration band."><HalfRing rows={model.severityDistribution} colours={SEVERITY_COLOURS} unitHead="Cases (share)" /></Panel></View>
-      <View style={styles.third}><Panel fill title="Contact mechanism" note="Time-loss injuries by released mechanism."><HalfRing rows={model.contactDistribution} colours={CONTACT_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
-      <View style={styles.third}><Panel fill title="Setting contrast" note="Match and training measures for the same window."><CompactSettingBench rows={model.matchTraining} /></Panel></View>
+      <View style={styles.third}><Panel fill title="Severity Profile" note="Injuries by released duration band."><HalfRing rows={model.severityDistribution} colours={SEVERITY_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
+      <View style={styles.third}><Panel fill title="Contact Mechanism" note="Injuries by released mechanism."><HalfRing rows={model.contactDistribution} colours={CONTACT_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
+      <View style={styles.third}><Panel fill title="Setting Contrast" note="Match and training measures for the same window."><CompactSettingBench rows={model.matchTraining} /></Panel></View>
     </View>
   </PageShell>;
 }
 function InjuryLocation({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   const rows = overall(model.injuryProfile.bodyLocations);
   return <PageShell model={model} meta={meta} section="injury-location">
-    <PageTitle title="Injury location" note="The body map, ranked locations and match-training split use the released body-location rows." />
+    <PageTitle title="Injury Location" note="The body map, ranked locations and match-training split use the released body-location rows." />
     <View style={[styles.split, { height: 400 }]}>
-      <View style={{ width: "38%", paddingHorizontal: 4 }}><Panel fill title="Body heat map" note="Front and back views of the released body-location rows."><BodyMapPdf rows={rows} chartHeight={270} /></Panel></View>
+      <View style={{ width: "38%", paddingHorizontal: 4 }}><Panel fill title="Body Heat Map" note="Front and back views of the released body-location rows."><BodyMapPdf rows={rows} chartHeight={270} /></Panel></View>
       <View style={{ width: "62%", paddingHorizontal: 4 }}>
-        <Panel fill title="Ranked locations" note="Time-loss case counts, then the matching rate measures for the leading regions.">
+        <Panel fill title="Ranked Locations" note="Injury counts, then the matching rate measures for the leading regions.">
           <RankedBars rows={rows} limit={11} coloured heading="Body region" unit="Cases" rowGap={5} />
           <View style={[styles.headRow, { marginTop: 8, alignItems: "flex-end" }]}>
             <Text style={[styles.columnHead, { flex: 1 }]}>Body region</Text>
             <View style={{ width: 174 }}>
-              <Text style={[styles.columnHead, { textAlign: "right", marginBottom: 3 }]}>Time-loss rate measures</Text>
+              <Text style={[styles.columnHead, { textAlign: "right", marginBottom: 3 }]}>Rate Measures</Text>
               <View style={{ flexDirection: "row" }}>
                 <Text style={[styles.columnHead, { width: 58, textAlign: "right", paddingLeft: 3 }]}>Incidence{"\n"}/1,000 h</Text>
                 <Text style={[styles.columnHead, { width: 58, textAlign: "right", paddingLeft: 4, borderLeftWidth: 1, borderLeftColor: C.rule }]}>Burden{"\n"}days/1,000 h</Text>
-                <Text style={[styles.columnHead, { width: 58, textAlign: "right", paddingLeft: 4, borderLeftWidth: 1, borderLeftColor: C.rule }]}>Mean severity{"\n"}days</Text>
+                <Text style={[styles.columnHead, { width: 58, textAlign: "right", paddingLeft: 4, borderLeftWidth: 1, borderLeftColor: C.rule }]}>Mean Severity{"\n"}days</Text>
               </View>
             </View>
           </View>
@@ -874,16 +890,16 @@ function InjuryLocation({ model, meta }: { model: ReportModel; meta: ReportMetad
         </Panel>
       </View>
     </View>
-    <View style={{ marginTop: 8, height: 275 }}><Panel fill title="Match versus training by region" note="Time-loss case counts for the leading regions."><MirroredBars rows={model.injuryProfile.bodyLocations} rowGap={11} heading="Body region" /></Panel></View>
+    <View style={{ marginTop: 8, height: 275 }}><Panel fill title="Match Versus Training By Region" note="Injury counts for the leading regions."><MirroredBars rows={model.injuryProfile.bodyLocations} rowGap={11} heading="Body region" /></Panel></View>
   </PageShell>;
 }
 function CommonInjuries({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   const diagnoses = overall(model.injuryProfile.diagnoses);
   return <PageShell model={model} meta={meta} section="common-injuries">
-    <PageTitle title="Common injuries" note="Each diagnosis keeps one colour across frequency, incidence, burden and severity." />
-    <View style={{ height: 330 }}><Panel fill title="Four views of the leading diagnoses" note="The top five released diagnoses for each measure. Each diagnosis keeps one colour across the four columns."><CommonLanes rows={diagnoses} cardHeight={45} /></Panel></View>
+    <PageTitle title="Common Injuries" note="Each diagnosis keeps one colour across frequency, incidence, burden and severity." />
+    <View style={{ height: 330 }}><Panel fill title="Four Views Of The Leading Diagnoses" note="The top five released diagnoses for each measure. Each diagnosis keeps one colour across the four columns."><CommonLanes rows={diagnoses} cardHeight={45} /></Panel></View>
     <View style={{ marginTop: 8, height: 342 }}>
-      <Panel fill title="Diagnosis impact matrix" note="Horizontal position is time-loss incidence and vertical position is mean severity on a logarithmic scale.">
+      <Panel fill title="Diagnosis Impact Matrix" note="Horizontal position is incidence and vertical position is mean severity on a logarithmic scale.">
         <ImpactMatrix rows={model.injuryProfile.diagnoses} chartHeight={282} />
       </Panel>
     </View>
@@ -891,61 +907,61 @@ function CommonInjuries({ model, meta }: { model: ReportModel; meta: ReportMetad
 }
 function ImpactMatrices({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="impact-matrices">
-    <PageTitle title="Injury impact matrices" note="Location and injury-type views use the same axes and visual grammar as the diagnosis matrix." />
-    <View style={{ height: 336 }}><Panel fill title="Location impact" note="Time-loss incidence against mean severity on a logarithmic scale."><ImpactMatrix rows={model.injuryProfile.bodyLocations} chartHeight={291} /></Panel></View>
-    <View style={{ marginTop: 8, height: 336 }}><Panel fill title="Injury-type impact" note="Time-loss incidence against mean severity on a logarithmic scale."><ImpactMatrix rows={model.injuryProfile.injuryTypes} chartHeight={291} /></Panel></View>
+    <PageTitle title="Injury Impact Matrices" note="Location and injury-type views use the same axes and visual grammar as the diagnosis matrix." />
+    <View style={{ height: 336 }}><Panel fill title="Location Impact" note="Incidence against mean severity on a logarithmic scale."><ImpactMatrix rows={model.injuryProfile.bodyLocations} chartHeight={291} /></Panel></View>
+    <View style={{ marginTop: 8, height: 336 }}><Panel fill title="Injury-Type Impact" note="Incidence against mean severity on a logarithmic scale."><ImpactMatrix rows={model.injuryProfile.injuryTypes} chartHeight={291} /></Panel></View>
   </PageShell>;
 }
 function InjuryTypes({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="injury-types">
-    <PageTitle title="Injury type" note="Injury families, subtype detail and setting contrast share one analytical page." />
+    <PageTitle title="Injury Type" note="Injury families, subtype detail and setting contrast share one analytical page." />
     <View style={[styles.split, { height: 300 }]}>
-      <View style={styles.half}><Panel fill title="Injury-family ranking" note="Overall time-loss injuries and incidence."><FamilyRanking rows={model.injuryProfile.injuryTypeFamilies} rowGap={6} /></Panel></View>
-      <View style={styles.half}><Panel fill title="Leading-family dossier" note="Released family and subtype measures."><FamilyDossier rows={model.injuryProfile.injuryTypeFamilies} /></Panel></View>
+      <View style={styles.half}><Panel fill title="Injury-Family Ranking" note="Overall injuries and incidence."><FamilyRanking rows={model.injuryProfile.injuryTypeFamilies} rowGap={6} /></Panel></View>
+      <View style={styles.half}><Panel fill title="Leading-Family Dossier" note="Released family and subtype measures."><FamilyDossier rows={model.injuryProfile.injuryTypeFamilies} /></Panel></View>
     </View>
-    <View style={{ marginTop: 8, height: 350 }}><Panel fill title="Match versus training by injury type" note="Time-loss case counts for the leading injury types."><MirroredBars rows={model.injuryProfile.injuryTypes} limit={10} rowGap={16} heading="Injury type" /></Panel></View>
+    <View style={{ marginTop: 8, height: 350 }}><Panel fill title="Match Versus Training By Injury Type" note="Injury counts for the leading injury types."><MirroredBars rows={model.injuryProfile.injuryTypes} limit={10} rowGap={16} heading="Injury type" /></Panel></View>
   </PageShell>;
 }
 function Exposure({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   const cards: Array<ReportMetric> = [
-    { key: "total-hours", label: "Total exposure", value: model.exposure.totalHours, unit: "player-hours", formula: "released exposure" },
-    { key: "match-hours", label: "Match exposure", value: model.exposure.matchHours, unit: "player-hours", formula: "released exposure" },
-    { key: "training-hours", label: "Training exposure", value: model.exposure.trainingHours, unit: "player-hours", formula: "released exposure" },
+    { key: "total-hours", label: "Total Exposure", value: model.exposure.totalHours, unit: "player-hours", formula: "released exposure" },
+    { key: "match-hours", label: "Match Exposure", value: model.exposure.matchHours, unit: "player-hours", formula: "released exposure" },
+    { key: "training-hours", label: "Training Exposure", value: model.exposure.trainingHours, unit: "player-hours", formula: "released exposure" },
     { key: "distance", label: "Distance", value: model.exposure.totalDistanceKm, unit: "km", formula: "released distance" },
   ];
   const pseudo = { ...model, snapshotMetrics: cards };
   return <PageShell model={model} meta={meta} section="exposure">
     <PageTitle title="Exposure" note="The released denominator is shown over time and against the anonymous league cohort." />
     <MetricCards model={pseudo} limit={4} trend={false} />
-    <View style={{ marginTop: 8, height: 280 }}><Panel fill title="Monthly exposure and distance" note="Player-hours on the left axis and kilometres on the right axis."><ExposureTrend model={model} chartHeight={213} /></Panel></View>
+    <View style={{ marginTop: 8, height: 280 }}><Panel fill title="Monthly Exposure And Distance" note="Player-hours on the left axis and kilometres on the right axis."><ExposureTrend model={model} chartHeight={213} /></Panel></View>
     <View style={[styles.split, { marginTop: 8, height: 320 }]}>
-      <View style={styles.half}><Panel fill title="Club exposure hours" note="Released player-hours for every club in the cohort."><ExposureLadder model={model} keyName="exposureHours" label="Player-hours" unit="Hours" colour={C.mint} rowGap={9} /></Panel></View>
-      <View style={styles.half}><Panel fill title="Club distance" note="Released distance for every club in the cohort."><ExposureLadder model={model} keyName="distanceKm" label="Kilometres" unit="km" colour={C.cyan} rowGap={9} /></Panel></View>
+      <View style={styles.half}><Panel fill title="Club Exposure Hours" note="Released player-hours for every club in the cohort."><ExposureLadder model={model} keyName="exposureHours" label="Player-hours" unit="Hours" colour={C.mint} rowGap={9} /></Panel></View>
+      <View style={styles.half}><Panel fill title="Club Distance" note="Released distance for every club in the cohort."><ExposureLadder model={model} keyName="distanceKm" label="Kilometres" unit="km" colour={C.cyan} rowGap={9} /></Panel></View>
     </View>
   </PageShell>;
 }
 function TeamComparison({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="team-comparison">
-    <PageTitle title="Team comparison" note={`Other clubs remain anonymous. ${model.subjectName} is highlighted against released league benchmarks.`} />
+    <PageTitle title="Team Comparison" note={`Other clubs remain anonymous. ${model.subjectName} is highlighted against released league benchmarks.`} />
     <View style={{ height: 322 }}>
-      <Panel fill title="Match versus training time-loss incidence" note="One bubble for each club in the released cohort. Dashed lines are the league means.">
+      <Panel fill title="Match Versus Training Incidence" note="One bubble for each club in the released cohort. Dashed lines are the league means.">
         <ComparisonScatter model={model} chartHeight={238} />
       </Panel>
     </View>
     <View style={[styles.split, { marginTop: 8, height: 350 }]}>
-      <View style={{ width: "42%", paddingHorizontal: 4 }}><Panel fill title="Overall incidence ladder" note="Time-loss injuries per 1,000 player-hours."><ComparisonLadder model={model} rowGap={9} /></Panel></View>
-      <View style={{ width: "58%", paddingHorizontal: 4 }}><Panel fill title="Four-metric benchmark heat map" note="Each cell is compared with the released league mean for that metric."><Heatmap model={model} rowHeight={15} /></Panel></View>
+      <View style={{ width: "42%", paddingHorizontal: 4 }}><Panel fill title="Overall Incidence Ladder" note="Injuries per 1,000 player-hours."><ComparisonLadder model={model} rowGap={9} /></Panel></View>
+      <View style={{ width: "58%", paddingHorizontal: 4 }}><Panel fill title="Four-Metric Benchmark Heat Map" note="Each cell is compared with the released league mean for that metric."><Heatmap model={model} rowHeight={15} /></Panel></View>
     </View>
   </PageShell>;
 }
 function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   const comparison = model.seasonComparisonVisuals;
   return <PageShell model={model} meta={meta} section="season-methodology">
-    <PageTitle title="Season comparison" note={comparison ? `Approved ${comparison.previous_season} and ${comparison.current_season} values are shown using the same measures as the dashboard.` : "No approved season comparison is available for this report."} />
+    <PageTitle title="Season Comparison" note={comparison ? `Approved ${comparison.previous_season} and ${comparison.current_season} values are shown using the same measures as the dashboard.` : "No approved season comparison is available for this report."} />
     {comparison ? <>
       <View style={{ height: 111 }}><ComparisonKpiCards comparison={comparison} /></View>
-      <View style={{ marginTop: 8, height: 267 }}><Panel fill title="Time-loss injuries by month" note="Paired monthly counts for the two approved releases."><SeasonMonthlyBars comparison={comparison} chartHeight={190} /></Panel></View>
-      <View style={{ marginTop: 8, height: 292 }}><Panel fill title="Diagnosis drivers" note="The three leading diagnosis families by time-loss injury count for overall, match and training settings."><DiagnosisDriversPdf comparison={comparison} /></Panel></View>
+      <View style={{ marginTop: 8, height: 267 }}><Panel fill title="Injuries By Month" note="Paired monthly counts for the two approved releases."><SeasonMonthlyBars comparison={comparison} chartHeight={190} /></Panel></View>
+      <View style={{ marginTop: 8, height: 292 }}><Panel fill title="Diagnosis Drivers" note="The three leading diagnosis families by injury count for Overall, Match and Training settings."><DiagnosisDriversPdf comparison={comparison} /></Panel></View>
     </> : <View style={[styles.panel, { height: 180, justifyContent: "center", alignItems: "center" }]}><Text style={styles.panelNote}>No approved season comparison is available.</Text></View>}
   </PageShell>;
 }

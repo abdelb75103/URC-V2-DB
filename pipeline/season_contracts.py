@@ -180,6 +180,7 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
         "20260831121000",
         "20260831130000",
         "20260831132000",
+        "20260901010000",
     ),
     required_migration_contracts=(
         MigrationContract(
@@ -323,6 +324,17 @@ YEAR2_2025_26_RELEASE_CONTRACT = ReleaseContract(
             registration_statements=(
                 "reason_code=league_dashboard_release_v6_partial_exposure_reporting",
                 "scope=audit_vocabulary_only",
+            ),
+        ),
+        MigrationContract(
+            version="20260901010000",
+            name="urc_diagnosis_family_reporting_successor",
+            sha256="b2d6af31bad2a49d26be8fe135c304fdc5a9c55a888f56cd26a5e32249cc903d",
+            registration_statements=(
+                "rule_version=season_comparison_reporting_2026_09_01_v5",
+                "scope=canonical_injury_and_separate_illness_reporting_overlay_no_release_or_source_mutation",
+                "cohorts=2024-25_injury_1662_illness_392,2025-26_injury_1545_illness_439",
+                "family_boundary=2024-25_mapped_1658_unknown_4,2025-26_mapped_1464_unknown_81",
             ),
         ),
     ),

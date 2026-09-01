@@ -6,10 +6,14 @@ import type {
   AnalyticsRow,
   Coverage,
   DashboardData,
+  DiagnosisFamilyRow,
+  IllnessProfileRow,
+  IllnessSummary,
   DistributionRow,
   HeadlineMetric,
   InjuryProfileRow,
   InjuryTypeFamilyRow,
+  PreliminaryMonthlyRateRow,
   SeasonComparisonData,
   SeverityRow,
   SettingMetricRow,
@@ -114,12 +118,105 @@ const injuryProfileSchema = z.object({
   setting: z.enum(["all", "match", "training", "unknown"]),
   recorded_injuries: z.number().optional(),
   time_loss_injuries: z.number(),
+  known_duration_time_loss_injuries: z.number().optional(),
   days_lost: z.number(),
   exposure_hours: z.number().nullish(),
   incidence_per_1000h: z.number().nullish(),
   burden_per_1000h: z.number().nullish(),
   mean_severity_days: z.number().nullish(),
 });
+
+const diagnosisFamilySubtypeSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  recorded_injuries: z.number().int().nonnegative(),
+  time_loss_injuries: z.number().int().nonnegative(),
+  known_duration_time_loss_injuries: z.number().int().nonnegative(),
+  days_lost: z.number().nonnegative(),
+}).strict();
+
+const diagnosisFamilySchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  setting: z.enum(["all", "match", "training", "unknown"]),
+  recorded_injuries: z.number().int().nonnegative(),
+  time_loss_injuries: z.number().int().nonnegative(),
+  known_duration_time_loss_injuries: z.number().int().nonnegative(),
+  days_lost: z.number().nonnegative(),
+  exposure_hours: z.number().nullable(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+  subtypes: z.array(diagnosisFamilySubtypeSchema),
+}).strict().superRefine((family, context) => {
+  if (family.known_duration_time_loss_injuries > family.time_loss_injuries) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["known_duration_time_loss_injuries"],
+      message: "Known-duration time-loss injuries cannot exceed time-loss injuries",
+    });
+  }
+});
+
+const illnessProfileSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  setting: z.enum(["all", "match", "training", "unknown"]),
+  recorded_illnesses: z.number().int().nonnegative(),
+  known_duration_illnesses: z.number().int().nonnegative(),
+  days_lost: z.number().nonnegative(),
+  exposure_hours: z.number().nullable(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+}).strict().superRefine((illness, context) => {
+  if (illness.known_duration_illnesses > illness.recorded_illnesses) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["known_duration_illnesses"],
+      message: "Known-duration illnesses cannot exceed recorded illnesses",
+    });
+  }
+});
+
+const illnessSummarySchema = z.object({
+  setting: z.literal("all"),
+  recorded_illnesses: z.number().int().nonnegative(),
+  known_duration_illnesses: z.number().int().nonnegative(),
+  days_lost: z.number().nonnegative(),
+  exposure_hours: z.number().nullable(),
+  incidence_per_1000h: z.number().nullable(),
+  burden_per_1000h: z.number().nullable(),
+  mean_severity_days: z.number().nullable(),
+  qualification: z.literal("Overall illness metrics use approved included illness rows and released total player-hours. Illness is not attributed to Match or Training."),
+}).strict().superRefine((illness, context) => {
+  if (illness.known_duration_illnesses > illness.recorded_illnesses) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["known_duration_illnesses"],
+      message: "Known-duration illnesses cannot exceed recorded illnesses",
+    });
+  }
+});
+
+const illnessProfilePresentationLabels = new Map<string, string>([
+  ["Infection", "Infection, unspecified"],
+  ["ENT Illness including dental (excl sinusitis - see MPAL) [Right]", "ENT or dental illness"],
+  ["Foot pain undiagnosed", "Foot pain, undiagnosed"],
+  ["Haematemesis/melaena/GI bleeding", "Gastrointestinal bleeding"],
+  ["Infected knee joint", "Knee joint infection"],
+  ["Lymphadenopathy secondary to skin infection", "Lymphadenopathy"],
+  ["Molluscum Contagiosum [Left]", "Molluscum contagiosum"],
+  ["Shingles (Zoster Virus) [Left]", "Shingles (zoster virus)"],
+  ["Sleep Disorder(s) [N/A]", "Sleep disorder"],
+  ["Tired athlete undiagnosed", "Fatigue, undiagnosed"],
+  ["Urinary problem [N/A]", "Urinary problem, unspecified"],
+  ["Vasovagal Syncope [N/A]", "Vasovagal syncope"],
+]);
+
+export function illnessProfileDisplayLabel(label: string): string {
+  return illnessProfilePresentationLabels.get(label) ?? label;
+}
 
 const injuryTypeSubtypeSchema = injuryProfileSchema.extend({
   dimension: z.literal('injury_type'),
@@ -219,6 +316,9 @@ const dashboardRowSchema = z.object({
   body_locations: z.array(analyticsRowSchema),
   injury_types: z.array(analyticsRowSchema),
   injury_profiles: z.array(injuryProfileSchema),
+  diagnosis_families: z.array(diagnosisFamilySchema).nullish(),
+  illness_profiles: z.array(illnessProfileSchema).nullish(),
+  illness_summary: illnessSummarySchema.nullish(),
   injury_type_families: z.array(injuryTypeFamilySchema),
   severity_distribution: z.array(severityRowSchema),
   // Optional: releases published before the 2026-07-26 contact-ring change do
@@ -277,6 +377,18 @@ const v6MonthlyRowSchema = z.object({
   time_loss_injuries: z.number(), days_lost: z.number(),
   overall_incidence_per_1000h: z.number().nullable(),
   incidence_per_1000h: z.number().nullable(), burden_per_1000h: z.number().nullable(),
+}).strict();
+const v6PreliminaryMonthlyRateSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  contributor_count: z.number().int().min(1).max(16),
+  exposure_hours: z.number().positive(),
+  time_loss_injuries: z.number().int().nonnegative(),
+  days_lost: z.number().nonnegative(),
+  incidence_per_1000h: z.number().nonnegative(),
+  burden_per_1000h: z.number().nonnegative(),
+  qualification: z.literal(
+    "Preliminary contributor-aligned rate. Includes only teams with positive source-backed exposure in this month; not the official 16-team rate."
+  ),
 }).strict();
 const v6ReportedLeagueMonthlyRowSchema = v6MonthlyRowSchema.extend({
   exposure_contributor_count: z.number().int().min(0).max(16),
@@ -388,7 +500,7 @@ const v6InjuryTypeFamilySchema = z.object({
   });
 });
 const v6SeverityRowSchema = severityRowSchema.extend({
-  setting: z.literal("all"),
+  setting: z.enum(["all", "match", "training"]),
 }).strict();
 const v6ContactRowSchema = (
   setting: "all" | "match" | "training" | "unknown",
@@ -506,8 +618,12 @@ const v6DashboardShape = {
   body_locations: z.array(v6CategoryRowSchema),
   injury_types: z.array(v6CategoryRowSchema),
   injury_profiles: v6InjuryProfilesSchema,
+  diagnosis_families: z.array(diagnosisFamilySchema).nullish(),
+  illness_profiles: z.array(illnessProfileSchema).nullish(),
+  illness_summary: illnessSummarySchema.nullish(),
   injury_type_families: z.array(v6InjuryTypeFamilySchema),
   severity_distribution: z.array(v6SeverityRowSchema),
+  preliminary_monthly_rates: z.array(v6PreliminaryMonthlyRateSchema).nullable().optional(),
   contact_distribution: v6ContactDistributionSchema,
   prior_season: z.object({
     season: z.literal("2024-25"),
@@ -519,6 +635,7 @@ const v6DashboardShape = {
 const v6TeamDashboardRowSchema = z.object({
   ...v6DashboardShape,
   coverage: v6TeamCoverageSchema,
+  preliminary_monthly_rates: z.null().optional(),
 }).strict();
 const v6LegacyLeagueDashboardRowSchema = z.object({
   ...v6DashboardShape,
@@ -558,11 +675,51 @@ const v6ReportedLeagueDashboardRowSchema = z.object({
       });
     }
   });
+  const preliminary = dashboard.preliminary_monthly_rates;
+  if (preliminary && (
+    preliminary.length !== expectedMonths.length
+    || preliminary.some((row, index) => row.month !== expectedMonths[index])
+  )) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["preliminary_monthly_rates"],
+      message: "Preliminary league months must be the ordered September to June domain",
+    });
+  }
+  preliminary?.forEach((row, index) => {
+    if (row.contributor_count > dashboard.coverage.source_backed_team_count) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["preliminary_monthly_rates", index, "contributor_count"],
+        message: "Preliminary contributors cannot exceed source-backed teams",
+      });
+    }
+  });
 });
 const v6LeagueDashboardRowSchema = z.union([
   v6ReportedLeagueDashboardRowSchema,
   v6LegacyLeagueDashboardRowSchema,
 ]);
+const v7InjuryProfileSchema = v6InjuryProfileSchema.extend({
+  known_duration_time_loss_injuries: z.number().int().nonnegative().optional(),
+}).strict();
+const v7DashboardShape = {
+  ...v6DashboardShape,
+  injury_profiles: z.array(v7InjuryProfileSchema),
+  diagnosis_families: z.array(diagnosisFamilySchema),
+  illness_profiles: z.array(illnessProfileSchema),
+  illness_summary: illnessSummarySchema,
+};
+const v7TeamDashboardRowSchema = z.object({
+  ...v7DashboardShape,
+  coverage: v6TeamCoverageSchema,
+  preliminary_monthly_rates: z.null().optional(),
+}).strict();
+const v7LeagueDashboardRowSchema = z.object({
+  ...v7DashboardShape,
+  coverage: z.union([v6ReportedLeagueCoverageSchema, v6LeagueCoverageSchema]),
+  monthly: z.array(z.union([v6ReportedLeagueMonthlyRowSchema, v6MonthlyRowSchema])),
+}).strict();
 const v6ComparisonSourceRowSchema = z.object({
   team_key: z.string(),
   team: z.string(),
@@ -640,7 +797,10 @@ const seasonComparisonExposureSchema = z.object({
   qualification: z.string().nullable(),
 }).strict();
 const seasonComparisonReaderSchema = z.object({
-  rule_version: z.literal("season_comparison_reporting_2026_08_31_v4"),
+  rule_version: z.enum([
+    "season_comparison_reporting_2026_08_31_v4",
+    "season_comparison_reporting_2026_09_01_v5",
+  ]),
   scope: z.enum(["team", "league"]),
   previous_season: z.literal("2024-25"),
   current_season: z.literal("2025-26"),
@@ -695,7 +855,9 @@ const seasonComparisonReaderSchema = z.object({
 type DashboardReaderRow =
   | z.infer<typeof dashboardRowSchema>
   | z.infer<typeof v6TeamDashboardRowSchema>
-  | z.infer<typeof v6LeagueDashboardRowSchema>;
+  | z.infer<typeof v6LeagueDashboardRowSchema>
+  | z.infer<typeof v7TeamDashboardRowSchema>
+  | z.infer<typeof v7LeagueDashboardRowSchema>;
 type ComparisonReaderRow =
   | z.infer<typeof comparisonSourceRowSchema>
   | z.infer<typeof v6ComparisonSourceRowSchema>;
@@ -723,7 +885,12 @@ export function parseDashboardReaderRow(
   season: string,
   scope: "team" | "league",
 ): DashboardReaderRow {
+  const hasV7Profiles = Boolean(raw && typeof raw === "object"
+    && !Array.isArray(raw) && ("diagnosis_families" in raw || "illness_profiles" in raw));
   if (season !== "2025-26") return dashboardRowSchema.parse(raw);
+  if (hasV7Profiles) {
+    return (scope === "team" ? v7TeamDashboardRowSchema : v7LeagueDashboardRowSchema).parse(raw);
+  }
   return (scope === "team" ? v6TeamDashboardRowSchema : v6LeagueDashboardRowSchema).parse(raw);
 }
 
@@ -806,7 +973,7 @@ async function approvedWebReaderQuery(
     transactionOpen = true;
     const attestation = await client.query(
       `select target_attested
-       from reporting.approved_dashboard_reader_target_v6`,
+       from reporting.approved_dashboard_reader_target_v7`,
     );
     if (
       attestation.rows.length !== 1
@@ -916,8 +1083,8 @@ function teamDisplayAliases(): Record<string, string> {
 
 /**
  * Reads the latest approved release for a team from
- * reporting.latest_team_dashboard_v6 and validates it into DashboardData.
- * The V6 successor keeps the V5 allowlisted immutable projection for Year 1
+ * reporting.latest_team_dashboard_v7 and validates it into DashboardData.
+ * The V7 successor keeps the V5 allowlisted immutable projection for Year 1
  * and adds the season-bound Year 2 release payload without widening the
  * frozen release-table contract.
  *
@@ -937,10 +1104,11 @@ export async function getTeamDashboard(
   const result = await approvedWebReaderQuery(pool,
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
-            injury_types, injury_profiles, injury_type_families, severity_distribution,
+            injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
             contact_distribution, prior_season,
+            to_jsonb(team_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
             limitations
-     from reporting.latest_team_dashboard_v6
+     from reporting.latest_team_dashboard_v7 team_dashboard
      where team_key = $1 and season = $2`,
     [teamId, season]
   );
@@ -965,10 +1133,11 @@ export async function getLeagueDashboard(
   const result = await approvedWebReaderQuery(pool,
     `select team, season, generated_at, analysis_window, method, coverage,
             headline, setting_split, setting_metrics, monthly, body_locations,
-            injury_types, injury_profiles, injury_type_families, severity_distribution,
+            injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
             contact_distribution, prior_season,
+            to_jsonb(league_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
             limitations
-     from reporting.latest_league_dashboard_v6
+     from reporting.latest_league_dashboard_v7 league_dashboard
      where season = $1`,
     [season]
   );
@@ -993,7 +1162,7 @@ export async function getTeamComparisons(
 
   const result = await approvedWebReaderQuery(pool,
     `select team_key, team, coverage, headline, setting_metrics
-     from reporting.latest_team_dashboard_v6
+     from reporting.latest_team_dashboard_v7
      where season = $1
      order by team_key`,
     [season]
@@ -1115,26 +1284,28 @@ async function loadTeamPageData(
        (select to_jsonb(team_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, injury_type_families, severity_distribution,
+                 injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
+                 to_jsonb(team_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_team_dashboard_v6
+          from reporting.latest_team_dashboard_v7 team_dashboard
           where team_key = $1 and season = $2
         ) team_row) as dashboard,
        (select to_jsonb(comparison_team_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, injury_type_families, severity_distribution,
+                 injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
+                 to_jsonb(comparison_team_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_team_dashboard_v6
+          from reporting.latest_team_dashboard_v7 comparison_team_dashboard
           where team_key = $1 and season = $3
         ) comparison_team_row) as comparison_dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v6
+           from reporting.latest_team_dashboard_v7
            where season = $2
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
@@ -1142,11 +1313,11 @@ async function loadTeamPageData(
        -- setting_metrics for the league benchmark.
        (select to_jsonb(league_metrics_row) from (
           select coverage, headline, setting_metrics
-          from reporting.latest_league_dashboard_v6
+          from reporting.latest_league_dashboard_v7
           where season = $2
         ) league_metrics_row) as league_metrics,
        (select comparison
-        from reporting.latest_team_season_comparison_v4
+        from reporting.latest_team_season_comparison_v5
         where team_key = $1) as season_comparison`,
     [teamId, season, comparisonSeason]
   );
@@ -1154,7 +1325,7 @@ async function loadTeamPageData(
 
   const snapshot = season === "2025-26"
     ? z.object({
-        dashboard: v6TeamDashboardRowSchema.nullable(),
+        dashboard: z.union([v7TeamDashboardRowSchema, v6TeamDashboardRowSchema]).nullable(),
         comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(v6ComparisonSourceRowSchema),
         league_metrics: v6LeagueMetricsSourceSchema.nullable(),
@@ -1241,38 +1412,40 @@ async function loadLeaguePageData(
        (select to_jsonb(league_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, injury_type_families, severity_distribution,
+                 injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
+                 to_jsonb(league_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_league_dashboard_v6
+          from reporting.latest_league_dashboard_v7 league_dashboard
           where season = $1
         ) league_row) as dashboard,
        (select to_jsonb(comparison_league_row) from (
           select team, season, generated_at, analysis_window, method, coverage,
                  headline, setting_split, setting_metrics, monthly, body_locations,
-                 injury_types, injury_profiles, injury_type_families, severity_distribution,
+                 injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
+                 to_jsonb(comparison_league_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_league_dashboard_v6
+          from reporting.latest_league_dashboard_v7 comparison_league_dashboard
           where season = $2
         ) comparison_league_row) as comparison_dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v6
+           from reporting.latest_team_dashboard_v7
           where season = $1
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
        (select comparison
-        from reporting.latest_league_season_comparison_v4) as season_comparison`,
+        from reporting.latest_league_season_comparison_v5) as season_comparison`,
     [season, comparisonSeason]
   );
   if (result.rows.length !== 1) throw new Error("expected one league page snapshot row");
 
   const snapshot = season === "2025-26"
     ? z.object({
-        dashboard: v6LeagueDashboardRowSchema.nullable(),
+        dashboard: z.union([v7LeagueDashboardRowSchema, v6LeagueDashboardRowSchema]).nullable(),
         comparison_dashboard: z.unknown().nullish(),
         comparisons: z.array(v6ComparisonSourceRowSchema),
         season_comparison: seasonComparisonReaderSchema.nullable(),
@@ -1359,7 +1532,7 @@ export async function getLeagueSettingMetrics(
   if (!pool) return [];
   const result = await approvedWebReaderQuery(pool,
     `select setting_metrics
-     from reporting.latest_league_dashboard_v6
+     from reporting.latest_league_dashboard_v7
      where season = $1`,
     [season]
   );
@@ -1443,6 +1616,40 @@ function normalizeDashboardRow(
       burden_per_1000h: item.burden_per_1000h ?? null,
       mean_severity_days: item.mean_severity_days ?? null,
     })) as InjuryProfileRow[],
+    ...(row.diagnosis_families
+      ? {
+          diagnosis_families: row.diagnosis_families.map((item) => ({
+            ...stripNulls(item),
+            exposure_hours: item.exposure_hours ?? null,
+            incidence_per_1000h: item.incidence_per_1000h ?? null,
+            burden_per_1000h: item.burden_per_1000h ?? null,
+            mean_severity_days: item.mean_severity_days ?? null,
+          })) as DiagnosisFamilyRow[],
+      }
+      : {}),
+    ...(row.illness_profiles
+      ? {
+          illness_profiles: row.illness_profiles.map((item) => ({
+            ...stripNulls(item),
+            label: illnessProfileDisplayLabel(item.label),
+            exposure_hours: item.exposure_hours ?? null,
+            incidence_per_1000h: item.incidence_per_1000h ?? null,
+            burden_per_1000h: item.burden_per_1000h ?? null,
+            mean_severity_days: item.mean_severity_days ?? null,
+          })) as IllnessProfileRow[],
+      }
+      : {}),
+    ...(row.illness_summary
+      ? {
+          illness_summary: {
+            ...stripNulls(row.illness_summary),
+            exposure_hours: row.illness_summary.exposure_hours ?? null,
+            incidence_per_1000h: row.illness_summary.incidence_per_1000h ?? null,
+            burden_per_1000h: row.illness_summary.burden_per_1000h ?? null,
+            mean_severity_days: row.illness_summary.mean_severity_days ?? null,
+          } as IllnessSummary,
+        }
+      : {}),
     injury_type_families: row.injury_type_families.map((item) => ({
       ...stripNulls(item),
       exposure_hours: item.exposure_hours ?? null,
@@ -1458,6 +1665,10 @@ function normalizeDashboardRow(
       })),
     })) as InjuryTypeFamilyRow[],
     severity_distribution: row.severity_distribution.map(stripNulls) as SeverityRow[],
+    preliminary_monthly_rates: "preliminary_monthly_rates" in row
+      && row.preliminary_monthly_rates
+      ? row.preliminary_monthly_rates.map(stripNulls) as PreliminaryMonthlyRateRow[]
+      : null,
     ...(row.contact_distribution
       ? {
           contact_distribution: row.contact_distribution.map(stripNulls) as DistributionRow[],

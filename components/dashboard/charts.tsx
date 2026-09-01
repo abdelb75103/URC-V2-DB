@@ -166,24 +166,24 @@ function MonthlyExposureTooltip({
       rows.push(
         { label: 'Match', value: `${hours(row.match_exposure_hours)} player-hours`, color: SETTING_COLORS.match },
         { label: 'Training', value: `${hours(row.training_exposure_hours)} player-hours`, color: SETTING_COLORS.training },
-        { label: 'Total hours', value: `${hours(row.exposure_hours)} player-hours` },
+        { label: 'Total Hours', value: `${hours(row.exposure_hours)} player-hours` },
       );
     } else {
       rows.push({ label: 'Hours', value: `${hours(row.exposure_hours)} player-hours`, color: hoursColor });
     }
     const hoursContributors = contributingClubsText(row, 'hours');
-    if (hoursContributors) rows.push({ label: 'Hours contributors', value: hoursContributors });
+    if (hoursContributors) rows.push({ label: 'Hours Contributors', value: hoursContributors });
   }
   if (showDistance && typeof row.distance_km === 'number') {
     rows.push({ label: 'Distance', value: `${number(row.distance_km)} km`, color: SETTING_COLORS.all });
     const distanceContributors = contributingClubsText(row, 'distance');
-    if (distanceContributors) rows.push({ label: 'Distance contributors', value: distanceContributors });
+    if (distanceContributors) rows.push({ label: 'Distance Contributors', value: distanceContributors });
   }
   if (showHsr && typeof row.hsr_distance_km === 'number') {
-    rows.push({ label: 'HSR distance', value: `${number(row.hsr_distance_km)} km`, color: '#f59e0b' });
+    rows.push({ label: 'HSR Distance', value: `${number(row.hsr_distance_km)} km`, color: '#f59e0b' });
     if (typeof row.hsr_distance_denominator_km === 'number' && row.hsr_distance_denominator_km > 0) {
       rows.push({
-        label: 'HSR share',
+        label: 'HSR Share',
         value: `${number(row.hsr_distance_km / row.hsr_distance_denominator_km * 100, 1)}%`,
         color: '#f59e0b',
       });
@@ -205,15 +205,15 @@ function TimelineTooltip({
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
-  const rows: TooltipRow[] = [{ label: 'TL injuries', value: `${count(row.time_loss_injuries)} injuries`, color: '#ffc45c' }];
+  const rows: TooltipRow[] = [{ label: 'Time Loss Injuries', value: `${count(row.time_loss_injuries)} injuries`, color: '#ffc45c' }];
   if (typeof row.recorded_injuries === 'number') {
-    rows.unshift({ label: 'Injuries', value: `${count(row.recorded_injuries)} injuries`, color: SETTING_COLORS.all });
+    rows.unshift({ label: 'Overall Injuries', value: `${count(row.recorded_injuries)} injuries`, color: SETTING_COLORS.all });
   }
   if (typeof row.overall_incidence_per_1000h === 'number') {
-    rows.push({ label: 'Overall incidence', value: `${number(row.overall_incidence_per_1000h)} /1,000 h`, color: SETTING_COLORS.all });
+    rows.push({ label: 'Overall Incidence', value: `${number(row.overall_incidence_per_1000h)} /1,000 h`, color: SETTING_COLORS.all });
   }
   if (typeof row.incidence_per_1000h === 'number') {
-    rows.push({ label: 'TL incidence', value: `${number(row.incidence_per_1000h)} /1,000 h`, color: '#ffc45c' });
+    rows.push({ label: 'Time Loss Incidence', value: `${number(row.incidence_per_1000h)} /1,000 h`, color: '#ffc45c' });
   }
   if (typeof row.overall_incidence_per_1000h === 'number' || typeof row.incidence_per_1000h === 'number') {
     rows.push({ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` });
@@ -249,7 +249,7 @@ export function SeasonTimelineChart({
   const hasTlIncidence = data.some((row) => typeof row.incidence_per_1000h === 'number');
 
   return (
-    <div className="h-[320px] sm:min-w-[560px]" aria-label="Season timeline of injuries, TL injuries, overall incidence and TL incidence">
+    <div className="h-[320px] sm:min-w-[560px]" aria-label="Season Timeline of Overall Injuries, Time Loss Injuries, Overall Incidence and Time Loss Incidence">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart accessibilityLayer data={data} margin={{ top: 34, right: 16, bottom: 32, left: 12 }}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
@@ -288,7 +288,7 @@ export function SeasonTimelineChart({
             <Bar
               yAxisId="cases"
               dataKey="recorded_injuries"
-              name="Injuries"
+              name="Overall Injuries"
               fill={SETTING_COLORS.all}
               fillOpacity={0.72}
               radius={[3, 3, 0, 0]}
@@ -300,7 +300,7 @@ export function SeasonTimelineChart({
             <Bar
               yAxisId="cases"
               dataKey="time_loss_injuries"
-              name="TL injuries"
+              name="Time Loss Injuries"
               fill="#ffc45c"
               fillOpacity={1}
               radius={[3, 3, 0, 0]}
@@ -313,7 +313,7 @@ export function SeasonTimelineChart({
               yAxisId="rate"
               type="monotone"
               dataKey="overall_incidence_per_1000h"
-              name="Overall incidence"
+              name="Overall Incidence"
               stroke={SETTING_COLORS.all}
               strokeWidth={2.5}
               dot={{ r: 3, strokeWidth: 1.5 }}
@@ -327,7 +327,7 @@ export function SeasonTimelineChart({
               yAxisId="rate"
               type="monotone"
               dataKey="incidence_per_1000h"
-              name="TL incidence"
+              name="Time Loss Incidence"
               stroke="#ffc45c"
               strokeWidth={2.5}
               dot={{ r: 3, strokeWidth: 1.5 }}
@@ -349,8 +349,8 @@ export function SeasonTimelineChart({
  */
 export function SeverityArc({
   rows,
-  scaleLabels = ['Least severe', 'Most severe'],
-  ariaLabel = 'Severity band breakdown',
+  scaleLabels = ['Least Severe', 'Most Severe'],
+  ariaLabel = 'Severity Band Breakdown',
 }: {
   rows: RingDatum[];
   scaleLabels?: [string, string] | null;
@@ -511,8 +511,8 @@ export function ExposureTrendChart({
           <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
           {showHours && typeof data[0]?.match_exposure_hours === 'number' ? (
             <>
-              <Bar yAxisId="hours" dataKey="match_exposure_hours" name="Match hours" stackId="hours" fill={SETTING_COLORS.match} isAnimationActive={false} />
-              <Bar yAxisId="hours" dataKey="training_exposure_hours" name="Training hours" stackId="hours" fill={SETTING_COLORS.training} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar yAxisId="hours" dataKey="match_exposure_hours" name="Match Hours" stackId="hours" fill={SETTING_COLORS.match} isAnimationActive={false} />
+              <Bar yAxisId="hours" dataKey="training_exposure_hours" name="Training Hours" stackId="hours" fill={SETTING_COLORS.training} radius={[3, 3, 0, 0]} isAnimationActive={false} />
             </>
           ) : showHours ? (
             <Bar yAxisId="hours" dataKey="exposure_hours" name="Hours" fill={totalHoursColor} radius={[3, 3, 0, 0]} maxBarSize={54} isAnimationActive={false} />
@@ -536,7 +536,7 @@ export function ExposureTrendChart({
               yAxisId="distance"
               type="monotone"
               dataKey="hsr_distance_km"
-              name="HSR distance"
+              name="HSR Distance"
               stroke="#f59e0b"
               strokeWidth={2.5}
               strokeDasharray="5 4"
@@ -576,8 +576,8 @@ function ComparisonScatterTooltip({
     <TooltipCard
       title={row.label}
       rows={[
-        { label: 'Match TL incidence', value: `${number(row.match_incidence, 2)} /1,000 h`, color: SETTING_COLORS.match },
-        { label: 'Training TL incidence', value: `${number(row.training_incidence, 2)} /1,000 h`, color: SETTING_COLORS.training },
+        { label: 'Match Incidence', value: `${number(row.match_incidence, 2)} /1,000 h`, color: SETTING_COLORS.match },
+        { label: 'Training Incidence', value: `${number(row.training_incidence, 2)} /1,000 h`, color: SETTING_COLORS.training },
         { label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` },
       ]}
     />
@@ -597,7 +597,7 @@ function comparisonMarkerLabel(label: string) {
 }
 
 /**
- * Match against training TL incidence, one dot per club. Every value is read from
+ * Match against training incidence, one dot per club. Every value is read from
  * the approved comparison payload: positions are the released rates, dot area is
  * released exposure, and the crosshairs are the released league means.
  */
@@ -627,7 +627,7 @@ export function ComparisonScatterChart({
     return () => observer.disconnect();
   }, []);
   if (!rows.length) {
-    return <ChartEmpty reason="No club has both a match and a training TL incidence in the approved comparison payload." />;
+    return <ChartEmpty reason="No club has both a match and a training incidence in the approved comparison payload." />;
   }
   const pad = (values: number[]) => [0, Math.max(...values) * 1.15 || 1] as [number, number];
   const matchDomain = pad(rows.map((row) => row.match_incidence));
@@ -639,11 +639,11 @@ export function ComparisonScatterChart({
   // phone that margin would cost a third of the card, so the label moves inside
   // the plot, still right-aligned, and the plot takes the width back.
   const trainingLabel = narrow
-    ? { value: 'League training mean', position: 'insideTopRight' as const, fill: SETTING_COLORS.training, fontSize: 10 }
-    : { value: 'League training mean', position: 'right' as const, fill: SETTING_COLORS.training, fontSize: 10 };
+    ? { value: 'League Training Mean', position: 'insideTopRight' as const, fill: SETTING_COLORS.training, fontSize: 10 }
+    : { value: 'League Training Mean', position: 'right' as const, fill: SETTING_COLORS.training, fontSize: 10 };
 
   return (
-    <section aria-label="Match vs training TL incidence for every club. Horizontal position is match TL incidence, vertical position is training TL incidence, and circle area is player-hours. The green zone is below both league means and the red zone is above both league means.">
+    <section aria-label="Match versus training incidence for every club. Horizontal position is match incidence, vertical position is training incidence, and circle area is player-hours. The green zone is below both league means and the red zone is above both league means.">
       <div className="pb-2" ref={boxRef}>
         <div className="h-[360px] sm:min-w-[620px]">
           <ResponsiveContainer width="100%" height="100%">
@@ -674,25 +674,25 @@ export function ComparisonScatterChart({
               <XAxis
                 type="number"
                 dataKey="match_incidence"
-                name="Match TL incidence"
+                name="Match Incidence"
                 domain={matchDomain}
                 tickFormatter={formatAxisTick}
                 tick={{ fill: AXIS, fontSize: 11 }}
                 tickLine={false}
                 axisLine={AXIS_LINE}
-                label={{ value: 'Match TL incidence, injuries /1,000 h', position: 'bottom', fill: AXIS, fontSize: 12, offset: 14 }}
+                label={{ value: 'Match Incidence, Injuries /1,000 h', position: 'bottom', fill: AXIS, fontSize: 12, offset: 14 }}
               />
               <YAxis
                 type="number"
                 dataKey="training_incidence"
-                name="Training TL incidence"
+                name="Training Incidence"
                 domain={trainingDomain}
                 tickFormatter={formatAxisTick}
                 width={50}
                 tick={{ fill: AXIS, fontSize: 11 }}
                 tickLine={false}
                 axisLine={AXIS_LINE}
-                label={{ value: 'Training TL incidence, injuries /1,000 h', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 2, style: Y_TITLE_STYLE }}
+                label={{ value: 'Training Incidence, Injuries /1,000 h', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 2, style: Y_TITLE_STYLE }}
               />
               <ZAxis type="number" dataKey="exposure_hours" range={[70, 620]} name="Exposure" />
               <Tooltip content={<ComparisonScatterTooltip />} cursor={{ stroke: GRID }} wrapperStyle={{ zIndex: 30 }} />
@@ -704,7 +704,7 @@ export function ComparisonScatterChart({
                   stroke={SETTING_COLORS.match}
                   strokeDasharray="4 4"
                   strokeOpacity={0.85}
-                  label={{ value: 'League match mean', position: 'top', fill: SETTING_COLORS.match, fontSize: 10 }}
+                  label={{ value: 'League Match Mean', position: 'top', fill: SETTING_COLORS.match, fontSize: 10 }}
                 />
               )}
               {typeof leagueTrainingIncidence === 'number' && (
@@ -742,16 +742,16 @@ export function ComparisonScatterChart({
           </ResponsiveContainer>
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 rounded-md border border-border/70 bg-background/25 px-3 py-2 text-[11px] text-muted-foreground">
-          <span>Circle area = player-hours</span>
+          <span>Circle Area = Player-Hours</span>
           {showIncidenceZones && (
             <>
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm bg-green-500/70" aria-hidden="true" />
-                Below both league means
+                Below Both League Means
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm bg-red-500/70" aria-hidden="true" />
-                Above both league means
+                Above Both League Means
               </span>
             </>
           )}
@@ -796,11 +796,11 @@ function ImpactTooltip({
       </div>
       <dl className="mt-1.5 space-y-1">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt style={{ color }}>TL incidence</dt>
+          <dt style={{ color }}>Incidence</dt>
           <dd className="text-right font-semibold tabular-nums" style={{ color }}>{number(row.incidence_per_1000h)} /1,000 h</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt style={{ color }}>Mean severity</dt>
+          <dt style={{ color }}>Mean Severity</dt>
           <dd className="text-right font-semibold tabular-nums" style={{ color }}>{number(row.mean_severity_days)} days</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
@@ -808,11 +808,11 @@ function ImpactTooltip({
           <dd className="text-right font-semibold tabular-nums">{number(row.burden_per_1000h)} days /1,000 h</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t border-white/10 pt-1">
-          <dt>TL injuries</dt>
+          <dt>Injuries</dt>
           <dd className="text-right font-semibold tabular-nums">{count(row.time_loss_injuries)}</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt>Total days lost</dt>
+          <dt>Total Days Lost</dt>
           <dd className="text-right font-semibold tabular-nums">{count(row.days_lost)}</dd>
         </div>
       </dl>
@@ -912,7 +912,7 @@ function ImpactDot({
   const point = { row: payload, x: cx, y: cy };
   const selected = pinnedKey === payload.impactKey;
   const active = activeKey === payload.impactKey;
-  const accessibleLabel = `${payload.label}, ${settingLabel(payload.setting)}. TL incidence ${number(payload.incidence_per_1000h)} injuries per 1,000 hours. Mean severity ${number(payload.mean_severity_days)} days. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
+  const accessibleLabel = `${payload.label}, ${settingLabel(payload.setting)}. Incidence ${number(payload.incidence_per_1000h)} injuries per 1,000 hours. Mean severity ${number(payload.mean_severity_days)} days. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
 
   return (
     <g>
@@ -954,7 +954,7 @@ function ImpactDot({
   );
 }
 
-/** TL incidence and mean severity define position; every displayed profile is a numbered fixed-size dot. */
+/** Incidence and mean severity define position; every displayed profile is a numbered fixed-size dot. */
 export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   const chartRef = useRef<HTMLDivElement>(null);
   const focusedImpactKeyRef = useRef<string | undefined>(undefined);
@@ -1061,7 +1061,7 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   ), [clearFocusPreview, clearPreview, dismissTooltip, pin, pinned, preview, previewFromFocus, previewPoint, syncPointPosition]);
 
   if (!data.length) {
-    return <ChartEmpty reason="No injury profiles have a finite TL incidence and positive mean severity needed for this logarithmic chart." />;
+    return <ChartEmpty reason="No injury profiles have a finite incidence and positive mean severity needed for this logarithmic chart." />;
   }
 
   const activePoint = pinned ?? preview;
@@ -1070,7 +1070,7 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
   const tooltipLeft = visiblePointX > 430 ? visiblePointX - 296 : visiblePointX + 16;
 
   return (
-    <section aria-label={`Risk Matrix of TL incidence and severity. Each numbered dot matches the diagnosis key below. Horizontal position is TL incidence. Vertical position is logarithmic mean severity from ${number(severityDomain[0])} to ${number(severityDomain[1])} days. Focus a dot to preview its values, then press Enter or Space to pin it.`}>
+    <section aria-label={`Risk Matrix of incidence and severity. Each numbered dot matches the diagnosis key below. Horizontal position is incidence. Vertical position is logarithmic mean severity from ${number(severityDomain[0])} to ${number(severityDomain[1])} days. Focus a dot to preview its values, then press Enter or Space to pin it.`}>
       <div className="relative">
         <div
           onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
@@ -1102,12 +1102,12 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
                   type="number"
                   dataKey="incidence_per_1000h"
                   domain={[0, maxIncidence]}
-                  name="TL incidence"
+                  name="Incidence"
                   tickFormatter={formatAxisTick}
                   tick={{ fill: AXIS, fontSize: 11 }}
                   tickLine={false}
                   axisLine={AXIS_LINE}
-                  label={{ value: 'TL incidence, injuries /1,000 h', position: 'bottom', fill: AXIS, fontSize: 12, offset: 16 }}
+                  label={{ value: 'Incidence, Injuries /1,000 h', position: 'bottom', fill: AXIS, fontSize: 12, offset: 16 }}
                 />
                 <YAxis
                   type="number"
@@ -1115,13 +1115,13 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
                   domain={severityDomain}
                   scale="log"
                   ticks={severityTicks}
-                  name="Mean severity"
+                  name="Mean Severity"
                   tickFormatter={formatAxisTick}
                   width={62}
                   tick={{ fill: AXIS, fontSize: 11 }}
                   tickLine={false}
                   axisLine={AXIS_LINE}
-                  label={{ value: 'Mean severity, days (logarithmic scale)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 0, style: Y_TITLE_STYLE }}
+                  label={{ value: 'Mean Severity, Days (Logarithmic Scale)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 0, style: Y_TITLE_STYLE }}
                 />
                 <Scatter
                   data={data}
@@ -1145,10 +1145,10 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
         )}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-muted-foreground" aria-label="Risk Matrix key">
-        <span className="font-medium text-foreground">Impact zone</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#2fbf83]/60" />Lower incidence and severity</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#e5bd45]/70" />One measure elevated</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#df4f52]/70" />Higher incidence and severity</span>
+        <span className="font-medium text-foreground">Impact Zone</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#2fbf83]/60" />Lower Incidence And Severity</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#e5bd45]/70" />One Measure Elevated</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#df4f52]/70" />Higher Incidence And Severity</span>
       </div>
       <ol className="mt-4 columns-1 gap-6 border-t border-border/60 pt-4 text-sm sm:columns-2 lg:columns-4" aria-label="Diagnoses shown on the Risk Matrix">
         {data.map((row) => (

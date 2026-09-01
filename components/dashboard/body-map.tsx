@@ -27,9 +27,9 @@ const REGIONS = [
 ] as const;
 
 const METRIC_LABELS: Record<LocationMetric, { label: string; unit: string }> = {
-  time_loss_injuries: { label: 'TL injuries', unit: '' },
-  incidence_per_1000h: { label: 'TL incidence', unit: ' TL injuries per 1,000 player-hours' },
-  burden_per_1000h: { label: 'burden', unit: ' days per 1,000 player-hours' },
+  time_loss_injuries: { label: 'Injuries', unit: '' },
+  incidence_per_1000h: { label: 'Incidence', unit: ' injuries per 1,000 player-hours' },
+  burden_per_1000h: { label: 'Burden', unit: ' days per 1,000 player-hours' },
 };
 
 /** Fallback name for a region the payload carries no row for, cased like the payload labels. */
@@ -96,7 +96,7 @@ export function BodyMap({
             <span className="font-medium tabular-nums text-foreground">{activeValue.toLocaleString(undefined, { maximumFractionDigits: 1 })} {metricMeta.label}{metricMeta.unit}</span>
             <span className="block mt-0.5 text-muted-foreground">
               {activeRow
-                ? `n = ${activeRow.time_loss_injuries} time-loss injuries.`
+                ? `n = ${activeRow.time_loss_injuries} injuries.`
                 : '0 means no cases were recorded in this bucket.'}
             </span>
           </>

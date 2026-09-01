@@ -289,7 +289,7 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("'setting', p.setting_code", PREVIEW)
         self.assertIn("'Unknown diagnosis'", PREVIEW)
         self.assertIn("withoutFrontFacingUnknown", UI)
-        for surface in ("Match vs training", "settingOptions", "SettingBench"):
+        for surface in ("Match Vs Training", "settingOptions", "SettingBench"):
             self.assertIn(surface, UI)
         self.assertIn("metricFor('match')", UI)
         self.assertIn("metricFor('training')", UI)
@@ -317,8 +317,8 @@ class DashboardV3PreviewTests(unittest.TestCase):
 
     def test_requested_dashboard_surfaces_exist(self) -> None:
         for label in (
-            "Season timeline",
-            "Contact mechanism",
+            "Season Timeline",
+            "Contact Mechanism",
             "Injury Location",
             "Team Comparison",
             "Exposure",
@@ -330,7 +330,7 @@ class DashboardV3PreviewTests(unittest.TestCase):
         self.assertIn("<InjuryTypeDossier", UI)
         self.assertIn("availableSettings(classifiedFamilies", UI)
         self.assertIn("row.setting === effectiveSetting && row.time_loss_injuries > 0", UI)
-        self.assertIn("Included injury types", INJURY_TYPE_DOSSIER)
+        self.assertIn("Included Injury Types", INJURY_TYPE_DOSSIER)
         self.assertNotIn("<svg", INJURY_TYPE_DOSSIER)
         self.assertNotIn("Head-to-foot profile", UI)
 

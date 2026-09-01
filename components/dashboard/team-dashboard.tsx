@@ -17,6 +17,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, X } from 'lucide-react';
 import type {
   DashboardSupplement,
+  DiagnosisFamilyRow,
   ExposureReviewPreview,
   InjuryProfileRow,
   InjuryTypeFamilyRow,
@@ -25,6 +26,7 @@ import type {
   TeamComparisonRow,
 } from '@/lib/reporting-types';
 import { Button } from '@/components/ui/button';
+import { diagnosisFamilyProfiles } from '@/lib/reporting-types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BodyMap, locationHeatColor, type LocationMetric } from '@/components/dashboard/body-map';
@@ -69,8 +71,8 @@ type ProfileMetric =
 type Setting = InjuryProfileRow['setting'];
 
 const METRICS: Array<{ key: ProfileMetric; label: string; shortUnit: string; longUnit: string }> = [
-  { key: 'time_loss_injuries', label: 'Count', shortUnit: 'injuries', longUnit: 'time-loss injuries' },
-  { key: 'incidence_per_1000h', label: 'TL Incidence', shortUnit: '/1,000 h', longUnit: 'TL injuries /1,000 h' },
+  { key: 'time_loss_injuries', label: 'Count', shortUnit: 'injuries', longUnit: 'injuries' },
+  { key: 'incidence_per_1000h', label: 'Incidence', shortUnit: '/1,000 h', longUnit: 'injuries /1,000 h' },
   { key: 'burden_per_1000h', label: 'Burden', shortUnit: 'days/1,000 h', longUnit: 'days /1,000 h' },
   { key: 'mean_severity_days', label: 'Severity', shortUnit: 'days', longUnit: 'days' },
 ];
@@ -406,8 +408,10 @@ function EmptyState({ children = 'No data is available for this view.' }: { chil
 
 function reportingDiagnosisRows(
   profiles: InjuryProfileRow[],
+  diagnosisFamilies: DiagnosisFamilyRow[] | null | undefined,
   supplement?: DashboardSupplement,
 ): InjuryProfileRow[] {
+  if (diagnosisFamilies) return withoutFrontFacingUnknown(diagnosisFamilyProfiles(diagnosisFamilies));
   if (supplement?.common_injuries.length) return withoutFrontFacingUnknown(supplement.common_injuries);
   if (profiles.some((row) => row.dimension === 'diagnosis')) {
     return withoutFrontFacingUnknown(profiles.filter((row) => row.dimension === 'diagnosis'));
@@ -434,9 +438,8 @@ function OverviewTab({
   const [showTlIncidence, setShowTlIncidence] = useState(true);
   const [severitySetting, setSeveritySetting] = useState<Setting>('all');
   const [contactSetting, setContactSetting] = useState<Setting>('all');
-  const [locationMetric, setLocationMetric] = useState<LocationMetric>('incidence_per_1000h');
-  const [benchMetric, setBenchMetric] = useState<ProfileMetric>('incidence_per_1000h');
-  const [includeZeroDay, setIncludeZeroDay] = useState(true);
+  const [locationMetric, setLocationMetric] = useState<LocationMetric>('time_loss_injuries');
+  const [benchMetric, setBenchMetric] = useState<ProfileMetric>('time_loss_injuries');
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
   const usesReportedLeagueContract = dashboard.scope === 'league'
@@ -462,6 +465,7 @@ function OverviewTab({
   const effectiveSetting: Setting = settingFilterAvailable && settingOptions.includes(setting) ? setting : 'all';
   const perSettingMonthly = Boolean(supplement);
   const filtered = effectiveSetting !== 'all';
+  const showsOverallOnlyKpiTrends = filtered && !perSettingMonthly;
 
   const recorded = supplement?.descriptive_consequence_summary.recorded_injuries
     ?? headline.recorded_injuries
@@ -492,12 +496,19 @@ function OverviewTab({
   // it dropped (handled inside the chart components). The KPI sparklines and every
   // headline total stay on the full set, so the tiles keep reconciling.
   const trend = sortByMonth(monthlyRows);
+  const preliminaryRateTrend = dashboard.preliminary_monthly_rates ?? [];
+  const usesPreliminaryRateTrend = preliminaryRateTrend.length > 1;
+  const incidenceTrend = usesPreliminaryRateTrend
+    ? preliminaryRateTrend.map((row) => row.incidence_per_1000h)
+    : trend.map((row) => row.incidence_per_1000h ?? null);
   // The burden tile's own series. Monthly burden is a released value on the
   // approved monthly rows but is not carried per setting, so this one series is
   // always the overall season shape.
-  const burdenTrend = sortByMonth(
-    dashboard.monthly.map((row) => ({ month: row.month ?? '', burden_per_1000h: row.burden_per_1000h ?? null }))
-  ).map((row) => row.burden_per_1000h);
+  const burdenTrend = usesPreliminaryRateTrend
+    ? preliminaryRateTrend.map((row) => row.burden_per_1000h)
+    : sortByMonth(
+        dashboard.monthly.map((row) => ({ month: row.month ?? '', burden_per_1000h: row.burden_per_1000h ?? null }))
+      ).map((row) => row.burden_per_1000h);
 
   const locationSettings = availableSettings(locationProfiles, ['all', 'match', 'training']);
   const locationSetting = locationSettings.includes(effectiveSetting) ? effectiveSetting : locationSettings[0] ?? 'all';
@@ -520,12 +531,10 @@ function OverviewTab({
     ? severityDistribution.filter((row) => row.setting === effectiveSeveritySetting)
     : severityDistribution;
   const severityRows = [
-    { key: 'zero', label: '0 days (medical attention)', value: severitySource.find((row) => row.key === 'zero_days_medical_attention_only')?.recorded_injuries ?? 0 },
-    { key: 'one_to_seven', label: '1-7 days', value: severitySource.filter((row) => ['one_day', 'two_to_three_days', 'four_to_seven_days'].includes(row.key)).reduce((sum, row) => sum + row.recorded_injuries, 0) },
-    { key: 'eight_to_twenty_eight', label: '8-28 days', value: severitySource.find((row) => row.key === 'eight_to_twenty_eight_days')?.recorded_injuries ?? 0 },
-    { key: 'greater_than_twenty_eight', label: 'Over 28 days', value: severitySource.find((row) => row.key === 'greater_than_twenty_eight_days')?.recorded_injuries ?? 0 },
+    { key: 'one_to_seven', label: '1-7 Days', value: severitySource.filter((row) => ['one_day', 'two_to_three_days', 'four_to_seven_days'].includes(row.key)).reduce((sum, row) => sum + row.time_loss_injuries, 0) },
+    { key: 'eight_to_twenty_eight', label: '8-28 Days', value: severitySource.find((row) => row.key === 'eight_to_twenty_eight_days')?.time_loss_injuries ?? 0 },
+    { key: 'greater_than_twenty_eight', label: 'Over 28 Days', value: severitySource.find((row) => row.key === 'greater_than_twenty_eight_days')?.time_loss_injuries ?? 0 },
   ]
-    .filter((row) => includeZeroDay || row.key !== 'zero')
     .map((row) => ({ ...row, color: SEVERITY_BAND_COLORS[row.key] }));
 
   // Unlike the other breakdowns this one keeps its Unknown slice, so the ring
@@ -558,50 +567,60 @@ function OverviewTab({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Injuries"
-          value={fmt(headlineValues.recorded_injuries, 0)}
+          value={fmt(headlineValues.time_loss_injuries, 0)}
           unit="injuries"
-          companion={<PairedStat label="TL injuries" value={fmt(headlineValues.time_loss_injuries)} color="#ffc45c" />}
+          companion={<PairedStat label="Overall Injuries" value={fmt(headlineValues.recorded_injuries, 0)} color="#ffc45c" />}
         >
-          <Sparkline values={trend.map((row) => row.recorded_injuries ?? null)} color={SETTING_COLORS.all} ariaLabel="Injuries by month" />
+          <ScopeChip show={showsOverallOnlyKpiTrends} label="Overall Trend" />
+          <Sparkline values={trend.map((row) => row.time_loss_injuries ?? null)} color={SETTING_COLORS.all} ariaLabel="Injuries By Month" />
         </StatTile>
         <StatTile
-          label="Overall incidence"
-          value={fmt(headlineValues.overall_incidence_per_1000h)}
+          label="Incidence"
+          value={fmt(headlineValues.incidence_per_1000h)}
           unit="injuries /1,000 h"
-          companion={<PairedStat label="TL incidence" value={fmt(headlineValues.incidence_per_1000h)} color="#ffc45c" />}
+          companion={<PairedStat label="Overall Incidence" value={fmt(headlineValues.overall_incidence_per_1000h)} color="#ffc45c" />}
         >
-          <Sparkline values={trend.map((row) => row.overall_incidence_per_1000h ?? null)} color={SETTING_COLORS.all} ariaLabel="Overall incidence by month" />
+          <ScopeChip show={showsOverallOnlyKpiTrends} label="Overall Trend" />
+          <Sparkline values={incidenceTrend} color={SETTING_COLORS.all} ariaLabel="Incidence By Month" />
         </StatTile>
         <StatTile
           label="Burden"
           value={fmt(active?.burden_per_1000h ?? (filtered ? null : headline.burden_per_1000h))}
           unit="days /1,000 h"
         >
-          <Sparkline values={burdenTrend} color="#ef7189" ariaLabel="Burden by month" />
+          <ScopeChip show={showsOverallOnlyKpiTrends} label="Overall Trend" />
+          <Sparkline values={burdenTrend} color="#ef7189" ariaLabel="Burden By Month" />
         </StatTile>
         <StatTile
-          label={usesTemporaryExposureEstimate ? 'Estimated exposure' : 'Exposure'}
+          label={usesTemporaryExposureEstimate ? 'Estimated Exposure' : 'Exposure'}
           value={fmtHours(filtered ? active?.exposure_hours : dashboard.coverage.hours)}
           unit="player-hours"
         >
-          <Sparkline values={trend.map((row) => row.exposure_hours)} color="#42d8b4" ariaLabel="Exposure hours by month" />
+          <ScopeChip show={showsOverallOnlyKpiTrends} label="Overall Trend" />
+          <Sparkline values={trend.map((row) => row.exposure_hours)} color="#42d8b4" ariaLabel="Exposure Hours By Month" />
           {usesReportedLeagueContract && (
             <p className="mt-1 text-[10px] text-muted-foreground">Monthly trend shows reported source-backed values.</p>
           )}
         </StatTile>
       </div>
 
+      {usesPreliminaryRateTrend && (
+        <p className="-mt-2 text-xs text-muted-foreground" role="note">
+          The Incidence and Burden trends use preliminary contributor-aligned monthly data. Headline values remain the approved season figures.
+        </p>
+      )}
+
       <Panel contentClassName="p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h3 className={PANEL_HEADING_CLASS}>Season timeline</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Season Timeline</h3>
             <ScopeChip show={effectiveSetting !== 'all' && !perSettingMonthly} />
           </div>
           <div className="flex flex-wrap gap-4">
-            <CheckToggle checked={showInjuries} onChange={setShowInjuries} label="Injuries" swatch={SETTING_COLORS.all} />
-            <CheckToggle checked={showTlInjuries} onChange={setShowTlInjuries} label="TL injuries" swatch="#ffc45c" />
-            <CheckToggle checked={showOverallIncidence} onChange={setShowOverallIncidence} label="Overall incidence" swatch={SETTING_COLORS.all} />
-            <CheckToggle checked={showTlIncidence} onChange={setShowTlIncidence} label="TL incidence" swatch="#ffc45c" />
+            <CheckToggle checked={showInjuries} onChange={setShowInjuries} label="Overall Injuries" swatch={SETTING_COLORS.all} />
+            <CheckToggle checked={showTlInjuries} onChange={setShowTlInjuries} label="Time Loss Injuries" swatch="#ffc45c" />
+            <CheckToggle checked={showOverallIncidence} onChange={setShowOverallIncidence} label="Overall Incidence" swatch={SETTING_COLORS.all} />
+            <CheckToggle checked={showTlIncidence} onChange={setShowTlIncidence} label="Time Loss Incidence" swatch="#ffc45c" />
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -623,7 +642,7 @@ function OverviewTab({
               value={locationMetric}
               options={[
                 { value: 'time_loss_injuries' as LocationMetric, label: 'Count' },
-                { value: 'incidence_per_1000h' as LocationMetric, label: 'TL incidence' },
+                { value: 'incidence_per_1000h' as LocationMetric, label: 'Incidence' },
                 { value: 'burden_per_1000h' as LocationMetric, label: 'Burden' },
               ]}
               onChange={setLocationMetric}
@@ -640,7 +659,7 @@ function OverviewTab({
                 onSelect={setSelectedCode}
               />
               <div>
-                <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Top locations</p>
+                <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Top Locations</p>
                 <ol className="space-y-1">
                   {barRows.slice(0, 8).map((row) => {
                     const value = metricValue(row, locationMetric);
@@ -678,7 +697,7 @@ function OverviewTab({
                   <p className="mt-3 border-t border-border/60 pt-3 text-xs text-muted-foreground">
                     <span className="font-semibold text-foreground">{selected.label}</span>
                     {' - '}
-                    {fmt(selected.time_loss_injuries, 0)} time-loss injuries, {fmt(selected.mean_severity_days)} mean days lost
+                    {fmt(selected.time_loss_injuries, 0)} injuries, {fmt(selected.mean_severity_days)} mean days lost
                   </p>
                 )}
               </div>
@@ -689,12 +708,9 @@ function OverviewTab({
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className={PANEL_HEADING_CLASS}>Severity</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              {severitySettings.length > 1 && (
-                <SettingControl value={effectiveSeveritySetting} settings={severitySettings} onChange={setSeveritySetting} />
-              )}
-              <CheckToggle checked={includeZeroDay} onChange={setIncludeZeroDay} label="Include 0-day" />
-            </div>
+            {severitySettings.length > 1 && (
+              <SettingControl value={effectiveSeveritySetting} settings={severitySettings} onChange={setSeveritySetting} />
+            )}
           </div>
           <SeverityArc rows={severityRows} />
         </Panel>
@@ -712,12 +728,12 @@ function OverviewTab({
                 <SettingControl value={effectiveContactSetting} settings={contactSettings} onChange={setContactSetting} />
               )}
             </div>
-            <SeverityArc rows={contactRows} scaleLabels={null} ariaLabel="Contact mechanism breakdown" />
+            <SeverityArc rows={contactRows} scaleLabels={null} ariaLabel="Contact Mechanism Breakdown" />
           </Panel>
         )}
         <Panel contentClassName="p-4 sm:p-5">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h3 className={PANEL_HEADING_CLASS}>Match vs training</h3>
+            <h3 className={PANEL_HEADING_CLASS}>Match Vs Training</h3>
             <MetricControl value={benchMetric} onChange={setBenchMetric} />
           </div>
           <SettingBench match={match} training={training} metric={benchMetric} />
@@ -834,8 +850,8 @@ function SettingBench({ match, training, metric }: {
         );
       })}
       <div className="grid gap-3 border-t border-border/60 pt-4 sm:grid-cols-2">
-        <BenchFoot label="Match cases" value={fmt(match?.time_loss_injuries, 0)} />
-        <BenchFoot label="Training cases" value={fmt(training?.time_loss_injuries, 0)} />
+        <BenchFoot label="Match Injuries" value={fmt(match?.time_loss_injuries, 0)} />
+        <BenchFoot label="Training Injuries" value={fmt(training?.time_loss_injuries, 0)} />
       </div>
     </div>
   );
@@ -871,7 +887,7 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
   supplement?: DashboardSupplement;
 }) {
   const [impactDimension, setImpactDimension] = useState<'diagnosis' | 'location' | 'type'>('diagnosis');
-  const source = reportingDiagnosisRows(profiles, supplement);
+  const source = reportingDiagnosisRows(profiles, dashboard.diagnosis_families, supplement);
   const settings = availableSettings(source, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
   const rows = source.filter((row) => row.setting === setting);
@@ -929,6 +945,56 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
           </section>
         </>
       ) : <EmptyState />}
+    </div>
+  );
+}
+
+function IllnessesTab({ dashboard }: { dashboard: TeamDashboardData }) {
+  const summary = dashboard.illness_summary;
+  const rows = withoutFrontFacingUnknown(dashboard.illness_profiles ?? [])
+    .filter((row) => row.setting === 'all')
+    .sort((left, right) => right.recorded_illnesses - left.recorded_illnesses || left.label.localeCompare(right.label));
+
+  return (
+    <div>
+      <div className="mb-6 border-b border-border/60 pb-4">
+        <h2 className={SECTION_HEADING_CLASS}>Most Common Illnesses</h2>
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+          {summary?.qualification ?? 'No released illness summary is available. Not available values are not estimated.'}
+        </p>
+      </div>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatTile label="Illnesses" value={fmt(summary?.recorded_illnesses, 0)} unit="recorded cases" />
+        <StatTile label="Incidence" value={fmt(summary?.incidence_per_1000h)} unit="cases /1,000 h" />
+        <StatTile label="Burden" value={fmt(summary?.burden_per_1000h)} unit="days /1,000 h" />
+        <StatTile label="Severity" value={fmt(summary?.mean_severity_days)} unit="days" />
+      </div>
+      {rows.length ? (
+        <Panel title="Illness Profile" contentClassName="overflow-x-auto p-0">
+          <table className="w-full min-w-[680px] text-sm">
+            <thead className="border-b border-border/60 bg-muted/40 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3">Illness</th>
+                <th className="px-4 py-3 text-right">Count</th>
+                <th className="px-4 py-3 text-right">Incidence</th>
+                <th className="px-4 py-3 text-right">Burden</th>
+                <th className="px-5 py-3 text-right">Severity</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {rows.map((row) => (
+                <tr key={row.code}>
+                  <th scope="row" className="px-5 py-3 text-left font-medium text-foreground">{row.label}</th>
+                  <td className="px-4 py-3 text-right tabular-nums">{fmt(row.recorded_illnesses, 0)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{fmt(row.incidence_per_1000h)}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">{fmt(row.burden_per_1000h)}</td>
+                  <td className="px-5 py-3 text-right tabular-nums">{fmt(row.mean_severity_days)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Panel>
+      ) : <EmptyState>No released illness profiles are available.</EmptyState>}
     </div>
   );
 }
@@ -1129,9 +1195,9 @@ function CommonInjuryCard({
 }) {
   const share = totalInjuries > 0 ? Math.round((row.time_loss_injuries / totalInjuries) * 100) : 0;
   const unit = metric === 'time_loss_injuries'
-    ? 'cases'
+    ? 'injuries'
     : metric === 'incidence_per_1000h'
-      ? 'TL injuries per 1,000 player-h'
+      ? 'injuries per 1,000 player-h'
       : metric === 'burden_per_1000h'
         ? 'days per 1,000 player-h'
         : 'mean days lost';
@@ -1150,7 +1216,7 @@ function CommonInjuryCard({
         <div className="min-w-0 self-center">
           <h4 className="text-sm font-semibold leading-snug text-inherit capitalize">{row.label}</h4>
           {metric === 'time_loss_injuries' && (
-            <p className="mt-1 text-xs text-inherit">{share}% of time-loss cases</p>
+            <p className="mt-1 text-xs text-inherit">{share}% of injuries</p>
           )}
         </div>
         <div className="shrink-0 text-right">
@@ -1232,9 +1298,11 @@ function TeamComparisonTab({
   }, [activeSetting, metric]);
 
   if (!rows.length) return <EmptyState>No approved team comparison rows are available.</EmptyState>;
-  const settingLabel = activeSetting === 'all' ? 'overall' : activeSetting;
-  const metricLabel = metric === 'incidence_per_1000h' ? 'TL incidence' : 'burden';
-  const metricUnit = metric === 'incidence_per_1000h' ? 'TL injuries /1,000 hours' : 'days /1,000 hours';
+  const settingLabel = activeSetting === 'all'
+    ? 'Overall'
+    : `${activeSetting[0].toUpperCase()}${activeSetting.slice(1)}`;
+  const metricLabel = metric === 'incidence_per_1000h' ? 'Incidence' : 'Burden';
+  const metricUnit = metric === 'incidence_per_1000h' ? 'injuries /1,000 hours' : 'days /1,000 hours';
   // The viewer's own row leads the table; the rest stay alphabetical by alias.
   const alphabetical = [...rows].sort((a, b) => {
     if (a.comparison_id === viewerComparisonId) return -1;
@@ -1264,12 +1332,12 @@ function TeamComparisonTab({
         <h2 className={SECTION_HEADING_CLASS}>Team Comparison</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented value={activeSetting} options={availableSettingOptions.length ? availableSettingOptions : comparisonSettings} onChange={setSetting} label="Choose comparison setting" />
-          <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'TL Incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
+          <Segmented value={metric} options={[{ value: 'incidence_per_1000h', label: 'Incidence' }, { value: 'burden_per_1000h', label: 'Burden' }]} onChange={setMetric} label="Choose comparison metric" />
         </div>
       </div>
       <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-lg border border-border/70 bg-card/70">
-        <OverviewStat label={`League ${settingLabel} TL incidence`} value={fmt(benchmark?.incidence_per_1000h)} unit="TL injuries /1,000 hours" />
-        <OverviewStat label={`League ${settingLabel} burden`} value={fmt(benchmark?.burden_per_1000h)} unit="days /1,000 hours" />
+        <OverviewStat label={`League ${settingLabel} Incidence`} value={fmt(benchmark?.incidence_per_1000h)} unit="injuries /1,000 hours" />
+        <OverviewStat label={`League ${settingLabel} Burden`} value={fmt(benchmark?.burden_per_1000h)} unit="days /1,000 hours" />
       </div>
       <div className="space-y-4">
         <Panel title={`Ranked By ${settingLabel} ${metricLabel} (${metricUnit})`}>
@@ -1298,7 +1366,7 @@ function TeamComparisonTab({
             <div className="mt-4 flex justify-end border-t border-border/60 pt-3" aria-label="Chart legend">
               <span className="inline-flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
                 <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
-                <strong className="font-semibold text-foreground">League mean</strong>
+                <strong className="font-semibold text-foreground">League Mean</strong>
               </span>
             </div>
           )}
@@ -1313,9 +1381,9 @@ function TeamComparisonTab({
                   <th colSpan={2} className="rounded-t-md border-l-4 border-card bg-primary/15 px-3 py-1.5 text-center text-sm font-semibold uppercase tracking-[0.14em] text-foreground">Training</th>
                 </tr>
                 <tr>
-                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL Incidence</th>
+                  <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Incidence</th>
                   <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
-                  <th className="border-l-4 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">TL Incidence</th>
+                  <th className="border-l-4 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Incidence</th>
                   <th className="border-l-2 border-card px-3 pb-1.5 pt-1 text-center text-sm font-medium text-foreground">Burden</th>
                 </tr>
               </thead>
@@ -1355,7 +1423,7 @@ function TeamComparisonTab({
           </div>
         </Panel>
         <Panel contentClassName="p-4 sm:p-5">
-          <h3 className={`${PANEL_HEADING_CLASS} mb-4`}>Match And Training TL Incidence</h3>
+          <h3 className={`${PANEL_HEADING_CLASS} mb-4`}>Match And Training Incidence</h3>
           <ComparisonScatterChart
             rows={scatterRows}
             leagueMatchIncidence={matchBenchmark?.incidence_per_1000h}
@@ -1410,7 +1478,7 @@ function ComparisonBarRow({
     <button
       data-row-id={row.comparison_id}
       type="button"
-      aria-label={`${label}${isViewer ? ', this team' : ''}, ${setting} ${metricLabel}: ${fmtRanked(value, metric)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${hasLeagueMean ? `, league mean ${fmtRanked(leagueMean, metric)}` : ''}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} time-loss cases` : ''}`}
+      aria-label={`${label}${isViewer ? ', this team' : ''}, ${setting} ${metricLabel}: ${fmtRanked(value, metric)} ${metric === 'incidence_per_1000h' ? 'injuries per 1,000 player-hours' : 'days per 1,000 player-hours'}${hasLeagueMean ? `, league mean ${fmtRanked(leagueMean, metric)}` : ''}${metricRow ? `, ${fmt(metricRow.time_loss_injuries, 0)} injuries` : ''}`}
       onMouseEnter={() => onHover(row.comparison_id)}
       onMouseLeave={() => onHover(undefined)}
       onFocus={() => onHover(row.comparison_id)}
@@ -1528,9 +1596,9 @@ function ExposureTab({
     && typeof sourceBackedTeamCount === 'number'
     && typeof temporaryEstimateTeamCount === 'number';
   const hoursLabel = usesReportedLeagueContract && temporaryEstimateTeamCount > 0
-    ? 'Estimated total hours'
-    : 'Total hours';
-  const distanceLabel = usesReportedLeagueContract ? 'Reported distance' : 'Total distance';
+    ? 'Estimated Total Hours'
+    : 'Total Hours';
+  const distanceLabel = usesReportedLeagueContract ? 'Reported Distance' : 'Total Distance';
 
   if (!hasExposureData) {
     return (
@@ -1550,7 +1618,7 @@ function ExposureTab({
           <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
             <OverviewStat label={hoursLabel} value={fmtHours(totalHours)} unit="player-hours" />
             <OverviewStat label={distanceLabel} value={fmt(totalDistance)} unit="km" />
-            {exposurePreview && <OverviewStat label="HSR distance" value={fmt(totalHsr)} unit="km" />}
+            {exposurePreview && <OverviewStat label="HSR Distance" value={fmt(totalHsr)} unit="km" />}
           </div>
         ) : (
           <EmptyState>No approved exposure totals are available for this season.</EmptyState>
@@ -1747,7 +1815,7 @@ function ExposureComparison({
           <div className="mt-4 flex justify-end border-t border-border/60 pt-3" aria-label="Chart legend">
             <span className="inline-flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
               <i aria-hidden="true" className="h-4 border-l-2 border-dotted border-orange-400" />
-              <strong className="font-semibold text-foreground">League mean</strong>
+              <strong className="font-semibold text-foreground">League Mean</strong>
             </span>
           </div>
         </div>
@@ -1760,7 +1828,7 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
   const locationProfiles = profiles.filter((row) => row.dimension === 'body_location');
   const settings = availableSettings(locationProfiles, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
-  const [metric, setMetric] = useState<ProfileMetric>('incidence_per_1000h');
+  const [metric, setMetric] = useState<ProfileMetric>('time_loss_injuries');
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
   const effectiveSetting = settings.includes(setting) ? setting : settings[0] ?? 'all';
@@ -1809,7 +1877,7 @@ function LocationTab({ profiles }: { profiles: InjuryProfileRow[] }) {
           </div>
           <SettingSplitBars
             profiles={locationProfiles}
-            title="Match vs training by region"
+            title="Match Vs Training By Region"
             emptyMessage="No body region has both a match and a training row."
           />
         </div>
@@ -1856,7 +1924,7 @@ function SettingSplitBars({ profiles, title, emptyMessage }: {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h3 className={`${PANEL_HEADING_CLASS} capitalize`}>{title}</h3>
-          <ScopeChip show label="Match & training" />
+          <ScopeChip show label="Match & Training" />
         </div>
         <MetricControl value={metric} onChange={setMetric} locationOnly />
       </div>
@@ -1919,12 +1987,12 @@ function LocationDetail({ row, metric }: { row?: InjuryProfileRow; metric: Profi
   return (
     <div className="mt-3 overflow-hidden rounded-md border border-border/70 bg-background/35 xl:mt-0 xl:flex xl:flex-col">
       <div className="flex items-baseline justify-between gap-3 px-4 py-3 xl:block xl:py-4">
-        <p className="text-xs font-medium text-muted-foreground">Selected location</p>
+        <p className="text-xs font-medium text-muted-foreground">Selected Location</p>
         <p className="truncate text-base font-semibold text-foreground xl:mt-1 xl:text-lg">{row?.label ?? 'Not available'}</p>
       </div>
       <div className="grid grid-cols-3 border-t border-border/60 xl:flex xl:flex-1 xl:flex-col">
         <LocationMetricValue label="Injuries" value={fmt(row?.time_loss_injuries, 0)} active={metric === 'time_loss_injuries'} />
-        <LocationMetricValue label="TL incidence" value={fmtRanked(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
+        <LocationMetricValue label="Incidence" value={fmtRanked(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
         <LocationMetricValue label="Burden" value={fmtRanked(row?.burden_per_1000h, 'burden_per_1000h')} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
       </div>
     </div>
@@ -1962,7 +2030,7 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
             <span className="font-semibold text-foreground">{activeRow.label}</span>
             <span className="mx-1 text-muted-foreground">:</span>
             <span className="font-medium tabular-nums text-foreground">{fmtRanked(activeRow[metric], metric)} {meta.longUnit}</span>
-            <span className="block mt-0.5 text-muted-foreground">n = {fmt(activeRow.time_loss_injuries, 0)} time-loss cases.</span>
+            <span className="block mt-0.5 text-muted-foreground">n = {fmt(activeRow.time_loss_injuries, 0)} injuries.</span>
           </>
         ) : 'No injury type selected.'}
       </div>
@@ -1974,7 +2042,7 @@ function MetricBars({ rows, metric, activeCode, onHover, onSelect, heatMapColors
             key={row.code}
             type="button"
             aria-describedby={tooltipId}
-            aria-label={`${row.label}: ${fmtRanked(row[metric], metric)} ${meta.longUnit}. ${row.setting === 'all' ? 'All settings' : row.setting} cohort; n = ${fmt(row.time_loss_injuries, 0)} time-loss cases.`}
+            aria-label={`${row.label}: ${fmtRanked(row[metric], metric)} ${meta.longUnit}. ${row.setting === 'all' ? 'All settings' : row.setting} cohort; n = ${fmt(row.time_loss_injuries, 0)} injuries.`}
             onMouseEnter={() => onHover(row.code)}
             onMouseLeave={() => onHover()}
             onFocus={() => onHover(row.code)}
@@ -2008,7 +2076,7 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
   ));
   const settings = availableSettings(classifiedFamilies, ['all', 'match', 'training']);
   const [setting, setSetting] = useState<Setting>(settings[0] ?? 'all');
-  const [metric, setMetric] = useState<ProfileMetric>('incidence_per_1000h');
+  const [metric, setMetric] = useState<ProfileMetric>('time_loss_injuries');
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
   const effectiveSetting = settings.includes(setting) ? setting : settings[0] ?? 'all';
@@ -2057,7 +2125,7 @@ function InjuryTypesTab({ families }: { families: InjuryTypeFamilyRow[] }) {
           </div>
           <SettingSplitBars
             profiles={classifiedFamilies}
-            title="Match vs training by injury type"
+            title="Match Vs Training By Injury Type"
             emptyMessage="No injury type has both a match and a training row."
           />
         </div>
@@ -2149,7 +2217,7 @@ export function TeamDashboard({
             className="text-2xl font-bold leading-tight text-foreground capitalize sm:text-3xl"
             style={teamColor && teamColor.source !== 'achromatic' ? { color: teamColor.text } : undefined}
           >
-            {teamName} Dashboard
+            {teamName}
           </h1>
           <SeasonSelector season={season} seasonPath={seasonPath} activeTab={activeTab} />
         </div>
@@ -2159,16 +2227,16 @@ export function TeamDashboard({
         <div
           className="mb-6 rounded-xl border border-amber-400/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100"
           role="note"
-          aria-label="Temporary exposure estimate"
+          aria-label="Temporary Exposure Estimate"
         >
-          <p className="font-semibold">Temporary exposure estimate affects rate denominators</p>
+          <p className="font-semibold">Temporary Exposure Estimate Affects Rate Denominators</p>
           <p className="mt-1">{exposureEstimateNote}</p>
         </div>
       )}
 
       <Tabs value={activeTab} onValueChange={selectTab}>
         <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-          <TabsList aria-label="Dashboard sections" className="mb-6 h-auto min-w-max justify-start bg-muted/80 p-1">
+          <TabsList aria-label="Dashboard sections" className="mb-3 h-auto min-w-max justify-start bg-muted/80 p-1">
             {DASHBOARD_TABS.map((tab) => (
               <TabsTrigger key={tab.value} value={tab.value} className="min-h-11 px-4">
                 {tab.label}
@@ -2176,6 +2244,10 @@ export function TeamDashboard({
             ))}
           </TabsList>
         </div>
+
+        <p className="mb-6 text-xs text-muted-foreground" role="note">
+          Unless explicitly stated, injuries, injury counts, incidence and burden are based on Time Loss Injuries.
+        </p>
 
         <TabsContent value="overview"><OverviewTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
         <TabsContent value="comparison">
@@ -2188,6 +2260,7 @@ export function TeamDashboard({
           />
         </TabsContent>
         <TabsContent value="common"><CommonInjuriesTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
+        <TabsContent value="illnesses"><IllnessesTab dashboard={dashboard} /></TabsContent>
         <TabsContent value="location"><LocationTab profiles={profiles} /></TabsContent>
         <TabsContent value="types"><InjuryTypesTab families={injuryTypeFamilies} /></TabsContent>
         <TabsContent value="exposure">

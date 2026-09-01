@@ -1,4 +1,6 @@
 import "server-only";
+import { withoutFrontFacingUnknown } from "@/lib/dashboard-visibility";
+import { diagnosisFamilyProfiles } from "@/lib/reporting-types";
 import type {
   AnalyticsRow,
   DashboardData,
@@ -33,6 +35,7 @@ export type ReportModelRequest = {
   expectedScope: DashboardData["scope"];
   expectedSeason: string;
   subjectName: string;
+  displaySubjectName?: string;
   protectedTerms: readonly string[];
   exportedAt?: string;
   comparisonRows?: readonly ReportComparisonRow[];
@@ -299,7 +302,7 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
     dataGeneratedAt: current.generated_at,
     brand: request.brand ?? { crestDataUri: null, accentColour: "#00B9D8" },
     scope: current.scope,
-    subjectName,
+    subjectName: request.displaySubjectName ?? subjectName,
     season: current.season,
     analysisWindow: { ...current.analysis_window },
     estimateOrIncompleteCoverage,
@@ -318,7 +321,12 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
     severityDistribution: distributionRows(current.severity_distribution),
     contactDistribution: distributionRows(current.contact_distribution ?? []),
     injuryProfile: {
-      diagnoses: profileRows(current.injury_profiles, "diagnosis"),
+      diagnoses: profileRows(
+        withoutFrontFacingUnknown(current.diagnosis_families != null
+          ? diagnosisFamilyProfiles(current.diagnosis_families)
+          : current.injury_profiles),
+        "diagnosis",
+      ),
       bodyLocations: profileRows(current.injury_profiles, "body_location"),
       injuryTypes: profileRows(current.injury_profiles, "injury_type"),
       injuryTypeFamilies: injuryTypeFamilies(current.injury_type_families),

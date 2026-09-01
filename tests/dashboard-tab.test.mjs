@@ -17,6 +17,7 @@ test('dashboard tab routing accepts every visible tab', async () => {
     'overview',
     'comparison',
     'common',
+    'illnesses',
     'location',
     'types',
     'exposure',

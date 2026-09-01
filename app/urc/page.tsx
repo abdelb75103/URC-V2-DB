@@ -44,10 +44,10 @@ export default async function UrcOverallPage({
   if (!dashboard) {
     return (
       <LockedShell
-        title="URC Overall"
+        title="United Rugby Championship"
         crest={StaticImages.urcLogo}
         reason="The approved league dashboard could not be loaded. Please try again later."
-        statusLabel="Dashboard unavailable"
+        statusLabel="Dashboard Unavailable"
       />
     );
   }
@@ -58,6 +58,7 @@ export default async function UrcOverallPage({
     expectedScope: 'league',
     expectedSeason: season,
     subjectName: dashboard.team,
+    displaySubjectName: 'United Rugby Championship',
     protectedTerms: reportProtectedTerms(),
     exportedAt: new Date().toISOString(),
     comparisonRows: buildReportComparisonRows({

@@ -616,8 +616,8 @@ class Year2TeamReleaseV6ContractTests(unittest.TestCase):
         reader = (ROOT / "lib/reporting.ts").read_text(encoding="utf-8")
         self.assertNotIn("latest_team_dashboard_v5", reader)
         self.assertNotIn("latest_league_dashboard_v5", reader)
-        self.assertIn("latest_team_dashboard_v6", reader)
-        self.assertIn("approved_dashboard_reader_target_v6", reader)
+        self.assertIn("latest_team_dashboard_v7", reader)
+        self.assertIn("approved_dashboard_reader_target_v7", reader)
 
 
 if __name__ == "__main__":

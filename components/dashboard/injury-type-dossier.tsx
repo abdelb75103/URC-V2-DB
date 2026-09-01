@@ -21,8 +21,8 @@ export const INJURY_FAMILY_COLORS: Record<string, string> = {
 };
 
 const METRIC_LABELS: Record<InjuryTypeMetric, { label: string; unit: string; longUnit: string }> = {
-  time_loss_injuries: { label: 'TL injuries', unit: 'injuries', longUnit: 'TL injuries' },
-  incidence_per_1000h: { label: 'TL incidence', unit: '/1,000 h', longUnit: 'TL injuries per 1,000 player-hours' },
+  time_loss_injuries: { label: 'Injuries', unit: 'injuries', longUnit: 'injuries' },
+  incidence_per_1000h: { label: 'Incidence', unit: '/1,000 h', longUnit: 'injuries per 1,000 player-hours' },
   burden_per_1000h: { label: 'Burden', unit: 'days /1,000 h', longUnit: 'days per 1,000 player-hours' },
 };
 
@@ -56,7 +56,7 @@ export function rankedTypeValue(value: number, metric: InjuryTypeMetric) {
 }
 
 function caseLabel(value: number) {
-  return value === 1 ? 'time-loss case' : 'time-loss cases';
+  return value === 1 ? 'injury' : 'injuries';
 }
 
 export function InjuryTypeRanking({
@@ -81,7 +81,7 @@ export function InjuryTypeRanking({
     <div aria-label={`Injury types ranked by ${metricMeta.label.toLowerCase()}`}>
       <div className="mb-2 grid grid-cols-[minmax(0,1fr)_4.75rem] items-end gap-3 px-3 text-[11px] text-muted-foreground sm:grid-cols-[2rem_minmax(8rem,0.7fr)_minmax(7rem,1fr)_4.75rem]">
         <span className="hidden sm:block" aria-hidden="true">Rank</span>
-        <span>Injury type</span>
+        <span>Injury Type</span>
         <span className="hidden sm:block" aria-hidden="true" />
         <span className="text-right">{metricMeta.label}</span>
       </div>
@@ -147,7 +147,7 @@ export function InjuryTypeDossier({
     <section className="flex h-full min-h-0 flex-col overflow-hidden lg:min-h-[25rem]">
       <div className="flex items-start justify-between gap-4 px-5 py-4" style={{ boxShadow: `inset 3px 0 0 ${color}` }}>
         <div className="min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">Selected injury type</p>
+          <p className="text-xs font-medium text-muted-foreground">Selected Injury Type</p>
           <h3 className="mt-1 truncate text-xl font-semibold leading-tight text-foreground capitalize">{row?.label ?? 'Not Available'}</h3>
         </div>
         {rank && total > 0 ? (
@@ -156,15 +156,15 @@ export function InjuryTypeDossier({
       </div>
 
       <div className="grid grid-cols-3 border-y border-border/60">
-        <DossierMetric label="TL injuries" value={formatValue(row?.time_loss_injuries, 0)} unit="injuries" active={metric === 'time_loss_injuries'} />
-        <DossierMetric label="TL incidence" value={formatMetric(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
+        <DossierMetric label="Injuries" value={formatValue(row?.time_loss_injuries, 0)} unit="injuries" active={metric === 'time_loss_injuries'} />
+        <DossierMetric label="Incidence" value={formatMetric(row?.incidence_per_1000h, 'incidence_per_1000h')} unit="/1,000 h" active={metric === 'incidence_per_1000h'} />
         <DossierMetric label="Burden" value={formatMetric(row?.burden_per_1000h, 'burden_per_1000h')} unit="days /1,000 h" active={metric === 'burden_per_1000h'} />
       </div>
 
       <div className="flex flex-1 flex-col px-5 py-4">
         <div className="flex items-baseline justify-between gap-4">
-          <h4 className="text-sm font-semibold text-foreground">Included injury types</h4>
-          <span className="text-[11px] text-muted-foreground">TL injuries</span>
+          <h4 className="text-sm font-semibold text-foreground">Included Injury Types</h4>
+          <span className="text-[11px] text-muted-foreground">Injuries</span>
         </div>
         {contributingSubtypes.length ? (
           <div className="mt-3 space-y-1">

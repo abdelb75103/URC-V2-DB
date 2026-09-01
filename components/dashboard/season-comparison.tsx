@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -26,10 +26,10 @@ const SETTING_LABELS: Record<Setting, string> = {
   training: 'Training',
 };
 const KPI_LABELS: Record<Kpi['key'], string> = {
-  time_loss_incidence: 'TL Injury Incidence',
+  time_loss_incidence: 'Injury Incidence',
   mean_severity: 'Mean Severity',
   injury_burden: 'Injury Burden',
-  time_loss_injuries: 'Time-Loss Injuries',
+  time_loss_injuries: 'Injuries',
 };
 const KPI_UNITS: Record<Kpi['key'], string> = {
   time_loss_incidence: '/1,000 h',
@@ -94,7 +94,7 @@ function KpiTile({ metric }: { metric: Kpi }) {
   const improvement = metric.outcome_improvement_percent;
   const state = improvementState(improvement);
   const direction = state === 'favourable'
-    ? 'Improved'
+    ? 'Decreased'
     : state === 'adverse'
       ? 'Increased'
       : state === 'neutral'
@@ -105,7 +105,7 @@ function KpiTile({ metric }: { metric: Kpi }) {
     : state === 'adverse'
       ? 'text-red-300'
       : 'text-muted-foreground';
-  const DirectionIcon = state === 'favourable' ? ArrowUp : state === 'adverse' ? ArrowDown : Minus;
+  const DirectionIcon = state === 'favourable' ? ArrowDown : state === 'adverse' ? ArrowUp : Minus;
   const digits = metric.key === 'time_loss_injuries' ? 0 : metric.key === 'injury_burden' ? 0 : 1;
   return (
     <Card className="min-w-0 border-border/70 bg-card/70 shadow-none">
@@ -205,6 +205,9 @@ function diagnosisMetricFormat(value: number | null, metric: DiagnosisMetric): s
 
 function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
   const [metric, setMetric] = useState<DiagnosisMetric>('count');
+  const [preview, setPreview] = useState<{ setting: Setting; rank: number }>();
+  const [pinned, setPinned] = useState<{ setting: Setting; rank: number }>();
+  const tooltipId = `diagnosis-tooltip-${useId().replace(/:/g, '')}`;
   const rows = diagnosisPoints(data);
   const diagnosisColours = diagnosisColourMap(rows);
   const values = rows.flatMap((row) => row.ranks.flatMap((rank) => (
@@ -215,6 +218,26 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
   const barWidth = (value: number | null) => `${max > 0 && value !== null
     ? Math.max((value / max) * 100, value > 0 ? 2 : 0)
     : 0}%`;
+  const active = pinned ?? preview;
+  const activeRow = active ? rows.find((row) => row.setting === active.setting) : undefined;
+  const activeRank = activeRow?.ranks.find((rank) => rank.rank === active?.rank);
+  const activePrevious = activeRank?.seasons[0];
+  const activeCurrent = activeRank?.seasons[1];
+  const activeMetricLabel = DIAGNOSIS_METRICS.find((item) => item.value === metric)?.label ?? metric;
+  const dismiss = () => {
+    setPreview(undefined);
+    setPinned(undefined);
+  };
+
+  useEffect(() => dismiss(), [metric]);
+  useEffect(() => {
+    if (!pinned) return;
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismiss();
+    };
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => document.removeEventListener('keydown', dismissOnEscape);
+  }, [pinned]);
 
   return (
     <Card className="min-w-0 border-border/70 bg-card/70 shadow-none">
@@ -232,36 +255,63 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
           </Tabs>
         </div>
 
-        <div className="overflow-x-auto">
-          <div className="min-w-[280px]">
-            <div className="mb-3 grid grid-cols-[2.5rem_minmax(0,1fr)_4.5rem_minmax(0,1fr)_2.5rem] items-center gap-1.5 text-[10px] font-semibold sm:grid-cols-[3.5rem_minmax(0,1fr)_6rem_minmax(0,1fr)_3.5rem] sm:gap-2">
-              <span />
-              <span className={`flex items-center justify-end gap-1.5 ${SEASON_STYLES[0].text}`}>
-                {data.previous_season}
-                <span className={`h-2 w-2 shrink-0 rounded-full ${SEASON_STYLES[0].dot}`} aria-hidden="true" />
-              </span>
-              <span className="text-center text-[9px] font-medium leading-tight text-muted-foreground">
-                {DIAGNOSIS_METRIC_UNITS[metric]}
-              </span>
-              <span className={`flex items-center gap-1.5 ${SEASON_STYLES[1].text}`}>
-                <span className={`h-2 w-2 shrink-0 rounded-full ${SEASON_STYLES[1].dot}`} aria-hidden="true" />
-                {data.current_season}
-              </span>
-              <span />
-            </div>
+        <div
+          id={tooltipId}
+          role="tooltip"
+          aria-live="polite"
+          className={activeRank
+            ? 'mb-5 rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm shadow-sm'
+            : 'sr-only'}
+        >
+          {activeRank ? (
+            <>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-semibold text-foreground">{SETTING_LABELS[activeRow!.setting]} · Rank {activeRank.rank} · {activeMetricLabel}</p>
+                {pinned && <span className="text-xs text-muted-foreground">Pinned. Press Escape to dismiss.</span>}
+              </div>
+              <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
+                <div>
+                  <dt className={SEASON_STYLES[0].text}>{data.previous_season}: {activePrevious?.diagnosis ?? 'Not available'}</dt>
+                  <dd className="font-semibold tabular-nums text-foreground">{diagnosisMetricFormat(activePrevious ? diagnosisMetricValue(activePrevious, metric) : null, metric)} {DIAGNOSIS_METRIC_UNITS[metric]}</dd>
+                </div>
+                <div>
+                  <dt className={SEASON_STYLES[1].text}>{data.current_season}: {activeCurrent?.diagnosis ?? 'Not available'}</dt>
+                  <dd className="font-semibold tabular-nums text-foreground">{diagnosisMetricFormat(activeCurrent ? diagnosisMetricValue(activeCurrent, metric) : null, metric)} {DIAGNOSIS_METRIC_UNITS[metric]}</dd>
+                </div>
+              </dl>
+            </>
+          ) : 'Focus or hover over a rank comparison to view both season values.'}
+        </div>
 
-            <ul className="space-y-5">
+        <div className="min-w-0">
+          <div className="mb-4 hidden grid-cols-[4.5rem_minmax(0,1fr)_7rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-xs font-semibold sm:grid">
+            <span />
+            <span className={`flex items-center justify-end gap-1.5 ${SEASON_STYLES[0].text}`}>
+              {data.previous_season}
+              <span className={`h-2 w-2 shrink-0 rounded-full ${SEASON_STYLES[0].dot}`} aria-hidden="true" />
+            </span>
+            <span className="text-center text-[11px] font-medium leading-tight text-muted-foreground">
+              {DIAGNOSIS_METRIC_UNITS[metric]}
+            </span>
+            <span className={`flex items-center gap-1.5 ${SEASON_STYLES[1].text}`}>
+              <span className={`h-2 w-2 shrink-0 rounded-full ${SEASON_STYLES[1].dot}`} aria-hidden="true" />
+              {data.current_season}
+            </span>
+            <span />
+          </div>
+
+          <ul className="space-y-6">
               {SETTINGS.map((setting) => {
                 const row = rows.find((item) => item.setting === setting);
                 return (
                   <li
                     key={setting}
-                    className="rounded-lg border border-border/55 bg-muted/[0.14] px-1.5 pb-2.5 pt-2 sm:px-2.5"
+                    className="rounded-xl border border-border/55 bg-muted/[0.14] p-3 sm:p-4"
                   >
-                    <p className="mb-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-foreground">
+                    <p className="mb-3 text-center text-sm font-semibold text-foreground">
                       {SETTING_LABELS[setting]}
                     </p>
-                    <ol className="space-y-2.5">
+                    <ol className="space-y-3">
                       {(row?.ranks ?? []).map((rankRow) => {
                         const previous = rankRow.seasons[0];
                         const current = rankRow.seasons[1];
@@ -273,38 +323,87 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
                         const currentColour = current.diagnosis
                           ? diagnosisColours.get(current.diagnosis)
                           : 'hsl(var(--muted-foreground))';
+                        const interaction = { setting, rank: rankRow.rank };
+                        const interactionKey = `${setting}-${rankRow.rank}`;
+                        const isPinned = pinned?.setting === setting && pinned.rank === rankRow.rank;
+                        const isActive = active?.setting === setting && active.rank === rankRow.rank;
+                        const accessibleLabel = `${SETTING_LABELS[setting]}, rank ${rankRow.rank}, ${activeMetricLabel}. ${data.previous_season}: ${previous.diagnosis ?? 'Not available'}, ${diagnosisMetricFormat(previousValue, metric)} ${DIAGNOSIS_METRIC_UNITS[metric]}. ${data.current_season}: ${current.diagnosis ?? 'Not available'}, ${diagnosisMetricFormat(currentValue, metric)} ${DIAGNOSIS_METRIC_UNITS[metric]}. ${isPinned ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
                         return (
                           <li
                             key={rankRow.rank}
-                            className="grid min-h-14 grid-cols-[2.5rem_minmax(0,1fr)_2rem_minmax(0,1fr)_2.5rem] items-end gap-1.5 sm:grid-cols-[3.5rem_minmax(0,1fr)_2.5rem_minmax(0,1fr)_3.5rem] sm:gap-2"
+                            className="min-w-0"
                           >
-                            <span className="pb-0.5 text-left text-[11px] tabular-nums text-muted-foreground">
-                              {diagnosisMetricFormat(previousValue, metric)}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="mb-1 flex min-h-6 min-w-0 items-end justify-end gap-1 text-right text-[10px] font-medium leading-tight text-foreground sm:text-xs">
-                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{previous.diagnosis ?? 'Not Available'}</span>
-                                <span className="mb-0.5 h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: previousColour }} />
+                            <button
+                              type="button"
+                              aria-label={accessibleLabel}
+                              aria-describedby={tooltipId}
+                              aria-pressed={isPinned}
+                              data-diagnosis-target={interactionKey}
+                              className={`min-h-11 w-full min-w-0 rounded-lg p-2 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isActive ? 'bg-background/60' : 'hover:bg-background/35'}`}
+                              onMouseEnter={() => setPreview(interaction)}
+                              onMouseLeave={() => setPreview(undefined)}
+                              onFocus={() => setPreview(interaction)}
+                              onBlur={() => setPreview(undefined)}
+                              onPointerDown={() => setPinned(interaction)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Escape') {
+                                  event.preventDefault();
+                                  dismiss();
+                                }
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  setPinned(interaction);
+                                }
+                              }}
+                            >
+                              <span className="block sm:hidden">
+                                <span className="mb-2 block text-center text-xs font-semibold text-muted-foreground">Rank {rankRow.rank}</span>
+                                <span className="grid gap-3">
+                                  {[
+                                    { season: data.previous_season, value: previous, metricValue: previousValue, colour: previousColour, barColour: SEASON_BAR_COLOURS[0], seasonClass: SEASON_STYLES[0].text },
+                                    { season: data.current_season, value: current, metricValue: currentValue, colour: currentColour, barColour: SEASON_BAR_COLOURS[1], seasonClass: SEASON_STYLES[1].text },
+                                  ].map((item) => (
+                                    <span key={item.season} className="grid min-w-0 grid-cols-[4.25rem_minmax(0,1fr)_3.25rem] items-center gap-2">
+                                      <span className={`text-xs font-semibold ${item.seasonClass}`}>{item.season}</span>
+                                      <span className="min-w-0">
+                                        <span className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-medium leading-tight text-foreground">
+                                          <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: item.colour }} aria-hidden="true" />
+                                          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{item.value.diagnosis ?? 'Not available'}</span>
+                                        </span>
+                                        <span className="block h-3 overflow-hidden rounded-sm bg-muted/60">
+                                          <span className="block h-full rounded-sm" style={{ width: barWidth(item.metricValue), backgroundColor: item.barColour }} />
+                                        </span>
+                                      </span>
+                                      <span className="text-right text-xs tabular-nums text-muted-foreground">{diagnosisMetricFormat(item.metricValue, metric)}</span>
+                                    </span>
+                                  ))}
+                                </span>
                               </span>
-                              <span className="flex h-3 justify-end overflow-hidden rounded-sm bg-muted/60">
-                                <span className="block h-full rounded-sm" style={{ width: barWidth(previousValue), backgroundColor: SEASON_BAR_COLOURS[0] }} />
+
+                              <span className="hidden min-w-0 grid-cols-[4.5rem_minmax(0,1fr)_3rem_minmax(0,1fr)_4.5rem] items-end gap-3 sm:grid">
+                                <span className="pb-0.5 text-left text-xs tabular-nums text-muted-foreground">{diagnosisMetricFormat(previousValue, metric)}</span>
+                                <span className="min-w-0">
+                                  <span className="mb-1 flex min-h-7 min-w-0 items-end justify-end gap-1.5 text-right text-sm font-medium leading-tight text-foreground">
+                                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{previous.diagnosis ?? 'Not available'}</span>
+                                    <span className="mb-0.5 h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: previousColour }} aria-hidden="true" />
+                                  </span>
+                                  <span className="flex h-4 justify-end overflow-hidden rounded-sm bg-muted/60">
+                                    <span className="block h-full rounded-sm" style={{ width: barWidth(previousValue), backgroundColor: SEASON_BAR_COLOURS[0] }} />
+                                  </span>
+                                </span>
+                                <span className="pb-0.5 text-center text-xs font-semibold tabular-nums text-muted-foreground">#{rankRow.rank}</span>
+                                <span className="min-w-0">
+                                  <span className="mb-1 flex min-h-7 min-w-0 items-end gap-1.5 text-sm font-medium leading-tight text-foreground">
+                                    <span className="mb-0.5 h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: currentColour }} aria-hidden="true" />
+                                    <span className="min-w-0 break-words [overflow-wrap:anywhere]">{current.diagnosis ?? 'Not available'}</span>
+                                  </span>
+                                  <span className="flex h-4 justify-start overflow-hidden rounded-sm bg-muted/60">
+                                    <span className="block h-full rounded-sm" style={{ width: barWidth(currentValue), backgroundColor: SEASON_BAR_COLOURS[1] }} />
+                                  </span>
+                                </span>
+                                <span className="pb-0.5 text-right text-xs tabular-nums text-muted-foreground">{diagnosisMetricFormat(currentValue, metric)}</span>
                               </span>
-                            </span>
-                            <span className="pb-0.5 text-center text-[10px] font-semibold tabular-nums text-muted-foreground sm:text-xs">
-                              #{rankRow.rank}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="mb-1 flex min-h-6 min-w-0 items-end gap-1 text-left text-[10px] font-medium leading-tight text-foreground sm:text-xs">
-                                <span className="mb-0.5 h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: currentColour }} />
-                                <span className="min-w-0 break-words [overflow-wrap:anywhere]">{current.diagnosis ?? 'Not Available'}</span>
-                              </span>
-                              <span className="flex h-3 justify-start overflow-hidden rounded-sm bg-muted/60">
-                                <span className="block h-full rounded-sm" style={{ width: barWidth(currentValue), backgroundColor: SEASON_BAR_COLOURS[1] }} />
-                              </span>
-                            </span>
-                            <span className="pb-0.5 text-right text-[11px] tabular-nums text-muted-foreground">
-                              {diagnosisMetricFormat(currentValue, metric)}
-                            </span>
+                            </button>
                           </li>
                         );
                       })}
@@ -312,8 +411,7 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
                   </li>
                 );
               })}
-            </ul>
-          </div>
+          </ul>
         </div>
       </CardContent>
     </Card>
@@ -366,7 +464,7 @@ export function SeasonComparison({ comparison }: { comparison?: SeasonComparison
         {impact ? <ImpactBubbles seasons={impactPoints(impact)} /> : <EmptyState>No approved injury-impact values are available for this setting.</EmptyState>}
       </Panel>
 
-      <Panel title="Time-Loss Injuries By Month">
+      <Panel title="Injuries By Month">
         <MonthlyBars monthly={monthlyPoints(comparison)} />
       </Panel>
 

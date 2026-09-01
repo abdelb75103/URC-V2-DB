@@ -122,11 +122,13 @@ test("the full document emits one A4 page for each stable section", () => {
   assert.match(result.text, /1,622 days\s*\/1,000 h/);
   assert.match(result.coverText, /Injury surveillance/);
   assert.doesNotMatch(result.coverText, /Recorded injuries|Overall incidence|Burden/);
-  assert.match(result.overviewText, /Season overview/);
-  assert.match(result.overviewText, /Recorded injuries/);
-  assert.match(result.overviewText, /Injury impact by season/);
-  assert.match(result.comparisonText, /Time-loss injuries by month/);
-  assert.match(result.comparisonText, /Diagnosis drivers/);
+  assert.match(result.overviewText, /Season Overview/);
+  assert.match(result.overviewText, /Overall Injuries/);
+  assert.match(result.overviewText, /Injury Impact By Season/);
+  assert.match(result.comparisonText, /Injuries By Month/);
+  assert.match(result.comparisonText, /Diagnosis Drivers/);
+  assert.match(result.comparisonText, /Decreased/);
+  assert.doesNotMatch(result.comparisonText, /Improved/);
   assert.doesNotMatch(result.comparisonText, /Publication record/);
   assert.match(result.text, /End of report/i);
 });
@@ -135,9 +137,9 @@ test("selected sections render in canonical PDF order", () => {
   const result = renderPdf(["season-methodology", "cover", "team-comparison"]);
   assert.equal(result.pages, 3);
   assert.match(result.pageText(1), /Injury surveillance/);
-  assert.match(result.pageText(2), /Team comparison/);
-  assert.match(result.pageText(3), /Season comparison/);
-  assert.doesNotMatch(result.pageText(2), /Season comparison/);
+  assert.match(result.pageText(2), /Team Comparison/);
+  assert.match(result.pageText(3), /Season Comparison/);
+  assert.doesNotMatch(result.pageText(2), /Season Comparison/);
 });
 
 test("rendered document metadata and source model do not contain protected sentinels", () => {

@@ -50,14 +50,61 @@ test('league dashboard uses the approved database consumer view and fails closed
 
   assert.match(page, /getLeaguePageData\(season\)/);
   assert.match(page, /force-dynamic/);
-  assert.match(page, /Dashboard unavailable/);
+  assert.match(page, /title="United Rugby Championship"/);
+  assert.match(page, /Dashboard Unavailable/);
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
   assert.doesNotMatch(page, /getExposureReviewPreview|exposurePreview/);
 
-  assert.match(reporting, /reporting\.latest_league_dashboard_v6/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v7/);
   assert.match(reporting, /where season = \$1/);
+  assert.match(reporting, /to_jsonb\(league_dashboard\) -> 'preliminary_monthly_rates' as preliminary_monthly_rates/);
   assert.match(reporting, /expected one league dashboard row/);
   assert.doesNotMatch(reporting, /reduce\(|incidence.*\/.*hours|burden.*\/.*hours/i);
+});
+
+test('shared presentation leads with time loss metrics and uses concise dashboard titles', async () => {
+  const [dashboard, charts, bodyMap, dossier, teamPage, leaguePage, agents] = await Promise.all([
+    readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/dashboard/injury-type-dossier.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/team/[teamId]/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../app/urc/page.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../AGENTS.md', import.meta.url), 'utf8'),
+  ]);
+
+  assert.match(teamPage, /title=\{team\.name\}/);
+  assert.doesNotMatch(teamPage, /team\.name\} Dashboard/);
+  assert.match(leaguePage, /title="United Rugby Championship"/);
+  assert.match(leaguePage, /teamName="United Rugby Championship"/);
+  assert.match(dashboard, /\{teamName\}\s*<\/h1>/);
+  assert.match(dashboard, /Unless explicitly stated, injuries, injury counts, incidence and burden are based on Time Loss Injuries\./);
+
+  assert.match(dashboard, /label="Injuries"[\s\S]*?value=\{fmt\(headlineValues\.time_loss_injuries, 0\)\}[\s\S]*?Overall Injuries/);
+  assert.match(dashboard, /label="Incidence"[\s\S]*?value=\{fmt\(headlineValues\.incidence_per_1000h\)\}[\s\S]*?Overall Incidence/);
+  assert.match(dashboard, /useState<LocationMetric>\('time_loss_injuries'\)/);
+  assert.match(dashboard, /useState<ProfileMetric>\('time_loss_injuries'\)/);
+  assert.match(dashboard, /dashboard\.preliminary_monthly_rates \?\? \[\]/);
+  assert.match(dashboard, /const incidenceTrend = usesPreliminaryRateTrend/);
+  assert.match(dashboard, /const burdenTrend = usesPreliminaryRateTrend/);
+  assert.match(dashboard, /preliminary contributor-aligned monthly data/);
+  assert.match(dashboard, /const showsOverallOnlyKpiTrends = filtered && !perSettingMonthly/);
+  assert.equal((dashboard.match(/<ScopeChip show=\{showsOverallOnlyKpiTrends\} label="Overall Trend" \/>/g) ?? []).length, 4);
+
+  const severity = dashboard.slice(dashboard.indexOf('const severityDistribution'), dashboard.indexOf('const contactOrder'));
+  assert.match(severity, /row\.time_loss_injuries/);
+  assert.doesNotMatch(severity, /row\.recorded_injuries|zero_days_medical_attention_only|includeZeroDay/);
+
+  const timeline = charts.slice(charts.indexOf('function TimelineTooltip'), charts.indexOf('export function SeverityArc'));
+  for (const label of ['Overall Injuries', 'Time Loss Injuries', 'Overall Incidence', 'Time Loss Incidence']) {
+    assert.match(timeline, new RegExp(label));
+  }
+  const comparisonScatter = charts.slice(charts.indexOf('function ComparisonScatterTooltip'), charts.indexOf('function ChartEmpty'));
+  const riskMatrix = charts.slice(charts.indexOf('function ImpactTooltip'));
+  assert.doesNotMatch(comparisonScatter, /TL incidence|TL injuries/);
+  assert.doesNotMatch(riskMatrix, /TL incidence|TL injuries/);
+  assert.doesNotMatch(bodyMap + dossier, /TL incidence|TL injuries/);
+  assert.match(agents, /Visible dashboard component headings and metric labels capitalise the first letter of every word\./);
 });
 
 test('published league dashboard is unlocked on the homepage', async () => {
@@ -69,18 +116,20 @@ test('published league dashboard is unlocked on the homepage', async () => {
   assert.match(tile, /<Link href=\{href\} prefetch=\{false\} className="group block">/);
 });
 
-test('shared readers use the v6 successor while preserving direct Year 1 pass-through', async () => {
+test('shared readers use the v7 successor while preserving direct Year 1 pass-through', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
   const migration = await readFile(new URL('../supabase/migrations/20260815030000_urc_2025_26_team_release_v6.sql', import.meta.url), 'utf8');
 
-  assert.match(reporting, /reporting\.latest_team_dashboard_v6/);
-  assert.match(reporting, /reporting\.latest_league_dashboard_v6/);
+  assert.match(reporting, /reporting\.latest_team_dashboard_v7/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v7/);
   assert.match(migration, /from reporting\.latest_team_dashboard_v5\s+where season <> '2025-26'/);
   assert.match(migration, /from reporting\.latest_league_dashboard_v5\s+where season <> '2025-26'/);
   assert.match(migration, /from reporting\.latest_dashboard_cache_token_v1\s+where season <> '2025-26'/);
   assert.match(reporting, /contact_distribution/);
   assert.match(reporting, /setting_metrics/);
   assert.match(reporting, /injury_profiles/);
+  assert.match(reporting, /diagnosis_families/);
+  assert.match(reporting, /illness_summary/);
   assert.match(reporting, /injury_type_families/);
   assert.match(reporting, /"injury_profile", "diagnosis"/);
   assert.match(reporting, /getTeamPageData/);
@@ -117,9 +166,9 @@ test('injury type dossier links ranked selection to exact subtype evidence', asy
   assert.match(dossier, /onClick/);
   assert.match(dossier, /aria-pressed=\{selected\}/);
   assert.match(dossier, /min-h-14/);
-  assert.match(dossier, /Included injury types/);
-  assert.match(dossier, /label: 'TL incidence'/);
-  assert.match(dossier, /label: 'TL injuries'/);
+  assert.match(dossier, /Included Injury Types/);
+  assert.match(dossier, /label: 'Incidence'/);
+  assert.match(dossier, /label: 'Injuries'/);
   assert.match(dossier, /subtype\.time_loss_injuries > 0/);
   assert.match(dossier, /contributingSubtypes\.map/);
   assert.doesNotMatch(dossier, /<svg|silhouette|anatomy/i);
@@ -142,7 +191,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   let queryText = '';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v6')) {
+      if (sql.includes('approved_dashboard_reader_target_v7')) {
         return { rows: [{ target_attested: true }] };
       }
       queryText = sql;
@@ -203,7 +252,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   try {
     const { getLeagueDashboard } = await loadReportingForFixtureTest();
     const dashboard = await getLeagueDashboard();
-    assert.match(queryText, /reporting\.latest_league_dashboard_v6/);
+    assert.match(queryText, /reporting\.latest_league_dashboard_v7/);
     assert.equal(dashboard.injury_type_families[0].burden_per_1000h, 50.8333333333);
     assert.equal(dashboard.injury_type_families[0].subtypes[0].code, 'muscle_injury');
 
@@ -262,7 +311,7 @@ test('team comparison overall setting is a validated projection of released head
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => ({
-      ...(sql.includes('approved_dashboard_reader_target_v6')
+      ...(sql.includes('approved_dashboard_reader_target_v7')
         ? { rows: [{ target_attested: true }] }
         : { rows: [{
         team_key: 'fixture-team',
@@ -354,7 +403,7 @@ test('team comparisons preserve unavailable exposure and place it after known co
     setting_metrics: settingMetrics,
   });
   globalThis.__urcWebReaderPool = transactionMockPool(
-    async (sql) => (sql.includes('approved_dashboard_reader_target_v6')
+    async (sql) => (sql.includes('approved_dashboard_reader_target_v7')
       ? { rows: [{ target_attested: true }] }
       : { rows: [row('unavailable', null, null), row('known', 100, 40)] }),
   );
@@ -419,7 +468,7 @@ test('league and team page metrics include the released overall benchmark', asyn
   let releaseToken = 'release-a';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v6')) {
+      if (sql.includes('approved_dashboard_reader_target_v7')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
@@ -455,7 +504,7 @@ test('league and team page metrics include the released overall benchmark', asyn
     assert.equal(pageData.leagueMetrics[0].burden_per_1000h, 93.75);
 
     globalThis.__urcWebReaderPool.query = async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v6')) {
+      if (sql.includes('approved_dashboard_reader_target_v7')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
@@ -531,7 +580,7 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
   let payloadQueryCount = 0;
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v6')) {
+      if (sql.includes('approved_dashboard_reader_target_v7')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
@@ -573,7 +622,7 @@ test('comparison tab offers Overall when projected overall data exists', async (
 
 test('body map regions keep a reliable touch and pointer hit area', async () => {
   const bodyMap = await readFile(new URL('../components/dashboard/body-map.tsx', import.meta.url), 'utf8');
-  assert.match(bodyMap, /label: 'TL incidence'/);
+  assert.match(bodyMap, /label: 'Incidence'/);
 
   // Every controlled IOC region is hoverable, including regions with no cases, and
   // reports 0 rather than being inert (decision, 25 July 2026).
@@ -593,7 +642,7 @@ test('risk matrix uses a data-fitted log severity scale, numbered dots, and a sm
   assert.match(impact, /domain=\{severityDomain\}/);
   assert.match(impact, /scale="log"/);
   assert.match(impact, /ticks=\{severityTicks\}/);
-  assert.match(impact, /Mean severity, days \(logarithmic scale\)/);
+  assert.match(impact, /Mean Severity, Days \(Logarithmic Scale\)/);
   assert.match(impact, /isPlottableLogSeverity\(row\.mean_severity_days\)/);
   assert.match(impact, /Number\.isFinite\(value\) && value > 0/);
   assert.match(impact, /non-positive mean severity.*not shown because a logarithmic scale cannot represent those values/s);
@@ -607,8 +656,8 @@ test('risk matrix uses a data-fitted log severity scale, numbered dots, and a sm
   assert.match(impact, /<linearGradient id="impact-risk-gradient"/);
   assert.match(impact, /fill="url\(#impact-risk-gradient\)"/);
   assert.match(impact, /<ReferenceArea/);
-  assert.match(impact, /Lower incidence and severity/);
-  assert.match(impact, /Higher incidence and severity/);
+  assert.match(impact, /Lower Incidence And Severity/);
+  assert.match(impact, /Higher Incidence And Severity/);
   assert.doesNotMatch(impact, /time_loss_injuries\s*[<>]/);
   assert.doesNotMatch(impact, /aboveLogDomainRows|pending chart-domain review/);
   assert.doesNotMatch(dashboard, /View injury impact data|function AccessibleDataTable/);
@@ -627,6 +676,32 @@ test('risk matrix selects prevalent TL diagnoses instead of recorded or burden-r
   assert.match(tab, /row\.time_loss_injuries > 0 && isKneeLigamentDiagnosis\(row\)/);
 });
 
+test('illness tab reads only released overall illness profiles', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const tab = dashboard.slice(dashboard.indexOf('function IllnessesTab'), dashboard.indexOf('function rankedForMetric'));
+
+  assert.match(tab, /dashboard\.illness_profiles \?\? \[\]/);
+  assert.match(tab, /const summary = dashboard\.illness_summary/);
+  assert.match(tab, /row\.recorded_illnesses/);
+  assert.match(tab, /<StatTile label="Illnesses" value=\{fmt\(summary\?\.recorded_illnesses, 0\)\}/);
+  assert.match(tab, /<StatTile label="Incidence" value=\{fmt\(summary\?\.incidence_per_1000h\)\}/);
+  assert.match(tab, /<StatTile label="Burden" value=\{fmt\(summary\?\.burden_per_1000h\)\}/);
+  assert.match(tab, /<StatTile label="Severity" value=\{fmt\(summary\?\.mean_severity_days\)\}/);
+  assert.match(tab, /row\.setting === 'all'/);
+  assert.match(tab, /Count[\s\S]*Incidence[\s\S]*Burden[\s\S]*Severity/);
+  assert.match(tab, /Not available values are not estimated/);
+  assert.doesNotMatch(tab, /SettingControl|setSetting|match.*training/i);
+  assert.match(dashboard, /<TabsContent value="illnesses"><IllnessesTab dashboard=\{dashboard\} \/><\/TabsContent>/);
+});
+
+test('an explicit empty diagnosis family release does not use legacy diagnosis rows', async () => {
+  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+  const selector = dashboard.slice(dashboard.indexOf('function reportingDiagnosisRows'), dashboard.indexOf('function OverviewTab'));
+
+  assert.match(selector, /if \(diagnosisFamilies\) return withoutFrontFacingUnknown\(diagnosisFamilyProfiles\(diagnosisFamilies\)\)/);
+  assert.doesNotMatch(selector, /diagnosisFamilies\?\.length/);
+});
+
 test('injury impact tooltip prioritises the plotted axes, gives exact small-sample cautions, and supports pinning', async () => {
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const tooltip = charts.slice(charts.indexOf('function ImpactTooltip'), charts.indexOf('function formatAxisTick'));
@@ -635,11 +710,11 @@ test('injury impact tooltip prioritises the plotted axes, gives exact small-samp
 
   assert.match(tooltip, /flex items-baseline.*\{row\.label\}.*settingLabel\(row\.setting\)/s);
   assert.match(tooltip, /\{\(caution \|\| pinned\) && \(/);
-  assert.ok(tooltip.indexOf('>TL incidence<') < tooltip.indexOf('>Mean severity<'), 'TL incidence must lead the plotted metrics');
-  assert.ok(tooltip.indexOf('>Mean severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
-  assert.doesNotMatch(tooltip, />Recorded injuries</);
-  assert.match(tooltip, />TL injuries</);
-  assert.match(tooltip, />Total days lost</);
+  assert.ok(tooltip.indexOf('>Incidence<') < tooltip.indexOf('>Mean Severity<'), 'incidence must lead the plotted metrics');
+  assert.ok(tooltip.indexOf('>Mean Severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
+  assert.doesNotMatch(tooltip, />Recorded Injuries</);
+  assert.match(tooltip, />Injuries</);
+  assert.match(tooltip, />Total Days Lost</);
   assert.doesNotMatch(tooltip, /Time-loss cases/);
   assert.match(tooltip, /Caution: based on 1 injury/);
   assert.match(tooltip, /Small sample: interpret 2 injuries cautiously/);
@@ -742,21 +817,21 @@ test('impact chart formats floating point axis ticks for presentation', async ()
   assert.doesNotMatch(charts, /unit=" \/1,000h"|unit=" days"/);
 });
 
-test('timeline distinguishes injuries from TL injuries and ranked team comparisons mark the active league mean', async () => {
+test('timeline distinguishes overall from time loss injuries and ranked team comparisons mark the active league mean', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const timeline = charts.slice(charts.indexOf('export function SeasonTimelineChart'), charts.indexOf('export function SeverityArc'));
   const comparison = dashboard.slice(dashboard.indexOf('function TeamComparisonTab'), dashboard.indexOf('function BenchmarkCell'));
 
-  assert.match(timeline, /dataKey="recorded_injuries"[\s\S]*?name="Injuries"[\s\S]*?fill=\{SETTING_COLORS\.all\}/);
-  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="TL injuries"[\s\S]*?fill="#ffc45c"/);
+  assert.match(timeline, /dataKey="recorded_injuries"[\s\S]*?name="Overall Injuries"[\s\S]*?fill=\{SETTING_COLORS\.all\}/);
+  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="Time Loss Injuries"[\s\S]*?fill="#ffc45c"/);
   assert.match(comparison, /const leagueMean = benchmark\?\.\[metric\]/);
   assert.match(comparison, /leagueMean=\{leagueMean\}/);
   assert.match(comparison, /border-dotted border-orange-400/);
-  assert.match(comparison, /League mean/);
+  assert.match(comparison, /League Mean/);
   assert.doesNotMatch(comparison, /\(dotted line\)/);
   assert.match(comparison, /h-4 border-l-2 border-dotted border-orange-400/);
-  assert.match(comparison, /ref=\{ladderRef\}[\s\S]*?ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League mean/);
+  assert.match(comparison, /ref=\{ladderRef\}[\s\S]*?ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League Mean/);
   assert.match(comparison, /league mean \$\{fmtRanked\(leagueMean, metric\)\}/);
 });
 
@@ -776,22 +851,24 @@ test('season timeline keeps recorded injuries distinct from time-loss injuries',
 
   const timeline = charts.slice(charts.indexOf('export function SeasonTimelineChart'), charts.indexOf('export function SeverityArc'));
   assert.match(timeline, /const hasRecordedCases = data\.every/);
-  assert.match(timeline, /dataKey="recorded_injuries"[\s\S]*?name="Injuries"/);
-  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="TL injuries"/);
-  assert.match(timeline, /dataKey="overall_incidence_per_1000h"[\s\S]*?name="Overall incidence"/);
-  assert.match(timeline, /dataKey="incidence_per_1000h"[\s\S]*?name="TL incidence"/);
+  assert.match(timeline, /dataKey="recorded_injuries"[\s\S]*?name="Overall Injuries"/);
+  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="Time Loss Injuries"/);
+  assert.match(timeline, /dataKey="overall_incidence_per_1000h"[\s\S]*?name="Overall Incidence"/);
+  assert.match(timeline, /dataKey="incidence_per_1000h"[\s\S]*?name="Time Loss Incidence"/);
   assert.match(timeline, /<Legend/);
   assert.doesNotMatch(dashboard, /open|ongoing/i);
 });
 
-test('overview and time line use only released overall-incidence values', async () => {
+test('overview leads with released time loss values and keeps overall values as companions', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
 
   assert.match(dashboard, /const isOverall = effectiveSetting === 'all';/);
   assert.match(dashboard, /const headlineValues = \{[\s\S]*?recorded_injuries: active\?\.recorded_injuries \?\? \(isOverall \? recorded : null\),[\s\S]*?overall_incidence_per_1000h: active\?\.overall_incidence_per_1000h \?\? \(isOverall \? headline\.overall_incidence_per_1000h : null\)/);
-  assert.match(dashboard, /<StatTile[\s\S]*?label="Overall incidence"[\s\S]*?value=\{fmt\(headlineValues\.overall_incidence_per_1000h\)\}/);
-  assert.match(dashboard, /companion=\{<PairedStat label="TL incidence" value=\{fmt\(headlineValues\.incidence_per_1000h\)\}/);
+  assert.match(dashboard, /<StatTile[\s\S]*?label="Injuries"[\s\S]*?value=\{fmt\(headlineValues\.time_loss_injuries, 0\)\}[\s\S]*?companion=\{<PairedStat label="Overall Injuries" value=\{fmt\(headlineValues\.recorded_injuries, 0\)\}/);
+  assert.match(dashboard, /<StatTile[\s\S]*?label="Incidence"[\s\S]*?value=\{fmt\(headlineValues\.incidence_per_1000h\)\}[\s\S]*?companion=\{<PairedStat label="Overall Incidence" value=\{fmt\(headlineValues\.overall_incidence_per_1000h\)\}/);
+  assert.match(dashboard, /trend\.map\(\(row\) => row\.time_loss_injuries \?\? null\)/);
+  assert.match(dashboard, /trend\.map\(\(row\) => row\.incidence_per_1000h \?\? null\)/);
   assert.match(dashboard, /overall_incidence_per_1000h: row\.overall_incidence_per_1000h \?\? null/);
   assert.doesNotMatch(dashboard, /recorded_injuries\s*\/\s*.*exposure_hours/);
   assert.match(charts, /const hasOverallIncidence = data\.some\(\(row\) => typeof row\.overall_incidence_per_1000h === 'number'\)/);
@@ -802,13 +879,13 @@ test('exposure tab combines monthly hours and distance while gating provisional 
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const tabConfig = await readFile(new URL('../lib/dashboard-tab.ts', import.meta.url), 'utf8');
 
-  assert.match(dashboard, /Estimated total hours[\s\S]*Reported distance/);
-  assert.match(dashboard, /Estimated exposure/);
+  assert.match(dashboard, /Estimated Total Hours[\s\S]*Reported Distance/);
+  assert.match(dashboard, /Estimated Exposure/);
   assert.match(dashboard, /Monthly trend shows reported source-backed values/);
   assert.match(dashboard, /14 source-backed clubs \+ 2 temporary estimates|sourceBackedTeamCount/);
   assert.match(dashboard, /Awaiting source-backed exposure from/);
   assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
-  assert.match(dashboard, /Temporary exposure estimate/);
+  assert.match(dashboard, /Temporary Exposure Estimate/);
   assert.match(dashboard, /row\.included_exposure_status\.includes\('estimate'\)[\s\S]*?Est\./);
   assert.match(dashboard, /No approved exposure data is available for this season/);
   assert.match(dashboard, /No approved exposure totals are available for this season/);
@@ -831,12 +908,12 @@ test('exposure tab combines monthly hours and distance while gating provisional 
   assert.match(reportsTab, /onPreviewReady=\{focusRestoredSection\}/);
   assert.match(dashboard, /<TabsContent value="reports"><ReportsTab key=\{`\$\{reportModel\.scope\}/);
   assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);
-  assert.match(dashboard, /HSR distance/);
+  assert.match(dashboard, /HSR Distance/);
   const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));
-  assert.match(exposureComparison, /League mean/);
+  assert.match(exposureComparison, /League Mean/);
   assert.doesNotMatch(exposureComparison, /\(dotted line\)/);
   assert.match(exposureComparison, /border-dotted border-orange-400/);
-  assert.match(exposureComparison, /ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League mean/);
+  assert.match(exposureComparison, /ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League Mean/);
   assert.match(exposureComparison, /ranked\.reduce\(\(sum, row\) => sum \+ \(metric\(row\) \?\? 0\), 0\) \/ ranked\.length/);
   assert.match(dashboard, /showMonthlyHours[\s\S]*showMonthlyDistance[\s\S]*comparisonMeasure/);
   assert.match(dashboard, /aria-label="Choose monthly exposure series"/);
@@ -848,7 +925,7 @@ test('exposure tab combines monthly hours and distance while gating provisional 
   assert.match(dashboard, /distance_km/);
   assert.match(charts, /match_exposure_hours/);
   assert.match(charts, /hsr_distance_km|hsr_percentage/);
-  assert.match(charts, /HSR share/);
+  assert.match(charts, /HSR Share/);
   assert.doesNotMatch(charts, /firstReportedMonth/);
   // Monthly charts drop pre-September months first (decision, 25 July 2026,
   // site-wide), then still open on the club's own first reported month.

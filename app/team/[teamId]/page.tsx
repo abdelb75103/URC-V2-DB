@@ -32,7 +32,7 @@ export default async function TeamPage({
   if (team.status !== 'live') {
     return (
       <LockedShell
-        title={`${team.name} Dashboard`}
+        title={team.name}
         crest={team.crest}
         accent={team.accent}
       />
@@ -65,11 +65,11 @@ export default async function TeamPage({
   if (!dashboard) {
     return (
       <LockedShell
-        title={`${team.name} Dashboard`}
+        title={team.name}
         crest={team.crest}
         accent={team.accent}
         reason="This approved dashboard could not be loaded. Please try again later."
-        statusLabel="Dashboard unavailable"
+        statusLabel="Dashboard Unavailable"
       />
     );
   }

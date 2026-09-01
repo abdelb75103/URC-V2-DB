@@ -229,14 +229,14 @@ test("concussion-family V4 includes released acute variants and retires historic
   assert.match(verification, /builder_v1_execute/);
 });
 
-test("application page reads attach the strict comparison projection in the dashboard snapshot and use v6 attestation", async () => {
+test("application page reads attach the strict comparison projection in the dashboard snapshot and use v7 attestation", async () => {
   const reporting = await readFile(new URL("../lib/reporting.ts", import.meta.url), "utf8");
   const leaguePage = await readFile(new URL("../app/urc/page.tsx", import.meta.url), "utf8");
   const teamPage = await readFile(new URL("../app/team/[teamId]/page.tsx", import.meta.url), "utf8");
 
-  assert.match(reporting, /approved_dashboard_reader_target_v6/);
-  assert.match(reporting, /from reporting\.latest_team_season_comparison_v4[\s\S]*where team_key = \$1/);
-  assert.match(reporting, /from reporting\.latest_league_season_comparison_v4/);
+  assert.match(reporting, /approved_dashboard_reader_target_v7/);
+  assert.match(reporting, /from reporting\.latest_team_season_comparison_v5[\s\S]*where team_key = \$1/);
+  assert.match(reporting, /from reporting\.latest_league_season_comparison_v5/);
   assert.match(reporting, /season_comparison: seasonComparisonReaderSchema\.nullable\(\)/);
   assert.match(reporting, /approvedSeasonComparisonReleaseToken[\s\S]*latest_dashboard_cache_token_v2[\s\S]*order by case season[\s\S]*2024-25[\s\S]*2025-26/);
   assert.doesNotMatch(reporting, /buildSeasonComparison|byarPoisson95|outcomeImprovement/);
