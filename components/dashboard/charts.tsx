@@ -96,6 +96,14 @@ function settingLabel(setting: MonthlySettingRow['setting'] | InjuryProfileRow['
 
 export type TooltipRow = { label: string; value: string; color?: string };
 
+/** The dashboard's metric identity colours, shared by the KPI cards and tooltips. */
+const METRIC_COLORS = {
+  count: SETTING_COLORS.all,
+  incidence: '#ffc45c',
+  burden: '#ef7189',
+  severity: '#42d8b4',
+} as const;
+
 /**
  * The one tooltip surface every chart uses: a dark, slightly transparent panel,
  * a bold header naming the category, and one compact row per series drawn in
@@ -120,11 +128,9 @@ export function TooltipCard({
       <dl className="mt-1.5 space-y-1">
         {rows.map((row) => (
           <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-            <dt style={row.color ? { color: row.color } : undefined} className={row.color ? undefined : 'text-muted-foreground'}>
-              {row.label}
-            </dt>
+            <dt className="text-white">{row.label}</dt>
             <dd
-              className={`text-right font-semibold tabular-nums ${row.color ? '' : 'text-white'}`}
+              className="text-right font-semibold tabular-nums text-white"
               style={row.color ? { color: row.color } : undefined}
             >
               {row.value}
@@ -784,7 +790,6 @@ function ImpactTooltip({
       ? 'Small sample: interpret 2 injuries cautiously'
       : '';
 
-  const color = SETTING_COLORS.all;
   return (
     <div
       id={id}
@@ -799,24 +804,24 @@ function ImpactTooltip({
       </div>
       <dl className="mt-1.5 space-y-1">
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt style={{ color }}>Incidence</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color }}>{number(row.incidence_per_1000h)} /1,000 h</dd>
+          <dt className="text-white">Incidence</dt>
+          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.incidence }}>{number(row.incidence_per_1000h)} /1,000 h</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt style={{ color }}>Mean Severity</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color }}>{number(row.mean_severity_days)} days</dd>
+          <dt className="text-white">Mean Severity</dt>
+          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.severity }}>{number(row.mean_severity_days)} days</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt>Burden</dt>
-          <dd className="text-right font-semibold tabular-nums">{number(row.burden_per_1000h)} days /1,000 h</dd>
+          <dt className="text-white">Burden</dt>
+          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.burden }}>{number(row.burden_per_1000h)} days /1,000 h</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t border-white/10 pt-1">
-          <dt>Injuries</dt>
-          <dd className="text-right font-semibold tabular-nums">{count(row.time_loss_injuries)}</dd>
+          <dt className="text-white">Injuries</dt>
+          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.count }}>{count(row.time_loss_injuries)}</dd>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt>Total Days Lost</dt>
-          <dd className="text-right font-semibold tabular-nums">{count(row.days_lost)}</dd>
+          <dt className="text-white">Total Days Lost</dt>
+          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.burden }}>{count(row.days_lost)}</dd>
         </div>
       </dl>
       {(caution || pinned) && (
