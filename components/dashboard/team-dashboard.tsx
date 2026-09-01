@@ -11,7 +11,6 @@ import {
   type ReactNode,
 } from 'react';
 import dynamic from 'next/dynamic';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, X } from 'lucide-react';
@@ -2282,7 +2281,6 @@ function availableSettings(rows: Array<{ setting: Setting }>, preference: Settin
 
 export function TeamDashboard({
   dashboard,
-  crest,
   teamName,
   comparisons = [],
   leagueMetrics = [],
@@ -2296,7 +2294,6 @@ export function TeamDashboard({
   reportModel,
 }: {
   dashboard: TeamDashboardData;
-  crest: string;
   teamName: string;
   comparisons?: TeamComparisonRow[];
   leagueMetrics?: SettingMetricRow[];
@@ -2349,10 +2346,7 @@ export function TeamDashboard({
         Back to dashboards
       </Link>
 
-      <header className="mb-6 flex items-center gap-4">
-        <div className="relative h-14 w-14 shrink-0 sm:h-16 sm:w-16">
-          <Image src={crest} alt={`${teamName} crest`} fill sizes="64px" className="object-contain" />
-        </div>
+      <header className="mb-6">
         <div className="min-w-0">
           <h1
             className="text-2xl font-bold leading-tight text-foreground capitalize sm:text-3xl"

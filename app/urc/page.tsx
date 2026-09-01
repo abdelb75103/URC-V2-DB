@@ -74,7 +74,6 @@ export default async function UrcOverallPage({
   return (
     <TeamDashboard
       dashboard={dashboard}
-      crest={StaticImages.urcLogo}
       teamName="United Rugby Championship"
       comparisons={comparisons}
       leagueMetrics={leagueMetrics}
