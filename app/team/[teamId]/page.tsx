@@ -97,6 +97,7 @@ export default async function TeamPage({
   return (
     <TeamDashboard
       dashboard={dashboard}
+      crest={team.crest}
       teamName={team.name}
       comparisons={comparisons}
       leagueMetrics={leagueMetrics}
