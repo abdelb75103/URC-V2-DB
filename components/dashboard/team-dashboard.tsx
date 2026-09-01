@@ -19,6 +19,7 @@ import type {
   DashboardSupplement,
   DiagnosisFamilyRow,
   ExposureReviewPreview,
+  IllnessProfileRow,
   InjuryProfileRow,
   InjuryTypeFamilyRow,
   SettingMetricRow,
@@ -564,12 +565,16 @@ function OverviewTab({
         )}
       </div>
 
+      <div className="rounded-lg border border-sky-300/25 bg-sky-300/[0.07] px-3 py-2.5 text-xs leading-relaxed text-muted-foreground" role="note">
+        Unless explicitly stated, injuries, injury counts, incidence and burden are based on Time Loss Injuries.
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Injuries"
           value={fmt(headlineValues.time_loss_injuries, 0)}
           unit="injuries"
-          companion={<PairedStat label="Overall Injuries" value={fmt(headlineValues.recorded_injuries, 0)} color="#ffc45c" />}
+          companion={<PairedStat label="Overall Injuries" value={fmt(headlineValues.recorded_injuries, 0)} color={SETTING_COLORS.all} />}
         >
           <ScopeChip show={showsOverallOnlyKpiTrends} label="Overall Trend" />
           <Sparkline values={trend.map((row) => row.time_loss_injuries ?? null)} color={SETTING_COLORS.all} ariaLabel="Injuries By Month" />
@@ -578,10 +583,10 @@ function OverviewTab({
           label="Incidence"
           value={fmt(headlineValues.incidence_per_1000h)}
           unit="injuries /1,000 h"
-          companion={<PairedStat label="Overall Incidence" value={fmt(headlineValues.overall_incidence_per_1000h)} color="#ffc45c" />}
+          companion={<PairedStat label="Overall Incidence" value={fmt(headlineValues.overall_incidence_per_1000h)} color={SETTING_COLORS.all} />}
         >
           <ScopeChip show={showsOverallOnlyKpiTrends} label="Overall Trend" />
-          <Sparkline values={incidenceTrend} color={SETTING_COLORS.all} ariaLabel="Incidence By Month" />
+          <Sparkline values={incidenceTrend} color="#ffc45c" ariaLabel="Incidence By Month" />
         </StatTile>
         <StatTile
           label="Burden"
@@ -598,9 +603,6 @@ function OverviewTab({
         >
           <ScopeChip show={showsOverallOnlyKpiTrends} label="Overall Trend" />
           <Sparkline values={trend.map((row) => row.exposure_hours)} color="#42d8b4" ariaLabel="Exposure Hours By Month" />
-          {usesReportedLeagueContract && (
-            <p className="mt-1 text-[10px] text-muted-foreground">Monthly trend shows reported source-backed values.</p>
-          )}
         </StatTile>
       </div>
 
@@ -949,53 +951,192 @@ function CommonInjuriesTab({ dashboard, profiles, supplement }: {
   );
 }
 
+type IllnessMetric = 'recorded_illnesses' | 'incidence_per_1000h' | 'burden_per_1000h' | 'mean_severity_days';
+
+const ILLNESS_METRICS: Array<{ key: IllnessMetric; label: string; unit: string }> = [
+  { key: 'recorded_illnesses', label: 'Count', unit: 'illnesses' },
+  { key: 'incidence_per_1000h', label: 'Incidence', unit: 'illnesses per 1,000 player-h' },
+  { key: 'burden_per_1000h', label: 'Burden', unit: 'days per 1,000 player-h' },
+  { key: 'mean_severity_days', label: 'Severity', unit: 'mean days lost' },
+];
+
+function rankedIllnesses(rows: IllnessProfileRow[], metric: IllnessMetric) {
+  return [...rows]
+    .filter((row) => (row[metric] ?? 0) > 0)
+    .sort((a, b) => (b[metric] ?? 0) - (a[metric] ?? 0) || a.label.localeCompare(b.label))
+    .slice(0, RANKED_LANE_SIZE);
+}
+
+/** Hue-spread so neighbouring illness cards never read as the same colour. */
+const ILLNESS_COLORS = [
+  '#e5252a',
+  '#0ea5e9',
+  '#16a34a',
+  '#9333ea',
+  '#f59e0b',
+  '#0f766e',
+  '#db2777',
+  '#4f46e5',
+  '#84cc16',
+  '#c2410c',
+  '#06b6d4',
+  '#be123c',
+] as const;
+
+/** One colour per illness on screen, so a code keeps its colour across the four lanes. */
+function illnessColorMap(rows: IllnessProfileRow[]) {
+  const codes: string[] = [];
+  for (const metric of ILLNESS_METRICS) {
+    for (const row of rankedIllnesses(rows, metric.key)) {
+      if (!codes.includes(row.code)) codes.push(row.code);
+    }
+  }
+  return new Map(codes.map((code, index) => [
+    code,
+    { background: ILLNESS_COLORS[index % ILLNESS_COLORS.length], foreground: '#ffffff' },
+  ]));
+}
+
 function IllnessesTab({ dashboard }: { dashboard: TeamDashboardData }) {
   const summary = dashboard.illness_summary;
   const rows = withoutFrontFacingUnknown(dashboard.illness_profiles ?? [])
     .filter((row) => row.setting === 'all')
     .sort((left, right) => right.recorded_illnesses - left.recorded_illnesses || left.label.localeCompare(right.label));
+  const totalIllnesses = summary?.recorded_illnesses
+    ?? rows.reduce((total, row) => total + row.recorded_illnesses, 0);
+  const illnessColors = illnessColorMap(rows);
 
   return (
-    <div>
-      <div className="mb-6 border-b border-border/60 pb-4">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className={SECTION_HEADING_CLASS}>Most Common Illnesses</h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          {summary?.qualification ?? 'No released illness summary is available. Not available values are not estimated.'}
-        </p>
       </div>
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile label="Illnesses" value={fmt(summary?.recorded_illnesses, 0)} unit="recorded cases" />
-        <StatTile label="Incidence" value={fmt(summary?.incidence_per_1000h)} unit="cases /1,000 h" />
-        <StatTile label="Burden" value={fmt(summary?.burden_per_1000h)} unit="days /1,000 h" />
-        <StatTile label="Severity" value={fmt(summary?.mean_severity_days)} unit="days" />
+
+      <p className="text-xs text-muted-foreground" role="note">
+        Overall illness reporting only. Illnesses are not attributed to Match or Training.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {ILLNESS_METRICS.map((metric) => (
+          <StatTile
+            key={metric.key}
+            label={metric.key === 'recorded_illnesses' ? 'Illnesses' : metric.label}
+            value={fmt(summary?.[metric.key], metric.key === 'recorded_illnesses' ? 0 : 1)}
+            unit={ILLNESS_KPI_UNITS[metric.key]}
+          >
+            <Sparkline
+              values={rankedIllnesses(rows, metric.key).map((row) => row[metric.key])}
+              color={ILLNESS_KPI_COLORS[metric.key]}
+              ariaLabel={`Top Illnesses By ${metric.label}`}
+            />
+          </StatTile>
+        ))}
       </div>
+
       {rows.length ? (
-        <Panel title="Illness Profile" contentClassName="overflow-x-auto p-0">
-          <table className="w-full min-w-[680px] text-sm">
-            <thead className="border-b border-border/60 bg-muted/40 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-5 py-3">Illness</th>
-                <th className="px-4 py-3 text-right">Count</th>
-                <th className="px-4 py-3 text-right">Incidence</th>
-                <th className="px-4 py-3 text-right">Burden</th>
-                <th className="px-5 py-3 text-right">Severity</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {rows.map((row) => (
-                <tr key={row.code}>
-                  <th scope="row" className="px-5 py-3 text-left font-medium text-foreground">{row.label}</th>
-                  <td className="px-4 py-3 text-right tabular-nums">{fmt(row.recorded_illnesses, 0)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{fmt(row.incidence_per_1000h)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">{fmt(row.burden_per_1000h)}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{fmt(row.mean_severity_days)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Panel>
+        <div className="grid gap-6 pt-1 md:grid-cols-2 xl:grid-cols-4">
+          {ILLNESS_METRICS.map((metric) => (
+            <IllnessLane
+              key={metric.key}
+              metric={metric}
+              rows={rows}
+              totalIllnesses={totalIllnesses}
+              illnessColors={illnessColors}
+            />
+          ))}
+        </div>
       ) : <EmptyState>No released illness profiles are available.</EmptyState>}
     </div>
+  );
+}
+
+const ILLNESS_KPI_UNITS: Record<IllnessMetric, string> = {
+  recorded_illnesses: 'illnesses',
+  incidence_per_1000h: 'illnesses /1,000 h',
+  burden_per_1000h: 'days /1,000 h',
+  mean_severity_days: 'mean days lost',
+};
+
+const ILLNESS_KPI_COLORS: Record<IllnessMetric, string> = {
+  recorded_illnesses: SETTING_COLORS.all,
+  incidence_per_1000h: '#ffc45c',
+  burden_per_1000h: '#ef7189',
+  mean_severity_days: '#42d8b4',
+};
+
+function IllnessLane({
+  metric,
+  rows,
+  totalIllnesses,
+  illnessColors,
+}: {
+  metric: (typeof ILLNESS_METRICS)[number];
+  rows: IllnessProfileRow[];
+  totalIllnesses: number;
+  illnessColors: Map<string, InjuryCardColor>;
+}) {
+  const ranked = rankedIllnesses(rows, metric.key);
+
+  return (
+    <section aria-labelledby={`common-illnesses-${metric.key}`}>
+      <h3 id={`common-illnesses-${metric.key}`} className={`${PANEL_HEADING_CLASS} mb-3`}>{metric.label}</h3>
+      {ranked.length ? (
+        <ol className="space-y-2.5">
+          {ranked.map((row, index) => (
+            <IllnessCard
+              key={`${metric.key}-${row.code}`}
+              row={row}
+              metric={metric}
+              rank={index + 1}
+              totalIllnesses={totalIllnesses}
+              color={illnessColors.get(row.code) ?? { background: profileColor(row.code), foreground: '#ffffff' }}
+            />
+          ))}
+        </ol>
+      ) : <EmptyState>No ranked illnesses are available for {metric.label.toLowerCase()}.</EmptyState>}
+    </section>
+  );
+}
+
+function IllnessCard({
+  row,
+  metric,
+  rank,
+  totalIllnesses,
+  color,
+}: {
+  row: IllnessProfileRow;
+  metric: (typeof ILLNESS_METRICS)[number];
+  rank: number;
+  totalIllnesses: number;
+  color: InjuryCardColor;
+}) {
+  const share = totalIllnesses > 0 ? Math.round((row.recorded_illnesses / totalIllnesses) * 100) : 0;
+  const value = fmt(row[metric.key], metric.key === 'recorded_illnesses' ? 0 : 1);
+
+  return (
+    <li
+      className="group min-h-24 animate-in overflow-hidden rounded-lg px-3 py-3.5 shadow-sm fill-mode-both fade-in slide-in-from-bottom-2 duration-200 transition-[transform,box-shadow,filter] ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/40 hover:brightness-110 motion-reduce:animate-none motion-reduce:transition-none motion-reduce:hover:transform-none"
+      style={{
+        backgroundColor: `color-mix(in srgb, ${color.background} 90%, black)`,
+        color: color.foreground,
+        animationDelay: `${(rank - 1) * 60}ms`,
+        animationDuration: '450ms',
+      }}
+    >
+      <article className="flex h-full items-center justify-between gap-3" aria-label={`${rank}. ${row.label}, ${value} ${metric.unit}`}>
+        <div className="min-w-0 self-center">
+          <h4 className="text-sm font-semibold leading-snug text-inherit">{row.label}</h4>
+          {metric.key === 'recorded_illnesses' && (
+            <p className="mt-1 text-xs text-inherit">{share}% of illnesses</p>
+          )}
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-xl font-bold leading-none tabular-nums text-inherit transition-transform duration-200 ease-out origin-right group-hover:scale-105 motion-reduce:transform-none">{value}</p>
+          <p className="mt-1 text-[11px] leading-tight text-inherit">{metric.unit}</p>
+        </div>
+      </article>
+    </li>
   );
 }
 
@@ -2244,10 +2385,6 @@ export function TeamDashboard({
             ))}
           </TabsList>
         </div>
-
-        <p className="mb-6 text-xs text-muted-foreground" role="note">
-          Unless explicitly stated, injuries, injury counts, incidence and burden are based on Time Loss Injuries.
-        </p>
 
         <TabsContent value="overview"><OverviewTab dashboard={dashboard} profiles={profiles} supplement={supplement} /></TabsContent>
         <TabsContent value="comparison">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,6 +11,7 @@ import {
   type ComparisonMonthlyPoint,
   type ComparisonSeasonPoint,
 } from '@/components/dashboard/season-comparison-charts';
+import { TooltipCard } from '@/components/dashboard/charts';
 
 type Setting = 'all' | 'match' | 'training';
 type Kpi = SeasonComparisonData['kpis'][number];
@@ -205,8 +206,9 @@ function diagnosisMetricFormat(value: number | null, metric: DiagnosisMetric): s
 
 function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
   const [metric, setMetric] = useState<DiagnosisMetric>('count');
-  const [preview, setPreview] = useState<{ setting: Setting; rank: number }>();
-  const [pinned, setPinned] = useState<{ setting: Setting; rank: number }>();
+  const [preview, setPreview] = useState<{ setting: Setting; rank: number; anchorX: number; anchorY: number }>();
+  const [pinned, setPinned] = useState<{ setting: Setting; rank: number; anchorX: number; anchorY: number }>();
+  const cardRef = useRef<HTMLDivElement>(null);
   const tooltipId = `diagnosis-tooltip-${useId().replace(/:/g, '')}`;
   const rows = diagnosisPoints(data);
   const diagnosisColours = diagnosisColourMap(rows);
@@ -228,6 +230,16 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
     setPreview(undefined);
     setPinned(undefined);
   };
+  const interactionAt = (setting: Setting, rank: number, target: HTMLElement) => {
+    const card = cardRef.current?.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
+    return {
+      setting,
+      rank,
+      anchorX: rect.left - (card?.left ?? 0) + rect.width / 2,
+      anchorY: rect.top - (card?.top ?? 0) + rect.height / 2,
+    };
+  };
 
   useEffect(() => dismiss(), [metric]);
   useEffect(() => {
@@ -241,7 +253,7 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
 
   return (
     <Card className="min-w-0 border-border/70 bg-card/70 shadow-none">
-      <CardContent className="p-4 sm:p-5">
+      <CardContent ref={cardRef} className="relative p-4 sm:p-5">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h3 className={PANEL_HEADING_CLASS}>Diagnosis Drivers</h3>
           <Tabs value={metric} onValueChange={(value) => setMetric(value as DiagnosisMetric)}>
@@ -255,33 +267,39 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
           </Tabs>
         </div>
 
-        <div
-          id={tooltipId}
-          role="tooltip"
-          aria-live="polite"
-          className={activeRank
-            ? 'mb-5 rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm shadow-sm'
-            : 'sr-only'}
-        >
-          {activeRank ? (
-            <>
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-semibold text-foreground">{SETTING_LABELS[activeRow!.setting]} · Rank {activeRank.rank} · {activeMetricLabel}</p>
-                {pinned && <span className="text-xs text-muted-foreground">Pinned. Press Escape to dismiss.</span>}
-              </div>
-              <dl className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
-                <div>
-                  <dt className={SEASON_STYLES[0].text}>{data.previous_season}: {activePrevious?.diagnosis ?? 'Not available'}</dt>
-                  <dd className="font-semibold tabular-nums text-foreground">{diagnosisMetricFormat(activePrevious ? diagnosisMetricValue(activePrevious, metric) : null, metric)} {DIAGNOSIS_METRIC_UNITS[metric]}</dd>
-                </div>
-                <div>
-                  <dt className={SEASON_STYLES[1].text}>{data.current_season}: {activeCurrent?.diagnosis ?? 'Not available'}</dt>
-                  <dd className="font-semibold tabular-nums text-foreground">{diagnosisMetricFormat(activeCurrent ? diagnosisMetricValue(activeCurrent, metric) : null, metric)} {DIAGNOSIS_METRIC_UNITS[metric]}</dd>
-                </div>
-              </dl>
-            </>
-          ) : 'Focus or hover over a rank comparison to view both season values.'}
-        </div>
+        {activeRank && active ? (
+          <div
+            id={tooltipId}
+            role="tooltip"
+            aria-live="polite"
+            className="pointer-events-none absolute z-30 w-[18rem] max-w-[calc(100%_-_1.5rem)]"
+            style={{
+              left: `clamp(0.75rem, ${active.anchorX + 12}px, calc(100% - 18.75rem))`,
+              top: `clamp(0.75rem, ${active.anchorY + 12}px, calc(100% - 8rem))`,
+            }}
+          >
+            <TooltipCard
+              title={`${SETTING_LABELS[activeRow!.setting]} · Rank ${activeRank.rank} · ${activeMetricLabel}`}
+              rows={[
+                {
+                  label: `${data.previous_season}: ${activePrevious?.diagnosis ?? 'Not available'}`,
+                  value: `${diagnosisMetricFormat(activePrevious ? diagnosisMetricValue(activePrevious, metric) : null, metric)} ${DIAGNOSIS_METRIC_UNITS[metric]}`,
+                  color: SEASON_BAR_COLOURS[0],
+                },
+                {
+                  label: `${data.current_season}: ${activeCurrent?.diagnosis ?? 'Not available'}`,
+                  value: `${diagnosisMetricFormat(activeCurrent ? diagnosisMetricValue(activeCurrent, metric) : null, metric)} ${DIAGNOSIS_METRIC_UNITS[metric]}`,
+                  color: SEASON_BAR_COLOURS[1],
+                },
+              ]}
+              note={pinned ? 'Pinned. Press Escape to dismiss.' : undefined}
+            />
+          </div>
+        ) : (
+          <div id={tooltipId} role="tooltip" aria-live="polite" className="sr-only">
+            Focus or hover over a rank comparison to view both season values.
+          </div>
+        )}
 
         <div className="min-w-0">
           <div className="mb-4 hidden grid-cols-[4.5rem_minmax(0,1fr)_7rem_minmax(0,1fr)_4.5rem] items-center gap-3 text-xs font-semibold sm:grid">
@@ -323,7 +341,6 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
                         const currentColour = current.diagnosis
                           ? diagnosisColours.get(current.diagnosis)
                           : 'hsl(var(--muted-foreground))';
-                        const interaction = { setting, rank: rankRow.rank };
                         const interactionKey = `${setting}-${rankRow.rank}`;
                         const isPinned = pinned?.setting === setting && pinned.rank === rankRow.rank;
                         const isActive = active?.setting === setting && active.rank === rankRow.rank;
@@ -340,11 +357,11 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
                               aria-pressed={isPinned}
                               data-diagnosis-target={interactionKey}
                               className={`min-h-11 w-full min-w-0 rounded-lg p-2 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isActive ? 'bg-background/60' : 'hover:bg-background/35'}`}
-                              onMouseEnter={() => setPreview(interaction)}
+                              onMouseEnter={(event) => setPreview(interactionAt(setting, rankRow.rank, event.currentTarget))}
                               onMouseLeave={() => setPreview(undefined)}
-                              onFocus={() => setPreview(interaction)}
+                              onFocus={(event) => setPreview(interactionAt(setting, rankRow.rank, event.currentTarget))}
                               onBlur={() => setPreview(undefined)}
-                              onPointerDown={() => setPinned(interaction)}
+                              onPointerDown={(event) => setPinned(interactionAt(setting, rankRow.rank, event.currentTarget))}
                               onKeyDown={(event) => {
                                 if (event.key === 'Escape') {
                                   event.preventDefault();
@@ -352,7 +369,7 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
                                 }
                                 if (event.key === 'Enter' || event.key === ' ') {
                                   event.preventDefault();
-                                  setPinned(interaction);
+                                  setPinned(interactionAt(setting, rankRow.rank, event.currentTarget));
                                 }
                               }}
                             >

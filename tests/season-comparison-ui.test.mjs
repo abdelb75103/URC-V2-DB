@@ -104,6 +104,11 @@ test('comparison charts fill their cards and expose accessible preview and pin t
   assert.match(charts, /Math\.max\(22, visualRadius\)/);
   assert.match(charts, /Math\.max\(44, height\)/);
   assert.match(charts, /Math\.max\(44, width\)/);
+  assert.match(charts, /function FloatingChartTooltip[\s\S]*pointer-events-none absolute z-30/);
+  assert.match(charts, /<TooltipCard/);
+  assert.match(charts, /const colour = point\.seasonIndex === 0 \? OLD_COLOUR : CURRENT_COLOUR/);
+  assert.match(charts, /label: 'Injuries'[\s\S]*color: colour[\s\S]*label: 'Burden'[\s\S]*color: colour/);
+  assert.doesNotMatch(charts, /rounded-lg border border-border\/70 bg-background\/80/);
 });
 
 test('diagnosis ranks stack on mobile and use the mirrored comparison from sm upwards', async () => {
@@ -114,8 +119,11 @@ test('diagnosis ranks stack on mobile and use the mirrored comparison from sm up
   assert.match(component, /data-diagnosis-target/);
   assert.match(component, /aria-describedby=\{tooltipId\}/);
   assert.match(component, /role="tooltip"/);
-  assert.match(component, /SETTING_LABELS\[activeRow!\.setting\][\s\S]*Rank \{activeRank\.rank\}[\s\S]*activeMetricLabel/);
+  assert.match(component, /SETTING_LABELS\[activeRow!\.setting\][\s\S]*activeRank\.rank[\s\S]*activeMetricLabel/);
   assert.match(component, /activePrevious\?\.diagnosis[\s\S]*activeCurrent\?\.diagnosis/);
+  assert.match(component, /pointer-events-none absolute z-30/);
+  assert.match(component, /<TooltipCard/);
+  assert.doesNotMatch(component, /className=\{activeRank[\s\S]*mb-5 rounded-lg/);
   assert.doesNotMatch(component, /overflow-x-auto/);
   assert.match(component, /h-4 justify-end/);
   assert.match(component, /h-4 justify-start/);

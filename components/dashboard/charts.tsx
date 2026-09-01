@@ -102,12 +102,14 @@ export type TooltipRow = { label: string; value: string; color?: string };
  * that series' own colour. Nothing else. The cohort footer was removed on
  * 25 July 2026: the hover states the values and stops there.
  */
-function TooltipCard({
+export function TooltipCard({
   title,
   rows,
+  note,
 }: {
   title: string;
   rows: TooltipRow[];
+  note?: string;
 }) {
   return (
     <div
@@ -130,6 +132,7 @@ function TooltipCard({
           </div>
         ))}
       </dl>
+      {note && <p className="mt-1.5 text-[11px] text-muted-foreground">{note}</p>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
 import {
   Bar,
   BarChart,
@@ -11,6 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { TooltipCard } from '@/components/dashboard/charts';
 
 export type ComparisonSeasonPoint = {
   season: string;
@@ -78,6 +79,38 @@ function SeasonLegend({ burden = false }: { burden?: boolean }) {
 }
 
 type InteractiveDatum = { interactionKey: string };
+type TooltipAnchor = { anchorX: number; anchorY: number };
+
+function FloatingChartTooltip({
+  id,
+  anchor,
+  fallback,
+  children,
+}: {
+  id: string;
+  anchor?: TooltipAnchor;
+  fallback: string;
+  children: ReactNode;
+}) {
+  if (!anchor) {
+    return <div id={id} role="tooltip" aria-live="polite" className="sr-only">{fallback}</div>;
+  }
+
+  return (
+    <div
+      id={id}
+      role="tooltip"
+      aria-live="polite"
+      className="pointer-events-none absolute z-30 w-[18rem] max-w-[calc(100%_-_1.5rem)]"
+      style={{
+        left: `clamp(0.75rem, ${anchor.anchorX + 12}px, calc(100% - 18.75rem))`,
+        top: `clamp(0.75rem, ${anchor.anchorY + 12}px, calc(100% - 8rem))`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
 
 function useInteractiveTooltip<T extends InteractiveDatum>(resetKey: string) {
   const [preview, setPreview] = useState<T>();
@@ -112,6 +145,7 @@ type ImpactPlotPoint = ComparisonSeasonPoint & {
   radius: number | null;
   seasonIndex: number;
 };
+type ImpactSelection = ImpactPlotPoint & TooltipAnchor;
 
 type ScatterShapeProps = {
   cx?: number;
@@ -134,9 +168,9 @@ function ImpactPoint({
   activeKey?: string;
   pinnedKey?: string;
   tooltipId: string;
-  onPreview: (point: ImpactPlotPoint) => void;
+  onPreview: (point: ImpactSelection) => void;
   onClearPreview: () => void;
-  onPin: (point: ImpactPlotPoint) => void;
+  onPin: (point: ImpactSelection) => void;
   onDismiss: () => void;
 }) {
   if (cx === undefined || cy === undefined || !payload) return null;
@@ -146,6 +180,7 @@ function ImpactPoint({
   const exact = `${payload.season}: ${formatNumber(payload.timeLossInjuries, 0)} injuries, ${formatNumber(payload.exposureHours, 0)} player-hours, incidence ${formatNumber(payload.incidence)}, severity ${formatNumber(payload.severity)} days, burden ${formatNumber(payload.burden, 0)} days per 1,000 player-hours${payload.radius === null ? '. Bubble area unavailable because the approved burden value is missing.' : ''}`;
   const accessibleLabel = `${exact}. ${selected ? 'Pinned. Press Escape to dismiss.' : 'Press Enter or Space to pin.'}`;
   const visualRadius = payload.radius ?? 7;
+  const selection = { ...payload, anchorX: cx, anchorY: cy };
 
   return (
     <g>
@@ -210,13 +245,13 @@ function ImpactPoint({
         aria-pressed={selected}
         data-impact-target={payload.interactionKey}
         className="outline-none"
-        onMouseEnter={() => onPreview(payload)}
+        onMouseEnter={() => onPreview(selection)}
         onMouseLeave={onClearPreview}
-        onFocus={() => onPreview(payload)}
+        onFocus={() => onPreview(selection)}
         onBlur={onClearPreview}
         onPointerDown={(event) => {
           event.stopPropagation();
-          onPin(payload);
+          onPin(selection);
         }}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
@@ -225,7 +260,7 @@ function ImpactPoint({
           }
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            onPin(payload);
+            onPin(selection);
           }
         }}
       />
@@ -233,24 +268,20 @@ function ImpactPoint({
   );
 }
 
-function ImpactTooltip({ id, point, pinned }: { id: string; point?: ImpactPlotPoint; pinned: boolean }) {
-  if (!point) {
-    return <div id={id} role="tooltip" aria-live="polite" className="sr-only">Focus or hover over a season point to view its values.</div>;
-  }
+function ImpactTooltip({ point, pinned }: { point: ImpactSelection; pinned: boolean }) {
+  const colour = point.seasonIndex === 0 ? OLD_COLOUR : CURRENT_COLOUR;
   return (
-    <div id={id} role="tooltip" aria-live="polite" className="rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm shadow-sm">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-semibold text-foreground">{point.season}</p>
-        {pinned && <span className="text-xs text-muted-foreground">Pinned. Press Escape to dismiss.</span>}
-      </div>
-      <dl className="mt-2 grid gap-x-5 gap-y-1 text-xs sm:grid-cols-2 lg:grid-cols-5">
-        <div><dt className="text-muted-foreground">Injuries</dt><dd className="font-semibold tabular-nums">{formatNumber(point.timeLossInjuries, 0)}</dd></div>
-        <div><dt className="text-muted-foreground">Player-Hours</dt><dd className="font-semibold tabular-nums">{formatNumber(point.exposureHours, 0)}</dd></div>
-        <div><dt className="text-muted-foreground">Incidence</dt><dd className="font-semibold tabular-nums">{formatNumber(point.incidence)} /1,000 h</dd></div>
-        <div><dt className="text-muted-foreground">Mean Severity</dt><dd className="font-semibold tabular-nums">{formatNumber(point.severity)} days</dd></div>
-        <div><dt className="text-muted-foreground">Burden</dt><dd className="font-semibold tabular-nums">{formatNumber(point.burden, 0)} days/1,000 h</dd></div>
-      </dl>
-    </div>
+    <TooltipCard
+      title={point.season}
+      rows={[
+        { label: 'Injuries', value: formatNumber(point.timeLossInjuries, 0), color: colour },
+        { label: 'Player-Hours', value: formatNumber(point.exposureHours, 0), color: colour },
+        { label: 'Incidence', value: `${formatNumber(point.incidence)} /1,000 h`, color: colour },
+        { label: 'Mean Severity', value: `${formatNumber(point.severity)} days`, color: colour },
+        { label: 'Burden', value: `${formatNumber(point.burden, 0)} days/1,000 h`, color: colour },
+      ]}
+      note={pinned ? 'Pinned. Press Escape to dismiss.' : undefined}
+    />
   );
 }
 
@@ -270,7 +301,7 @@ export function ImpactBubbles({ seasons }: { seasons: ComparisonSeasonPoint[] })
         : null,
     })), [maxBurden, seasons]);
   const resetKey = data.map((row) => `${row.interactionKey}-${row.incidence}-${row.severity}-${row.burden}`).join('|');
-  const interaction = useInteractiveTooltip<ImpactPlotPoint>(resetKey);
+  const interaction = useInteractiveTooltip<ImpactSelection>(resetKey);
   const xDomain = domainFor(data.map((row) => row.incidence), true);
   const yDomain = domainFor(data.map((row) => row.severity), true);
   const renderPoint = useCallback((shapeProps: ScatterShapeProps) => (
@@ -288,7 +319,7 @@ export function ImpactBubbles({ seasons }: { seasons: ComparisonSeasonPoint[] })
 
   return (
     <section className="min-w-0 space-y-3" aria-label="Injury Impact By Season. The horizontal axis shows injury incidence. The vertical axis shows mean severity. Circle area represents burden. Focus a point to preview it, then press Enter or Space to pin it.">
-      <div className="h-[390px] w-full min-w-0 sm:h-[460px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
+      <div className="relative h-[390px] w-full min-w-0 sm:h-[460px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart accessibilityLayer margin={{ top: 54, right: 38, bottom: 54, left: 32 }}>
             <defs>
@@ -327,8 +358,14 @@ export function ImpactBubbles({ seasons }: { seasons: ComparisonSeasonPoint[] })
             />
           </ScatterChart>
         </ResponsiveContainer>
+        <FloatingChartTooltip
+          id={tooltipId}
+          anchor={interaction.active}
+          fallback="Focus or hover over a season point to view its values."
+        >
+          {interaction.active && <ImpactTooltip point={interaction.active} pinned={Boolean(interaction.pinned)} />}
+        </FloatingChartTooltip>
       </div>
-      <ImpactTooltip id={tooltipId} point={interaction.active} pinned={Boolean(interaction.pinned)} />
       <SeasonLegend burden />
       <p className="sr-only">A dashed arrow shows the sequence from 2024-25 to 2025-26, not causality.</p>
     </section>
@@ -347,7 +384,7 @@ type MonthlyPlotPoint = ComparisonMonthlyPoint & {
   currentPlot: number;
 };
 
-type MonthlySelection = InteractiveDatum & {
+type MonthlySelection = InteractiveDatum & TooltipAnchor & {
   month: string;
   season: string;
   value: number | null;
@@ -393,7 +430,15 @@ function MonthlyBar({
   if (x === undefined || y === undefined || width === undefined || height === undefined || !payload) return null;
   const interactionKey = `${payload.month}-${series}`;
   const value = payload[series];
-  const selection = { interactionKey, month: monthLabel(payload.month), season, value, colour };
+  const selection = {
+    interactionKey,
+    month: monthLabel(payload.month),
+    season,
+    value,
+    colour,
+    anchorX: x + width / 2,
+    anchorY: y,
+  };
   const selected = pinnedKey === interactionKey;
   const active = activeKey === interactionKey;
   const targetHeight = Math.max(44, height);
@@ -449,20 +494,13 @@ function MonthlyBar({
   );
 }
 
-function MonthlyTooltip({ id, selection, pinned }: { id: string; selection?: MonthlySelection; pinned: boolean }) {
-  if (!selection) {
-    return <div id={id} role="tooltip" aria-live="polite" className="sr-only">Focus or hover over a monthly bar to view its value.</div>;
-  }
+function MonthlyTooltip({ selection, pinned }: { selection: MonthlySelection; pinned: boolean }) {
   return (
-    <div id={id} role="tooltip" aria-live="polite" className="rounded-lg border border-border/70 bg-background/80 px-4 py-3 text-sm shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="font-semibold text-foreground">{selection.month} · {selection.season}</p>
-        {pinned && <span className="text-xs text-muted-foreground">Pinned. Press Escape to dismiss.</span>}
-      </div>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Injuries: <span className="font-semibold tabular-nums text-foreground">{formatNumber(selection.value, 0)}</span>
-      </p>
-    </div>
+    <TooltipCard
+      title={`${selection.month} · ${selection.season}`}
+      rows={[{ label: 'Injuries', value: formatNumber(selection.value, 0), color: selection.colour }]}
+      note={pinned ? 'Pinned. Press Escape to dismiss.' : undefined}
+    />
   );
 }
 
@@ -490,7 +528,7 @@ export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) 
 
   return (
     <section className="min-w-0 space-y-3" aria-label="Injuries By Month. Paired bars compare injuries from September through June. Focus a bar to preview it, then press Enter or Space to pin it.">
-      <div className="h-[350px] w-full min-w-0 sm:h-[420px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
+      <div className="relative h-[350px] w-full min-w-0 sm:h-[420px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart accessibilityLayer data={data} margin={{ top: 24, right: 24, bottom: 48, left: 20 }} barGap={4} barCategoryGap="24%">
             <CartesianGrid stroke={GRID_COLOUR} strokeDasharray="3 5" vertical={false} />
@@ -529,8 +567,14 @@ export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) 
             />
           </BarChart>
         </ResponsiveContainer>
+        <FloatingChartTooltip
+          id={tooltipId}
+          anchor={interaction.active}
+          fallback="Focus or hover over a monthly bar to view its value."
+        >
+          {interaction.active && <MonthlyTooltip selection={interaction.active} pinned={Boolean(interaction.pinned)} />}
+        </FloatingChartTooltip>
       </div>
-      <MonthlyTooltip id={tooltipId} selection={interaction.active} pinned={Boolean(interaction.pinned)} />
       <SeasonLegend />
     </section>
   );

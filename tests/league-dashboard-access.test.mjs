@@ -78,7 +78,9 @@ test('shared presentation leads with time loss metrics and uses concise dashboar
   assert.match(leaguePage, /title="United Rugby Championship"/);
   assert.match(leaguePage, /teamName="United Rugby Championship"/);
   assert.match(dashboard, /\{teamName\}\s*<\/h1>/);
-  assert.match(dashboard, /Unless explicitly stated, injuries, injury counts, incidence and burden are based on Time Loss Injuries\./);
+  const overview = dashboard.slice(dashboard.indexOf('function OverviewTab'), dashboard.indexOf('function TeamComparisonTab'));
+  assert.match(overview, /Unless explicitly stated, injuries, injury counts, incidence and burden are based on Time Loss Injuries\./);
+  assert.equal((dashboard.match(/Unless explicitly stated, injuries, injury counts, incidence and burden are based on Time Loss Injuries\./g) ?? []).length, 1);
 
   assert.match(dashboard, /label="Injuries"[\s\S]*?value=\{fmt\(headlineValues\.time_loss_injuries, 0\)\}[\s\S]*?Overall Injuries/);
   assert.match(dashboard, /label="Incidence"[\s\S]*?value=\{fmt\(headlineValues\.incidence_per_1000h\)\}[\s\S]*?Overall Incidence/);
@@ -678,19 +680,20 @@ test('risk matrix selects prevalent TL diagnoses instead of recorded or burden-r
 
 test('illness tab reads only released overall illness profiles', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
-  const tab = dashboard.slice(dashboard.indexOf('function IllnessesTab'), dashboard.indexOf('function rankedForMetric'));
+  const tab = dashboard.slice(dashboard.indexOf('const ILLNESS_METRICS'), dashboard.indexOf('function rankedForMetric'));
 
   assert.match(tab, /dashboard\.illness_profiles \?\? \[\]/);
   assert.match(tab, /const summary = dashboard\.illness_summary/);
   assert.match(tab, /row\.recorded_illnesses/);
-  assert.match(tab, /<StatTile label="Illnesses" value=\{fmt\(summary\?\.recorded_illnesses, 0\)\}/);
-  assert.match(tab, /<StatTile label="Incidence" value=\{fmt\(summary\?\.incidence_per_1000h\)\}/);
-  assert.match(tab, /<StatTile label="Burden" value=\{fmt\(summary\?\.burden_per_1000h\)\}/);
-  assert.match(tab, /<StatTile label="Severity" value=\{fmt\(summary\?\.mean_severity_days\)\}/);
+  assert.match(tab, /ILLNESS_METRICS\.map/);
+  assert.match(tab, /value=\{fmt\(summary\?\.\[metric\.key\]/);
+  assert.match(tab, /rankedIllnesses\(rows, metric\.key\)/);
+  assert.match(tab, /Top Illnesses By \$\{metric\.label\}/);
   assert.match(tab, /row\.setting === 'all'/);
   assert.match(tab, /Count[\s\S]*Incidence[\s\S]*Burden[\s\S]*Severity/);
-  assert.match(tab, /Not available values are not estimated/);
-  assert.doesNotMatch(tab, /SettingControl|setSetting|match.*training/i);
+  assert.match(tab, /Overall illness reporting only\. Illnesses are not attributed to Match or Training\./);
+  assert.doesNotMatch(tab, /<table/);
+  assert.doesNotMatch(tab, /SettingControl|setSetting/);
   assert.match(dashboard, /<TabsContent value="illnesses"><IllnessesTab dashboard=\{dashboard\} \/><\/TabsContent>/);
 });
 
