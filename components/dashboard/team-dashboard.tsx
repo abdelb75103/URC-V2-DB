@@ -558,7 +558,7 @@ function OverviewTab({
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className={SECTION_HEADING_CLASS}>
-          {dashboard.scope === 'league' ? 'League Injury Picture' : 'Team Injury Picture'}
+          {dashboard.scope === 'league' ? 'League Injury Overview' : 'Team Injury Overview'}
         </h2>
         {settingFilterAvailable && (
           <SettingControl value={effectiveSetting} settings={settingOptions} onChange={setSetting} />
