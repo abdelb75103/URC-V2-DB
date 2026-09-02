@@ -19,8 +19,7 @@ create table analysis.hsr_team_season_metadata_v1 (
   created_at timestamptz not null default now(),
   primary key (season, team_key),
   check (accepted_row_count = actual_hsr_row_count + blank_hsr_row_count),
-  check ((source_available and source_gap_reason is null)
-    or (not source_available and source_gap_reason is not null)),
+  check (source_available or source_gap_reason is not null),
   check (not source_available or actual_hsr_row_count > 0)
 );
 

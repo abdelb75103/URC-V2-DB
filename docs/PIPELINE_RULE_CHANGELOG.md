@@ -19,10 +19,12 @@ Every change that alters a derived value, classification, cohort, denominator, o
 | Rule version | `hsr_source_to_display_reporting_2026_09_02_v1`; dashboard reader `v8`. |
 | Carry-forward | `carries-forward`: row-resolution, null and display rules are versioned. The current 16/16 and 14/16 source-availability states, source blanks, mapping evidence and the Zebre warning are season-specific. |
 | Evidence | `docs/evidence/hsr_exposure_mapping_manifest.json`; `docs/evidence/hsr_exposure_validation_report.json`; flat parameter payload SHA-256 `821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149`. |
-| Migration | Additive successor `20260902010000_urc_hsr_reporting_v8.sql`, SHA-256 `fae659ee69b5e455bc824793eeab6695184232c3c6cd828223a653b490c4a53b`; checksum registration `tools/sql/register_urc_hsr_reporting_v8_migration.sql`; read-only proof `tools/sql/verify_hsr_reporting_v8.sql`. |
+| Migration | Additive successor `20260902010000_urc_hsr_reporting_v8.sql`, SHA-256 `769f8c0bdb2a18b6e4c128625c5bfbecce3a1f38274f65f9a23a5cb919063cbf`; checksum registration `tools/sql/register_urc_hsr_reporting_v8_migration.sql`; read-only proof `tools/sql/verify_hsr_reporting_v8.sql`. |
 | Decision provenance | Abdel Babiker, 2 September 2026. |
 
 **Source and lineage rule.** Each HSR observation is bound by its accepted locator to one existing `ingestion.source_rows` row and one active curated exposure row. HSR is an absolute distance from that same accepted observation. The source status, units, threshold or zone, comparability state, blank reason and row lineage remain private. Source blanks remain unknown; they are never zero. A valid paired actual observation takes precedence over a display placeholder without changing an existing source or curated row.
+
+An available source may retain a gap note describing partial blanks or a validated GPS-file bridge. Unavailable sources require a gap reason. All 32 metadata records passed the corresponding database constraints in a temporary-table preflight.
 
 **Display rule.** For each season and month, the league HSR percentage is the pooled ratio of valid paired actual HSR distance to accepted total distance. It is never an average of team percentages and does not include unknown, blank or unpaired rows. A team-month with no paired actual HSR may show a clearly labelled placeholder only when its accepted total distance and that season-month pooled percentage are both available. If total distance is absent, HSR distance remains null. V8 exposes actual HSR separately from `hsr_distance_km`, along with the 0 to 100 `hsr_percentage`, imputation fields, contributor counts and source status in coverage, monthly and team-comparison data.
 
