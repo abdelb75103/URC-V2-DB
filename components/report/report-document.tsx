@@ -1,15 +1,21 @@
 import {
-  Circle, Document, Font, G, Image, Line, Page, Path, Rect, StyleSheet, Svg,
-  Text, Text as PdfSvgText, View,
+  Circle, Defs, Document, Font, G, Image, Line, LinearGradient, Page, Path, Rect,
+  Stop, StyleSheet, Svg, Text, Text as PdfSvgText, View,
 } from "@react-pdf/renderer";
 import { cloneElement, type ComponentType, type ReactElement, type ReactNode } from "react";
 import {
   orderedReportSectionIds,
   REPORT_SECTION_LABELS,
-  type ReportDistributionRow, type ReportInjuryTypeFamily, type ReportMetric,
+  type ReportDistributionRow, type ReportInjuryTypeFamily,
   type ReportModel, type ReportPatternRow, type ReportProfileRow,
   type ReportSectionId, type ReportSettingMetric,
 } from "@/lib/report-model-types";
+import {
+  cardFill, commonInjuryColorMap, diagnosisColourMap, heatColour, heatScaleStops,
+  illnessColorMap, MATRIX_DOT,
+  NO_CASE_FILL, RANKED_LANE_SIZE, rankedForMetric, rankedIllnesses, readableOn,
+  RISK_ZONE_STOPS,
+} from "@/lib/report-presentation";
 
 export { DEFAULT_REPORT_SECTION_IDS } from "@/lib/report-model-types";
 export type { ReportModel, ReportSectionId } from "@/lib/report-model-types";
@@ -28,6 +34,7 @@ const C = {
   mint: "#42D8B4", blue: "#72A7FF", amber: "#FFC45C", coral: "#EF7189",
   purple: "#A78BFA", lime: "#8BD450", orange: "#FB923C", red: "#D95656",
   green: "#2F8F62", grey: "#94A3B8", rule: "#E2EAF1", track: "#E4EBF1",
+  hsr: "#F59E0B",
 } as const;
 const PALETTE = [C.cyan, C.mint, C.blue, C.amber, C.coral, C.purple, C.lime, C.orange];
 const SEVERITY_COLOURS: Record<string, string> = {
@@ -98,19 +105,34 @@ function niceScale(max: number, count = 4): { top: number; ticks: number[] } {
   for (let value = 0; value <= top + step / 2; value += step) ticks.push(Number(value.toFixed(6)));
   return { top, ticks };
 }
-function logTicks(top: number): number[] { return [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].filter((tick) => tick <= top); }
-/** Chooses ink or white body text so labels stay legible on a category colour. */
-function readableOn(hex: string): string {
-  const value = Number.parseInt(hex.slice(1), 16);
-  const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255].map((channel) => { const s = channel / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? C.ink : C.white;
+
+/**
+ * A rounded linear domain for a matrix axis. The bounds come from the plotted
+ * values rather than from zero, so clustered points spread across the plot, and
+ * a domain that does not reach zero is reported so the axis can be marked broken.
+ */
+function linearDomain(values: number[], count = 4): { low: number; high: number; ticks: number[]; broken: boolean } {
+  const usable = values.filter((value) => Number.isFinite(value));
+  if (!usable.length) return { low: 0, high: 1, ticks: [0, 0.5, 1], broken: false };
+  const min = Math.min(...usable), max = Math.max(...usable);
+  const raw = Math.max((max - min) / count, Math.abs(max) * 0.08, 1e-6);
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = ([1, 2, 2.5, 5, 10].find((factor) => factor * magnitude >= raw) ?? 10) * magnitude;
+  let low = Math.max(0, Math.floor(min / step) * step), high = Math.ceil(max / step) * step;
+  // A point sitting exactly on the frame would draw a clipped circle, so the
+  // domain gains a step whenever the data touches an edge.
+  if (min - low < step * 0.4) low = Math.max(0, low - step);
+  if (high - max < step * 0.4) high += step;
+  const ticks: number[] = [];
+  for (let value = low; value <= high + step / 2; value += step) ticks.push(Number(value.toFixed(6)));
+  return { low, high, ticks, broken: low > 0 };
 }
 
 function Header({ model, section }: { model: ReportModel; section: ReportSectionId }) { return <View style={styles.header}><View style={styles.headerBrand}>{model.brand.crestDataUri && <Image src={model.brand.crestDataUri} style={styles.headerCrest} />}<Text style={styles.eyebrow}>URC injury surveillance</Text></View><Text style={styles.headerLabel}>{REPORT_SECTION_LABELS[section]}</Text></View>; }
 function Footer({ model, meta, cover = false }: { model: ReportModel; meta: ReportMetadata; cover?: boolean }) { return <View fixed style={[styles.footer, cover ? styles.coverFooter : {}]}><Text>{model.subjectName} | {model.season} | v{meta.version}</Text><Text>Source {formatDate(meta.sourceGeneratedAt)} | Exported {formatDate(meta.exportedAt)}</Text><Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} /></View>; }
 function PageShell({ model, meta, section, children }: { model: ReportModel; meta: ReportMetadata; section: ReportSectionId; children: ReactNode }) { return <Page size="A4" style={styles.page}><Header model={model} section={section} />{children}<Footer model={model} meta={meta} /></Page>; }
 function PageTitle({ title, note }: { title: string; note: string }) { return <View><Text style={styles.title}>{title}</Text><Text style={styles.standfirst}>{note}</Text></View>; }
-function Panel({ title, note, children, fill = false }: { title: string; note?: string; children: ReactNode; fill?: boolean }) { return <View style={[styles.panel, fill ? { height: "100%" } : {}]}><Text style={styles.panelTitle}>{title}</Text>{note && <Text style={styles.panelNote}>{note}</Text>}{children}</View>; }
+function Panel({ title, note, children, fill = false }: { title?: string; note?: string; children: ReactNode; fill?: boolean }) { return <View style={[styles.panel, fill ? { height: "100%" } : {}]}>{title && <Text style={styles.panelTitle}>{title}</Text>}{note && <Text style={styles.panelNote}>{note}</Text>}{children}</View>; }
 
 type LegendItem = { label: string; colour: string; shape?: "bar" | "line" | "swatch" };
 function Legend({ items }: { items: LegendItem[] }) {
@@ -123,45 +145,85 @@ function Legend({ items }: { items: LegendItem[] }) {
 }
 function Caption({ children }: { children: ReactNode }) { return <Text style={styles.caption}>{children}</Text>; }
 
-function metricColour(key: string, index: number): string { if (/burden/i.test(key)) return C.coral; if (/incidence/i.test(key)) return /overall/i.test(key) ? C.cyan : C.amber; if (/severity/i.test(key)) return C.purple; if (/exposure|hour/i.test(key)) return C.mint; if (/time.loss/i.test(key)) return C.amber; return PALETTE[index % PALETTE.length]; }
-function metricSeries(metric: ReportMetric, rows: readonly ReportPatternRow[]): Array<number | null> { if (/overall.incidence/i.test(metric.key)) return rows.map((r) => r.overallIncidencePer1000h); if (/incidence/i.test(metric.key)) return rows.map((r) => r.incidencePer1000h); if (/burden/i.test(metric.key)) return rows.map((r) => r.burdenPer1000h); if (/time.loss/i.test(metric.key)) return rows.map((r) => r.timeLossInjuries); if (/recorded/i.test(metric.key)) return rows.map((r) => r.recordedInjuries); return rows.map(() => null); }
-function metricLabel(metric: ReportMetric): string {
-  if (/recorded/i.test(metric.key)) return "Overall Injuries";
-  if (/time.*loss.*injur/i.test(metric.key)) return "Injuries";
-  if (/overall.*incidence/i.test(metric.key)) return "Overall Incidence";
-  if (/incidence/i.test(metric.key)) return "Incidence";
-  if (/mean.*severity|severity.*mean/i.test(metric.key)) return "Mean Severity";
-  if (/median.*severity|severity.*median/i.test(metric.key)) return "Median Severity";
-  if (/burden/i.test(metric.key)) return "Burden";
-  return metric.label;
-}
+type StatCard = {
+  key: string;
+  label: string;
+  value: string;
+  unit: string;
+  companion?: { label: string; value: string };
+  series?: Array<number | null>;
+  colour: string;
+};
+
 function Sparkline({ values, colour }: { values: Array<number | null>; colour: string }) {
   const data = values.map((value, index) => ({ value, index })).filter((p): p is { value: number; index: number } => typeof p.value === "number" && Number.isFinite(p.value));
   if (data.length < 2) return null;
   const min = Math.min(...data.map((p) => p.value)), max = Math.max(...data.map((p) => p.value)), span = max - min || 1;
   const y = (v: number) => 19 - ((v - min) / span) * 15, last = data[data.length - 1];
   const path = data.map((p, i) => `${i ? "L" : "M"} ${(p.index / Math.max(1, values.length - 1)) * 100} ${y(p.value)}`).join(" ");
-  return <Svg viewBox="0 0 100 22" style={{ height: 14, marginTop: 3 }}>
+  return <Svg viewBox="0 0 100 22" style={{ height: 14, marginTop: 4 }}>
     <Line x1={0} x2={100} y1={20.5} y2={20.5} stroke={C.rule} strokeWidth={0.8} />
     <Path d={path} stroke={colour} strokeWidth={2} fill="none" />
     <Circle cx={(last.index / Math.max(1, values.length - 1)) * 100} cy={y(last.value)} r={2.4} fill={colour} />
   </Svg>;
 }
-function MetricCards({ model, dark = false, limit = 7, trend = true }: { model: ReportModel; dark?: boolean; limit?: number; trend?: boolean }) {
-  const metrics = model.snapshotMetrics.slice(0, limit), pattern = model.monthlyInjuryPattern;
-  return <View style={styles.metricGrid}>{metrics.map((metric, index) => {
-    const colour = metricColour(metric.key, index), series = trend ? metricSeries(metric, pattern) : [];
-    const plotted = series.filter((value) => typeof value === "number" && Number.isFinite(value)).length;
-    return <View key={metric.key} style={[styles.metricCell, { width: metrics.length > 4 ? "25%" : `${100 / metrics.length}%` }, metrics.length === 7 && index === 4 ? { marginLeft: "12.5%" } : {}]}>
-      <View style={[styles.metricCard, dark ? { backgroundColor: C.navy2, borderColor: "#294565" } : {}, trend ? { minHeight: 68 } : { minHeight: 52 }]}>
-        <Text style={[styles.metricLabel, dark ? { color: C.white } : {}]}>{metricLabel(metric)}</Text>
-        <Text style={[styles.metricValue, dark ? { color: C.white } : {}]}>{fmt(metric.value)}</Text>
-        <Text style={[styles.metricUnit, dark ? { color: "#AFC1D4" } : {}]}>{metric.unit}</Text>
-        {trend && plotted > 1 && <Sparkline values={series} colour={colour} />}
-        {!trend && <Text style={[styles.metricUnit, { marginTop: 6 }]}>Released season total</Text>}
-      </View>
-    </View>;
-  })}</View>;
+
+function StatCards({ cards }: { cards: StatCard[] }) {
+  return <View style={styles.metricGrid}>{cards.map((card) => <View key={card.key} style={[styles.metricCell, { width: `${100 / cards.length}%` }]}>
+    <View style={[styles.metricCard, { minHeight: card.series ? 82 : 56 }]}>
+      <Text style={styles.metricLabel}>{card.label}</Text>
+      <Text style={styles.metricValue}>{card.value}</Text>
+      <Text style={styles.metricUnit}>{card.unit}</Text>
+      {card.companion && <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4 }}>
+        <View style={[styles.legendDot, { width: 5, height: 5, borderRadius: 2.5, backgroundColor: card.colour }]} />
+        <Text style={{ color: C.muted, fontSize: 6.2 }}>{card.companion.label} </Text>
+        <Text style={{ color: C.ink, fontFamily: "Helvetica-Bold", fontSize: 6.2 }}>{card.companion.value}</Text>
+      </View>}
+      {card.series && <Sparkline values={card.series} colour={card.colour} />}
+    </View>
+  </View>)}</View>;
+}
+
+function headlineValue(model: ReportModel, key: string): number | null {
+  return model.snapshotMetrics.find((metric) => metric.key === key)?.value ?? null;
+}
+
+/**
+ * The dashboard overview tiles, in the dashboard's order and colours. Incidence
+ * and burden borrow the preliminary contributor-aligned series for their trend
+ * whenever the release carries more than one such row, exactly as the dashboard
+ * does; the headline values themselves stay the approved season figures.
+ */
+function OverviewCards({ model }: { model: ReportModel }) {
+  const pattern = model.monthlyInjuryPattern, preliminary = model.preliminaryMonthlyRates;
+  const usesPreliminary = preliminary.length > 1;
+  const cards: StatCard[] = [
+    {
+      key: "injuries", label: "Injuries", value: fmt(headlineValue(model, "time_loss_injuries")), unit: "injuries", colour: C.cyan,
+      companion: { label: "Overall Injuries", value: fmt(headlineValue(model, "recorded_injuries")) },
+      series: pattern.map((row) => row.timeLossInjuries),
+    },
+    {
+      key: "incidence", label: "Incidence", value: fmt(headlineValue(model, "incidence_per_1000h")), unit: "injuries /1,000 h", colour: C.amber,
+      companion: { label: "Overall Incidence", value: fmt(headlineValue(model, "overall_incidence_per_1000h")) },
+      series: usesPreliminary ? preliminary.map((row) => row.incidence_per_1000h) : pattern.map((row) => row.incidencePer1000h),
+    },
+    {
+      key: "burden", label: "Burden", value: fmt(headlineValue(model, "burden_per_1000h")), unit: "days /1,000 h", colour: C.coral,
+      series: usesPreliminary ? preliminary.map((row) => row.burden_per_1000h) : pattern.map((row) => row.burdenPer1000h),
+    },
+    {
+      key: "exposure", label: model.exposure.totalHoursLabel === "Estimated Total Hours" ? "Estimated Exposure" : "Exposure",
+      value: fmt(model.exposure.totalHours, "", 0), unit: "player-hours", colour: C.mint,
+      series: model.exposure.monthly.map((row) => row.exposureHours),
+    },
+  ];
+  return <View>
+    <StatCards cards={cards} />
+    {usesPreliminary && <Text style={[styles.panelNote, { marginTop: 4, marginBottom: 0 }]}>
+      The Incidence and Burden trends use preliminary contributor-aligned monthly data. Headline values remain the approved season figures.
+    </Text>}
+  </View>;
 }
 
 function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatternRow[]; chartHeight?: number }) {
@@ -171,8 +233,22 @@ function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatte
   const rate = niceScale(Math.max(1, ...rows.flatMap((r) => [r.overallIncidencePer1000h ?? 0, r.incidencePer1000h ?? 0])));
   const slot = plotW / Math.max(1, rows.length), x = (i: number) => left + slot * i + slot / 2;
   const caseY = (v: number) => top + plotH - (v / cases.top) * plotH, rateY = (v: number) => top + plotH - (v / rate.top) * plotH;
-  const linePath = (pick: (r: ReportPatternRow) => number | null) => rows.map((r, i) => pick(r) === null ? "" : `${i ? "L" : "M"} ${x(i)} ${rateY(pick(r) ?? 0)}`).filter(Boolean).join(" ");
+  // A month with no released rate breaks the line rather than joining across it,
+  // so a gap never reads as a value.
+  const linePath = (pick: (r: ReportPatternRow) => number | null) => {
+    let open = false;
+    return rows.map((r, i) => {
+      const value = pick(r);
+      if (value === null || !Number.isFinite(value)) { open = false; return ""; }
+      const command = open ? "L" : "M";
+      open = true;
+      return `${command} ${x(i)} ${rateY(value)}`;
+    }).filter(Boolean).join(" ");
+  };
   const barWidth = Math.min(15, slot * 0.34);
+  // Some releases carry no monthly rates at all. The rate axis, its lines and its
+  // legend entries are then dropped rather than drawn as an empty scale.
+  const hasRates = rows.some((r) => finiteNumber(r.overallIncidencePer1000h) || finiteNumber(r.incidencePer1000h));
   return <View>
     <Svg viewBox={`0 0 ${w} ${h}`} style={{ height: h }}>
       <Rect x={left} y={top} width={plotW} height={plotH} fill={C.white} stroke={C.line} strokeWidth={0.8} />
@@ -180,7 +256,7 @@ function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatte
         <Line x1={left} x2={left + plotW} y1={caseY(tick)} y2={caseY(tick)} stroke={C.rule} strokeWidth={0.8} />
         <SvgText x={left - 5} y={caseY(tick) + 2.4} textAnchor="end" fontSize={6.5} fill={C.muted}>{tickText(tick)}</SvgText>
       </G>)}
-      {rate.ticks.map((tick) => <G key={`rate-${tick}`}>
+      {hasRates && rate.ticks.map((tick) => <G key={`rate-${tick}`}>
         <Line x1={left + plotW} x2={left + plotW + 3} y1={rateY(tick)} y2={rateY(tick)} stroke={C.line} strokeWidth={0.8} />
         <SvgText x={left + plotW + 6} y={rateY(tick) + 2.4} fontSize={6.5} fill={C.muted}>{tickText(tick)}</SvgText>
       </G>)}
@@ -189,22 +265,26 @@ function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatte
         <Rect x={centre + 1} y={caseY(r.timeLossInjuries)} width={barWidth} height={top + plotH - caseY(r.timeLossInjuries)} fill={C.amber} />
         <SvgText x={centre} y={top + plotH + 12} textAnchor="middle" fontSize={6.5} fill={C.muted}>{shortMonth(r.month)}</SvgText>
       </G>; })}
-      <Path d={linePath((r) => r.overallIncidencePer1000h)} fill="none" stroke={C.cyan} strokeWidth={2.2} />
-      <Path d={linePath((r) => r.incidencePer1000h)} fill="none" stroke={C.amber} strokeWidth={2.2} />
+      {hasRates && <Path d={linePath((r) => r.overallIncidencePer1000h)} fill="none" stroke={C.cyan} strokeWidth={2.2} />}
+      {hasRates && <Path d={linePath((r) => r.incidencePer1000h)} fill="none" stroke={C.amber} strokeWidth={2.2} />}
       {rows.map((r, i) => <G key={`point-${r.month}`}>
         {r.overallIncidencePer1000h !== null && <Circle cx={x(i)} cy={rateY(r.overallIncidencePer1000h)} r={2.4} fill={C.cyan} stroke={C.white} strokeWidth={0.8} />}
         {r.incidencePer1000h !== null && <Circle cx={x(i)} cy={rateY(r.incidencePer1000h)} r={2.4} fill={C.amber} stroke={C.white} strokeWidth={0.8} />}
       </G>)}
       <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Injuries (cases)</SvgText>
-      <SvgText x={w - 2} y={top - 9} textAnchor="end" fontSize={6.8} fill={C.ink}>Injuries per 1,000 player-hours</SvgText>
+      {hasRates && <SvgText x={w - 2} y={top - 9} textAnchor="end" fontSize={6.8} fill={C.ink}>Injuries per 1,000 player-hours</SvgText>}
     </Svg>
     <Legend items={[
       { label: "Overall Injuries", colour: C.cyan, shape: "bar" },
       { label: "Time Loss Injuries", colour: C.amber, shape: "bar" },
-      { label: "Overall Incidence", colour: C.cyan, shape: "line" },
-      { label: "Time Loss Incidence", colour: C.amber, shape: "line" },
+      ...(hasRates ? [
+        { label: "Overall Incidence", colour: C.cyan, shape: "line" as const },
+        { label: "Time Loss Incidence", colour: C.amber, shape: "line" as const },
+      ] : []),
     ]} />
-    <Caption>Bars read against the left axis in cases. Lines read against the right axis in injuries per 1,000 player-hours.</Caption>
+    <Caption>{hasRates
+      ? "Bars read against the left axis in cases. Lines read against the right axis in injuries per 1,000 player-hours."
+      : "Bars read against the left axis in cases. Monthly incidence is not available in this release, so no rate lines are drawn."}</Caption>
   </View>;
 }
 
@@ -269,7 +349,7 @@ function overall(rows: readonly ReportProfileRow[]) { return rows.filter((r) => 
 type ProfileMetric = "timeLossInjuries" | "incidencePer1000h" | "burdenPer1000h" | "meanSeverityDays";
 function profileValue(row: ReportProfileRow, metric: ProfileMetric) { return row[metric] ?? 0; }
 
-function RankedBars({ rows, metric = "timeLossInjuries", limit = 8, coloured = false, heading, unit, rowGap = 6 }: { rows: readonly ReportProfileRow[]; metric?: ProfileMetric; limit?: number; coloured?: boolean; heading: string; unit: string; rowGap?: number }) {
+function RankedBars({ rows, metric = "timeLossInjuries", limit = 8, heat = false, heading, unit, rowGap = 6 }: { rows: readonly ReportProfileRow[]; metric?: ProfileMetric; limit?: number; heat?: boolean; heading: string; unit: string; rowGap?: number }) {
   const ranked = [...rows].filter((r) => profileValue(r, metric) > 0).sort((a, b) => profileValue(b, metric) - profileValue(a, metric)).slice(0, limit);
   const max = Math.max(1, ...ranked.map((r) => profileValue(r, metric)));
   return <View>
@@ -283,7 +363,7 @@ function RankedBars({ rows, metric = "timeLossInjuries", limit = 8, coloured = f
       <Text style={{ width: 18, color: C.muted, fontSize: 6.5 }}>{String(i + 1).padStart(2, "0")}</Text>
       <Text style={{ width: 112, fontSize: 7, paddingRight: 4 }}>{r.label}</Text>
       <View style={{ flex: 1, height: 8, backgroundColor: C.track, borderRadius: 2, overflow: "hidden", marginRight: 6 }}>
-        <View style={{ height: 8, width: `${profileValue(r, metric) / max * 100}%`, backgroundColor: coloured ? profileColour(r.code) : C.cyan }} />
+        <View style={{ height: 8, width: `${profileValue(r, metric) / max * 100}%`, backgroundColor: heat ? heatColour(profileValue(r, metric), max) : C.cyan }} />
       </View>
       <Text style={{ width: 46, textAlign: "right", color: C.ink, fontFamily: "Helvetica-Bold", fontSize: 6.8 }}>{fmt(profileValue(r, metric))}</Text>
     </View>)}
@@ -297,25 +377,19 @@ const BACK_PATHS = BODY_PATHS.filter((shape) => shape.code !== "chest" && shape.
   { code: "thoracic_spine", d: "M38 76 Q60 69 82 76 L80 130 Q60 139 40 130 Z M56 78 H64 V132 H56 Z" },
   { code: "lumbosacral", d: "M40 131 Q60 139 80 131 L77 176 Q60 186 43 176 Z M54 145 H66 V178 H54 Z" },
 ]);
-const NO_CASE_FILL = "#D7E2EA";
-function bodyHeat(value: number, max: number) { if (value <= 0) return NO_CASE_FILL; const ratio = Math.min(1, value / Math.max(1, max)); return ratio > .72 ? "#D93F45" : ratio > .38 ? C.orange : C.amber; }
-/** Turns the heat bands into explicit case ranges so the legend carries units. */
-function bodyHeatLegend(max: number): LegendItem[] {
-  const buckets = new Map<string, number[]>();
-  for (let value = 1; value <= max; value += 1) { const colour = bodyHeat(value, max); buckets.set(colour, [...(buckets.get(colour) ?? []), value]); }
-  const items: LegendItem[] = [{ label: "No Injuries", colour: NO_CASE_FILL, shape: "swatch" }];
-  for (const [colour, values] of buckets) {
-    const low = values[0], high = values[values.length - 1];
-    items.push({ label: low === high ? `${low} case${low === 1 ? "" : "s"}` : `${low} to ${high} cases`, colour, shape: "swatch" });
-  }
-  return items;
+/** The continuous ramp sampled at five stops, so the printed key stays short. */
+function heatLegend(max: number): LegendItem[] {
+  return [
+    { label: "No Injuries", colour: NO_CASE_FILL, shape: "swatch" as const },
+    ...heatScaleStops(max).map((stop) => ({ label: `${stop.value} case${stop.value === 1 ? "" : "s"}`, colour: stop.colour, shape: "swatch" as const })),
+  ];
 }
 function BodyMapPdf({ rows, chartHeight = 300 }: { rows: readonly ReportProfileRow[]; chartHeight?: number }) {
   const byCode = new Map(rows.map((r) => [r.code, r])), max = Math.max(1, ...rows.map((r) => r.timeLossInjuries));
   const figure = (shapes: typeof BODY_PATHS, offset: number, label: string) => <G transform={`translate(${offset} 14)`}>
     <SvgText x={60} y={-3} textAnchor="middle" fontSize={10} fill={C.ink}>{label}</SvgText>
     {shapes.map((shape) => {
-      const props = { fill: bodyHeat(byCode.get(shape.code)?.timeLossInjuries ?? 0, max), stroke: C.white, strokeWidth: 1 };
+      const props = { fill: heatColour(byCode.get(shape.code)?.timeLossInjuries ?? 0, max), stroke: C.white, strokeWidth: 1 };
       if (shape.circle) return <Circle key={`${label}-${shape.code}`} cx={shape.circle[0]} cy={shape.circle[1]} r={shape.circle[2]} {...props} />;
       if (shape.rect) return <Rect key={`${label}-${shape.code}`} x={shape.rect[0]} y={shape.rect[1]} width={shape.rect[2]} height={shape.rect[3]} rx={shape.rect[4]} {...props} />;
       return <Path key={`${label}-${shape.code}`} d={shape.d ?? ""} {...props} />;
@@ -323,134 +397,221 @@ function BodyMapPdf({ rows, chartHeight = 300 }: { rows: readonly ReportProfileR
   </G>;
   return <View>
     <Svg viewBox="0 0 270 422" style={{ height: chartHeight }}>{figure(BODY_PATHS, 5, "Front")}{figure(BACK_PATHS, 140, "Back")}</Svg>
-    <Legend items={bodyHeatLegend(max)} />
+    <Legend items={heatLegend(max)} />
     <Caption>Shading is the injury count for each region, from 0 to {max} cases.</Caption>
   </View>;
 }
 
-function MirroredBars({ rows, limit = 9, rowGap = 6, heading }: { rows: readonly ReportProfileRow[]; limit?: number; rowGap?: number; heading: string }) {
-  const allRows = overall(rows).sort((a, b) => b.timeLossInjuries - a.timeLossInjuries).slice(0, limit);
-  const byKey = new Map(rows.map((r) => [`${r.setting}:${r.code}`, r]));
-  const max = Math.max(1, ...allRows.flatMap((r) => [byKey.get(`match:${r.code}`)?.timeLossInjuries ?? 0, byKey.get(`training:${r.code}`)?.timeLossInjuries ?? 0]));
+/** Only the fields the split needs, so injury-type families fit without widening. */
+type SplitRow = Pick<ReportProfileRow, "code" | "label" | "setting" | "timeLossInjuries">;
+function MirroredBars({ rows, rowGap = 6, heading }: { rows: readonly SplitRow[]; rowGap?: number; heading: string }) {
+  // The union of the released match and training rows, as the dashboard split
+  // takes it: a category reported by only one setting still appears, with a true
+  // zero on the setting that did not report it.
+  const match = new Map(rows.filter((r) => r.setting === "match").map((r) => [r.code, r]));
+  const training = new Map(rows.filter((r) => r.setting === "training").map((r) => [r.code, r]));
+  const paired = [...new Set([...match.keys(), ...training.keys()])]
+    .map((code) => {
+      const matchRow = match.get(code), trainingRow = training.get(code);
+      return {
+        code,
+        label: matchRow?.label ?? trainingRow?.label ?? code,
+        match: matchRow?.timeLossInjuries ?? 0,
+        training: trainingRow?.timeLossInjuries ?? 0,
+      };
+    })
+    .filter((r) => r.match > 0 || r.training > 0)
+    .sort((a, b) => Math.max(b.match, b.training) - Math.max(a.match, a.training) || a.label.localeCompare(b.label));
+  const max = Math.max(1, ...paired.map((r) => Math.max(r.match, r.training)));
   return <View>
     <View style={styles.headRow}>
-      <Text style={[styles.columnHead, { width: 34, textAlign: "right", paddingRight: 6, color: C.cyan }]}>Match</Text>
-      <Text style={[styles.columnHead, { flex: 1, textAlign: "right", paddingRight: 6 }]}>{tickText(max)} to 0 cases</Text>
-      <Text style={[styles.columnHead, { width: 125, textAlign: "center" }]}>{heading}</Text>
-      <Text style={[styles.columnHead, { flex: 1, paddingLeft: 6 }]}>0 to {tickText(max)} cases</Text>
-      <Text style={[styles.columnHead, { width: 34, paddingLeft: 6, color: C.mint }]}>Training</Text>
+      <View style={{ width: 22 }} />
+      <Text style={[styles.columnHead, { flex: 1, textAlign: "right", paddingRight: 5, color: C.cyan }]}>Match, {tickText(max)} to 0 cases</Text>
+      <Text style={[styles.columnHead, { width: 92, textAlign: "center" }]}>{heading}</Text>
+      <Text style={[styles.columnHead, { flex: 1, paddingLeft: 5, color: C.mint }]}>Training, 0 to {tickText(max)} cases</Text>
+      <View style={{ width: 22 }} />
     </View>
-    {allRows.map((r) => {
-      const match = byKey.get(`match:${r.code}`)?.timeLossInjuries ?? 0, training = byKey.get(`training:${r.code}`)?.timeLossInjuries ?? 0;
-      return <View key={r.code} style={{ flexDirection: "row", alignItems: "center", marginBottom: rowGap }}>
-        <Text style={{ width: 34, textAlign: "right", paddingRight: 6, color: C.ink, fontSize: 6.8 }}>{match}</Text>
-        <View style={{ flex: 1, height: 8, alignItems: "flex-end", backgroundColor: C.track, marginRight: 6 }}>
-          <View style={{ width: `${match / max * 100}%`, height: 8, backgroundColor: C.cyan }} />
-        </View>
-        <Text style={{ width: 125, textAlign: "center", fontSize: 7 }}>{r.label}</Text>
-        <View style={{ flex: 1, height: 8, backgroundColor: C.track, marginLeft: 6 }}>
-          <View style={{ width: `${training / max * 100}%`, height: 8, backgroundColor: C.mint }} />
-        </View>
-        <Text style={{ width: 34, paddingLeft: 6, color: C.ink, fontSize: 6.8 }}>{training}</Text>
-      </View>;
-    })}
+    {paired.map((r) => <View key={r.code} style={{ flexDirection: "row", alignItems: "center", marginBottom: rowGap }}>
+      <Text style={{ width: 22, textAlign: "right", paddingRight: 4, color: C.ink, fontSize: 6.8 }}>{r.match}</Text>
+      <View style={{ flex: 1, height: 11, alignItems: "flex-end", backgroundColor: C.track, marginRight: 5 }}>
+        <View style={{ width: `${r.match / max * 100}%`, height: 11, backgroundColor: C.cyan }} />
+      </View>
+      <Text style={{ width: 92, textAlign: "center", fontSize: 6.6, lineHeight: 1.15 }}>{r.label}</Text>
+      <View style={{ flex: 1, height: 11, backgroundColor: C.track, marginLeft: 5 }}>
+        <View style={{ width: `${r.training / max * 100}%`, height: 11, backgroundColor: C.mint }} />
+      </View>
+      <Text style={{ width: 22, paddingLeft: 4, color: C.ink, fontSize: 6.8 }}>{r.training}</Text>
+    </View>)}
     <Legend items={[{ label: "Match Injuries", colour: C.cyan, shape: "bar" }, { label: "Training Injuries", colour: C.mint, shape: "bar" }]} />
     <Caption>Both sides use one shared scale of 0 to {tickText(max)} injuries. Match reads right to left, training reads left to right.</Caption>
   </View>;
 }
 
+/** ReportProfileRow reshaped to the released row field names the shared dashboard resolver reads. */
+function colourInput(rows: readonly ReportProfileRow[]) {
+  return rows.map((row) => ({
+    code: row.code,
+    label: row.label,
+    setting: row.setting,
+    time_loss_injuries: row.timeLossInjuries,
+    incidence_per_1000h: row.incidencePer1000h,
+    burden_per_1000h: row.burdenPer1000h,
+    mean_severity_days: row.meanSeverityDays,
+  }));
+}
+type ColourRow = ReturnType<typeof colourInput>[number];
+const LANE_METRICS: Array<{ metric: keyof ColourRow & string; label: string; unit: string }> = [
+  { metric: "time_loss_injuries", label: "Count", unit: "cases" },
+  { metric: "incidence_per_1000h", label: "Incidence", unit: "per 1,000 h" },
+  { metric: "burden_per_1000h", label: "Burden", unit: "days per 1,000 h" },
+  { metric: "mean_severity_days", label: "Severity", unit: "mean days" },
+];
+
+/**
+ * The four ranked lanes. Colours are resolved from every released setting, not
+ * only the overall rows shown here, so a diagnosis carries the same colour in
+ * the PDF as it does on the dashboard.
+ */
 function CommonLanes({ rows, cardHeight = 49 }: { rows: readonly ReportProfileRow[]; cardHeight?: number }) {
-  const defs: Array<{ metric: ProfileMetric; label: string; unit: string }> = [
-    { metric: "timeLossInjuries", label: "Frequency", unit: "cases" },
-    { metric: "incidencePer1000h", label: "Incidence", unit: "per 1,000 h" },
-    { metric: "burdenPer1000h", label: "Burden", unit: "days per 1,000 h" },
-    { metric: "meanSeverityDays", label: "Severity", unit: "mean days" },
-  ];
+  const colours = commonInjuryColorMap(colourInput(rows));
+  const overallRows = colourInput(rows.filter((row) => row.setting === "all"));
   return <View style={{ flexDirection: "row", marginHorizontal: -3 }}>
-    {defs.map((d) => {
-      const ranked = [...rows].filter((r) => profileValue(r, d.metric) > 0).sort((a, b) => profileValue(b, d.metric) - profileValue(a, d.metric)).slice(0, 5);
-      return <View key={d.metric} style={{ width: "25%", paddingHorizontal: 3 }}>
+    {LANE_METRICS.map((lane) => {
+      const ranked = rankedForMetric(overallRows, lane.metric).slice(0, RANKED_LANE_SIZE);
+      return <View key={lane.metric} style={{ width: "25%", paddingHorizontal: 3 }}>
         <View style={[styles.headRow, { flexDirection: "column", alignItems: "flex-start" }]}>
-          <Text style={styles.panelTitle}>{d.label}</Text>
-          <Text style={styles.columnHead}>{d.unit}</Text>
+          <Text style={styles.panelTitle}>{lane.label}</Text>
+          <Text style={styles.columnHead}>{lane.unit}</Text>
         </View>
-        {ranked.map((r, i) => { const fill = profileColour(r.code), text = readableOn(fill); return <View key={r.code} style={{ backgroundColor: fill, borderRadius: 3, padding: 5, minHeight: cardHeight, marginBottom: 4 }}>
-          <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 6.8, lineHeight: 1.2 }}>{i + 1}. {r.label}</Text>
-          <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 12.5, marginTop: 4 }}>{fmt(profileValue(r, d.metric))}</Text>
-        </View>; })}
+        {ranked.map((row, index) => {
+          // The dashboard darkens each palette colour by mixing 10% black, so the
+          // PDF composites the same mix rather than filling with the raw palette
+          // entry. Only the text colour is re-picked, for legibility.
+          const fill = cardFill(colours.get(row.code)?.background ?? C.navy);
+          const text = readableOn(fill);
+          return <View key={row.code} style={{ backgroundColor: fill, borderRadius: 4, padding: 8, minHeight: cardHeight, marginBottom: 4, flexShrink: 0 }}>
+            <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 8.5, lineHeight: 1.25 }}>{index + 1}. {row.label}</Text>
+            <View style={{ flex: 1 }} />
+            <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 19 }}>{fmt(row[lane.metric] as number | null)}</Text>
+          </View>;
+        })}
       </View>;
     })}
   </View>;
 }
 
-function impactRows(rows: readonly ReportProfileRow[]) { return overall(rows).filter((r) => (r.incidencePer1000h ?? 0) > 0 && (r.meanSeverityDays ?? 0) > 0).sort((a, b) => b.timeLossInjuries - a.timeLossInjuries || (b.burdenPer1000h ?? 0) - (a.burdenPer1000h ?? 0)); }
+/**
+ * The plotted rows arrive already selected and ordered by the report model,
+ * using the dashboard's inclusion threshold and its knee-ligament retention.
+ * Only rows without a placeable coordinate are dropped here.
+ */
+function impactRows(rows: readonly ReportProfileRow[]) {
+  return rows.filter((r) => finiteNumber(r.incidencePer1000h) && finiteNumber(r.meanSeverityDays));
+}
 type LabelSpot = { x: number; y: number; offset: boolean };
 /**
  * Data points stay on their exact coordinates. Only the numeral moves when
  * circles overlap, and a leader line ties the moved numeral back to its point.
+ * Every numeral is placed inside the plot: candidates run outward in rings, and
+ * when no candidate is fully clear the least crowded in-bounds one wins rather
+ * than a fallback that could sit outside the axes.
  */
 function placeLabels(points: Array<{ x: number; y: number }>, radius: number, bounds: { x0: number; y0: number; x1: number; y1: number }): LabelSpot[] {
-  const near = radius + 7, far = radius + 15;
-  const offsets: Array<[number, number]> = [[0, 0], [0, -near], [near, 0], [0, near], [-near, 0], [near - 1, -(near - 1)], [-(near - 1), -(near - 1)], [near - 1, near - 1], [-(near - 1), near - 1], [0, -far], [far, 0], [-far, 0], [0, far]];
+  const rings = [radius + 7, radius + 15, radius + 24, radius + 34, radius + 46, radius + 60];
+  const angles = [-90, 0, 90, 180, -45, -135, 45, 135, -22.5, 22.5, 157.5, -157.5, 67.5, 112.5, -67.5, -112.5];
+  const offsets: Array<[number, number]> = [[0, 0]];
+  for (const ring of rings) for (const angle of angles) {
+    offsets.push([Math.cos(angle * Math.PI / 180) * ring, Math.sin(angle * Math.PI / 180) * ring]);
+  }
+  const inset = 6;
   const placed: LabelSpot[] = [];
   return points.map((point, index) => {
     const crowded = points.some((other, j) => j !== index && Math.hypot(other.x - point.x, other.y - point.y) < radius * 2);
     const candidates = crowded ? offsets.slice(1) : offsets;
-    const choice = candidates.find(([dx, dy]) => {
+    let best: [number, number] | null = null, bestScore = -Infinity;
+    for (const [dx, dy] of candidates) {
       const x = point.x + dx, y = point.y + dy;
-      if (x < bounds.x0 + 6 || x > bounds.x1 - 6 || y < bounds.y0 + 6 || y > bounds.y1 - 6) return false;
-      if (placed.some((spot) => Math.hypot(spot.x - x, spot.y - y) < 9)) return false;
-      if (dx === 0 && dy === 0) return true;
-      return points.every((other, j) => j === index || Math.hypot(other.x - x, other.y - y) >= radius + 4);
-    }) ?? candidates[candidates.length - 1];
+      if (x < bounds.x0 + inset || x > bounds.x1 - inset || y < bounds.y0 + inset || y > bounds.y1 - inset) continue;
+      const labelClear = placed.length ? Math.min(...placed.map((spot) => Math.hypot(spot.x - x, spot.y - y))) : Infinity;
+      const pointClear = Math.min(Infinity, ...points.filter((_, j) => j !== index).map((other) => Math.hypot(other.x - x, other.y - y)));
+      if (labelClear >= 9 && pointClear >= radius + 4) { best = [dx, dy]; break; }
+      const score = Math.min(labelClear, pointClear);
+      if (score > bestScore) { bestScore = score; best = [dx, dy]; }
+    }
+    const choice = best ?? [
+      Math.min(Math.max(point.x, bounds.x0 + inset), bounds.x1 - inset) - point.x,
+      Math.min(Math.max(point.y, bounds.y0 + inset), bounds.y1 - inset) - point.y,
+    ];
     const spot: LabelSpot = { x: point.x + choice[0], y: point.y + choice[1], offset: choice[0] !== 0 || choice[1] !== 0 };
     placed.push(spot);
     return spot;
   });
 }
-function ImpactMatrix({ rows, chartHeight = 250 }: { rows: readonly ReportProfileRow[]; chartHeight?: number }) {
-  const data = impactRows(rows).slice(0, 12);
-  const w = 316, h = chartHeight, left = 40, top = 24, right = 10, bottom = 38;
+
+/**
+ * The dashboard risk matrix on paper: one navy series over the impact-zone
+ * gradient, full page width, with the numbered key underneath. Both axes are
+ * linear on rounded bounds taken from the plotted rows, so clustered points
+ * spread out; an axis that does not reach zero carries an explicit break mark.
+ */
+function ImpactMatrix({ rows, chartHeight = 250, gradientId }: { rows: readonly ReportProfileRow[]; chartHeight?: number; gradientId: string }) {
+  const data = impactRows(rows);
+  const w = 517, h = chartHeight, left = 46, top = 22, right = 16, bottom = 34;
   const plotW = w - left - right, plotH = h - top - bottom;
-  const xScale = niceScale(Math.max(0.1, ...data.map((r) => r.incidencePer1000h ?? 0)));
-  const severityTop = Math.max(2, ...data.map((r) => r.meanSeverityDays ?? 0)) * 1.2;
-  const logTop = Math.max(0.1, Math.log10(severityTop));
-  const px = (v: number) => left + v / xScale.top * plotW;
-  const py = (v: number) => top + plotH - Math.log10(Math.max(1, v)) / logTop * plotH;
+  const xScale = linearDomain(data.map((r) => r.incidencePer1000h ?? 0));
+  const yScale = linearDomain(data.map((r) => r.meanSeverityDays ?? 0));
+  const px = (v: number) => left + (v - xScale.low) / (xScale.high - xScale.low) * plotW;
+  const py = (v: number) => top + plotH - (v - yScale.low) / (yScale.high - yScale.low) * plotH;
   const radius = 6.5;
-  const points = data.map((r) => ({ x: px(r.incidencePer1000h ?? 0), y: py(r.meanSeverityDays ?? 1) }));
+  const points = data.map((r) => ({ x: px(r.incidencePer1000h ?? 0), y: py(r.meanSeverityDays ?? 0) }));
   const labels = placeLabels(points, radius, { x0: left, y0: top, x1: left + plotW, y1: top + plotH });
-  const keyRowHeight = Math.max(17, Math.min(30, (h - 22) / Math.max(1, data.length)));
-  return <View style={styles.split}>
-    <View style={{ width: "62%", paddingHorizontal: 4 }}>
-      <Svg viewBox={`0 0 ${w} ${h}`} style={{ height: h }}>
+  const breaks = [xScale.broken ? "incidence" : "", yScale.broken ? "mean severity" : ""].filter(Boolean);
+  const sparse = data.some((r) => r.timeLossInjuries <= 2);
+  return <View>
+    <Svg viewBox={`0 0 ${w} ${h}`} style={{ height: h }}>
+      <Defs>
+        <LinearGradient id={gradientId} x1="0" y1="1" x2="1" y2="0">
+          {RISK_ZONE_STOPS.map((stop) => <Stop key={stop.offset} offset={stop.offset} stopColor={stop.colour} stopOpacity={0.25} />)}
+        </LinearGradient>
+      </Defs>
       <Rect x={left} y={top} width={plotW} height={plotH} fill={C.white} stroke={C.line} strokeWidth={0.8} />
-      {logTicks(severityTop).map((tick) => <G key={`y-${tick}`}>
-        <Line x1={left} x2={left + plotW} y1={py(tick)} y2={py(tick)} stroke={C.rule} strokeWidth={0.8} />
-        <SvgText x={left - 5} y={py(tick) + 2.4} textAnchor="end" fontSize={6.5} fill={C.muted}>{tick}</SvgText>
+      <Rect x={left} y={top} width={plotW} height={plotH} fill={`url(#${gradientId})`} />
+      {yScale.ticks.map((tick) => <G key={`y-${tick}`}>
+        <Line x1={left} x2={left + plotW} y1={py(tick)} y2={py(tick)} stroke={C.rule} strokeWidth={0.7} />
+        <SvgText x={left - 5} y={py(tick) + 2.4} textAnchor="end" fontSize={6.5} fill={C.muted}>{tickText(tick)}</SvgText>
       </G>)}
       {xScale.ticks.map((tick) => <G key={`x-${tick}`}>
-        <Line x1={px(tick)} x2={px(tick)} y1={top} y2={top + plotH} stroke={C.rule} strokeWidth={0.8} />
+        <Line x1={px(tick)} x2={px(tick)} y1={top} y2={top + plotH} stroke={C.rule} strokeWidth={0.7} />
         <SvgText x={px(tick)} y={top + plotH + 11} textAnchor="middle" fontSize={6.5} fill={C.muted}>{tickText(tick)}</SvgText>
       </G>)}
-      {points.map((point, i) => { const spot = labels[i]; if (!spot.offset) return null; const angle = Math.atan2(spot.y - point.y, spot.x - point.x); return <Line key={`leader-${data[i].code}`} x1={point.x + Math.cos(angle) * radius} y1={point.y + Math.sin(angle) * radius} x2={spot.x - Math.cos(angle) * 4.5} y2={spot.y - Math.sin(angle) * 4.5} stroke={C.muted} strokeWidth={0.5} />; })}
-      {data.map((r, i) => <Circle key={r.code} cx={points[i].x} cy={points[i].y} r={radius} fill={profileColour(r.code)} stroke={C.white} strokeWidth={1.2} />)}
-      {data.map((r, i) => { const spot = labels[i], fill = profileColour(r.code); return <SvgText key={`n-${r.code}`} x={spot.x} y={spot.y + 2.3} textAnchor="middle" fontSize={6.5} fontWeight="bold" fill={spot.offset ? fill : readableOn(fill)}>{i + 1}</SvgText>; })}
-      <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Mean Severity (days, logarithmic)</SvgText>
-      <SvgText x={left + plotW / 2} y={h - 5} textAnchor="middle" fontSize={6.8} fill={C.ink}>Incidence per 1,000 player-hours</SvgText>
-      </Svg>
-    </View>
-    <View style={{ width: "38%", paddingHorizontal: 4 }}>
-      <View style={styles.headRow}>
-        <Text style={[styles.columnHead, { flex: 1 }]}>Key</Text>
-        <Text style={[styles.columnHead, { width: 40, textAlign: "right" }]}>Burden{"\n"}days/1,000 h</Text>
-      </View>
-      {data.map((r, i) => <View key={r.code} style={{ flexDirection: "row", alignItems: "center", minHeight: keyRowHeight }}>
-        <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: profileColour(r.code), alignItems: "center", justifyContent: "center", marginRight: 5 }}>
-          <Text style={{ color: readableOn(profileColour(r.code)), fontFamily: "Helvetica-Bold", fontSize: 6.5 }}>{i + 1}</Text>
+      {/* The conventional double slash: this axis starts above zero. */}
+      {xScale.broken && <G>
+        <Line x1={left - 9} x2={left - 5} y1={top + plotH + 4} y2={top + plotH - 3} stroke={C.ink} strokeWidth={0.9} />
+        <Line x1={left - 6} x2={left - 2} y1={top + plotH + 4} y2={top + plotH - 3} stroke={C.ink} strokeWidth={0.9} />
+      </G>}
+      {yScale.broken && <G>
+        <Line x1={left - 4} x2={left + 3} y1={top + plotH + 9} y2={top + plotH + 5} stroke={C.ink} strokeWidth={0.9} />
+        <Line x1={left - 4} x2={left + 3} y1={top + plotH + 6} y2={top + plotH + 2} stroke={C.ink} strokeWidth={0.9} />
+      </G>}
+      {points.map((point, i) => { const spot = labels[i]; if (!spot.offset) return null; const angle = Math.atan2(spot.y - point.y, spot.x - point.x); return <Line key={`leader-${data[i].code}`} x1={point.x + Math.cos(angle) * radius} y1={point.y + Math.sin(angle) * radius} x2={spot.x - Math.cos(angle) * 4.5} y2={spot.y - Math.sin(angle) * 4.5} stroke={C.ink} strokeWidth={0.5} />; })}
+      {data.map((r, i) => <Circle key={r.code} cx={points[i].x} cy={points[i].y} r={radius} fill={MATRIX_DOT} stroke={C.white} strokeWidth={1.2} />)}
+      {data.map((r, i) => { const spot = labels[i]; return <SvgText key={`n-${r.code}`} x={spot.x} y={spot.y + 2.3} textAnchor="middle" fontSize={6.5} fontWeight="bold" fill={spot.offset ? C.ink : C.white}>{i + 1}</SvgText>; })}
+      <SvgText x={2} y={top - 8} fontSize={6.8} fill={C.ink}>Mean Severity, Days</SvgText>
+      <SvgText x={left + plotW / 2} y={h - 3} textAnchor="middle" fontSize={6.8} fill={C.ink}>Incidence, Injuries /1,000 h</SvgText>
+    </Svg>
+    <Legend items={[
+      { label: "Lower Incidence And Severity", colour: "#A9E2C7", shape: "swatch" },
+      { label: "One Measure Elevated", colour: "#F1EBBF", shape: "swatch" },
+      { label: "Higher Incidence And Severity", colour: "#F4C3C4", shape: "swatch" },
+    ]} />
+    <Caption>Key numbers run highest injury count first, and each key row ends with that diagnosis burden in days per 1,000 player-hours.{breaks.length ? ` The ${breaks.join(" and ")} axis does not start at zero, marked by the break on the axis.` : ""}{sparse ? " Interpret diagnoses based on one or two injuries cautiously." : ""}</Caption>
+    <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 5, borderTopWidth: 1, borderTopColor: C.rule, paddingTop: 5 }}>
+      {data.map((r, i) => <View key={`key-${r.code}`} style={{ width: "25%", flexDirection: "row", alignItems: "center", paddingRight: 6, marginBottom: 4, flexShrink: 0 }}>
+        <View style={{ width: 11, height: 11, borderRadius: 5.5, backgroundColor: MATRIX_DOT, alignItems: "center", justifyContent: "center", marginRight: 4 }}>
+          <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 6 }}>{i + 1}</Text>
         </View>
-        <Text style={{ flex: 1, fontSize: 6.5, lineHeight: 1.2, paddingRight: 4 }}>{r.label}</Text>
-        <Text style={{ width: 40, textAlign: "right", color: C.ink, fontSize: 6.5 }}>{fmt(r.burdenPer1000h)}</Text>
+        <Text style={{ flex: 1, fontSize: 6.2, lineHeight: 1.15 }}>{r.label}</Text>
+        <Text style={{ color: C.muted, fontSize: 6.2, paddingLeft: 3 }}>{fmt(r.burdenPer1000h)}</Text>
       </View>)}
     </View>
   </View>;
@@ -511,18 +672,17 @@ const heatColumns: Array<{ key: ComparisonKey; label: string; unit: string }> = 
 ];
 const HEAT_NEUTRAL = "#E4EBF1", HEAT_AMBER = "#C98A16";
 function benchmarkColour(value: number | null, mean: number | null) { if (value === null || mean === null || mean <= 0) return HEAT_NEUTRAL; if (value <= mean * .9) return C.green; if (value >= mean * 1.1) return C.red; return HEAT_AMBER; }
-function safeComparisonRows(model: ReportModel) { let anonymous = 0; return model.comparisonHeatmap.map((row) => ({ ...row, label: row.isSubject ? model.subjectName : `Anonymous club ${String(++anonymous).padStart(2, "0")}` })); }
 function Heatmap({ model, rowHeight = 16 }: { model: ReportModel; rowHeight?: number }) {
   return <View>
     <View style={[styles.heatRow, { minHeight: 30, borderBottomColor: C.navy, borderLeftWidth: 2.5, borderLeftColor: C.white, alignItems: "flex-end", paddingBottom: 3 }]}>
-      <Text style={[styles.heatName, styles.columnHead]}>Club</Text>
+      <Text style={[styles.heatName, styles.columnHead, { width: 118 }]}>Club</Text>
       {heatColumns.map((c) => <View key={c.key} style={{ flex: 1, paddingHorizontal: 2 }}>
         <Text style={[styles.columnHead, { textAlign: "center" }]}>{c.label}</Text>
         <Text style={[styles.columnHead, { textAlign: "center", color: C.grey }]}>{c.unit}</Text>
       </View>)}
     </View>
-    {safeComparisonRows(model).map((r, i) => <View key={`${r.label}-${i}`} style={[styles.heatRow, { minHeight: rowHeight, borderLeftWidth: 2.5, borderLeftColor: r.isSubject ? model.brand.accentColour : C.white }, r.isSubject ? { backgroundColor: "#EDF3F9" } : {}]}>
-      <Text style={[styles.heatName, r.isSubject ? { fontFamily: "Helvetica-Bold", color: model.brand.accentColour } : {}]}>{r.label}</Text>
+    {model.comparisonHeatmap.map((r, i) => <View key={`${r.label}-${i}`} style={[styles.heatRow, { minHeight: rowHeight, borderLeftWidth: 2.5, borderLeftColor: r.isSubject ? model.brand.accentColour : C.white }, r.isSubject ? { backgroundColor: "#EDF3F9" } : {}]}>
+      <Text style={[styles.heatName, { width: 118 }, r.isSubject ? { fontFamily: "Helvetica-Bold", color: model.brand.accentColour } : {}]}>{r.label}</Text>
       {heatColumns.map((c) => { const colour = benchmarkColour(r[c.key], model.comparisonBenchmarks[c.key]); return <Text key={c.key} style={[styles.heatCell, { backgroundColor: colour, color: colour === HEAT_NEUTRAL ? C.ink : C.white }]}>{fmt(r[c.key])}</Text>; })}
     </View>)}
     <Legend items={[
@@ -531,33 +691,11 @@ function Heatmap({ model, rowHeight = 16 }: { model: ReportModel; rowHeight?: nu
       { label: "Above mean", colour: C.red, shape: "swatch" },
       { label: "Not available", colour: HEAT_NEUTRAL, shape: "swatch" },
     ]} />
-    <Caption>Below and above mean the value differs from the released league mean by at least 10%. {model.subjectName} carries the accent rule.</Caption>
-  </View>;
-}
-function ComparisonLadder({ model, rowGap = 9 }: { model: ReportModel; rowGap?: number }) {
-  const rows = safeComparisonRows(model).filter((r) => r.allIncidencePer1000h !== null).sort((a, b) => (b.allIncidencePer1000h ?? 0) - (a.allIncidencePer1000h ?? 0));
-  const max = Math.max(1, ...rows.map((r) => r.allIncidencePer1000h ?? 0)), mean = model.comparisonBenchmarks.allIncidencePer1000h ?? 0;
-  return <View>
-    <View style={styles.headRow}>
-      <Text style={[styles.columnHead, { width: 16 }]}>#</Text>
-      <Text style={[styles.columnHead, { width: 74 }]}>Club</Text>
-      <Text style={[styles.columnHead, { flex: 1 }]}>0 to {tickText(max)}</Text>
-      <Text style={[styles.columnHead, { width: 30, textAlign: "right" }]}>/1,000 h</Text>
-    </View>
-    {rows.map((r, i) => <View key={`${r.label}-${i}`} style={{ flexDirection: "row", alignItems: "center", marginBottom: rowGap }}>
-      <Text style={{ width: 16, color: C.muted, fontSize: 6.5 }}>{i + 1}</Text>
-      <Text style={{ width: 74, fontFamily: r.isSubject ? "Helvetica-Bold" : "Helvetica", color: r.isSubject ? model.brand.accentColour : C.ink, fontSize: 6.5, paddingRight: 3 }}>{r.label}</Text>
-      <View style={{ flex: 1, height: 8, backgroundColor: C.track, position: "relative", marginRight: 5 }}>
-        <View style={{ height: 8, width: `${(r.allIncidencePer1000h ?? 0) / max * 100}%`, backgroundColor: r.isSubject ? model.brand.accentColour : C.blue }} />
-        <View style={{ position: "absolute", left: `${mean / max * 100}%`, top: -2, width: 1.2, height: 12, backgroundColor: C.coral }} />
-      </View>
-      <Text style={{ width: 30, textAlign: "right", fontSize: 6.5 }}>{fmt(r.allIncidencePer1000h)}</Text>
-    </View>)}
-    <Legend items={[{ label: model.subjectName, colour: model.brand.accentColour, shape: "bar" }, { label: "Anonymous club", colour: C.blue, shape: "bar" }, { label: `League mean ${fmt(mean)}`, colour: C.coral, shape: "line" }]} />
+    <Caption>Below and above mean the value differs from the released league mean by at least 10%.{model.comparisonHeatmap.some((row) => row.isSubject) ? ` ${model.subjectName} carries the accent rule, and every other club keeps its approved dashboard alias.` : " Every club keeps its approved dashboard alias."}</Caption>
   </View>;
 }
 function ComparisonScatter({ model, chartHeight = 275 }: { model: ReportModel; chartHeight?: number }) {
-  const data = safeComparisonRows(model).filter((r) => r.matchIncidencePer1000h !== null && r.trainingIncidencePer1000h !== null);
+  const data = model.comparisonHeatmap.filter((r) => r.matchIncidencePer1000h !== null && r.trainingIncidencePer1000h !== null);
   const w = 517, h = chartHeight, left = 46, top = 24, right = 14, bottom = 40;
   const plotW = w - left - right, plotH = h - top - bottom;
   const xScale = niceScale(Math.max(1, ...data.map((r) => r.matchIncidencePer1000h ?? 0)));
@@ -593,7 +731,11 @@ function ComparisonScatter({ model, chartHeight = 275 }: { model: ReportModel; c
       <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Training Incidence (per 1,000 player-hours)</SvgText>
       <SvgText x={left + plotW / 2} y={h - 5} textAnchor="middle" fontSize={6.8} fill={C.ink}>Match Incidence (injuries per 1,000 player-hours)</SvgText>
     </Svg>
-    <Legend items={[{ label: model.subjectName, colour: model.brand.accentColour }, { label: "Anonymous club", colour: C.blue }, { label: `League mean, match ${fmt(meanX)} and training ${fmt(meanY)}`, colour: C.coral, shape: "line" }]} />
+    <Legend items={[
+      ...(subject ? [{ label: model.subjectName, colour: model.brand.accentColour }] : []),
+      { label: subject ? "Other Teams" : "Teams", colour: C.blue },
+      { label: `League mean, match ${fmt(meanX)} and training ${fmt(meanY)}`, colour: C.coral, shape: "line" as const },
+    ]} />
     <Caption>Bubble area is exposure hours, from the smallest club to {fmt(maxExposure, "hours", 0)}.</Caption>
   </View>;
 }
@@ -623,20 +765,20 @@ function ExposureTrend({ model, chartHeight = 218 }: { model: ReportModel; chart
         {r.distanceKm !== null && <Rect x={x(i) + 1} y={distY(r.distanceKm)} width={barWidth} height={top + plotH - distY(r.distanceKm)} fill={C.cyan} />}
         {r.distanceKm !== null && r.hsrDistanceKm !== null && r.distanceKm > 0 && (() => {
           const insetHeight = Math.min(top + plotH - distY(r.distanceKm), Math.max((r.hsrDistanceKm / r.distanceKm) * (top + plotH - distY(r.distanceKm)), r.hsrDistanceKm > 0 ? 2 : 0));
-          return <Rect x={x(i) + 3} y={top + plotH - insetHeight} width={Math.max(barWidth - 4, 0)} height={insetHeight} fill={C.orange} />;
+          return <Rect x={x(i) + 1} y={top + plotH - insetHeight} width={barWidth} height={insetHeight} fill={C.hsr} />;
         })()}
-        {r.hsrPercentage !== null && <SvgText x={x(i) + barWidth / 2 + 1} y={top + plotH - 4} textAnchor="middle" fontSize={5.5} fill={C.white}>{fmt(r.hsrPercentage, "%")}</SvgText>}
+        {r.hsrPercentage !== null && r.distanceKm !== null && <SvgText x={x(i) + barWidth / 2 + 1} y={distY(r.distanceKm) - 3} textAnchor="middle" fontSize={5.8} fontWeight="bold" fill={C.muted}>{fmt(r.hsrPercentage, "%")}</SvgText>}
         <SvgText x={x(i)} y={top + plotH + 12} textAnchor="middle" fontSize={6.5} fill={C.muted}>{shortMonth(r.month)}</SvgText>
       </G>)}
       <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Player-hours</SvgText>
       <SvgText x={w - 2} y={top - 9} textAnchor="end" fontSize={6.8} fill={C.ink}>Distance (km)</SvgText>
     </Svg>
-    <Legend items={[{ label: "Player-hours (left axis)", colour: C.mint, shape: "bar" }, { label: "Total distance (right axis)", colour: C.cyan, shape: "bar" }, { label: "HSR inset", colour: C.orange, shape: "bar" }]} />
-    <Caption>Monthly released exposure across {monthRange(rows)}. The HSR inset is part of total distance, not additional distance.</Caption>
+    <Legend items={[{ label: "Hours (left axis)", colour: C.mint, shape: "bar" }, { label: "Total Distance (right axis)", colour: C.cyan, shape: "bar" }, { label: "HSR Distance", colour: C.hsr, shape: "bar" }]} />
+    <Caption>Monthly released exposure across {monthRange(rows)}. Each percentage is HSR as a share of that month's total distance, and the HSR inset is part of total distance rather than additional distance.{rows.some((r) => r.isImputed) ? " Months drawn from a league-mean placeholder are named in the display note above." : ""}</Caption>
   </View>;
 }
 function ExposureLadder({ model, keyName, label, unit, colour, rowGap = 9 }: { model: ReportModel; keyName: "exposureHours" | "distanceKm"; label: string; unit: string; colour: string; rowGap?: number }) {
-  const rows = safeComparisonRows(model).filter((r) => r[keyName] !== null).sort((a, b) => (b[keyName] ?? 0) - (a[keyName] ?? 0));
+  const rows = model.comparisonHeatmap.filter((r) => r[keyName] !== null).sort((a, b) => (b[keyName] ?? 0) - (a[keyName] ?? 0));
   const max = Math.max(1, ...rows.map((r) => r[keyName] ?? 0));
   return <View>
     <View style={styles.headRow}>
@@ -795,26 +937,39 @@ function SeasonMonthlyBars({ comparison, chartHeight = 205 }: { comparison: Seas
 }
 
 function DiagnosisDriversPdf({ comparison }: { comparison: SeasonComparisonVisuals }) {
-  const allValues = comparison.diagnoses.flatMap((row) => [...row.previous, ...row.current].map((item) => item.time_loss_injuries));
-  const max = Math.max(1, ...allValues);
-  return <View style={[styles.split, { flex: 1 }]}>
-    {comparison.diagnoses.map((row, settingIndex) => <View key={row.setting} style={[styles.third, settingIndex > 0 ? { borderLeftWidth: 1, borderLeftColor: C.rule, paddingLeft: 7 } : {}, settingIndex < 2 ? { paddingRight: 7 } : {}]}>
-      <Text style={[styles.panelTitle, { textAlign: "center", marginBottom: 6 }]}>{row.label}</Text>
-      <View style={[styles.headRow, { marginBottom: 5 }]}>
-        <Text style={[styles.columnHead, { width: "50%", color: SEASON_COLOURS[0] }]}>{comparison.previous_season}</Text>
-        <Text style={[styles.columnHead, { width: "50%", textAlign: "right", color: SEASON_COLOURS[1] }]}>{comparison.current_season}</Text>
-      </View>
+  const entries = comparison.diagnoses.flatMap((row) => [...row.previous, ...row.current]);
+  const max = Math.max(1, ...entries.map((item) => item.time_loss_injuries));
+  // One colour per diagnosis, so the same condition reads the same in every
+  // setting and both seasons. The season colours stay on the column headings.
+  const colours = diagnosisColourMap(entries.map((item) => item.diagnosis));
+  const bar = (value: number) => `${value / max * 100}%`;
+  const fillFor = (diagnosis?: string | null) => (diagnosis && colours.get(diagnosis)) || C.track;
+  return <View>
+    <View style={[styles.headRow, { marginBottom: 4, flexShrink: 0 }]}>
+      <Text style={[styles.columnHead, { width: 48 }]}>Setting</Text>
+      <Text style={[styles.columnHead, { flex: 1, textAlign: "right", color: SEASON_COLOURS[0] }]}>{comparison.previous_season}</Text>
+      <Text style={[styles.columnHead, { width: 42, textAlign: "center" }]}>Injuries</Text>
+      <Text style={[styles.columnHead, { flex: 1, color: SEASON_COLOURS[1] }]}>{comparison.current_season}</Text>
+    </View>
+    {comparison.diagnoses.map((row) => <View key={row.setting} style={{ borderWidth: 1, borderColor: C.rule, borderRadius: 4, padding: 4, marginBottom: 4, flexShrink: 0 }}>
+      <Text style={{ color: C.navy, fontFamily: "Helvetica-Bold", fontSize: 7.5, textAlign: "center", marginBottom: 2 }}>{row.label}</Text>
       {[0, 1, 2].map((rank) => {
         const previous = row.previous[rank], current = row.current[rank];
-        return <View key={rank} style={{ marginBottom: 8, minHeight: 47, borderBottomWidth: rank < 2 ? 1 : 0, borderBottomColor: C.rule, paddingBottom: 6 }}>
-          <Text style={{ color: C.muted, fontFamily: "Helvetica-Bold", fontSize: 6, textAlign: "center", marginBottom: 3 }}>RANK {rank + 1}</Text>
-          <View style={{ flexDirection: "row" }}>
-            <View style={{ width: "50%", paddingRight: 4 }}><Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.18, minHeight: 16 }}>{previous?.diagnosis ?? "Not available"}</Text><View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}><Text style={{ width: 15, fontFamily: "Helvetica-Bold", fontSize: 7 }}>{previous?.time_loss_injuries ?? 0}</Text><View style={{ flex: 1, height: 6, backgroundColor: C.track }}><View style={{ height: 6, width: `${(previous?.time_loss_injuries ?? 0) / max * 100}%`, backgroundColor: SEASON_COLOURS[0] }} /></View></View></View>
-            <View style={{ width: "50%", paddingLeft: 4 }}><Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.18, minHeight: 16, textAlign: "right" }}>{current?.diagnosis ?? "Not available"}</Text><View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}><View style={{ flex: 1, height: 6, backgroundColor: C.track }}><View style={{ height: 6, width: `${(current?.time_loss_injuries ?? 0) / max * 100}%`, backgroundColor: SEASON_COLOURS[1] }} /></View><Text style={{ width: 15, textAlign: "right", fontFamily: "Helvetica-Bold", fontSize: 7 }}>{current?.time_loss_injuries ?? 0}</Text></View></View>
+        return <View key={rank} style={{ flexDirection: "row", alignItems: "center", flexShrink: 0, borderTopWidth: rank > 0 ? 1 : 0, borderTopColor: C.rule, paddingTop: rank > 0 ? 3 : 0, marginTop: rank > 0 ? 3 : 0 }}>
+          <Text style={{ width: 48, color: C.muted, fontFamily: "Helvetica-Bold", fontSize: 6 }}>RANK {rank + 1}</Text>
+          <View style={{ flex: 1, alignItems: "flex-end", paddingRight: 4 }}>
+            <Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.15, textAlign: "right" }}>{previous?.diagnosis ?? "Not available"}</Text>
+            <View style={{ height: 6, width: "100%", backgroundColor: C.track, marginTop: 2, alignItems: "flex-end" }}><View style={{ height: 6, width: bar(previous?.time_loss_injuries ?? 0), backgroundColor: fillFor(previous?.diagnosis) }} /></View>
+          </View>
+          <Text style={{ width: 42, textAlign: "center", fontFamily: "Helvetica-Bold", fontSize: 7 }}>{previous?.time_loss_injuries ?? 0} | {current?.time_loss_injuries ?? 0}</Text>
+          <View style={{ flex: 1, paddingLeft: 4 }}>
+            <Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.15 }}>{current?.diagnosis ?? "Not available"}</Text>
+            <View style={{ height: 6, width: "100%", backgroundColor: C.track, marginTop: 2 }}><View style={{ height: 6, width: bar(current?.time_loss_injuries ?? 0), backgroundColor: fillFor(current?.diagnosis) }} /></View>
           </View>
         </View>;
       })}
     </View>)}
+    <Caption>Bars share one scale of 0 to {max} injuries, and each diagnosis keeps one colour across both seasons and all three settings.</Caption>
   </View>;
 }
 
@@ -822,7 +977,20 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
   return <Page size="A4" style={styles.cover}>
     {model.brand.heroDataUri && <Image fixed src={model.brand.heroDataUri} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
     <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: C.navy, opacity: model.brand.heroDataUri ? .2 : 1 }} />
-    <View style={{ position: "absolute", left: 0, top: 0, width: "61%", height: "100%", backgroundColor: C.navy, opacity: .76 }} />
+    {/* A left-to-right wash instead of a panel: the old 61%-wide overlay drew a
+        hard vertical seam down the cover. */}
+    <View style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%" }}>
+      <Svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
+        <Defs>
+          <LinearGradient id="cover-wash" x1="0" y1="0" x2="1" y2="0">
+            <Stop offset={0} stopColor={C.navy} stopOpacity={0.9} />
+            <Stop offset={0.52} stopColor={C.navy} stopOpacity={0.78} />
+            <Stop offset={1} stopColor={C.navy} stopOpacity={0} />
+          </LinearGradient>
+        </Defs>
+        <Rect x={0} y={0} width={100} height={100} fill="url(#cover-wash)" />
+      </Svg>
+    </View>
     <View style={{ position: "absolute", left: 0, top: 0, width: 6, height: "100%", backgroundColor: model.brand.accentColour }} />
     <View style={{ height: 48, flexDirection: "row", alignItems: "center", marginHorizontal: 30, marginTop: 30 }}>
       {model.brand.urcLogoDataUri && <Image src={model.brand.urcLogoDataUri} style={{ width: 31, height: 32, objectFit: "contain", marginRight: 10 }} />}
@@ -838,6 +1006,8 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 25, lineHeight: 1.04, marginTop: 3 }}>Injury surveillance</Text>
       <View style={{ width: 54, height: 3, backgroundColor: model.brand.accentColour, marginTop: 18 }} />
       <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 16, marginTop: 13 }}>{model.season} season</Text>
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 20 }}>SCRIIPT Project</Text>
+      <Text style={{ color: "#C6D6E7", fontSize: 8, lineHeight: 1.35, marginTop: 4 }}>Surveillance of Continental Rugby Injury/Illness and Performance Tracking</Text>
     </View>
     <View style={{ width: "61%", borderTopWidth: 1, borderTopColor: "#36516E", paddingTop: 13, marginLeft: 30, marginBottom: 64, flexDirection: "row" }}>
       <View style={{ width: "52%" }}><Text style={{ color: "#93A9C1", fontSize: 6.2, letterSpacing: .9 }}>ANALYSIS WINDOW</Text><Text style={{ color: C.white, fontSize: 8.5, marginTop: 4 }}>{formatDate(model.analysisWindow.start)} to {formatDate(model.analysisWindow.end)}</Text></View>
@@ -852,19 +1022,19 @@ function SeasonPattern({ model, meta }: { model: ReportModel; meta: ReportMetada
   const comparison = model.seasonComparisonVisuals;
   return <PageShell model={model} meta={meta} section="season-pattern">
     <PageTitle title="Season Overview" note="Headline measures, the setting split and the approved season comparison are brought together on the first analytical page." />
-    <MetricCards model={model} />
-    <View style={{ marginTop: 8 }}><Panel title="Match And Training" note="Released setting measures shown side by side."><SettingBench rows={model.matchTraining} /></Panel></View>
-    <View style={{ marginTop: 8, height: 247 }}><Panel fill title="Injury Impact By Season" note="Overall incidence, mean severity and burden for the two approved releases.">{comparison ? <SeasonImpactChart comparison={comparison} chartHeight={165} /> : <Text style={styles.panelNote}>No approved season comparison is available for this report.</Text>}</Panel></View>
+    <OverviewCards model={model} />
+    <View style={{ marginTop: 8 }}><Panel title="Match Vs Training" note="Released setting measures shown side by side."><SettingBench rows={model.matchTraining} /></Panel></View>
+    <View style={{ marginTop: 8, height: 377 }}><Panel fill title="Injury Impact By Season" note="Overall incidence, mean severity and burden for the two approved releases.">{comparison ? <SeasonImpactChart comparison={comparison} chartHeight={295} /> : <Text style={styles.panelNote}>No approved season comparison is available for this report.</Text>}</Panel></View>
   </PageShell>;
 }
 function SeverityContact({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="severity-contact">
     <PageTitle title="Monthly Pattern, Severity And Mechanism" note="The monthly injury series leads into the released severity and contact profiles." />
-    <View style={{ height: 320 }}><Panel fill title="Monthly Injury Pattern" note="Case counts and incidence for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={244} /></Panel></View>
+    <View style={{ height: 320 }}><Panel fill title="Season Timeline" note="Case counts, and incidence where the release carries monthly rates, for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={244} /></Panel></View>
     <View style={[styles.split, { marginTop: 8, height: 318 }]}>
-      <View style={styles.third}><Panel fill title="Severity Profile" note="Injuries by released duration band."><HalfRing rows={model.severityDistribution} colours={SEVERITY_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
+      <View style={styles.third}><Panel fill title="Severity" note="Injuries by released duration band."><HalfRing rows={model.severityDistribution} colours={SEVERITY_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
       <View style={styles.third}><Panel fill title="Contact Mechanism" note="Injuries by released mechanism."><HalfRing rows={model.contactDistribution} colours={CONTACT_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
-      <View style={styles.third}><Panel fill title="Setting Contrast" note="Match and training measures for the same window."><CompactSettingBench rows={model.matchTraining} /></Panel></View>
+      <View style={styles.third}><Panel fill title="Match Vs Training" note="Match and training measures for the same window."><CompactSettingBench rows={model.matchTraining} /></Panel></View>
     </View>
   </PageShell>;
 }
@@ -872,11 +1042,11 @@ function InjuryLocation({ model, meta }: { model: ReportModel; meta: ReportMetad
   const rows = overall(model.injuryProfile.bodyLocations);
   return <PageShell model={model} meta={meta} section="injury-location">
     <PageTitle title="Injury Location" note="The body map, ranked locations and match-training split use the released body-location rows." />
-    <View style={[styles.split, { height: 400 }]}>
-      <View style={{ width: "38%", paddingHorizontal: 4 }}><Panel fill title="Body Heat Map" note="Front and back views of the released body-location rows."><BodyMapPdf rows={rows} chartHeight={270} /></Panel></View>
+    <View style={[styles.split, { height: 352 }]}>
+      <View style={{ width: "38%", paddingHorizontal: 4 }}><Panel fill title="Body Heat Map" note="Front and back views of the released body-location rows."><BodyMapPdf rows={rows} chartHeight={248} /></Panel></View>
       <View style={{ width: "62%", paddingHorizontal: 4 }}>
-        <Panel fill title="Ranked Locations" note="Injury counts, then the matching rate measures for the leading regions.">
-          <RankedBars rows={rows} limit={11} coloured heading="Body region" unit="Cases" rowGap={5} />
+        <Panel fill title="Top Locations" note="Injury counts, then the matching rate measures for the leading regions.">
+          <RankedBars rows={rows} limit={8} heat heading="Body region" unit="Cases" rowGap={5} />
           <View style={[styles.headRow, { marginTop: 8, alignItems: "flex-end" }]}>
             <Text style={[styles.columnHead, { flex: 1 }]}>Body region</Text>
             <View style={{ width: 174 }}>
@@ -897,70 +1067,129 @@ function InjuryLocation({ model, meta }: { model: ReportModel; meta: ReportMetad
         </Panel>
       </View>
     </View>
-    <View style={{ marginTop: 8, height: 275 }}><Panel fill title="Match Versus Training By Region" note="Injury counts for the leading regions."><MirroredBars rows={model.injuryProfile.bodyLocations} rowGap={11} heading="Body region" /></Panel></View>
+    <View style={{ marginTop: 8, height: 348 }}><Panel fill title="Match Vs Training By Region" note="Injury counts for every region with a released match or training case."><MirroredBars rows={model.injuryProfile.bodyLocations} rowGap={1.5} heading="Body region" /></Panel></View>
   </PageShell>;
 }
 function CommonInjuries({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
-  const diagnoses = overall(model.injuryProfile.diagnoses);
   return <PageShell model={model} meta={meta} section="common-injuries">
-    <PageTitle title="Common Injuries" note="Each diagnosis keeps one colour across frequency, incidence, burden and severity." />
-    <View style={{ height: 330 }}><Panel fill title="Four Views Of The Leading Diagnoses" note="The top five released diagnoses for each measure. Each diagnosis keeps one colour across the four columns."><CommonLanes rows={diagnoses} cardHeight={45} /></Panel></View>
-    <View style={{ marginTop: 8, height: 342 }}>
-      <Panel fill title="Diagnosis Impact Matrix" note="Horizontal position is incidence and vertical position is mean severity on a logarithmic scale.">
-        <ImpactMatrix rows={model.injuryProfile.diagnoses} chartHeight={282} />
+    <PageTitle title="Most Common Injuries" note="Each diagnosis keeps one colour across count, incidence, burden and severity." />
+    <Panel note="The top five released diagnoses for each measure. Each diagnosis keeps one colour across the four columns."><CommonLanes rows={model.injuryProfile.diagnoses} cardHeight={118} /></Panel>
+  </PageShell>;
+}
+const ILLNESS_LANES = [
+  { metric: "recorded_illnesses", label: "Count", unit: "illnesses", colour: C.cyan, digits: 0 },
+  { metric: "incidence_per_1000h", label: "Incidence", unit: "illnesses per 1,000 player-h", colour: C.amber, digits: 1 },
+  { metric: "burden_per_1000h", label: "Burden", unit: "days per 1,000 player-h", colour: C.coral, digits: 1 },
+  { metric: "mean_severity_days", label: "Severity", unit: "mean days lost", colour: C.mint, digits: 1 },
+] as const;
+
+function Illnesses({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
+  const { summary, profiles } = model.illness;
+  const colours = illnessColorMap(profiles);
+  const totalIllnesses = summary?.recorded_illnesses ?? profiles.reduce((total, row) => total + row.recorded_illnesses, 0);
+  const cards: StatCard[] = ILLNESS_LANES.map((lane) => ({
+    key: lane.metric,
+    label: lane.metric === "recorded_illnesses" ? "Illnesses" : lane.label,
+    value: fmt(summary?.[lane.metric] ?? null, "", lane.digits),
+    unit: lane.unit,
+    colour: lane.colour,
+    series: rankedIllnesses(profiles, lane.metric).map((row) => row[lane.metric]),
+  }));
+  return <PageShell model={model} meta={meta} section="illnesses">
+    <PageTitle title="Most Common Illnesses" note="Overall illness reporting only. Illnesses are not attributed to Match or Training." />
+    <StatCards cards={cards} />
+    {summary?.qualification && <View style={[styles.note, { marginTop: 7 }]}><Text>{summary.qualification}</Text></View>}
+    <View style={{ marginTop: 8, height: 470 }}>
+      <Panel fill note="The top five released illnesses for each measure. Each illness keeps one colour across the four columns.">
+        {profiles.length ? <View style={{ flexDirection: "row", marginHorizontal: -3 }}>
+          {ILLNESS_LANES.map((lane) => <View key={lane.metric} style={{ width: "25%", paddingHorizontal: 3 }}>
+            <View style={[styles.headRow, { flexDirection: "column", alignItems: "flex-start" }]}>
+              <Text style={styles.panelTitle}>{lane.label}</Text>
+              <Text style={styles.columnHead}>{lane.unit}</Text>
+            </View>
+            {rankedIllnesses(profiles, lane.metric).map((row, index) => {
+              const fill = cardFill(colours.get(row.code)?.background ?? C.navy);
+              const text = readableOn(fill);
+              return <View key={row.code} style={{ backgroundColor: fill, borderRadius: 3, padding: 5, minHeight: 62, marginBottom: 4 }}>
+                <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 6.8, lineHeight: 1.2 }}>{index + 1}. {row.label}</Text>
+                {lane.metric === "recorded_illnesses" && <Text style={{ color: text, fontSize: 6, marginTop: 2 }}>{totalIllnesses > 0 ? Math.round(row.recorded_illnesses / totalIllnesses * 100) : 0}% of illnesses</Text>}
+                <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 12.5, marginTop: 4 }}>{fmt(row[lane.metric], "", lane.digits)}</Text>
+              </View>;
+            })}
+          </View>)}
+        </View> : <Text style={styles.panelNote}>No released illness profiles are available.</Text>}
       </Panel>
     </View>
   </PageShell>;
 }
+
+function DiagnosisMatrix({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
+  const rowCount = model.injuryImpact.diagnoses.length;
+  // The key wraps into four columns beneath the plot, so the plot gives back
+  // whatever those rows need and never shrinks past a readable chart.
+  const chartHeight = Math.max(360, 590 - Math.ceil(rowCount / 4) * 19);
+  return <PageShell model={model} meta={meta} section="diagnosis-matrix">
+    <PageTitle title="Risk Matrix" note="Grouped By Diagnosis. Horizontal position is incidence and vertical position is mean severity." />
+    <View style={{ height: 684 }}>
+      <Panel fill><ImpactMatrix rows={model.injuryImpact.diagnoses} chartHeight={chartHeight} gradientId="risk-diagnosis" /></Panel>
+    </View>
+  </PageShell>;
+}
+
 function ImpactMatrices({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="impact-matrices">
-    <PageTitle title="Injury Impact Matrices" note="Location and injury-type views use the same axes and visual grammar as the diagnosis matrix." />
-    <View style={{ height: 336 }}><Panel fill title="Location Impact" note="Incidence against mean severity on a logarithmic scale."><ImpactMatrix rows={model.injuryProfile.bodyLocations} chartHeight={291} /></Panel></View>
-    <View style={{ marginTop: 8, height: 336 }}><Panel fill title="Injury-Type Impact" note="Incidence against mean severity on a logarithmic scale."><ImpactMatrix rows={model.injuryProfile.injuryTypes} chartHeight={291} /></Panel></View>
+    <PageTitle title="Injury Impact Matrix" note="The Location and Type groupings of the Risk Matrix, on the same axes as the Diagnosis grouping." />
+    <View style={{ height: 336 }}><Panel fill title="Risk Matrix" note="Grouped by Location. Incidence against mean severity."><ImpactMatrix rows={model.injuryImpact.bodyLocations} chartHeight={214} gradientId="risk-location" /></Panel></View>
+    <View style={{ marginTop: 8, height: 336 }}><Panel fill title="Risk Matrix" note="Grouped by Type. Incidence against mean severity."><ImpactMatrix rows={model.injuryImpact.injuryTypes} chartHeight={214} gradientId="risk-injury-type" /></Panel></View>
   </PageShell>;
 }
 function InjuryTypes({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="injury-types">
-    <PageTitle title="Injury Type" note="Injury families, subtype detail and setting contrast share one analytical page." />
+    <PageTitle title="Injury Types" note="Injury families, subtype detail and the match against training split share one analytical page." />
     <View style={[styles.split, { height: 300 }]}>
       <View style={styles.half}><Panel fill title="Injury-Family Ranking" note="Overall injuries and incidence."><FamilyRanking rows={model.injuryProfile.injuryTypeFamilies} rowGap={6} /></Panel></View>
       <View style={styles.half}><Panel fill title="Leading-Family Dossier" note="Released family and subtype measures."><FamilyDossier rows={model.injuryProfile.injuryTypeFamilies} /></Panel></View>
     </View>
-    <View style={{ marginTop: 8, height: 350 }}><Panel fill title="Match Versus Training By Injury Type" note="Injury counts for the leading injury types."><MirroredBars rows={model.injuryProfile.injuryTypes} limit={10} rowGap={16} heading="Injury type" /></Panel></View>
+    <View style={{ marginTop: 8, height: 350 }}><Panel fill title="Match Vs Training By Injury Type" note="Injury counts for every family with a released match or training case."><MirroredBars rows={model.injuryProfile.injuryTypeFamilies} rowGap={8} heading="Injury family" /></Panel></View>
   </PageShell>;
 }
 function Exposure({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
-  const cards: Array<ReportMetric> = [
-    { key: "total-hours", label: "Total Exposure", value: model.exposure.totalHours, unit: "player-hours", formula: "released exposure" },
-    { key: "match-hours", label: "Match Exposure", value: model.exposure.matchHours, unit: "player-hours", formula: "released exposure" },
-    { key: "training-hours", label: "Training Exposure", value: model.exposure.trainingHours, unit: "player-hours", formula: "released exposure" },
-    { key: "distance", label: "Distance", value: model.exposure.totalDistanceKm, unit: "km", formula: "released distance" },
-  ];
-  const pseudo = { ...model, snapshotMetrics: cards };
-  const hsrStatus = model.exposure.hsrIsImputed
+  const exposure = model.exposure;
+  const hsrStatus = exposure.hsrIsImputed
     ? "League-mean placeholder"
-    : model.exposure.totalHsrDistanceKm === null ? "HSR not available" : "Actual source data";
+    : exposure.totalHsrDistanceKm === null ? "HSR not available" : "Actual source data";
+  const cards: StatCard[] = [
+    { key: "hours", label: exposure.totalHoursLabel, value: fmt(exposure.totalHours, "", 0), unit: "player-hours", colour: C.mint },
+    { key: "distance", label: exposure.totalDistanceLabel, value: fmt(exposure.totalDistanceKm, "", 0), unit: "km", colour: C.cyan },
+    { key: "hsr", label: "HSR Distance", value: fmt(exposure.totalHsrDistanceKm, "", 0), unit: "km", colour: C.hsr },
+  ];
+  const hsrNote = [`HSR Status: ${hsrStatus}.`, exposure.totalHsrPercentage === null ? "" : `HSR is ${fmt(exposure.totalHsrPercentage, "%")} of total distance.`, exposure.hsrDisplayNote ?? exposure.hsrSourceStatus ?? ""].filter(Boolean).join(" ");
   return <PageShell model={model} meta={meta} section="exposure">
-    <PageTitle title="Exposure" note="The released denominator is shown over time and against the anonymous league cohort." />
-    <MetricCards model={pseudo} limit={4} trend={false} />
-    <View style={{ marginTop: 8, height: 280 }}><Panel fill title="Monthly Exposure And HSR" note={`Player-hours use the left axis. Total distance uses the right axis, with HSR drawn as an inset. HSR Distance: ${fmt(model.exposure.totalHsrDistanceKm, "km")}. HSR Percentage: ${fmt(model.exposure.totalHsrPercentage, "%")}. HSR Status: ${hsrStatus}. ${model.exposure.hsrDisplayNote ?? model.exposure.hsrSourceStatus ?? ""}`}><ExposureTrend model={model} chartHeight={213} /></Panel></View>
-    <View style={[styles.split, { marginTop: 8, height: 320 }]}>
-      <View style={styles.half}><Panel fill title="Club Exposure Hours" note="Released player-hours for every club in the cohort."><ExposureLadder model={model} keyName="exposureHours" label="Player-hours" unit="Hours" colour={C.mint} rowGap={9} /></Panel></View>
-      <View style={styles.half}><Panel fill title="Club Distance" note="Released distance for every club in the cohort."><ExposureLadder model={model} keyName="distanceKm" label="Kilometres" unit="km" colour={C.cyan} rowGap={9} /></Panel></View>
+    <PageTitle title="Exposure" note="The released denominator is shown over time and against the league cohort." />
+    <StatCards cards={cards} />
+    {exposure.dataQualityWarnings.map((warning) => <View key={warning} style={[styles.note, { marginTop: 7 }]}>
+      <Text><Text style={{ fontFamily: "Helvetica-Bold" }}>Data Quality Warning. </Text>{warning}</Text>
+    </View>)}
+    <Text style={[styles.panelNote, { marginTop: 6, marginBottom: 0 }]}>{hsrNote}</Text>
+    <View style={{ marginTop: 8, height: 272 }}><Panel fill title="Monthly Exposure" note="Player-hours use the left axis. Total distance uses the right axis, with HSR drawn as an inset inside it."><ExposureTrend model={model} chartHeight={205} /></Panel></View>
+    <View style={[styles.split, { marginTop: 8, height: 300 }]}>
+      <View style={styles.half}><Panel fill title="Team Comparison" note="Hours. Released player-hours for every club in the cohort."><ExposureLadder model={model} keyName="exposureHours" label="Player-hours" unit="Hours" colour={C.mint} rowGap={8} /></Panel></View>
+      <View style={styles.half}><Panel fill title="Team Comparison" note="Distance. Released distance for every club in the cohort."><ExposureLadder model={model} keyName="distanceKm" label="Kilometres" unit="km" colour={C.cyan} rowGap={8} /></Panel></View>
     </View>
   </PageShell>;
 }
 function TeamComparison({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="team-comparison">
-    <PageTitle title="Team Comparison" note={`Other clubs remain anonymous. ${model.subjectName} is highlighted against released league benchmarks.`} />
+    <PageTitle title="Team Comparison" note={model.comparisonHeatmap.some((row) => row.isSubject)
+      ? `Other clubs carry their approved dashboard alias. ${model.subjectName} is highlighted against released league benchmarks.`
+      : "Every club carries its approved dashboard alias, compared against released league benchmarks."} />
     <View style={{ height: 322 }}>
-      <Panel fill title="Match Versus Training Incidence" note="One bubble for each club in the released cohort. Dashed lines are the league means.">
+      <Panel fill title="Match And Training Incidence" note="One bubble for each club in the released cohort. Dashed lines are the league means.">
         <ComparisonScatter model={model} chartHeight={238} />
       </Panel>
     </View>
-    <View style={[styles.split, { marginTop: 8, height: 350 }]}>
-      <View style={{ width: "42%", paddingHorizontal: 4 }}><Panel fill title="Overall Incidence Ladder" note="Injuries per 1,000 player-hours."><ComparisonLadder model={model} rowGap={9} /></Panel></View>
-      <View style={{ width: "58%", paddingHorizontal: 4 }}><Panel fill title="Four-Metric Benchmark Heat Map" note="Each cell is compared with the released league mean for that metric."><Heatmap model={model} rowHeight={15} /></Panel></View>
+    <View style={{ marginTop: 8, height: 350 }}>
+      <Panel fill title="Match And Training Values Vs League Average" note="Each cell is compared with the released league mean for that metric."><Heatmap model={model} rowHeight={16} /></Panel>
     </View>
   </PageShell>;
 }
@@ -970,8 +1199,8 @@ function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMe
     <PageTitle title="Season Comparison" note={comparison ? `Approved ${comparison.previous_season} and ${comparison.current_season} values are shown using the same measures as the dashboard.` : "No approved season comparison is available for this report."} />
     {comparison ? <>
       <View style={{ height: 111 }}><ComparisonKpiCards comparison={comparison} /></View>
-      <View style={{ marginTop: 8, height: 267 }}><Panel fill title="Injuries By Month" note="Paired monthly counts for the two approved releases."><SeasonMonthlyBars comparison={comparison} chartHeight={190} /></Panel></View>
-      <View style={{ marginTop: 8, height: 292 }}><Panel fill title="Diagnosis Drivers" note="The three leading diagnosis families by injury count for Overall, Match and Training settings."><DiagnosisDriversPdf comparison={comparison} /></Panel></View>
+      <View style={{ marginTop: 8, height: 225 }}><Panel fill title="Injuries By Month" note="Paired monthly counts for the two approved releases."><SeasonMonthlyBars comparison={comparison} chartHeight={148} /></Panel></View>
+      <View style={{ marginTop: 8 }}><Panel title="Diagnosis Drivers" note="The three leading diagnosis families by injury count for Overall, Match and Training settings. Bars share one scale across the three settings."><DiagnosisDriversPdf comparison={comparison} /></Panel></View>
     </> : <View style={[styles.panel, { height: 180, justifyContent: "center", alignItems: "center" }]}><Text style={styles.panelNote}>No approved season comparison is available.</Text></View>}
   </PageShell>;
 }
@@ -990,6 +1219,8 @@ function ClosingPage({ model, meta }: { model: ReportModel; meta: ReportMetadata
       <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 8, letterSpacing: 1.7 }}>END OF REPORT</Text>
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 31, textAlign: "center", lineHeight: 1.03, marginTop: 14 }}>Injury surveillance</Text>
       <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 16, textAlign: "center", marginTop: 8 }}>{model.subjectName} · {model.season}</Text>
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 11, textAlign: "center", marginTop: 14 }}>SCRIIPT Project</Text>
+      <Text style={{ color: "#C6D6E7", fontSize: 8, textAlign: "center", lineHeight: 1.35, marginTop: 4 }}>Surveillance of Continental Rugby Injury/Illness and Performance Tracking</Text>
       <View style={{ width: 56, height: 3, backgroundColor: model.brand.accentColour, marginVertical: 23 }} />
       {model.scope === "team" && model.brand.crestDataUri && <View style={{ width: 78, height: 78, borderRadius: 8, backgroundColor: C.white, padding: 11, alignItems: "center", justifyContent: "center" }}><Image src={model.brand.crestDataUri} style={{ width: 56, height: 56, objectFit: "contain" }} /></View>}
     </View>
@@ -1000,7 +1231,8 @@ function ClosingPage({ model, meta }: { model: ReportModel; meta: ReportMetadata
 const sectionPages: Record<ReportSectionId, (model: ReportModel, meta: ReportMetadata) => ReactElement> = {
   cover: (m, x) => <CoverPage model={m} meta={x} />, "season-pattern": (m, x) => <SeasonPattern model={m} meta={x} />,
   "severity-contact": (m, x) => <SeverityContact model={m} meta={x} />, "injury-location": (m, x) => <InjuryLocation model={m} meta={x} />,
-  "common-injuries": (m, x) => <CommonInjuries model={m} meta={x} />, "impact-matrices": (m, x) => <ImpactMatrices model={m} meta={x} />,
+  "common-injuries": (m, x) => <CommonInjuries model={m} meta={x} />,
+  "diagnosis-matrix": (m, x) => <DiagnosisMatrix model={m} meta={x} />, illnesses: (m, x) => <Illnesses model={m} meta={x} />, "impact-matrices": (m, x) => <ImpactMatrices model={m} meta={x} />,
   "injury-types": (m, x) => <InjuryTypes model={m} meta={x} />, exposure: (m, x) => <Exposure model={m} meta={x} />,
   "team-comparison": (m, x) => <TeamComparison model={m} meta={x} />, "season-methodology": (m, x) => <SeasonMethodology model={m} meta={x} />,
   closing: (m, x) => <ClosingPage model={m} meta={x} />,

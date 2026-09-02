@@ -105,8 +105,8 @@ const source = `
     const priorRaw = JSON.parse(await readFile(path.join(reportingDirectory, fixture.priorFile), "utf8"));
     const prior = { ...parseDashboardReaderRow(priorRaw, priorRaw.season, fixture.scope), scope: fixture.scope, team: fixture.subjectName };
     const crestDataUri = "data:image/png;base64," + (await readFile(path.join(process.cwd(), fixture.crest))).toString("base64");
-    const comparisonRows = currentTeamRows.map((row) => ({
-      label: row.team === fixture.subjectName ? fixture.subjectName : "Anonymous fixture club",
+    const comparisonRows = currentTeamRows.map((row, index) => ({
+      label: row.team === fixture.subjectName ? fixture.subjectName : "Club " + String(index + 1).padStart(2, "0"),
       isSubject: fixture.scope === "team" && row.team === fixture.subjectName,
       exposureHours: row.exposureHours,
       distanceKm: row.distanceKm,

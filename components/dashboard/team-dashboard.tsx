@@ -37,6 +37,10 @@ import {
 } from '@/components/dashboard/injury-type-dossier';
 import { resolveLocationView } from '@/lib/location-view';
 import { withoutFrontFacingUnknown } from '@/lib/dashboard-visibility';
+import {
+  commonInjuryColorMap, illnessColorMap, isKneeLigamentDiagnosis, metricValue,
+  RANKED_LANE_SIZE, rankedForMetric, rankedIllnesses, type CardColour,
+} from '@/lib/report-presentation';
 import type { ComparisonScatterRow } from '@/components/dashboard/charts';
 import {
   SETTING_COLORS,
@@ -116,60 +120,7 @@ const ReportPreview = dynamic(
   },
 );
 
-type InjuryCardColor = { background: string; foreground: string };
-
-const REFERENCE_INJURY_COLORS: Record<string, InjuryCardColor> = {
-  concussion: { background: '#e5252a', foreground: '#ffffff' },
-  contusion_haematoma: { background: '#f59e0b', foreground: '#ffffff' },
-  compound__thigh__contusion_superficial: { background: '#f59e0b', foreground: '#ffffff' },
-  compound__knee__joint_sprain: { background: '#3b82f6', foreground: '#ffffff' },
-  hamstring_strain: { background: '#9333ea', foreground: '#ffffff' },
-  compound__thigh__muscle_injury: { background: '#9333ea', foreground: '#ffffff' },
-  compound__ankle__joint_sprain: { background: '#16a34a', foreground: '#ffffff' },
-  adductor_groin: { background: '#db2777', foreground: '#ffffff' },
-  compound__knee__peripheral_nerve_injury: { background: '#db2777', foreground: '#ffffff' },
-  calf_muscle: { background: '#f97316', foreground: '#ffffff' },
-  compound__lower_leg__muscle_injury: { background: '#f97316', foreground: '#ffffff' },
-  compound__shoulder__joint_sprain: { background: '#14b8a6', foreground: '#ffffff' },
-  compound__shoulder__tendon_rupture: { background: '#06b6d4', foreground: '#ffffff' },
-  compound__ankle__fracture: { background: '#0d9488', foreground: '#ffffff' },
-  compound__lower_leg__fracture: { background: '#4f46e5', foreground: '#ffffff' },
-  compound__wrist__fracture: { background: '#0ea5e9', foreground: '#ffffff' },
-  compound__wrist__tendinopathy: { background: '#14b8a6', foreground: '#ffffff' },
-  compound__shoulder__fracture: { background: '#eab308', foreground: '#ffffff' },
-  compound__lumbosacral__synovitis_capsulitis: { background: '#65a30d', foreground: '#ffffff' },
-  compound__lumbosacral__cartilage_injury: { background: '#84cc16', foreground: '#ffffff' },
-  compound__lumbosacral__tendinopathy: { background: '#eab308', foreground: '#ffffff' },
-  compound__lumbosacral__nonspecific: { background: '#c026d3', foreground: '#ffffff' },
-  compound__forearm__fracture: { background: '#1e40af', foreground: '#ffffff' },
-};
-
-const FALLBACK_INJURY_COLORS = [
-  '#007d92',
-  '#6d28d9',
-  '#b56000',
-  '#00759a',
-  '#007a55',
-  '#c94b00',
-  '#4f46e5',
-  '#007a78',
-  '#c51b4a',
-  '#075fc7',
-  '#966b00',
-  '#08783f',
-  '#1e40af',
-  '#7e22ce',
-  '#be123c',
-  '#007f6d',
-  '#0369a1',
-  '#5b21b6',
-  '#b45309',
-  '#0f766e',
-  '#4338ca',
-  '#0e7490',
-  '#15803d',
-  '#9f1239',
-] as const;
+type InjuryCardColor = CardColour;
 
 const CONTACT_RING_COLORS: Record<string, string> = {
   contact: '#a78bfa',
@@ -238,11 +189,6 @@ function hasKnownExposure(
 }
 
 type ProfileMetricRow = InjuryProfileRow | InjuryTypeFamilyRow;
-
-function metricValue(row: ProfileMetricRow, metric: ProfileMetric) {
-  const value = row[metric];
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
 
 function metricMeta(metric: ProfileMetric) {
   return METRICS.find((item) => item.key === metric) ?? METRICS[0];
@@ -951,43 +897,6 @@ const ILLNESS_METRICS: Array<{ key: IllnessMetric; label: string; unit: string }
   { key: 'mean_severity_days', label: 'Severity', unit: 'mean days lost' },
 ];
 
-function rankedIllnesses(rows: IllnessProfileRow[], metric: IllnessMetric) {
-  return [...rows]
-    .filter((row) => (row[metric] ?? 0) > 0)
-    .sort((a, b) => (b[metric] ?? 0) - (a[metric] ?? 0) || a.label.localeCompare(b.label))
-    .slice(0, RANKED_LANE_SIZE);
-}
-
-/** Hue-spread so neighbouring illness cards never read as the same colour. */
-const ILLNESS_COLORS = [
-  '#e5252a',
-  '#0ea5e9',
-  '#16a34a',
-  '#9333ea',
-  '#f59e0b',
-  '#0f766e',
-  '#db2777',
-  '#4f46e5',
-  '#84cc16',
-  '#c2410c',
-  '#06b6d4',
-  '#be123c',
-] as const;
-
-/** One colour per illness on screen, so a code keeps its colour across the four lanes. */
-function illnessColorMap(rows: IllnessProfileRow[]) {
-  const codes: string[] = [];
-  for (const metric of ILLNESS_METRICS) {
-    for (const row of rankedIllnesses(rows, metric.key)) {
-      if (!codes.includes(row.code)) codes.push(row.code);
-    }
-  }
-  return new Map(codes.map((code, index) => [
-    code,
-    { background: ILLNESS_COLORS[index % ILLNESS_COLORS.length], foreground: '#ffffff' },
-  ]));
-}
-
 function IllnessesTab({ dashboard }: { dashboard: TeamDashboardData }) {
   const summary = dashboard.illness_summary;
   const rows = withoutFrontFacingUnknown(dashboard.illness_profiles ?? [])
@@ -1129,127 +1038,6 @@ function IllnessCard({
       </article>
     </li>
   );
-}
-
-/**
- * One ranked lane: the rows with a value for this metric, highest first. The
- * lanes, the colour map and the risk matrix all read their selection from here,
- * so they cannot drift apart when a sort changes.
- */
-function rankedForMetric(rows: InjuryProfileRow[], metric: ProfileMetric) {
-  return [...rows]
-    .filter((row) => metricValue(row, metric) > 0)
-    .sort((a, b) => metricValue(b, metric) - metricValue(a, metric) || a.label.localeCompare(b.label));
-}
-
-const RANKED_LANE_SIZE = 5;
-
-function isKneeLigamentDiagnosis(row?: Pick<InjuryProfileRow, 'code' | 'label'>) {
-  if (!row) return false;
-  const value = `${row.code} ${row.label}`.toLowerCase();
-  return row.code.startsWith('dx_acl_')
-    || row.code.startsWith('dx_mcl_')
-    || row.code.startsWith('dx_pcl_')
-    || value.includes('posterior cruciate ligament')
-    || value.includes('knee cruciate ligament')
-    || value.includes('knee ligament')
-    || value.includes('knee multiligament')
-    || value.includes('knee posterolateral corner')
-    || row.label.toLowerCase() === 'lateral collateral ligament injury';
-}
-
-/** The codes on screen for one setting: the union of each metric's top five. */
-function rankedLaneCodes(rows: InjuryProfileRow[], setting: Setting) {
-  const codes = new Set<string>();
-  const scoped = rows.filter((row) => row.setting === setting);
-  for (const metric of METRICS) {
-    for (const row of rankedForMetric(scoped, metric.key).slice(0, RANKED_LANE_SIZE)) codes.add(row.code);
-  }
-  return codes;
-}
-
-function commonInjuryColorMap(rows: InjuryProfileRow[]) {
-  const codes: string[] = [];
-  const seen = new Set<string>();
-  const visibleBySetting = new Map<Setting, Set<string>>();
-  const addCode = (code: string) => {
-    if (!seen.has(code)) {
-      seen.add(code);
-      codes.push(code);
-    }
-  };
-
-  for (const setting of ['all', 'match', 'training'] as const) {
-    const visibleCodes = rankedLaneCodes(rows, setting);
-    visibleCodes.forEach(addCode);
-    visibleBySetting.set(setting, visibleCodes);
-  }
-
-  [...new Set(rows.map((row) => row.code))].sort().forEach(addCode);
-  const neighbours = new Map(codes.map((code) => [code, new Set<string>()]));
-  for (const visibleCodes of visibleBySetting.values()) {
-    for (const code of visibleCodes) {
-      for (const other of visibleCodes) {
-        if (other !== code) neighbours.get(code)?.add(other);
-      }
-    }
-  }
-
-  const assigned = new Map<string, InjuryCardColor>();
-  for (const code of codes) {
-    const row = rows.find((candidate) => candidate.code === code);
-    const label = row?.label.toLowerCase() ?? '';
-    const referenceColor = REFERENCE_INJURY_COLORS[code]
-      ?? (label.includes('concussion') && !label.includes('non-concussion') ? REFERENCE_INJURY_COLORS.concussion : undefined)
-      ?? (label.includes('hamstring') ? REFERENCE_INJURY_COLORS.hamstring_strain : undefined)
-      ?? (isKneeLigamentDiagnosis(row) ? REFERENCE_INJURY_COLORS.compound__knee__joint_sprain : undefined)
-      ?? ((label.includes('ankle') && (label.includes('ligament') || label.includes('syndesmosis'))) ? REFERENCE_INJURY_COLORS.compound__ankle__joint_sprain : undefined)
-      ?? ((label.includes('contusion') || label.includes('haematoma')) ? REFERENCE_INJURY_COLORS.contusion_haematoma : undefined)
-      ?? ((label.includes('groin') || label.includes('adductor')) ? REFERENCE_INJURY_COLORS.adductor_groin : undefined)
-      ?? (label.includes('calf') ? REFERENCE_INJURY_COLORS.calf_muscle : undefined);
-    if (referenceColor) assigned.set(code, referenceColor);
-  }
-
-  const available = [...FALLBACK_INJURY_COLORS];
-  const orderedCodes = [...codes].sort((a, b) =>
-    (neighbours.get(b)?.size ?? 0) - (neighbours.get(a)?.size ?? 0) || a.localeCompare(b));
-
-  for (const code of orderedCodes) {
-    if (assigned.has(code)) continue;
-    const neighbourColors = [...(neighbours.get(code) ?? [])]
-      .map((other) => assigned.get(other)?.background)
-      .filter((color): color is string => Boolean(color));
-    const comparisonColors = neighbourColors.length
-      ? neighbourColors
-      : [...assigned.values()].map((color) => color.background);
-    let selectedIndex = 0;
-    let bestDistance = -1;
-    for (let index = 0; index < available.length; index += 1) {
-      const candidate = available[index];
-      const distance = comparisonColors.length
-        ? Math.min(...comparisonColors.map((color) => hexColorDistance(candidate, color)))
-        : Number.POSITIVE_INFINITY;
-      if (distance > bestDistance) {
-        selectedIndex = index;
-        bestDistance = distance;
-      }
-    }
-    const paletteColor = available.splice(selectedIndex, 1)[0];
-    const generatedHue = (205 + assigned.size * 137.508) % 360;
-    assigned.set(code, {
-      background: paletteColor ?? `hsl(${generatedHue} 76% 38%)`,
-      foreground: '#ffffff',
-    });
-  }
-
-  return assigned;
-}
-
-function hexColorDistance(a: string, b: string) {
-  const channels = (color: string) => [1, 3, 5].map((index) => Number.parseInt(color.slice(index, index + 2), 16));
-  const [ar, ag, ab] = channels(a);
-  const [br, bg, bb] = channels(b);
-  return Math.hypot(ar - br, ag - bg, ab - bb);
 }
 
 function CommonInjuryRankings({

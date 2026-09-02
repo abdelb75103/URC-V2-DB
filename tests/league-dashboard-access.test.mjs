@@ -670,7 +670,7 @@ test('risk matrix uses a data-fitted log severity scale, numbered dots, and a sm
 
 test('risk matrix selects prevalent TL diagnoses instead of recorded or burden-ranked rows', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
-  const tab = dashboard.slice(dashboard.indexOf('function CommonInjuriesTab'), dashboard.indexOf('function rankedForMetric'));
+  const tab = dashboard.slice(dashboard.indexOf('function CommonInjuriesTab'), dashboard.indexOf('const ILLNESS_METRICS'));
 
   assert.match(tab, /row\.time_loss_injuries \/ totalInjuries >= 0\.013/);
   assert.doesNotMatch(tab, /impactSelectionTotal|hasRecordedCounts|totalRecordedInjuries/);
@@ -680,7 +680,7 @@ test('risk matrix selects prevalent TL diagnoses instead of recorded or burden-r
 
 test('illness tab reads only released overall illness profiles', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
-  const tab = dashboard.slice(dashboard.indexOf('const ILLNESS_METRICS'), dashboard.indexOf('function rankedForMetric'));
+  const tab = dashboard.slice(dashboard.indexOf('const ILLNESS_METRICS'), dashboard.indexOf('function CommonInjuryLane'));
 
   assert.match(tab, /dashboard\.illness_profiles \?\? \[\]/);
   assert.match(tab, /const summary = dashboard\.illness_summary/);

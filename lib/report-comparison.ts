@@ -18,12 +18,13 @@ export function buildReportComparisonRows({
     if (viewerRows.length !== 1) throw new Error("Team report comparison does not identify exactly one viewing club");
   }
 
-  let anonymousIndex = 0;
   return rows.map((row) => {
     const isSubject = scope === "team" && row.comparison_id === viewerComparisonId;
-    if (!isSubject) anonymousIndex += 1;
+    if (!isSubject && !/^(Team [A-Z]|Club \d{2})$/.test(row.team_alias)) {
+      throw new Error("Report comparison requires an approved dashboard alias");
+    }
     return {
-      label: isSubject ? subjectName : `Anonymous club ${String(anonymousIndex).padStart(2, "0")}`,
+      label: isSubject ? subjectName : row.team_alias,
       isSubject,
       exposureHours: row.exposure_hours,
       distanceKm: row.distance_km,

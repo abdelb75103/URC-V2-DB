@@ -1,6 +1,7 @@
 import "server-only";
 import { withoutFrontFacingUnknown } from "@/lib/dashboard-visibility";
 import { diagnosisFamilyProfiles } from "@/lib/reporting-types";
+import { isKneeLigamentDiagnosis } from "@/lib/report-presentation";
 import type {
   AnalyticsRow,
   DashboardData,
@@ -127,7 +128,7 @@ function distributionRows(rows: readonly (DistributionRow | SeverityRow)[]): Rep
 }
 
 function injuryTypeFamilies(rows: readonly InjuryTypeFamilyRow[]): ReportInjuryTypeFamily[] {
-  return rows.map((row) => ({
+  return withoutFrontFacingUnknown(rows).map((row) => ({
     code: row.code,
     label: row.label,
     setting: row.setting,
@@ -137,8 +138,19 @@ function injuryTypeFamilies(rows: readonly InjuryTypeFamilyRow[]): ReportInjuryT
     incidencePer1000h: row.incidence_per_1000h,
     burdenPer1000h: row.burden_per_1000h,
     meanSeverityDays: row.mean_severity_days,
-    subtypes: profileRows(row.subtypes, "injury_type"),
+    subtypes: profileRows(withoutFrontFacingUnknown(row.subtypes), "injury_type"),
   }));
+}
+
+function impactProfiles(rows: ReportProfileRow[], totalInjuries: number, includeKneeLigaments = false): ReportProfileRow[] {
+  const overall = rows.filter((row) => row.setting === "all");
+  const selected = overall.filter((row) => totalInjuries > 0 && row.timeLossInjuries / totalInjuries >= 0.013)
+    .sort((a, b) => b.timeLossInjuries - a.timeLossInjuries || (b.burdenPer1000h ?? 0) - (a.burdenPer1000h ?? 0));
+  if (includeKneeLigaments) {
+    const codes = new Set(selected.map((row) => row.code));
+    selected.push(...overall.filter((row) => row.timeLossInjuries > 0 && isKneeLigamentDiagnosis(row) && !codes.has(row.code)));
+  }
+  return selected;
 }
 
 function asReportMetric(metric: HeadlineMetric): ReportMetric {
@@ -234,7 +246,17 @@ function assertNoForbiddenKeys(value: unknown, path = "report"): void {
 export function assertReportModelPrivacy(model: ReportModel, subjectName: string, protectedTerms: readonly string[]): void {
   if (protectedTerms.length === 0) throw new Error("Report model requires protected terms");
   assertNoForbiddenKeys(model);
-  const serialized = JSON.stringify(model);
+  // Only comparison labels may carry the dashboard's approved codebook aliases.
+  // Keep aliases protected in narrative text and omit the subject's own alias.
+  for (const row of model.comparisonHeatmap) {
+    if (row.isSubject ? row.label !== model.subjectName : !/^(Team [A-Z]|Club \d{2})$/.test(row.label)) {
+      throw new Error("Report comparison label is not an approved display label");
+    }
+  }
+  const serialized = JSON.stringify({
+    ...model,
+    comparisonHeatmap: model.comparisonHeatmap.map((row) => ({ ...row, label: row.isSubject ? row.label : "" })),
+  });
   if (ALIAS_PATTERN.test(serialized) || INTERNAL_KEY_PATTERN.test(serialized)) throw new Error("Report model contains protected team text");
   for (const term of protectedTerms) {
     if (!term || term.toLocaleLowerCase("en-IE") === subjectName.toLocaleLowerCase("en-IE")) continue;
@@ -294,6 +316,15 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
   const safeLimitations = expectedScope === "league" && temporaryEstimateCount > 0
     ? [`${temporaryEstimateCount} clubs use temporary league-mean exposure estimates while source-backed exposure is awaited.`, ...limitations]
     : limitations;
+  const visibleProfiles = withoutFrontFacingUnknown(current.injury_profiles);
+  const injuryProfile = {
+    diagnoses: profileRows(withoutFrontFacingUnknown(current.diagnosis_families != null
+      ? diagnosisFamilyProfiles(current.diagnosis_families) : current.injury_profiles), "diagnosis"),
+    bodyLocations: profileRows(visibleProfiles, "body_location"),
+    injuryTypes: profileRows(visibleProfiles, "injury_type"),
+    injuryTypeFamilies: injuryTypeFamilies(current.injury_type_families),
+  };
+  const totalInjuries = current.headline.find((metric) => metric.key === "time_loss_injuries")?.value ?? 0;
 
   const model: ReportModel = {
     schemaVersion: "urc-report-v1",
@@ -308,6 +339,7 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
     estimateOrIncompleteCoverage,
     coverageNote: estimateOrIncompleteCoverage ? coverageStatusLabel(current.coverage.included_exposure_status) : null,
     snapshotMetrics: current.headline.map(asReportMetric),
+    preliminaryMonthlyRates: (current.preliminary_monthly_rates ?? []).map((row) => ({ ...row })),
     monthlyInjuryPattern: sortByMonth(current.monthly).map((row: AnalyticsRow) => ({
       month: row.month ?? "",
       recordedInjuries: row.recorded_injuries ?? null,
@@ -320,18 +352,21 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
     matchTraining: sortByPresentation(current.setting_metrics.filter((metric) => metric.setting === "match" || metric.setting === "training")).map(asSettingMetric),
     severityDistribution: distributionRows(current.severity_distribution),
     contactDistribution: distributionRows(current.contact_distribution ?? []),
-    injuryProfile: {
-      diagnoses: profileRows(
-        withoutFrontFacingUnknown(current.diagnosis_families != null
-          ? diagnosisFamilyProfiles(current.diagnosis_families)
-          : current.injury_profiles),
-        "diagnosis",
-      ),
-      bodyLocations: profileRows(current.injury_profiles, "body_location"),
-      injuryTypes: profileRows(current.injury_profiles, "injury_type"),
-      injuryTypeFamilies: injuryTypeFamilies(current.injury_type_families),
+    illness: {
+      summary: current.illness_summary ? { ...current.illness_summary } : null,
+      profiles: withoutFrontFacingUnknown(current.illness_profiles ?? [])
+        .filter((row) => row.setting === "all")
+        .map((row) => ({ ...row })),
+    },
+    injuryProfile,
+    injuryImpact: {
+      diagnoses: impactProfiles(injuryProfile.diagnoses, totalInjuries, true),
+      bodyLocations: impactProfiles(injuryProfile.bodyLocations, totalInjuries),
+      injuryTypes: impactProfiles(injuryProfile.injuryTypes, totalInjuries),
     },
     exposure: {
+      totalHoursLabel: current.scope === "league" && temporaryEstimateCount > 0 ? "Estimated Total Hours" : "Total Hours",
+      totalDistanceLabel: current.scope === "league" && typeof current.coverage.source_backed_team_count === "number" ? "Reported Distance" : "Total Distance",
       totalHours: current.coverage.hours,
       matchHours: current.coverage.match_hours ?? null,
       trainingHours: current.coverage.training_hours ?? null,
@@ -341,6 +376,15 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
       hsrIsImputed: current.coverage.is_imputed ?? false,
       hsrDisplayNote: current.coverage.display_note ?? null,
       hsrSourceStatus: current.coverage.hsr_source_status ?? null,
+      dataQualityWarnings: (current.coverage.data_quality_warnings ?? []).map((warning) => {
+        // Retain the qualification without naming another club in an export.
+        for (const term of protectedTerms) {
+          if (!term || term.toLowerCase() === subjectName.toLowerCase()) continue;
+          const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          warning = warning.replace(new RegExp(`\\b${escaped}\\b`, "gi"), "A club");
+        }
+        return warning;
+      }),
       monthly: sortByMonth(current.monthly).map((row) => ({
         month: row.month ?? "",
         exposureHours: row.exposure_hours ?? null,

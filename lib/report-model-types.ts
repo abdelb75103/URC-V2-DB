@@ -1,4 +1,4 @@
-import type { SeasonComparisonData } from "@/lib/reporting-types";
+import type { IllnessProfileRow, IllnessSummary, PreliminaryMonthlyRateRow, SeasonComparisonData } from "@/lib/reporting-types";
 
 export const DEFAULT_REPORT_SECTION_IDS = [
   "cover",
@@ -6,6 +6,8 @@ export const DEFAULT_REPORT_SECTION_IDS = [
   "severity-contact",
   "injury-location",
   "common-injuries",
+  "diagnosis-matrix",
+  "illnesses",
   "impact-matrices",
   "injury-types",
   "exposure",
@@ -18,15 +20,17 @@ export type ReportSectionId = (typeof DEFAULT_REPORT_SECTION_IDS)[number];
 
 export const REPORT_SECTION_LABELS: Record<ReportSectionId, string> = {
   cover: "Cover",
-  "season-pattern": "Season overview",
-  "severity-contact": "Severity and mechanism",
-  "injury-location": "Injury location",
-  "common-injuries": "Common injuries",
-  "impact-matrices": "Injury impact matrices",
-  "injury-types": "Injury type",
+  "season-pattern": "Season Overview",
+  "severity-contact": "Severity And Mechanism",
+  "injury-location": "Injury Location",
+  "common-injuries": "Most Common Injuries",
+  "diagnosis-matrix": "Risk Matrix",
+  illnesses: "Illnesses",
+  "impact-matrices": "Injury Impact Matrix",
+  "injury-types": "Injury Types",
   exposure: "Exposure",
-  "team-comparison": "Team comparison",
-  "season-methodology": "Season comparison",
+  "team-comparison": "Team Comparison",
+  "season-methodology": "Season Comparison",
   closing: "Closing",
 };
 
@@ -165,16 +169,28 @@ export type ReportModel = {
   coverageNote: string | null;
   snapshotMetrics: ReportMetric[];
   monthlyInjuryPattern: ReportPatternRow[];
+  preliminaryMonthlyRates: PreliminaryMonthlyRateRow[];
   matchTraining: ReportSettingMetric[];
   severityDistribution: ReportDistributionRow[];
   contactDistribution: ReportDistributionRow[];
+  illness: {
+    summary: IllnessSummary | null;
+    profiles: IllnessProfileRow[];
+  };
   injuryProfile: {
     diagnoses: ReportProfileRow[];
     bodyLocations: ReportProfileRow[];
     injuryTypes: ReportProfileRow[];
     injuryTypeFamilies: ReportInjuryTypeFamily[];
   };
+  injuryImpact: {
+    diagnoses: ReportProfileRow[];
+    bodyLocations: ReportProfileRow[];
+    injuryTypes: ReportProfileRow[];
+  };
   exposure: {
+    totalHoursLabel: string;
+    totalDistanceLabel: string;
     totalHours: number | null;
     matchHours: number | null;
     trainingHours: number | null;
@@ -184,6 +200,7 @@ export type ReportModel = {
     hsrIsImputed: boolean;
     hsrDisplayNote: string | null;
     hsrSourceStatus: string | null;
+    dataQualityWarnings: string[];
     monthly: ReportExposureRow[];
   };
   comparisonHeatmap: ReportComparisonRow[];

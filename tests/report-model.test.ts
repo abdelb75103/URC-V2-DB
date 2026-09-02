@@ -151,6 +151,44 @@ test("keeps an authoritative empty diagnosis family release empty", () => {
   assert.deepEqual(model.injuryProfile.diagnoses, []);
 });
 
+test("uses the dashboard matrix threshold and retains low-count knee ligament injuries", () => {
+  const base = { ...dashboardFixture().injury_profiles[0], dimension: "diagnosis" as const, setting: "all" as const };
+  const current = dashboardFixture({
+    headline: [{ key: "time_loss_injuries", label: "Injuries", value: 1000, unit: "injuries", formula: "released count" }],
+    injury_profiles: [
+      { ...base, code: "common", label: "Common Injury", time_loss_injuries: 13 },
+      { ...base, code: "rare", label: "Rare Injury", time_loss_injuries: 12 },
+      { ...base, code: "dx_acl_tear", label: "ACL Tear", time_loss_injuries: 1 },
+      { ...base, code: "unknown", label: "Unknown", time_loss_injuries: 100 },
+    ],
+  });
+  const model = buildReportModel({ current, prior: null, expectedScope: "team", expectedSeason: current.season, subjectName: current.team, protectedTerms: ["Rivals RFC"] });
+  assert.deepEqual(model.injuryImpact.diagnoses.map(row => row.code), ["common", "dx_acl_tear"]);
+  assert.deepEqual(model.injuryProfile.diagnoses.map(row => row.code), ["common", "rare", "dx_acl_tear"]);
+  assert.equal(model.snapshotMetrics[0].value, 1000);
+});
+
+test("carries released illness metrics separately without replacing null rates or including unknown profiles", () => {
+  const metrics = {
+    setting: "all" as const, recorded_illnesses: 12, known_duration_illnesses: 8,
+    days_lost: 20, exposure_hours: null, incidence_per_1000h: null,
+    burden_per_1000h: null, mean_severity_days: 2.5,
+  };
+  const current = dashboardFixture({
+    illness_summary: { ...metrics, qualification: "Overall illness metrics use approved included illness rows and released total player-hours. Illness is not attributed to Match or Training." },
+    illness_profiles: [
+      { ...metrics, code: "respiratory", label: "Respiratory Illness" },
+      { ...metrics, code: "unknown", label: "Unknown" },
+    ],
+  });
+  const model = buildReportModel({ current, prior: null, expectedScope: "team", expectedSeason: current.season, subjectName: current.team, protectedTerms: ["Rivals RFC"] });
+  assert.deepEqual(model.illness.summary, current.illness_summary);
+  assert.deepEqual(model.illness.profiles, [current.illness_profiles![0]]);
+  assert.deepEqual(model.snapshotMetrics.map(metric => metric.value), current.headline.map(metric => metric.value));
+  const unavailable = buildReportModel({ current: dashboardFixture(), prior: null, expectedScope: "team", expectedSeason: current.season, subjectName: current.team, protectedTerms: ["Rivals RFC"] });
+  assert.deepEqual(unavailable.illness, { summary: null, profiles: [] });
+});
+
 test("keeps approved league identity validation separate from its display name", () => {
   const current = { ...dashboardFixture(), scope: "league" as const, team: "URC Overall" };
   const model = buildReportModel({
@@ -186,7 +224,7 @@ test("compares the selected earlier season with the approved later season", () =
   assert.equal(recorded?.delta, -6);
 });
 
-test("rebuilds dashboard comparison rows with report-local anonymous labels", () => {
+test("preserves dashboard aliases and hides the viewing club alias in report comparisons", () => {
   const setting = (label: string) => ({
     setting: "match" as const,
     label,
@@ -218,8 +256,13 @@ test("rebuilds dashboard comparison rows with report-local anonymous labels", ()
     viewerComparisonId: "comparison-private-1",
   });
 
-  assert.deepEqual(rows.map((item) => item.label), ["Harbour RFC", "Anonymous club 01"]);
-  assert.doesNotMatch(JSON.stringify(rows), /comparison-private|Team Q|Team R/);
+  assert.deepEqual(rows.map((item) => item.label), ["Harbour RFC", "Team R"]);
+  assert.doesNotMatch(JSON.stringify(rows), /comparison-private|Team Q/);
+  const model = buildReportModel({ current: dashboardFixture(), prior: null, expectedScope: "team", expectedSeason: "2025-26", subjectName: "Harbour RFC", protectedTerms: ["Rivals RFC", "Team Q", "Team R"], comparisonRows: rows });
+  assert.equal(model.comparisonHeatmap[1].label, "Team R");
+  assert.throws(() => assertReportModelPrivacy({ ...model, limitations: ["Team R is Rivals RFC"] }, model.subjectName, ["Rivals RFC", "Team R"]), /protected|another club/);
+  assert.throws(() => assertReportModelPrivacy({ ...model, comparisonHeatmap: [{ ...rows[1], label: "Rivals RFC" }] }, model.subjectName, ["Rivals RFC"]), /display label/);
+  assert.throws(() => buildReportComparisonRows({ rows: [row("comparison-private-2", "Rivals RFC")], scope: "league", subjectName: "URC" }), /approved dashboard alias/);
 });
 
 test("preserves released nulls and blocks rate deltas without comparable exposure", () => {
@@ -235,6 +278,17 @@ test("preserves released nulls and blocks rate deltas without comparable exposur
   assert.equal(model.seasonComparison.headline[0].deltaReason, "Exposure denominator is not comparable");
   assert.equal(model.estimateOrIncompleteCoverage, true);
   assert.match(model.coverageNote ?? "", /Temporary league-mean exposure estimate/);
+});
+
+test("keeps preliminary sparkline rates separate from released monthly rates and preserves source warnings safely", () => {
+  const current = dashboardFixture({
+    preliminary_monthly_rates: [{ month: "Sep 2025", contributor_count: 14, exposure_hours: 1000, time_loss_injuries: 10, days_lost: 50, incidence_per_1000h: 10, burden_per_1000h: 50, qualification: "Preliminary contributor-aligned monthly rates." }],
+    coverage: { ...dashboardFixture().coverage, data_quality_warnings: ["Rivals RFC retains a source distance anomaly."] },
+  });
+  const model = buildReportModel({ current, prior: null, expectedScope: "team", expectedSeason: current.season, subjectName: current.team, protectedTerms: ["Rivals RFC"] });
+  assert.deepEqual(model.preliminaryMonthlyRates, current.preliminary_monthly_rates);
+  assert.equal(model.monthlyInjuryPattern[0].incidencePer1000h, current.monthly[1].incidence_per_1000h ?? null);
+  assert.deepEqual(model.exposure.dataQualityWarnings, ["A club retains a source distance anomaly."]);
 });
 
 test("carries released HSR values and placeholder status into the exposure export", () => {
@@ -322,18 +376,20 @@ test("refuses an unapproved prior release", () => {
 });
 
 test("restores enabled sections in canonical order", () => {
-  assert.deepEqual(DEFAULT_REPORT_SECTION_IDS, ["cover", "season-pattern", "severity-contact", "injury-location", "common-injuries", "impact-matrices", "injury-types", "exposure", "team-comparison", "season-methodology", "closing"]);
+  assert.deepEqual(DEFAULT_REPORT_SECTION_IDS, ["cover", "season-pattern", "severity-contact", "injury-location", "common-injuries", "diagnosis-matrix", "illnesses", "impact-matrices", "injury-types", "exposure", "team-comparison", "season-methodology", "closing"]);
   assert.deepEqual(REPORT_SECTION_LABELS, {
     cover: "Cover",
-    "season-pattern": "Season overview",
-    "severity-contact": "Severity and mechanism",
-    "injury-location": "Injury location",
-    "common-injuries": "Common injuries",
-    "impact-matrices": "Injury impact matrices",
-    "injury-types": "Injury type",
+    "season-pattern": "Season Overview",
+    "severity-contact": "Severity And Mechanism",
+    "injury-location": "Injury Location",
+    "common-injuries": "Most Common Injuries",
+    "diagnosis-matrix": "Risk Matrix",
+    illnesses: "Illnesses",
+    "impact-matrices": "Injury Impact Matrix",
+    "injury-types": "Injury Types",
     exposure: "Exposure",
-    "team-comparison": "Team comparison",
-    "season-methodology": "Season comparison",
+    "team-comparison": "Team Comparison",
+    "season-methodology": "Season Comparison",
     closing: "Closing",
   });
   assert.deepEqual(

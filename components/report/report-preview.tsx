@@ -91,7 +91,10 @@ export function ReportPreview({ model, enabledSectionIds, fileName, sectionContr
     const link = window.document.createElement("a");
     link.href = currentPdf.url;
     link.download = downloadFileName;
+    link.hidden = true;
+    window.document.body.appendChild(link);
     link.click();
+    link.remove();
   }
 
   const empty = sections.length === 0;
