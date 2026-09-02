@@ -1674,12 +1674,6 @@ function ExposureTab({
   const totalHours = coverage.hours;
   const totalDistance = coverage.distance_km;
   const totalHsr = coverage.hsr_distance_km;
-  const totalHsrPercentage = coverage.hsr_percentage;
-  const hsrPlaceholderMonths = coverage.placeholder_month_count ?? 0;
-  const hasHsrPlaceholder = coverage.is_imputed || hsrPlaceholderMonths > 0 || monthlyRows.some((row) => row.is_imputed);
-  const placeholderNote = coverage.display_note
-    ?? monthlyRows.find((row) => row.is_imputed && row.display_note)?.display_note
-    ?? 'League-mean placeholder pending source data.';
   const hsrWarnings = coverage.data_quality_warnings ?? [];
   const options: Array<{ value: ExposureMeasure; label: string }> = [
     { value: 'hours', label: 'Hours' },
@@ -1691,8 +1685,6 @@ function ExposureTab({
   const hasExposureTotals = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value));
   const sourceBackedTeamCount = coverage.source_backed_team_count;
   const temporaryEstimateTeamCount = coverage.temporary_estimate_team_count;
-  const distanceContributorCount = coverage.distance_contributor_count;
-  const pendingSourceTeams = coverage.pending_source_teams ?? [];
   const usesReportedLeagueContract = dashboard.scope === 'league'
     && typeof sourceBackedTeamCount === 'number'
     && typeof temporaryEstimateTeamCount === 'number';
@@ -1724,42 +1716,7 @@ function ExposureTab({
         ) : (
           <EmptyState>No approved exposure totals are available for this season.</EmptyState>
         )}
-        {usesReportedLeagueContract && (
-          <div className="mt-3 rounded-lg border border-border/70 bg-card/50 px-4 py-3 text-sm text-muted-foreground" role="note">
-            <p>
-              {sourceBackedTeamCount} source-backed clubs + {temporaryEstimateTeamCount} temporary estimates.
-              {typeof distanceContributorCount === 'number' && ` Distance is reported by ${distanceContributorCount} of 16 clubs.`}
-            </p>
-            {pendingSourceTeams.length > 0 && (
-              <p className="mt-1">
-                Awaiting source-backed exposure from {new Intl.ListFormat('en-IE', { style: 'long', type: 'conjunction' }).format(pendingSourceTeams)}.
-                {' '}Total hours include temporary estimates. Distance and monthly bars show reported values only.
-              </p>
-            )}
-          </div>
-        )}
       </section>
-      <Panel contentClassName="p-4 sm:p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-2">
-          <h3 className={PANEL_HEADING_CLASS}>Seasonal HSR</h3>
-          <p className="text-sm text-muted-foreground">
-            HSR Percentage <span className="font-semibold tabular-nums text-foreground">{totalHsrPercentage === null || totalHsrPercentage === undefined ? 'Not available' : `${fmt(totalHsrPercentage)}%`}</span>
-          </p>
-        </div>
-        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-          <p>
-            {coverage.actual_month_count ?? 0} actual month{(coverage.actual_month_count ?? 0) === 1 ? '' : 's'}
-            {hsrPlaceholderMonths > 0 && `, ${hsrPlaceholderMonths} league-mean placeholder month${hsrPlaceholderMonths === 1 ? '' : 's'}`}.
-            {dashboard.scope === 'league' && typeof coverage.hsr_contributor_count === 'number'
-              && ` ${coverage.hsr_contributor_count} source-backed HSR team${coverage.hsr_contributor_count === 1 ? '' : 's'}.`}
-          </p>
-          {hasHsrPlaceholder && <p role="note">{placeholderNote}</p>}
-          {coverage.hsr_source_status === 'source_unavailable' && (
-            <p role="note">HSR source data is unavailable. No distance placeholder is shown without an accepted total-distance denominator.</p>
-          )}
-          <p>HSR definitions are team-specific. Threshold or Zone: {coverage.threshold_or_zone ?? 'Unknown'}. Units: {coverage.units ?? 'Unknown'}. Cross-team comparability is not implied.</p>
-        </div>
-      </Panel>
       {hsrWarnings.map((warning) => (
         <div key={warning} className="rounded-lg border border-amber-400/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-100" role="note">
           <span className="font-semibold">Data Quality Warning. </span>{warning}

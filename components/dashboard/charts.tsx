@@ -21,7 +21,7 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts';
-import type { BarShapeProps, LabelProps } from 'recharts';
+import type { BarShapeProps } from 'recharts';
 import type { AnalyticsRow, InjuryProfileRow, MonthlySettingRow } from '@/lib/reporting-types';
 import {
   contributingClubsText,
@@ -204,38 +204,27 @@ function HsrInsetDistanceBar({ x, y, width, height, payload }: BarShapeProps) {
   const hasInset = typeof totalDistance === 'number' && totalDistance > 0
     && typeof hsrDistance === 'number' && hsrDistance >= 0;
   const insetHeight = hasInset ? Math.min(height, Math.max((hsrDistance / totalDistance) * height, hsrDistance > 0 ? 3 : 0)) : 0;
-  const horizontalInset = Math.min(4, width / 4);
+  const percentage = payload ? hsrPercentage(payload) : null;
 
   return (
     <g>
       <rect x={x} y={y} width={width} height={height} rx={3} fill={DISTANCE_COLOR} />
       {hasInset && insetHeight > 0 && (
         <rect
-          x={x + horizontalInset}
+          x={x}
           y={y + height - insetHeight}
-          width={Math.max(width - horizontalInset * 2, 0)}
+          width={width}
           height={insetHeight}
           rx={2}
           fill={HSR_COLOR}
         />
       )}
+      {hasInset && percentage !== null && (
+        <text x={x + width / 2} y={y + height - insetHeight - 5} fill="#e2e8f0" fontSize={10} fontWeight={700} textAnchor="middle">
+          {number(percentage, 1)}%
+        </text>
+      )}
     </g>
-  );
-}
-
-function HsrPercentageLabel({ x = 0, y = 0, width = 0, height = 0, payload }: LabelProps & {
-  payload?: ExposureMonthlyRow;
-}) {
-  const percentage = payload ? hsrPercentage(payload) : null;
-  if (percentage === null) return null;
-  const labelX = typeof x === 'number' ? x : Number(x);
-  const labelY = typeof y === 'number' ? y : Number(y);
-  const labelWidth = typeof width === 'number' ? width : Number(width);
-  const labelHeight = typeof height === 'number' ? height : Number(height);
-  return (
-    <text x={labelX + labelWidth / 2} y={labelY + labelHeight - 5} fill="#e2e8f0" fontSize={10} fontWeight={700} textAnchor="middle">
-      {number(percentage, 1)}%
-    </text>
   );
 }
 
@@ -543,16 +532,14 @@ export function ExposureTrendChart({
           />
           <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
           <Bar yAxisId="hours" dataKey="exposure_hours" name="Hours" fill={totalHoursColor} radius={[3, 3, 0, 0]} maxBarSize={54} isAnimationActive={false} />
-          <Bar yAxisId="distance" dataKey="distance_km" name="Total Distance" shape={HsrInsetDistanceBar} maxBarSize={54} isAnimationActive={false}>
-            <LabelList dataKey="hsr_percentage" content={HsrPercentageLabel} />
-          </Bar>
+          <Bar yAxisId="distance" dataKey="distance_km" name="Total Distance" fill={DISTANCE_COLOR} shape={HsrInsetDistanceBar} maxBarSize={54} isAnimationActive={false} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
       <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Exposure chart legend">
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: totalHoursColor }} aria-hidden="true" />Hours</span>
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: DISTANCE_COLOR }} aria-hidden="true" />Total Distance</span>
-        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: HSR_COLOR }} aria-hidden="true" />HSR Inset</span>
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: HSR_COLOR }} aria-hidden="true" />HSR Distance</span>
       </div>
     </div>
   );

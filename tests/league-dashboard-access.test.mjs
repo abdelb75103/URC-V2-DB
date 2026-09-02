@@ -884,9 +884,8 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
 
   assert.match(dashboard, /Estimated Total Hours[\s\S]*Reported Distance/);
   assert.match(dashboard, /Estimated Exposure/);
-  assert.match(dashboard, /Distance and monthly bars show reported values only/);
   assert.match(dashboard, /14 source-backed clubs \+ 2 temporary estimates|sourceBackedTeamCount/);
-  assert.match(dashboard, /Awaiting source-backed exposure from/);
+  assert.doesNotMatch(dashboard, /Awaiting source-backed exposure from/);
   assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
   assert.match(dashboard, /Temporary Exposure Estimate/);
   assert.match(dashboard, /row\.included_exposure_status\.includes\('estimate'\)[\s\S]*?Est\./);
@@ -913,8 +912,7 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.doesNotMatch(dashboard, /\{ value: 'hsr', label: 'HSR' \}/);
   assert.doesNotMatch(dashboard, /exposurePreview|ExposureReviewPreview/);
   assert.match(dashboard, /HSR Distance/);
-  assert.match(dashboard, /Seasonal HSR/);
-  assert.match(dashboard, /League-mean placeholder pending source data/);
+  assert.doesNotMatch(dashboard, /Seasonal HSR/);
   assert.match(dashboard, /coverage\.data_quality_warnings/);
   const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));
   assert.match(exposureComparison, /League Mean/);
@@ -929,7 +927,10 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.match(dashboard, /distance_km/);
   assert.match(charts, /HsrInsetDistanceBar/);
   assert.match(charts, /hsr_distance_km/);
-  assert.match(charts, /hsr_percentage/);
+  assert.match(charts, /hsrPercentage\(payload\)/);
+  assert.match(charts, /name="Total Distance" fill=\{DISTANCE_COLOR\}/);
+  assert.match(charts, /\/\>HSR Distance/);
+  assert.doesNotMatch(charts, /horizontalInset|HSR Inset/);
   assert.match(charts, /HSR Percentage/);
   assert.match(charts, /hsrStatusLabel/);
   assert.doesNotMatch(charts, /firstReportedMonth/);
