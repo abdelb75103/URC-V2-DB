@@ -157,7 +157,7 @@ test("the full document emits one A4 page for each stable section", () => {
   assert.equal(result.pages, 13);
   assert.ok(result.bytes > 5_000);
   assert.match(result.text, /1,622 days\s*\/1,000 h/);
-  assert.match(result.coverText, /SCRIIPT Project/);
+  assert.match(result.coverText, /\bSCRIIPT\b/);
   assert.doesNotMatch(result.coverText, /Recorded injuries|Overall incidence|Burden/);
   assert.match(result.overviewText, /Season Overview/);
   assert.match(result.overviewText, /Overall Injuries/);
@@ -176,14 +176,20 @@ test("the full document emits one A4 page for each stable section", () => {
   assert.doesNotMatch(result.comparisonText, /Improved/);
   assert.doesNotMatch(result.comparisonText, /Publication record/);
   assert.match(result.text, /End of report/i);
-  assert.match(result.pageText(13), /SCRIIPT Project/);
-  assert.match(result.coverText.replace(/\s+/g, " "), /Surveillance of Continental Rugby Injury\/Illness and Performance Tracking/);
+  assert.match(result.pageText(13), /\bSCRIIPT\b/);
+  for (const page of [1, 13]) {
+    const cover = result.pageText(page).replace(/\s+/g, " ");
+    assert.match(cover, /SCRIIPT Surveillance of Continental Rugby Injury\/Illness and Performance Tracking/);
+    assert.doesNotMatch(cover, /Injury surveillance|INJURY SURVEILLANCE|SCRIIPT Project|Source 30 Aug|\d+ \/ 13/);
+  }
+  assert.match(result.overviewText, /Source 30 Aug 2026/);
+  assert.match(result.overviewText, /2 \/ 13/);
 });
 
 test("selected sections render in canonical PDF order", () => {
   const result = renderPdf(["season-methodology", "cover", "team-comparison"]);
   assert.equal(result.pages, 3);
-  assert.match(result.pageText(1), /SCRIIPT Project/);
+  assert.match(result.pageText(1), /\bSCRIIPT\b/);
   assert.match(result.pageText(2), /Team Comparison/);
   assert.match(result.pageText(3), /Season Comparison/);
   assert.doesNotMatch(result.pageText(2), /Season Comparison/);

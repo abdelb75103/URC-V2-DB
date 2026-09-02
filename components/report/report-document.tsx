@@ -64,7 +64,6 @@ const styles = StyleSheet.create({
   headRow: { flexDirection: "row", alignItems: "flex-end", borderBottomWidth: 1, borderBottomColor: C.line, paddingBottom: 3, marginBottom: 5 },
   split: { flexDirection: "row", marginHorizontal: -4 }, half: { width: "50%", paddingHorizontal: 4 }, third: { width: "33.333%", paddingHorizontal: 4 },
   footer: { position: "absolute", bottom: 13, left: 30, right: 30, flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: C.line, paddingTop: 5, color: C.muted, fontSize: 6.5 },
-  coverFooter: { borderTopColor: "#294565", color: "#C6D6E7" },
   metricGrid: { flexDirection: "row", flexWrap: "wrap", marginHorizontal: -3 }, metricCell: { padding: 3 },
   metricCard: { backgroundColor: C.white, borderRadius: 4, padding: 9, borderWidth: 1, borderColor: C.line, overflow: "hidden" },
   metricLabel: { color: C.ink, fontFamily: "Helvetica-Bold", fontSize: 7.2, letterSpacing: 0.2 },
@@ -129,7 +128,7 @@ function linearDomain(values: number[], count = 4): { low: number; high: number;
 }
 
 function Header({ model, section }: { model: ReportModel; section: ReportSectionId }) { return <View style={styles.header}><View style={styles.headerBrand}>{model.brand.crestDataUri && <Image src={model.brand.crestDataUri} style={styles.headerCrest} />}<Text style={styles.eyebrow}>URC injury surveillance</Text></View><Text style={styles.headerLabel}>{REPORT_SECTION_LABELS[section]}</Text></View>; }
-function Footer({ model, meta, cover = false }: { model: ReportModel; meta: ReportMetadata; cover?: boolean }) { return <View fixed style={[styles.footer, cover ? styles.coverFooter : {}]}><Text>{model.subjectName} | {model.season} | v{meta.version}</Text><Text>Source {formatDate(meta.sourceGeneratedAt)} | Exported {formatDate(meta.exportedAt)}</Text><Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} /></View>; }
+function Footer({ model, meta }: { model: ReportModel; meta: ReportMetadata }) { return <View fixed style={styles.footer}><Text>{model.subjectName} | {model.season} | v{meta.version}</Text><Text>Source {formatDate(meta.sourceGeneratedAt)} | Exported {formatDate(meta.exportedAt)}</Text><Text render={({ pageNumber, totalPages }) => `${pageNumber} / ${totalPages}`} /></View>; }
 function PageShell({ model, meta, section, children }: { model: ReportModel; meta: ReportMetadata; section: ReportSectionId; children: ReactNode }) { return <Page size="A4" style={styles.page}><Header model={model} section={section} />{children}<Footer model={model} meta={meta} /></Page>; }
 function PageTitle({ title, note }: { title: string; note: string }) { return <View><Text style={styles.title}>{title}</Text><Text style={styles.standfirst}>{note}</Text></View>; }
 function Panel({ title, note, children, fill = false }: { title?: string; note?: string; children: ReactNode; fill?: boolean }) { return <View style={[styles.panel, fill ? { height: "100%" } : {}]}>{title && <Text style={styles.panelTitle}>{title}</Text>}{note && <Text style={styles.panelNote}>{note}</Text>}{children}</View>; }
@@ -472,7 +471,7 @@ const LANE_METRICS: Array<{ metric: keyof ColourRow & string; label: string; uni
  * only the overall rows shown here, so a diagnosis carries the same colour in
  * the PDF as it does on the dashboard.
  */
-function CommonLanes({ rows, cardHeight = 49 }: { rows: readonly ReportProfileRow[]; cardHeight?: number }) {
+function CommonLanes({ rows }: { rows: readonly ReportProfileRow[] }) {
   const colours = commonInjuryColorMap(colourInput(rows));
   const overallRows = colourInput(rows.filter((row) => row.setting === "all"));
   return <View style={{ flexDirection: "row", marginHorizontal: -3 }}>
@@ -489,10 +488,11 @@ function CommonLanes({ rows, cardHeight = 49 }: { rows: readonly ReportProfileRo
           // entry. Only the text colour is re-picked, for legibility.
           const fill = cardFill(colours.get(row.code)?.background ?? C.navy);
           const text = readableOn(fill);
-          return <View key={row.code} style={{ backgroundColor: fill, borderRadius: 4, padding: 8, minHeight: cardHeight, marginBottom: 4, flexShrink: 0 }}>
-            <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 8.5, lineHeight: 1.25 }}>{index + 1}. {row.label}</Text>
-            <View style={{ flex: 1 }} />
-            <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 19 }}>{fmt(row[lane.metric] as number | null)}</Text>
+          // Same compact card as the illness lanes: the label grows to as many
+          // lines as it needs and the value sits directly under it.
+          return <View key={row.code} style={{ backgroundColor: fill, borderRadius: 3, padding: 5, minHeight: 62, marginBottom: 4, flexShrink: 0 }}>
+            <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 6.8, lineHeight: 1.2 }}>{index + 1}. {row.label}</Text>
+            <Text style={{ color: text, fontFamily: "Helvetica-Bold", fontSize: 12.5, marginTop: 4 }}>{fmt(row[lane.metric] as number | null)}</Text>
           </View>;
         })}
       </View>;
@@ -604,7 +604,7 @@ function ImpactMatrix({ rows, chartHeight = 250, gradientId }: { rows: readonly 
       { label: "One Measure Elevated", colour: "#F1EBBF", shape: "swatch" },
       { label: "Higher Incidence And Severity", colour: "#F4C3C4", shape: "swatch" },
     ]} />
-    <Caption>Key numbers run highest injury count first, and each key row ends with that diagnosis burden in days per 1,000 player-hours.{breaks.length ? ` The ${breaks.join(" and ")} axis does not start at zero, marked by the break on the axis.` : ""}{sparse ? " Interpret diagnoses based on one or two injuries cautiously." : ""}</Caption>
+    <Caption>Key numbers run highest injury count first, and each key row ends with the burden for that group in days per 1,000 player-hours.{breaks.length ? ` The ${breaks.join(" and ")} axis does not start at zero, marked by the break on the axis.` : ""}{sparse ? " Interpret groups based on one or two injuries cautiously." : ""}</Caption>
     <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 5, borderTopWidth: 1, borderTopColor: C.rule, paddingTop: 5 }}>
       {data.map((r, i) => <View key={`key-${r.code}`} style={{ width: "25%", flexDirection: "row", alignItems: "center", paddingRight: 6, marginBottom: 4, flexShrink: 0 }}>
         <View style={{ width: 11, height: 11, borderRadius: 5.5, backgroundColor: MATRIX_DOT, alignItems: "center", justifyContent: "center", marginRight: 4 }}>
@@ -976,15 +976,16 @@ function DiagnosisDriversPdf({ comparison }: { comparison: SeasonComparisonVisua
 function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <Page size="A4" style={styles.cover}>
     {model.brand.heroDataUri && <Image fixed src={model.brand.heroDataUri} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-    <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: C.navy, opacity: model.brand.heroDataUri ? .2 : 1 }} />
     {/* A left-to-right wash instead of a panel: the old 61%-wide overlay drew a
-        hard vertical seam down the cover. */}
+        hard vertical seam down the cover. It clears well before the athlete on
+        the right, so the type stays legible and the photograph stays visible. */}
     <View style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%" }}>
       <Svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
         <Defs>
           <LinearGradient id="cover-wash" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset={0} stopColor={C.navy} stopOpacity={0.9} />
-            <Stop offset={0.52} stopColor={C.navy} stopOpacity={0.78} />
+            <Stop offset={0} stopColor={C.navy} stopOpacity={0.88} />
+            <Stop offset={0.42} stopColor={C.navy} stopOpacity={0.7} />
+            <Stop offset={0.74} stopColor={C.navy} stopOpacity={0} />
             <Stop offset={1} stopColor={C.navy} stopOpacity={0} />
           </LinearGradient>
         </Defs>
@@ -994,7 +995,9 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
     <View style={{ position: "absolute", left: 0, top: 0, width: 6, height: "100%", backgroundColor: model.brand.accentColour }} />
     <View style={{ height: 48, flexDirection: "row", alignItems: "center", marginHorizontal: 30, marginTop: 30 }}>
       {model.brand.urcLogoDataUri && <Image src={model.brand.urcLogoDataUri} style={{ width: 31, height: 32, objectFit: "contain", marginRight: 10 }} />}
-      <View><Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 9, letterSpacing: 1.3 }}>URC INJURY SURVEILLANCE</Text><Text style={{ color: "#AFC1D4", fontSize: 6.5, marginTop: 3 }}>United Rugby Championship</Text></View>
+      {/* The old lockup repeated the cover title. It is the league wordmark now;
+          the title block carries the subject, season and SCRIIPT. */}
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 9, letterSpacing: 1.3 }}>UNITED RUGBY CHAMPIONSHIP</Text>
       <View style={{ flex: 1 }} />
       <Text style={{ color: "#AFC1D4", fontSize: 5.8, letterSpacing: .7, marginRight: 8 }}>IN PARTNERSHIP WITH</Text>
       {model.brand.partnerLogoDataUri && <Image src={model.brand.partnerLogoDataUri} style={{ width: 23, height: 32, objectFit: "contain" }} />}
@@ -1003,18 +1006,16 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
     <View style={{ flex: 1, width: "61%", justifyContent: "center", paddingRight: 18, marginLeft: 30 }}>
       <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 8, letterSpacing: 1.5 }}>{model.scope === "league" ? "LEAGUE REPORT" : "TEAM PERFORMANCE REPORT"}</Text>
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 36, lineHeight: 1.02, marginTop: 14 }}>{model.subjectName}</Text>
-      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 25, lineHeight: 1.04, marginTop: 3 }}>Injury surveillance</Text>
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 25, lineHeight: 1.04, marginTop: 3 }}>SCRIIPT</Text>
+      <Text style={{ color: "#C6D6E7", fontSize: 8, lineHeight: 1.35, marginTop: 5 }}>Surveillance of Continental Rugby Injury/Illness and Performance Tracking</Text>
       <View style={{ width: 54, height: 3, backgroundColor: model.brand.accentColour, marginTop: 18 }} />
       <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 16, marginTop: 13 }}>{model.season} season</Text>
-      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 20 }}>SCRIIPT Project</Text>
-      <Text style={{ color: "#C6D6E7", fontSize: 8, lineHeight: 1.35, marginTop: 4 }}>Surveillance of Continental Rugby Injury/Illness and Performance Tracking</Text>
     </View>
-    <View style={{ width: "61%", borderTopWidth: 1, borderTopColor: "#36516E", paddingTop: 13, marginLeft: 30, marginBottom: 64, flexDirection: "row" }}>
+    <View style={{ width: "61%", borderTopWidth: 1, borderTopColor: "#36516E", paddingTop: 13, marginLeft: 30, marginBottom: 34, flexDirection: "row" }}>
       <View style={{ width: "52%" }}><Text style={{ color: "#93A9C1", fontSize: 6.2, letterSpacing: .9 }}>ANALYSIS WINDOW</Text><Text style={{ color: C.white, fontSize: 8.5, marginTop: 4 }}>{formatDate(model.analysisWindow.start)} to {formatDate(model.analysisWindow.end)}</Text></View>
       <View style={{ width: "21%" }}><Text style={{ color: "#93A9C1", fontSize: 6.2, letterSpacing: .9 }}>VERSION</Text><Text style={{ color: C.white, fontSize: 8.5, marginTop: 4 }}>v{meta.version}</Text></View>
       <View style={{ width: "27%" }}><Text style={{ color: "#93A9C1", fontSize: 6.2, letterSpacing: .9 }}>EXPORTED</Text><Text style={{ color: C.white, fontSize: 8.5, marginTop: 4 }}>{formatDate(meta.exportedAt)}</Text></View>
     </View>
-    <Footer model={model} meta={meta} cover />
   </Page>;
 }
 
@@ -1073,7 +1074,7 @@ function InjuryLocation({ model, meta }: { model: ReportModel; meta: ReportMetad
 function CommonInjuries({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="common-injuries">
     <PageTitle title="Most Common Injuries" note="Each diagnosis keeps one colour across count, incidence, burden and severity." />
-    <Panel note="The top five released diagnoses for each measure. Each diagnosis keeps one colour across the four columns."><CommonLanes rows={model.injuryProfile.diagnoses} cardHeight={118} /></Panel>
+    <Panel note="The top five released diagnoses for each measure. Each diagnosis keeps one colour across the four columns."><CommonLanes rows={model.injuryProfile.diagnoses} /></Panel>
   </PageShell>;
 }
 const ILLNESS_LANES = [
@@ -1163,7 +1164,7 @@ function Exposure({ model, meta }: { model: ReportModel; meta: ReportMetadata })
     { key: "distance", label: exposure.totalDistanceLabel, value: fmt(exposure.totalDistanceKm, "", 0), unit: "km", colour: C.cyan },
     { key: "hsr", label: "HSR Distance", value: fmt(exposure.totalHsrDistanceKm, "", 0), unit: "km", colour: C.hsr },
   ];
-  const hsrNote = [`HSR Status: ${hsrStatus}.`, exposure.totalHsrPercentage === null ? "" : `HSR is ${fmt(exposure.totalHsrPercentage, "%")} of total distance.`, exposure.hsrDisplayNote ?? exposure.hsrSourceStatus ?? ""].filter(Boolean).join(" ");
+  const hsrNote = [`HSR Status: ${hsrStatus}.`, exposure.totalHsrPercentage === null ? "" : `HSR is ${fmt(exposure.totalHsrPercentage, "%")} of total distance.`, exposure.hsrDisplayNote ?? ""].filter(Boolean).join(" ");
   return <PageShell model={model} meta={meta} section="exposure">
     <PageTitle title="Exposure" note="The released denominator is shown over time and against the league cohort." />
     <StatCards cards={cards} />
@@ -1205,10 +1206,12 @@ function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMe
   </PageShell>;
 }
 
-function ClosingPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
+function ClosingPage({ model }: { model: ReportModel }) {
   return <Page size="A4" style={styles.cover}>
     {model.brand.heroDataUri && <Image fixed src={model.brand.heroDataUri} style={{ position: "absolute", left: -28, top: -24, width: "112%", height: "112%", objectFit: "cover" }} />}
-    <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: C.navy, opacity: model.brand.heroDataUri ? .7 : 1 }} />
+    {/* Centred type sits over the whole frame here, so this cover keeps a flat
+        scrim; it is light enough to leave the athlete readable. */}
+    <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: C.navy, opacity: model.brand.heroDataUri ? .5 : 1 }} />
     <View style={{ position: "absolute", left: 0, bottom: 0, width: "100%", height: 7, backgroundColor: model.brand.accentColour }} />
     <View style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 72 }}>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 30 }}>
@@ -1217,14 +1220,12 @@ function ClosingPage({ model, meta }: { model: ReportModel; meta: ReportMetadata
         <View style={{ alignItems: "center" }}><Text style={{ color: "#AFC1D4", fontSize: 5.8, letterSpacing: .8, marginBottom: 5 }}>IN PARTNERSHIP WITH</Text>{model.brand.partnerLogoDataUri && <Image src={model.brand.partnerLogoDataUri} style={{ width: 29, height: 42, objectFit: "contain" }} />}</View>
       </View>
       <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 8, letterSpacing: 1.7 }}>END OF REPORT</Text>
-      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 31, textAlign: "center", lineHeight: 1.03, marginTop: 14 }}>Injury surveillance</Text>
-      <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 16, textAlign: "center", marginTop: 8 }}>{model.subjectName} · {model.season}</Text>
-      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 11, textAlign: "center", marginTop: 14 }}>SCRIIPT Project</Text>
-      <Text style={{ color: "#C6D6E7", fontSize: 8, textAlign: "center", lineHeight: 1.35, marginTop: 4 }}>Surveillance of Continental Rugby Injury/Illness and Performance Tracking</Text>
+      <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 31, textAlign: "center", lineHeight: 1.03, marginTop: 14 }}>SCRIIPT</Text>
+      <Text style={{ color: "#C6D6E7", fontSize: 8, textAlign: "center", lineHeight: 1.35, marginTop: 6 }}>Surveillance of Continental Rugby Injury/Illness and Performance Tracking</Text>
+      <Text style={{ color: C.blue, fontFamily: "Helvetica-Bold", fontSize: 16, textAlign: "center", marginTop: 14 }}>{model.subjectName} · {model.season}</Text>
       <View style={{ width: 56, height: 3, backgroundColor: model.brand.accentColour, marginVertical: 23 }} />
       {model.scope === "team" && model.brand.crestDataUri && <View style={{ width: 78, height: 78, borderRadius: 8, backgroundColor: C.white, padding: 11, alignItems: "center", justifyContent: "center" }}><Image src={model.brand.crestDataUri} style={{ width: 56, height: 56, objectFit: "contain" }} /></View>}
     </View>
-    <Footer model={model} meta={meta} cover />
   </Page>;
 }
 
@@ -1235,7 +1236,7 @@ const sectionPages: Record<ReportSectionId, (model: ReportModel, meta: ReportMet
   "diagnosis-matrix": (m, x) => <DiagnosisMatrix model={m} meta={x} />, illnesses: (m, x) => <Illnesses model={m} meta={x} />, "impact-matrices": (m, x) => <ImpactMatrices model={m} meta={x} />,
   "injury-types": (m, x) => <InjuryTypes model={m} meta={x} />, exposure: (m, x) => <Exposure model={m} meta={x} />,
   "team-comparison": (m, x) => <TeamComparison model={m} meta={x} />, "season-methodology": (m, x) => <SeasonMethodology model={m} meta={x} />,
-  closing: (m, x) => <ClosingPage model={m} meta={x} />,
+  closing: (m) => <ClosingPage model={m} />,
 };
 export function enabledReportSections(sectionIds?: readonly ReportSectionId[]) { return orderedReportSectionIds(sectionIds); }
 export function ReportDocument({ model, enabledSectionIds }: { model: ReportModel; enabledSectionIds?: readonly ReportSectionId[] }) { if (model.schemaVersion !== "urc-report-v1") throw new Error("Unsupported report model schema"); const meta = metadata(model); return <Document title={`${model.subjectName} injury surveillance report ${model.season}`} author="United Rugby Championship" subject={`Released aggregate injury surveillance metrics | ${meta.version}`} creator="URC injury surveillance" language="en-IE" creationDate={new Date(meta.exportedAt)}>{enabledReportSections(enabledSectionIds).map((section) => cloneElement(sectionPages[section](model, meta), { key: section }))}</Document>; }
