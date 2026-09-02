@@ -87,8 +87,7 @@ create trigger hsr_source_observation_events_v1_immutable
 before update or delete on analysis.hsr_source_observation_events_v1
 for each row execute function analysis.reject_hsr_reporting_mutation_v1();
 
-create view analysis.hsr_active_curated_exposure_rows_v1
-with (security_invoker = false) as
+create materialized view analysis.hsr_active_curated_exposure_rows_v1 as
 select exposure.id as curated_exposure_id, exposure.source_row_id,
   exposure.team_key, exposure.season, exposure.distance_m_clean,
   source.source_values ->> 'source_file_sha256' as accepted_source_file_sha256,
@@ -100,6 +99,14 @@ join curated.builds build on build.id = exposure.curated_build_id
 join ingestion.source_rows source on source.id = exposure.source_row_id
 where build.status = 'active'
   and exposure.season in ('2024-25', '2025-26');
+
+create unique index hsr_active_curated_exposure_rows_v1_locator
+  on analysis.hsr_active_curated_exposure_rows_v1 (
+    season, team_key, accepted_source_file_sha256,
+    (coalesce(accepted_source_sheet, '')),
+    accepted_source_row_number, accepted_source_row_sha256
+  );
+analyze analysis.hsr_active_curated_exposure_rows_v1;
 
 create unique index hsr_source_observation_events_v1_active_lookup
   on analysis.hsr_source_observation_events_v1 (source_row_id, event_id desc);
@@ -181,6 +188,8 @@ set search_path = pg_catalog, pg_temp as $$
 declare
   metadata_count integer;
   observation_count bigint;
+  zebre_mismatch_count bigint;
+  zebre_mismatch_sha256 text;
 begin
   if parameter_payload_sha256 !~ '^[0-9a-f]{64}$'
     or jsonb_typeof(payload) <> 'array'
@@ -268,27 +277,59 @@ begin
   if exists (
     with incoming as (select * from analysis.hsr_payload_observations_v1(payload)), resolved as (
       select incoming.*, active.curated_exposure_id,
-        source.id as resolved_source_row_id,
+        active.source_row_id as resolved_source_row_id,
         active.distance_m_clean
       from incoming
       left join analysis.hsr_active_curated_exposure_rows_v1 active
-        on active.team_key = incoming.team_key and active.season = incoming.season
-      left join ingestion.source_rows source on source.id = active.source_row_id
-        and source.source_values ->> 'source_file_sha256' = incoming.accepted_source_file_sha256
-        and coalesce(source.source_values ->> 'source_sheet', '')
+        on active.team_key = incoming.team_key
+        and active.season = incoming.season
+        and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
+        and coalesce(active.accepted_source_sheet, '')
           = coalesce(incoming.accepted_source_sheet, '')
-        and source.source_values ->> 'source_row_number' = incoming.accepted_source_row_number
-        and source.source_values ->> 'source_row_sha256' = incoming.accepted_source_row_sha256
+        and active.accepted_source_row_number = incoming.accepted_source_row_number
+        and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
     )
     select 1 from resolved
     where resolved_source_row_id is null
       or (hsr_distance_m is null and nullif(blank_reason, '') is null)
       or (hsr_distance_m is not null and blank_reason is not null)
-      or accepted_total_distance_m is distinct from distance_m_clean
+      or (accepted_total_distance_m is distinct from distance_m_clean
+        and not (season = '2025-26' and team_key = 'zebre'))
       or (hsr_distance_m is not null and distance_m_clean is not null
         and hsr_distance_m > distance_m_clean)
   ) then
     raise exception 'HSR observations must resolve to one active accepted exposure row with a valid same-row distance';
+  end if;
+
+  with incoming as (select * from analysis.hsr_payload_observations_v1(payload))
+    select count(*), encode(extensions.digest(convert_to(
+      jsonb_agg(jsonb_build_array(
+        incoming.season, incoming.team_key, incoming.accepted_source_file_sha256,
+        coalesce(incoming.accepted_source_sheet, ''), incoming.accepted_source_row_number,
+        incoming.accepted_source_row_sha256, incoming.accepted_total_distance_m,
+        active.distance_m_clean
+      ) order by incoming.accepted_source_file_sha256,
+        coalesce(incoming.accepted_source_sheet, ''),
+        incoming.accepted_source_row_number, incoming.accepted_source_row_sha256)::text,
+      'UTF8'), 'sha256'), 'hex')
+    into zebre_mismatch_count, zebre_mismatch_sha256
+    from incoming
+    join analysis.hsr_active_curated_exposure_rows_v1 active
+      on active.team_key = incoming.team_key
+      and active.season = incoming.season
+      and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
+      and coalesce(active.accepted_source_sheet, '')
+        = coalesce(incoming.accepted_source_sheet, '')
+      and active.accepted_source_row_number = incoming.accepted_source_row_number
+      and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
+    where incoming.season = '2025-26' and incoming.team_key = 'zebre'
+      and incoming.accepted_total_distance_m is distinct from active.distance_m_clean;
+
+  if zebre_mismatch_count <> 976
+    or zebre_mismatch_sha256 is distinct from
+      '8f056d74844db183ccfda9692cbdad4682e3592c6c8e76fb2c7e7c9021952746'
+  then
+    raise exception 'HSR payload must retain the exact 976 known Zebre accepted-distance anomaly rows';
   end if;
 
   if exists (
@@ -296,13 +337,13 @@ begin
     select 1
     from incoming
     join analysis.hsr_active_curated_exposure_rows_v1 active
-      on active.team_key = incoming.team_key and active.season = incoming.season
-    join ingestion.source_rows source on source.id = active.source_row_id
-      and source.source_values ->> 'source_file_sha256' = incoming.accepted_source_file_sha256
-      and coalesce(source.source_values ->> 'source_sheet', '')
+      on active.team_key = incoming.team_key
+      and active.season = incoming.season
+      and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
+      and coalesce(active.accepted_source_sheet, '')
         = coalesce(incoming.accepted_source_sheet, '')
-      and source.source_values ->> 'source_row_number' = incoming.accepted_source_row_number
-      and source.source_values ->> 'source_row_sha256' = incoming.accepted_source_row_sha256
+      and active.accepted_source_row_number = incoming.accepted_source_row_number
+      and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
     group by incoming.season, incoming.team_key, incoming.accepted_source_file_sha256,
       incoming.accepted_source_sheet, incoming.accepted_source_row_number,
       incoming.accepted_source_row_sha256
@@ -330,13 +371,13 @@ begin
       select incoming.*, active.source_row_id
       from incoming
       join analysis.hsr_active_curated_exposure_rows_v1 active
-        on active.team_key = incoming.team_key and active.season = incoming.season
-      join ingestion.source_rows source on source.id = active.source_row_id
-        and source.source_values ->> 'source_file_sha256' = incoming.accepted_source_file_sha256
-        and coalesce(source.source_values ->> 'source_sheet', '')
+        on active.team_key = incoming.team_key
+        and active.season = incoming.season
+        and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
+        and coalesce(active.accepted_source_sheet, '')
           = coalesce(incoming.accepted_source_sheet, '')
-        and source.source_values ->> 'source_row_number' = incoming.accepted_source_row_number
-        and source.source_values ->> 'source_row_sha256' = incoming.accepted_source_row_sha256
+        and active.accepted_source_row_number = incoming.accepted_source_row_number
+        and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
     )
     select 1 from resolved join analysis.hsr_source_observation_events_v1 stored
       on stored.source_row_id = resolved.source_row_id
@@ -376,13 +417,13 @@ begin
       metadata.units, metadata.threshold_or_zone, metadata.comparability_status
     from incoming
     join analysis.hsr_active_curated_exposure_rows_v1 active
-      on active.team_key = incoming.team_key and active.season = incoming.season
-    join ingestion.source_rows source on source.id = active.source_row_id
-      and source.source_values ->> 'source_file_sha256' = incoming.accepted_source_file_sha256
-      and coalesce(source.source_values ->> 'source_sheet', '')
+      on active.team_key = incoming.team_key
+      and active.season = incoming.season
+      and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
+      and coalesce(active.accepted_source_sheet, '')
         = coalesce(incoming.accepted_source_sheet, '')
-      and source.source_values ->> 'source_row_number' = incoming.accepted_source_row_number
-      and source.source_values ->> 'source_row_sha256' = incoming.accepted_source_row_sha256
+      and active.accepted_source_row_number = incoming.accepted_source_row_number
+      and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
     join analysis.hsr_team_season_metadata_v1 metadata
       on metadata.team_key = incoming.team_key and metadata.season = incoming.season
   )
@@ -545,12 +586,12 @@ left join means using (season, month_start);
 
 create view analysis.hsr_dashboard_team_display_v1
 with (security_invoker = false) as
-select monthly.season, monthly.team_key,
+select metadata.season, metadata.team_key,
   sum(monthly.actual_hsr_distance_km) as actual_hsr_distance_km,
   sum(monthly.hsr_distance_km) as hsr_distance_km,
   100 * sum(monthly.hsr_distance_km * 1000)
     / nullif(sum(monthly.display_denominator_m), 0) as hsr_percentage,
-  bool_or(monthly.is_imputed) as is_imputed,
+  coalesce(bool_or(monthly.is_imputed), false) as is_imputed,
   case when bool_or(monthly.is_imputed)
     then 'season_month_pooled_valid_hsr_percentage_v1' end as imputation_method,
   case when bool_or(monthly.is_imputed)
@@ -566,20 +607,20 @@ select monthly.season, monthly.team_key,
     when metadata.source_available then 'source_blank_unknown'
     else 'source_unavailable' end as hsr_source_status,
   metadata.accepted_row_count as source_row_count,
-  sum(monthly.valid_paired_row_count)::bigint as valid_paired_row_count,
+  coalesce(sum(monthly.valid_paired_row_count), 0)::bigint as valid_paired_row_count,
   count(*) filter (where monthly.valid_paired_row_count > 0)::integer as actual_month_count,
   count(*) filter (where monthly.is_imputed)::integer as placeholder_month_count,
   metadata.units, metadata.threshold_or_zone, metadata.comparability_status,
-  case when monthly.season = '2025-26'
-      and (monthly.team_key = 'zebre' or bool_or(monthly.is_imputed))
+  case when metadata.season = '2025-26'
+      and (metadata.team_key = 'zebre' or bool_or(monthly.is_imputed))
     then jsonb_build_array(
-      'The accepted Zebre total-distance anomaly remains uncorrected and affects league-mean placeholders.'
+      'The Zebre source total-distance anomaly was corrected in the accepted exposure release. HSR uses those corrected distances.'
     )
     else '[]'::jsonb end as data_quality_warnings
-from analysis.hsr_dashboard_monthly_display_v1 monthly
-join analysis.hsr_team_season_metadata_v1 metadata
+from analysis.hsr_team_season_metadata_v1 metadata
+left join analysis.hsr_dashboard_monthly_display_v1 monthly
   on metadata.season = monthly.season and metadata.team_key = monthly.team_key
-group by monthly.season, monthly.team_key, metadata.source_available,
+group by metadata.season, metadata.team_key, metadata.source_available,
   metadata.accepted_row_count, metadata.units, metadata.threshold_or_zone,
   metadata.comparability_status;
 
@@ -640,7 +681,7 @@ select aggregate_values.season,
   'not_cross_team_comparable'::text as comparability_status,
   case when aggregate_values.season = '2025-26'
     then jsonb_build_array(
-      'The accepted Zebre total-distance anomaly remains uncorrected and affects league-mean placeholders.'
+      'The Zebre source total-distance anomaly was corrected in the accepted exposure release. HSR uses those corrected distances.'
     )
     else '[]'::jsonb end as data_quality_warnings
 from aggregate_values join coverage using (season);

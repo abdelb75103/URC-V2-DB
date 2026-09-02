@@ -27,10 +27,12 @@ values (
   '20260902010000',
   'urc_hsr_reporting_v8',
   array[
-    'migration_sha256=4bfb3ac841238953c59c72aa65c36c76f289d543e9fb4ffc08751e7b78360b22',
+    'migration_sha256=46ba9e9f5d5fa0f3a01e8e3c2330984e418cbc15d2412089c7a2b145031e3b78',
     'parameter_payload_sha256=821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149',
     'rule_version=hsr_source_to_display_reporting_2026_09_02_v1',
     'predecessor=20260901021000_urc_diagnosis_family_materialized_reader_boundary',
+    'zebre_2025_26_accepted_distance_mismatch_rows=976',
+    'zebre_2025_26_accepted_distance_mismatch_sha256=8f056d74844db183ccfda9692cbdad4682e3592c6c8e76fb2c7e7c9021952746',
     'scope=private_row_lineage_and_reporting_v8_no_source_curated_or_release_mutation'
   ]
 )
@@ -44,10 +46,12 @@ begin
     where version = '20260902010000'
       and name = 'urc_hsr_reporting_v8'
       and statements = array[
-        'migration_sha256=4bfb3ac841238953c59c72aa65c36c76f289d543e9fb4ffc08751e7b78360b22',
+        'migration_sha256=46ba9e9f5d5fa0f3a01e8e3c2330984e418cbc15d2412089c7a2b145031e3b78',
         'parameter_payload_sha256=821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149',
         'rule_version=hsr_source_to_display_reporting_2026_09_02_v1',
         'predecessor=20260901021000_urc_diagnosis_family_materialized_reader_boundary',
+        'zebre_2025_26_accepted_distance_mismatch_rows=976',
+        'zebre_2025_26_accepted_distance_mismatch_sha256=8f056d74844db183ccfda9692cbdad4682e3592c6c8e76fb2c7e7c9021952746',
         'scope=private_row_lineage_and_reporting_v8_no_source_curated_or_release_mutation'
       ]
   )

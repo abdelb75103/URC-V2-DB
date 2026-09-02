@@ -1680,11 +1680,7 @@ function ExposureTab({
   const placeholderNote = coverage.display_note
     ?? monthlyRows.find((row) => row.is_imputed && row.display_note)?.display_note
     ?? 'League-mean placeholder pending source data.';
-  const hsrWarnings = [...(coverage.data_quality_warnings ?? [])];
-  if (dashboard.season === '2025-26' && (dashboard.scope === 'league' || /zebre/i.test(teamName ?? ''))
-    && !hsrWarnings.some((warning) => /zebre/i.test(warning))) {
-    hsrWarnings.push('Zebre 2025-26 accepted total-distance anomaly remains visible and has not been corrected in this dashboard.');
-  }
+  const hsrWarnings = coverage.data_quality_warnings ?? [];
   const options: Array<{ value: ExposureMeasure; label: string }> = [
     { value: 'hours', label: 'Hours' },
     { value: 'distance', label: 'Distance' },
@@ -1757,7 +1753,10 @@ function ExposureTab({
             {dashboard.scope === 'league' && typeof coverage.hsr_contributor_count === 'number'
               && ` ${coverage.hsr_contributor_count} source-backed HSR team${coverage.hsr_contributor_count === 1 ? '' : 's'}.`}
           </p>
-          {hasHsrPlaceholder && <p role="note">League-mean placeholder pending source data. {placeholderNote}</p>}
+          {hasHsrPlaceholder && <p role="note">{placeholderNote}</p>}
+          {coverage.hsr_source_status === 'source_unavailable' && (
+            <p role="note">HSR source data is unavailable. No distance placeholder is shown without an accepted total-distance denominator.</p>
+          )}
           <p>HSR definitions are team-specific. Threshold or Zone: {coverage.threshold_or_zone ?? 'Unknown'}. Units: {coverage.units ?? 'Unknown'}. Cross-team comparability is not implied.</p>
         </div>
       </Panel>

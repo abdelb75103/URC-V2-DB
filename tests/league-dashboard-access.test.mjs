@@ -915,7 +915,7 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.match(dashboard, /HSR Distance/);
   assert.match(dashboard, /Seasonal HSR/);
   assert.match(dashboard, /League-mean placeholder pending source data/);
-  assert.match(dashboard, /Zebre 2025-26 accepted total-distance anomaly/);
+  assert.match(dashboard, /coverage\.data_quality_warnings/);
   const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));
   assert.match(exposureComparison, /League Mean/);
   assert.doesNotMatch(exposureComparison, /\(dotted line\)/);
@@ -931,7 +931,7 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.match(charts, /hsr_distance_km/);
   assert.match(charts, /hsr_percentage/);
   assert.match(charts, /HSR Percentage/);
-  assert.match(charts, /League-mean placeholder/);
+  assert.match(charts, /hsrStatusLabel/);
   assert.doesNotMatch(charts, /firstReportedMonth/);
   // Monthly charts drop pre-September months first (decision, 25 July 2026,
   // site-wide), then still open on the club's own first reported month.
