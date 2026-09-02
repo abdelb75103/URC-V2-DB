@@ -37,7 +37,7 @@ export const teams: Team[] = [
   { id: 'zebre', name: 'Zebre', crest: `${CREST}/ZebreRugby.svg.png`, accent: '#FFC72C', accentSecondary: '#000000', status: 'live' },
   // Scotland
   { id: 'edinburgh', name: 'Edinburgh', crest: `${CREST}/Edinburgh_Rugby_logo_2018.svg.png`, accent: '#002D56', accentSecondary: '#E87722', status: 'live' },
-  { id: 'glasgow', name: 'Glasgow', crest: `${CREST}/GlasgowRugby.svg.png`, accent: '#00A3E0', accentSecondary: '#000000', status: 'live' },
+  { id: 'glasgow', name: 'Glasgow Warriors', crest: `${CREST}/GlasgowRugby.svg.png`, accent: '#00A3E0', accentSecondary: '#000000', status: 'live' },
 ];
 
 export const getTeamById = (id: string): Team | undefined =>

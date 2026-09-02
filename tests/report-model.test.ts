@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import test from "node:test";
+import { teams } from "../config/teams";
 import { assertReportModelPrivacy, buildReportModel, DEFAULT_REPORT_SECTION_IDS, filterReportSectionIds } from "../lib/report-model";
 import { REPORT_SECTION_LABELS } from "../lib/report-model-types";
 import { dashboardFixture, priorDashboardFixture } from "./report-fixtures";
 import { buildReportComparisonRows } from "../lib/report-comparison";
 import type { TeamComparisonRow } from "../lib/reporting-types";
+
+test("canonical team names match every accepted parity payload", async () => {
+  const configuredNames = new Map(teams.map((team) => [team.id, team.name]));
+  const files = (await readdir("content/reporting"))
+    .filter((file) => /_dashboard_20(?:24-25|25-26)\.json$/.test(file) && !file.startsWith("urc_"));
+
+  assert.equal(files.length, 32);
+  for (const file of files) {
+    const teamId = file.split("_dashboard_")[0];
+    const payload = JSON.parse(await readFile(join("content/reporting", file), "utf8")) as { team: string };
+    assert.equal(payload.team, configuredNames.get(teamId), file);
+  }
+});
 
 test("builds a narrow team report model from approved current and prior payloads", () => {
   const model = buildReportModel({
