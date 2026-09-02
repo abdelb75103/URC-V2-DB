@@ -15,7 +15,7 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `applied-and-verified-reporting-successor`: both migrations are committed and checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`. The scientific verifier and actual restricted reader pass. All V7 payload digests remain unchanged. Dashboard browser acceptance is in progress. |
+| Status | `applied-and-verified-reporting-successor`: all three migrations are committed and checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`. The scientific verifier, actual restricted reader and local dashboard browser checks pass. All V7 payload digests remain unchanged. Access controls and the private-review boundary are unchanged. |
 | Rule version | `hsr_source_to_display_reporting_2026_09_02_v1`; dashboard reader `v8`. |
 | Carry-forward | `carries-forward`: row-resolution, null and display rules are versioned. The current 16/16 and 14/16 source-availability states, source blanks, mapping evidence and the Zebre warning are season-specific. |
 | Evidence | `docs/evidence/hsr_exposure_mapping_manifest.json`; `docs/evidence/hsr_exposure_validation_report.json`; flat parameter payload SHA-256 `821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149`. |
@@ -42,7 +42,11 @@ The display view uses explicit join keys where earlier joins expose duplicate co
 
 **Reader attestation correction.** The real restricted account could read V8 payloads but could not evaluate the attestation's private object names. Additive migration `20260902020000_urc_hsr_reader_attestation_oid_fix.sql`, SHA-256 `bee1b599918457968d0a73408e7cf7d22f91563731d4faf53f63d65b522db148`, binds those names as `regclass` and `regprocedure` constants when the view is created. It changes no grants or payload calculations. The real-reader regression command is `node --env-file=.env.local --conditions=react-server --import tsx scripts/verify-hsr-web-reader.ts`.
 
+**Month-key correction.** The released seasons use both `Mon YYYY` and `YYYY-MM` monthly labels. Additive migration `20260902030000_urc_hsr_month_key_compatibility.sql`, SHA-256 `5695cb6433a89700617b74bac22341aa8cc167ad849c769f4710498e5a0a612a`, matches both formats in the two V8 reader joins without changing V7 labels, ordering or values. Positive monthly-presence assertions reproduced the missing 2025-26 HSR bars before the correction and pass afterwards. Null-range checks alone did not catch this missing join.
+
 **Live acceptance.** All 166,207 observations pass lineage, status and display checks. Both league dashboards and all 32 team-season dashboards pass the actual `web_reader` target check and strict payload parser. League actual HSR is 14,864.04417509749 km with 16 contributors in 2024-25 and 14,663.20446359738 km with 14 contributors in 2025-26. Pooled paired HSR percentages are 6.010161460533192% and 5.5377130380534085%. Benetton and Edinburgh 2025-26 retain null HSR without imputation. The four prior V7 league/team payload digests match their pre-migration values. Production build, TypeScript and 37 targeted dashboard checks pass. Existing report changes are retained; further PDF work and verification are deferred at Abdel's request.
+
+**Rendered dashboard acceptance.** Both league seasons and all 32 team-season Exposure pages pass local browser checks. The chart shows full-width HSR distance sections and monthly percentages; Total Distance bars and legend indicators share cyan `#02d5f0`. The source-coverage notice and Seasonal HSR panel were removed at Abdel's request. Estimated-hour labels, tooltip status and data-quality warnings remain. Desktop and representative mobile checks show no horizontal overflow. A pre-existing Glasgow page-load failure was corrected by using its approved canonical name and excluding only its own configured aliases from its report denylist. Both Glasgow seasons load with HTTP 200; the generic privacy guard still rejects other club names. This was a dashboard-load repair, not PDF redesign.
 
 ---
 
