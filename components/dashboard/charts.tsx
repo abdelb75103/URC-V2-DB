@@ -220,7 +220,7 @@ function HsrInsetDistanceBar({ x, y, width, height, payload }: BarShapeProps) {
         />
       )}
       {hasInset && percentage !== null && (
-        <text x={x + width / 2} y={y + height - insetHeight - 5} fill="#e2e8f0" fontSize={10} fontWeight={700} textAnchor="middle">
+        <text className="hidden sm:block" x={x + width / 2} y={y + height - insetHeight - 5} fill="#e2e8f0" fontSize={10} fontWeight={700} textAnchor="middle">
           {number(percentage, 1)}%
         </text>
       )}
