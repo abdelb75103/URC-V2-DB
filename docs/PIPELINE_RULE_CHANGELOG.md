@@ -15,7 +15,7 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 | Field | Value |
 |---|---|
-| Status | `applied-and-verified-reporting-successor`: the additive migration is committed and checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`. The scientific verifier passes and all V7 payload digests remain unchanged. Dashboard reader and browser acceptance are in progress. |
+| Status | `applied-and-verified-reporting-successor`: both migrations are committed and checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`. The scientific verifier and actual restricted reader pass. All V7 payload digests remain unchanged. Dashboard browser acceptance is in progress. |
 | Rule version | `hsr_source_to_display_reporting_2026_09_02_v1`; dashboard reader `v8`. |
 | Carry-forward | `carries-forward`: row-resolution, null and display rules are versioned. The current 16/16 and 14/16 source-availability states, source blanks, mapping evidence and the Zebre warning are season-specific. |
 | Evidence | `docs/evidence/hsr_exposure_mapping_manifest.json`; `docs/evidence/hsr_exposure_validation_report.json`; flat parameter payload SHA-256 `821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149`. |
@@ -41,6 +41,8 @@ The monthly query's original plan estimated one 2025-26 exposure row and chose a
 The display view uses explicit join keys where earlier joins expose duplicate column names. Before the final import, all reporting definitions compiled successfully in a rollback-only check with materialised views left unpopulated. This catches definition errors without repeating the bulk import.
 
 **Reader attestation correction.** The real restricted account could read V8 payloads but could not evaluate the attestation's private object names. Additive migration `20260902020000_urc_hsr_reader_attestation_oid_fix.sql`, SHA-256 `bee1b599918457968d0a73408e7cf7d22f91563731d4faf53f63d65b522db148`, binds those names as `regclass` and `regprocedure` constants when the view is created. It changes no grants or payload calculations. The real-reader regression command is `node --env-file=.env.local --conditions=react-server --import tsx scripts/verify-hsr-web-reader.ts`.
+
+**Live acceptance.** All 166,207 observations pass lineage, status and display checks. Both league dashboards and all 32 team-season dashboards pass the actual `web_reader` target check and strict payload parser. League actual HSR is 14,864.04417509749 km with 16 contributors in 2024-25 and 14,663.20446359738 km with 14 contributors in 2025-26. Pooled paired HSR percentages are 6.010161460533192% and 5.5377130380534085%. Benetton and Edinburgh 2025-26 retain null HSR without imputation. The four prior V7 league/team payload digests match their pre-migration values. Production build, TypeScript and 37 targeted dashboard checks pass. Existing report changes are retained; further PDF work and verification are deferred at Abdel's request.
 
 ---
 
