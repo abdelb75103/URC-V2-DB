@@ -45,10 +45,10 @@ test("web reader target proof accepts only the approved project and least-privil
 test("reporting queries obtain database attestation before each reader SQL statement", async () => {
   const reporting = await readFile(new URL("../lib/reporting.ts", import.meta.url), "utf8");
   assert.match(reporting, /approvedWebReaderQuery/);
-  assert.match(reporting, /reporting\.approved_dashboard_reader_target_v7/);
+  assert.match(reporting, /reporting\.approved_dashboard_reader_target_v8/);
   assert.match(reporting, /target_attested/);
   assert.doesNotMatch(reporting, /pool\.query/);
-  assert.match(reporting, /pool\.connect\(\)[\s\S]*begin transaction read only[\s\S]*approved_dashboard_reader_target_v7[\s\S]*client\.query<any, any\[]>\(sql, values\)/);
+  assert.match(reporting, /pool\.connect\(\)[\s\S]*begin transaction read only[\s\S]*approved_dashboard_reader_target_v8[\s\S]*client\.query<any, any\[]>\(sql, values\)/);
 });
 
 test("attestation and dashboard SQL run on one read-only database session", async () => {
@@ -64,7 +64,7 @@ test("attestation and dashboard SQL run on one read-only database session", asyn
     connect: async () => ({
       query: async (sql) => {
         statements.push(sql.trim());
-        if (sql.includes("approved_dashboard_reader_target_v7")) {
+        if (sql.includes("approved_dashboard_reader_target_v8")) {
           return { rows: [{ target_attested: true }] };
         }
         return { rows: [] };
@@ -77,8 +77,8 @@ test("attestation and dashboard SQL run on one read-only database session", asyn
     const { getTeamDashboard } = await loadTargetModule();
     assert.equal(await getTeamDashboard("fixture-team", "2025-26"), undefined);
     assert.match(statements[0], /^begin transaction read only$/i);
-    assert.match(statements[1], /approved_dashboard_reader_target_v7/);
-    assert.match(statements[2], /latest_team_dashboard_v7/);
+    assert.match(statements[1], /approved_dashboard_reader_target_v8/);
+    assert.match(statements[2], /latest_team_dashboard_v8/);
     assert.match(statements[3], /^commit$/i);
     assert.equal(released, true);
   } finally {

@@ -87,6 +87,8 @@ create trigger hsr_source_observation_events_v1_immutable
 before update or delete on analysis.hsr_source_observation_events_v1
 for each row execute function analysis.reject_hsr_reporting_mutation_v1();
 
+select set_config('application_name', 'urc_hsr_v8:active_locator_materialisation', true);
+
 create materialized view analysis.hsr_active_curated_exposure_rows_v1 as
 select exposure.id as curated_exposure_id, exposure.source_row_id,
   exposure.team_key, exposure.season, exposure.distance_m_clean,
@@ -127,88 +129,91 @@ revoke all on analysis.hsr_active_curated_exposure_rows_v1,
   analysis.hsr_active_source_observations_v1
 from public, anon, authenticated, web_reader;
 
-create function analysis.hsr_payload_team_seasons_v1(payload jsonb)
-returns table (
-  season text, team_key text, accepted_exposure_sha256 text,
-  canonical_output_sha256 text, mapping_sha256 text, source_available boolean,
-  source_mode text, units text, threshold_or_zone text,
-  comparability_status text, source_gap_reason text, accepted_row_count bigint,
-  actual_hsr_row_count bigint, blank_hsr_row_count bigint
-) language sql immutable strict
-set search_path = pg_catalog, pg_temp as $$
-  select item.season, item.team_key, item.accepted_exposure_sha256,
-    item.canonical_output_sha256, item.mapping_sha256, item.source_available,
-    item.source_mode, item.units, item.threshold_or_zone,
-    item.comparability_status, item.gap_reason, item.accepted_row_count,
-    item.canonical_populated_row_count, item.canonical_blank_row_count
-  from jsonb_to_recordset(payload) as item(
-    kind text, season text, team_key text,
-    accepted_exposure_sha256 text, canonical_output_sha256 text,
-    mapping_sha256 text, source_available boolean, source_mode text,
-    units text, threshold_or_zone text, comparability_status text,
-    gap_reason text, accepted_row_count bigint,
-    canonical_populated_row_count bigint, canonical_blank_row_count bigint
-  ) where item.kind = 'team_season';
-$$;
-
-create function analysis.hsr_payload_observations_v1(payload jsonb)
-returns table (
-  season text, team_key text, accepted_source_file_sha256 text,
-  accepted_source_sheet text, accepted_source_row_number text,
-  accepted_source_row_sha256 text, accepted_total_distance_m numeric, hsr_distance_m numeric,
-  blank_reason text, hsr_source_file_sha256 text, hsr_source_sheet text,
-  hsr_source_row_number text, hsr_source_row_sha256 text
-) language sql immutable strict
-set search_path = pg_catalog, pg_temp as $$
-  select item.season, item.team_key,
-    item.accepted_locator ->> 'source_file_sha256',
-    item.accepted_locator ->> 'source_sheet',
-    item.accepted_locator ->> 'source_row_number',
-    item.accepted_locator ->> 'source_row_sha256',
-    item.accepted_total_distance_m, item.hsr_distance_m, item.blank_reason,
-    null::text, null::text, null::text,
-    nullif(item.hsr_source_row_sha256, '')
-  from jsonb_to_recordset(payload) as item(
-    kind text, season text, team_key text, accepted_locator jsonb,
-    accepted_total_distance_m numeric, blank_reason text,
-    hsr_distance_m numeric, hsr_source_row_sha256 text
-  ) where item.kind = 'observation';
-$$;
-
-revoke execute on function analysis.hsr_payload_team_seasons_v1(jsonb),
-  analysis.hsr_payload_observations_v1(jsonb)
-from public, anon, authenticated, web_reader;
-
-create function analysis.apply_hsr_payload_v1(
-  payload jsonb,
-  parameter_payload_sha256 text
-)
-returns void language plpgsql security definer
-set search_path = pg_catalog, pg_temp as $$
+do $$
 declare
   metadata_count integer;
   observation_count bigint;
   zebre_mismatch_count bigint;
   zebre_mismatch_sha256 text;
+  attested_payload_sha256 text;
 begin
-  if parameter_payload_sha256 !~ '^[0-9a-f]{64}$'
-    or jsonb_typeof(payload) <> 'array'
-    or jsonb_array_length(payload) <> 166239
+  perform set_config('application_name', 'urc_hsr_v8:payload_staging', true);
+
+  if to_regclass('pg_temp._pipeline_params') is null
+    or to_regclass('pg_temp._pipeline_params_attestation') is null
+    or (select count(*) from _pipeline_params) <> 166239
+    or (select count(*) from _pipeline_params_attestation) <> 1
   then
+    raise exception 'HSR migration requires one checksum-attested _pipeline_params payload';
+  end if;
+
+  select payload_sha256 into strict attested_payload_sha256
+  from _pipeline_params_attestation;
+  if attested_payload_sha256
+      <> '821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149'
+  then
+    raise exception 'HSR migration payload checksum does not match the reviewed canonical artefact';
+  end if;
+
+  if exists (
+    select 1 from _pipeline_params
+    where value ->> 'kind' not in ('team_season', 'observation')
+  ) then
     raise exception 'HSR payload is not a checksum-attested canonical record array';
   end if;
 
-  select count(*) into metadata_count
-  from analysis.hsr_payload_team_seasons_v1(payload);
-  select count(*) into observation_count
-  from analysis.hsr_payload_observations_v1(payload);
+  create temp table _hsr_metadata on commit drop as
+  select value ->> 'season' as season,
+    value ->> 'team_key' as team_key,
+    value ->> 'accepted_exposure_sha256' as accepted_exposure_sha256,
+    value ->> 'canonical_output_sha256' as canonical_output_sha256,
+    value ->> 'mapping_sha256' as mapping_sha256,
+    (value ->> 'source_available')::boolean as source_available,
+    value ->> 'source_mode' as source_mode,
+    value ->> 'units' as units,
+    value ->> 'threshold_or_zone' as threshold_or_zone,
+    value ->> 'comparability_status' as comparability_status,
+    value ->> 'gap_reason' as source_gap_reason,
+    (value ->> 'accepted_row_count')::bigint as accepted_row_count,
+    (value ->> 'canonical_populated_row_count')::bigint as actual_hsr_row_count,
+    (value ->> 'canonical_blank_row_count')::bigint as blank_hsr_row_count
+  from _pipeline_params
+  where value ->> 'kind' = 'team_season';
+  create unique index _hsr_metadata_key on _hsr_metadata (season, team_key);
+  analyze _hsr_metadata;
+
+  create temp table _hsr_observations on commit drop as
+  select value ->> 'season' as season,
+    value ->> 'team_key' as team_key,
+    value -> 'accepted_locator' ->> 'source_file_sha256' as accepted_source_file_sha256,
+    value -> 'accepted_locator' ->> 'source_sheet' as accepted_source_sheet,
+    value -> 'accepted_locator' ->> 'source_row_number' as accepted_source_row_number,
+    value -> 'accepted_locator' ->> 'source_row_sha256' as accepted_source_row_sha256,
+    (value ->> 'accepted_total_distance_m')::numeric as accepted_total_distance_m,
+    (value ->> 'hsr_distance_m')::numeric as hsr_distance_m,
+    value ->> 'blank_reason' as blank_reason,
+    null::text as hsr_source_file_sha256,
+    null::text as hsr_source_sheet,
+    null::text as hsr_source_row_number,
+    nullif(value ->> 'hsr_source_row_sha256', '') as hsr_source_row_sha256
+  from _pipeline_params
+  where value ->> 'kind' = 'observation';
+  create unique index _hsr_observations_locator on _hsr_observations (
+    season, team_key, accepted_source_file_sha256,
+    (coalesce(accepted_source_sheet, '')),
+    accepted_source_row_number, accepted_source_row_sha256
+  );
+  analyze _hsr_observations;
+
+  select count(*) into metadata_count from _hsr_metadata;
+  select count(*) into observation_count from _hsr_observations;
 
   if metadata_count <> 32 or observation_count <> 166207 then
     raise exception 'HSR payload must contain exactly 32 team-seasons and 166207 observations';
   end if;
 
   if exists (
-    with incoming as (select * from analysis.hsr_payload_team_seasons_v1(payload))
+    with incoming as (select * from _hsr_metadata)
     select 1 from incoming
     full join (select season, team_key from reporting.teams
       cross join (values ('2024-25'::text), ('2025-26'::text)) seasons(season)
@@ -220,11 +225,11 @@ begin
     raise exception 'HSR payload team-season roster is not the exact 32-team contract';
   end if;
 
-  if (select count(*) from analysis.hsr_payload_team_seasons_v1(payload)
+  if (select count(*) from _hsr_metadata
         where season = '2024-25' and source_available) <> 16
-    or (select count(*) from analysis.hsr_payload_team_seasons_v1(payload)
+    or (select count(*) from _hsr_metadata
         where season = '2025-26' and source_available) <> 14
-    or (select count(*) from analysis.hsr_payload_team_seasons_v1(payload)
+    or (select count(*) from _hsr_metadata
       where season = '2025-26' and not source_available
         and team_key in ('benetton', 'edinburgh')) <> 2
   then
@@ -232,7 +237,7 @@ begin
   end if;
 
   if exists (
-    select 1 from analysis.hsr_payload_team_seasons_v1(payload)
+    select 1 from _hsr_metadata
     where (season = '2024-25' and mapping_sha256
         <> '578dce00e0055be4b5aed07a59d518effd0fc79677bb16cdbe02d7006038c22f')
       or (season = '2025-26' and mapping_sha256
@@ -246,11 +251,11 @@ begin
   end if;
 
   if exists (
-    with incoming as (select * from analysis.hsr_payload_team_seasons_v1(payload)), counts as (
+    with incoming as (select * from _hsr_metadata), counts as (
       select season, team_key, count(*)::bigint as accepted_row_count,
         count(*) filter (where hsr_distance_m is not null)::bigint as actual_hsr_row_count,
         count(*) filter (where hsr_distance_m is null)::bigint as blank_hsr_row_count
-      from analysis.hsr_payload_observations_v1(payload)
+      from _hsr_observations
       group by season, team_key
     )
     select 1 from incoming left join counts using (season, team_key)
@@ -264,33 +269,24 @@ begin
     raise exception 'HSR payload observation counts do not match the team-season evidence';
   end if;
 
-  if exists (
-    with incoming as (select * from analysis.hsr_payload_observations_v1(payload))
-    select 1 from incoming
-    group by season, team_key, accepted_source_file_sha256,
-      accepted_source_sheet, accepted_source_row_number, accepted_source_row_sha256
-    having count(*) <> 1
-  ) then
-    raise exception 'HSR payload contains duplicate accepted-source locators';
-  end if;
+  perform set_config('application_name', 'urc_hsr_v8:locator_resolution', true);
+  create temp table _hsr_resolved on commit drop as
+  select incoming.*, active.curated_exposure_id, active.source_row_id,
+    active.distance_m_clean
+  from _hsr_observations incoming
+  left join analysis.hsr_active_curated_exposure_rows_v1 active
+    on active.team_key = incoming.team_key
+    and active.season = incoming.season
+    and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
+    and coalesce(active.accepted_source_sheet, '')
+      = coalesce(incoming.accepted_source_sheet, '')
+    and active.accepted_source_row_number = incoming.accepted_source_row_number
+    and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256;
+  analyze _hsr_resolved;
 
   if exists (
-    with incoming as (select * from analysis.hsr_payload_observations_v1(payload)), resolved as (
-      select incoming.*, active.curated_exposure_id,
-        active.source_row_id as resolved_source_row_id,
-        active.distance_m_clean
-      from incoming
-      left join analysis.hsr_active_curated_exposure_rows_v1 active
-        on active.team_key = incoming.team_key
-        and active.season = incoming.season
-        and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
-        and coalesce(active.accepted_source_sheet, '')
-          = coalesce(incoming.accepted_source_sheet, '')
-        and active.accepted_source_row_number = incoming.accepted_source_row_number
-        and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
-    )
-    select 1 from resolved
-    where resolved_source_row_id is null
+    select 1 from _hsr_resolved
+    where source_row_id is null
       or (hsr_distance_m is null and nullif(blank_reason, '') is null)
       or (hsr_distance_m is not null and blank_reason is not null)
       or (accepted_total_distance_m is distinct from distance_m_clean
@@ -301,29 +297,20 @@ begin
     raise exception 'HSR observations must resolve to one active accepted exposure row with a valid same-row distance';
   end if;
 
-  with incoming as (select * from analysis.hsr_payload_observations_v1(payload))
-    select count(*), encode(extensions.digest(convert_to(
+  select count(*), encode(extensions.digest(convert_to(
       jsonb_agg(jsonb_build_array(
-        incoming.season, incoming.team_key, incoming.accepted_source_file_sha256,
-        coalesce(incoming.accepted_source_sheet, ''), incoming.accepted_source_row_number,
-        incoming.accepted_source_row_sha256, incoming.accepted_total_distance_m,
-        active.distance_m_clean
-      ) order by incoming.accepted_source_file_sha256,
-        coalesce(incoming.accepted_source_sheet, ''),
-        incoming.accepted_source_row_number, incoming.accepted_source_row_sha256)::text,
+        season, team_key, accepted_source_file_sha256,
+        coalesce(accepted_source_sheet, ''), accepted_source_row_number,
+        accepted_source_row_sha256, accepted_total_distance_m,
+        distance_m_clean
+      ) order by accepted_source_file_sha256,
+        coalesce(accepted_source_sheet, ''),
+        accepted_source_row_number, accepted_source_row_sha256)::text,
       'UTF8'), 'sha256'), 'hex')
     into zebre_mismatch_count, zebre_mismatch_sha256
-    from incoming
-    join analysis.hsr_active_curated_exposure_rows_v1 active
-      on active.team_key = incoming.team_key
-      and active.season = incoming.season
-      and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
-      and coalesce(active.accepted_source_sheet, '')
-        = coalesce(incoming.accepted_source_sheet, '')
-      and active.accepted_source_row_number = incoming.accepted_source_row_number
-      and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
-    where incoming.season = '2025-26' and incoming.team_key = 'zebre'
-      and incoming.accepted_total_distance_m is distinct from active.distance_m_clean;
+    from _hsr_resolved
+    where season = '2025-26' and team_key = 'zebre'
+      and accepted_total_distance_m is distinct from distance_m_clean;
 
   if zebre_mismatch_count <> 976
     or zebre_mismatch_sha256 is distinct from
@@ -333,27 +320,7 @@ begin
   end if;
 
   if exists (
-    with incoming as (select * from analysis.hsr_payload_observations_v1(payload))
-    select 1
-    from incoming
-    join analysis.hsr_active_curated_exposure_rows_v1 active
-      on active.team_key = incoming.team_key
-      and active.season = incoming.season
-      and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
-      and coalesce(active.accepted_source_sheet, '')
-        = coalesce(incoming.accepted_source_sheet, '')
-      and active.accepted_source_row_number = incoming.accepted_source_row_number
-      and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
-    group by incoming.season, incoming.team_key, incoming.accepted_source_file_sha256,
-      incoming.accepted_source_sheet, incoming.accepted_source_row_number,
-      incoming.accepted_source_row_sha256
-    having count(*) <> 1
-  ) then
-    raise exception 'HSR observations must resolve to exactly one active accepted exposure row';
-  end if;
-
-  if exists (
-    with incoming as (select * from analysis.hsr_payload_team_seasons_v1(payload))
+    with incoming as (select * from _hsr_metadata)
     select 1 from incoming join analysis.hsr_team_season_metadata_v1 stored
       using (season, team_key)
     where stored.accepted_exposure_sha256 is distinct from incoming.accepted_exposure_sha256
@@ -367,19 +334,8 @@ begin
   end if;
 
   if exists (
-    with incoming as (select * from analysis.hsr_payload_observations_v1(payload)), resolved as (
-      select incoming.*, active.source_row_id
-      from incoming
-      join analysis.hsr_active_curated_exposure_rows_v1 active
-        on active.team_key = incoming.team_key
-        and active.season = incoming.season
-        and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
-        and coalesce(active.accepted_source_sheet, '')
-          = coalesce(incoming.accepted_source_sheet, '')
-        and active.accepted_source_row_number = incoming.accepted_source_row_number
-        and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
-    )
-    select 1 from resolved join analysis.hsr_source_observation_events_v1 stored
+    select 1 from _hsr_resolved resolved
+    join analysis.hsr_source_observation_events_v1 stored
       on stored.source_row_id = resolved.source_row_id
      and stored.source_status = 'actual'
     where resolved.hsr_distance_m is not null
@@ -389,14 +345,14 @@ begin
   end if;
 
   if exists (select 1 from analysis.hsr_ingestion_batches_v1 batch
-      where batch.parameter_payload_sha256 = $2) then
+      where batch.parameter_payload_sha256 = attested_payload_sha256) then
     return;
   end if;
 
   insert into analysis.hsr_ingestion_batches_v1 (
     parameter_payload_sha256, team_season_count, observation_count
   ) values (
-    $2, metadata_count, observation_count
+    attested_payload_sha256, metadata_count, observation_count
   );
 
   insert into analysis.hsr_team_season_metadata_v1 (
@@ -409,24 +365,10 @@ begin
     mapping_sha256, source_available, source_mode, units, threshold_or_zone,
     comparability_status, accepted_row_count, actual_hsr_row_count,
     blank_hsr_row_count, source_gap_reason
-  from analysis.hsr_payload_team_seasons_v1(payload)
+  from _hsr_metadata
   on conflict (season, team_key) do nothing;
 
-  with incoming as (select * from analysis.hsr_payload_observations_v1(payload)), resolved as (
-    select incoming.*, active.curated_exposure_id, active.source_row_id,
-      metadata.units, metadata.threshold_or_zone, metadata.comparability_status
-    from incoming
-    join analysis.hsr_active_curated_exposure_rows_v1 active
-      on active.team_key = incoming.team_key
-      and active.season = incoming.season
-      and active.accepted_source_file_sha256 = incoming.accepted_source_file_sha256
-      and coalesce(active.accepted_source_sheet, '')
-        = coalesce(incoming.accepted_source_sheet, '')
-      and active.accepted_source_row_number = incoming.accepted_source_row_number
-      and active.accepted_source_row_sha256 = incoming.accepted_source_row_sha256
-    join analysis.hsr_team_season_metadata_v1 metadata
-      on metadata.team_key = incoming.team_key and metadata.season = incoming.season
-  )
+  perform set_config('application_name', 'urc_hsr_v8:event_insert', true);
   insert into analysis.hsr_source_observation_events_v1 (
     source_row_id, curated_exposure_id, team_key, season, source_status,
     hsr_distance_m, blank_reason, units, threshold_or_zone,
@@ -434,47 +376,28 @@ begin
     hsr_source_row_number, hsr_source_row_sha256, observation_sha256,
     parameter_payload_sha256
   )
-  select source_row_id, curated_exposure_id, team_key, season,
-    case when hsr_distance_m is null then 'unknown' else 'actual' end,
-    hsr_distance_m, blank_reason, units, threshold_or_zone,
-    comparability_status, hsr_source_file_sha256, hsr_source_sheet,
-    hsr_source_row_number, hsr_source_row_sha256,
+  select resolved.source_row_id, resolved.curated_exposure_id,
+    resolved.team_key, resolved.season,
+    case when resolved.hsr_distance_m is null then 'unknown' else 'actual' end,
+    resolved.hsr_distance_m, resolved.blank_reason,
+    metadata.units, metadata.threshold_or_zone, metadata.comparability_status,
+    resolved.hsr_source_file_sha256, resolved.hsr_source_sheet,
+    resolved.hsr_source_row_number, resolved.hsr_source_row_sha256,
     encode(extensions.digest(convert_to(jsonb_build_object(
-      'source_row_id', source_row_id::text, 'hsr_distance_m', hsr_distance_m,
-      'blank_reason', blank_reason, 'hsr_source_file_sha256', hsr_source_file_sha256,
-      'hsr_source_sheet', hsr_source_sheet,
-      'hsr_source_row_number', hsr_source_row_number,
-      'hsr_source_row_sha256', hsr_source_row_sha256
+      'source_row_id', resolved.source_row_id::text,
+      'hsr_distance_m', resolved.hsr_distance_m,
+      'blank_reason', resolved.blank_reason,
+      'hsr_source_file_sha256', resolved.hsr_source_file_sha256,
+      'hsr_source_sheet', resolved.hsr_source_sheet,
+      'hsr_source_row_number', resolved.hsr_source_row_number,
+      'hsr_source_row_sha256', resolved.hsr_source_row_sha256
     )::text, 'UTF8'), 'sha256'), 'hex'),
-    parameter_payload_sha256
-  from resolved
+    attested_payload_sha256
+  from _hsr_resolved resolved
+  join analysis.hsr_team_season_metadata_v1 metadata
+    on metadata.team_key = resolved.team_key and metadata.season = resolved.season
   on conflict (source_row_id, observation_sha256) do nothing;
-
-  if to_regclass('analysis.hsr_dashboard_monthly_actual_v1') is not null then
-    refresh materialized view analysis.hsr_dashboard_monthly_actual_v1;
-  end if;
-end;
-$$;
-
-revoke execute on function analysis.apply_hsr_payload_v1(jsonb, text)
-from public, anon, authenticated, web_reader;
-
-do $$
-declare payload jsonb; attestation text;
-begin
-  if to_regclass('pg_temp._pipeline_params') is null
-    or to_regclass('pg_temp._pipeline_params_attestation') is null
-    or (select count(*) from _pipeline_params) <> 166239
-    or (select count(*) from _pipeline_params_attestation) <> 1
-  then
-    raise exception 'HSR migration requires one checksum-attested _pipeline_params payload';
-  end if;
-  select jsonb_agg(value order by idx) into payload from _pipeline_params;
-  select payload_sha256 into attestation from _pipeline_params_attestation;
-  if attestation <> '821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149' then
-    raise exception 'HSR migration payload checksum does not match the reviewed canonical artefact';
-  end if;
-  perform analysis.apply_hsr_payload_v1(payload, attestation);
+  perform set_config('application_name', 'urc_hsr_v8:import_complete', true);
 end;
 $$;
 
@@ -512,6 +435,8 @@ where exposure.season = '2025-26'
   and coalesce(exposure.session_date, exposure.week_start_date) <= season_window.season_end
   and coalesce(exposure.session_date, exposure.week_start_date)
     + case when exposure.grain = 'weekly' then 6 else 0 end >= season_window.season_start;
+
+select set_config('application_name', 'urc_hsr_v8:monthly_materialisation', true);
 
 create materialized view analysis.hsr_dashboard_monthly_actual_v1 as
 select season, team_key, date_trunc('month', period_start)::date as month_start,
@@ -846,9 +771,6 @@ select target.target_attested
   and not has_table_privilege('web_reader', 'analysis.hsr_dashboard_team_display_v1', 'select')
   and not has_table_privilege('web_reader', 'analysis.hsr_dashboard_league_monthly_display_v1', 'select')
   and not has_table_privilege('web_reader', 'analysis.hsr_dashboard_league_display_v1', 'select')
-  and not has_function_privilege('web_reader', 'analysis.hsr_payload_team_seasons_v1(jsonb)', 'execute')
-  and not has_function_privilege('web_reader', 'analysis.hsr_payload_observations_v1(jsonb)', 'execute')
-  and not has_function_privilege('web_reader', 'analysis.apply_hsr_payload_v1(jsonb,text)', 'execute')
   and not has_function_privilege('web_reader', 'analysis.reject_hsr_reporting_mutation_v1()', 'execute')
   and has_table_privilege('web_reader', 'reporting.latest_team_dashboard_v8', 'select')
   and has_table_privilege('web_reader', 'reporting.latest_league_dashboard_v8', 'select')
@@ -863,6 +785,8 @@ grant select on reporting.latest_team_dashboard_v8,
   reporting.latest_league_dashboard_v8,
   reporting.approved_dashboard_reader_target_v8
 to web_reader;
+
+select set_config('application_name', 'urc_hsr_v8:reader_contract_checks', true);
 
 do $$
 begin
