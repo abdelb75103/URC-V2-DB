@@ -4,7 +4,9 @@ import { join } from "node:path";
 import test from "node:test";
 import { teams } from "../config/teams";
 import { assertReportModelPrivacy, buildReportModel, DEFAULT_REPORT_SECTION_IDS, filterReportSectionIds } from "../lib/report-model";
+import { reportProtectedTerms } from "../lib/report-privacy";
 import { REPORT_SECTION_LABELS } from "../lib/report-model-types";
+import type { DashboardData } from "../lib/reporting-types";
 import { dashboardFixture, priorDashboardFixture } from "./report-fixtures";
 import { buildReportComparisonRows } from "../lib/report-comparison";
 import type { TeamComparisonRow } from "../lib/reporting-types";
@@ -19,6 +21,32 @@ test("canonical team names match every accepted parity payload", async () => {
     const teamId = file.split("_dashboard_")[0];
     const payload = JSON.parse(await readFile(join("content/reporting", file), "utf8")) as { team: string };
     assert.equal(payload.team, configuredNames.get(teamId), file);
+  }
+});
+
+test("allows only Glasgow's own canonical name in its report", async () => {
+  for (const season of ["2024-25", "2025-26"] as const) {
+    const current = {
+      ...JSON.parse(await readFile(join("content/reporting", `glasgow_dashboard_${season}.json`), "utf8")),
+      scope: "team",
+    } as DashboardData;
+    const request = {
+      current,
+      prior: null,
+      expectedScope: "team" as const,
+      expectedSeason: season,
+      subjectName: "Glasgow Warriors",
+      protectedTerms: reportProtectedTerms("glasgow"),
+    };
+
+    assert.doesNotThrow(() => buildReportModel(request));
+    assert.throws(
+      () => buildReportModel({
+        ...request,
+        current: { ...current, limitations: [...current.limitations, "Benetton must not appear in a Glasgow report."] },
+      }),
+      /another club name/,
+    );
   }
 });
 

@@ -81,7 +81,7 @@ export default async function TeamPage({
     expectedScope: 'team',
     expectedSeason: season,
     subjectName: team.name,
-    protectedTerms: reportProtectedTerms(),
+    protectedTerms: reportProtectedTerms(team.id),
     exportedAt: new Date().toISOString(),
     comparisonRows: buildReportComparisonRows({
       rows: comparisons,
