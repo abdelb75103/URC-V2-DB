@@ -49,6 +49,26 @@ begin
       where (month ->> 'hsr_percentage')::numeric < 0
         or (month ->> 'hsr_percentage')::numeric > 100
     )
+    or exists (
+      select 1
+      from reporting.latest_team_dashboard_v8 dashboard
+      where dashboard.coverage ->> 'actual_hsr_distance_km' is not null
+        and not exists (
+          select 1
+          from jsonb_array_elements(dashboard.monthly) month
+          where month ->> 'actual_hsr_distance_km' is not null
+        )
+    )
+    or exists (
+      select 1
+      from reporting.latest_league_dashboard_v8 dashboard
+      where dashboard.coverage ->> 'actual_hsr_distance_km' is not null
+        and not exists (
+          select 1
+          from jsonb_array_elements(dashboard.monthly) month
+          where month ->> 'actual_hsr_distance_km' is not null
+        )
+    )
     or not exists (
       select 1
       from reporting.latest_team_dashboard_v8 dashboard

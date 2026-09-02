@@ -11,6 +11,12 @@ function verify(dashboard: DashboardData | undefined, season: string) {
   assert.ok(coverage.hsr_distance_km === null || typeof coverage.hsr_distance_km === 'number');
   assert.ok(coverage.actual_hsr_distance_km === null || typeof coverage.actual_hsr_distance_km === 'number');
   assert.ok(typeof coverage.hsr_source_status === 'string');
+  if (coverage.actual_hsr_distance_km !== null) {
+    assert.ok(
+      dashboard.monthly.some((month) => typeof month.actual_hsr_distance_km === 'number'),
+      'Expected monthly actual HSR where the season has actual HSR',
+    );
+  }
   for (const month of dashboard.monthly) {
     assert.ok(month.hsr_percentage === null || (
       typeof month.hsr_percentage === 'number'
