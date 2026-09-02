@@ -48,6 +48,8 @@ The display view uses explicit join keys where earlier joins expose duplicate co
 
 **Rendered dashboard acceptance.** Both league seasons and all 32 team-season Exposure pages pass local browser checks. The chart shows full-width HSR distance sections and monthly percentages; Total Distance bars and legend indicators share cyan `#02d5f0`. The source-coverage notice and Seasonal HSR panel were removed at Abdel's request. Estimated-hour labels, tooltip status and data-quality warnings remain. Desktop and representative mobile checks show no horizontal overflow. A pre-existing Glasgow page-load failure was corrected by using its approved canonical name and excluding only its own configured aliases from its report denylist. Both Glasgow seasons load with HTTP 200; the generic privacy guard still rejects other club names. This was a dashboard-load repair, not PDF redesign.
 
+**Deployment identity.** Release commit `41035b77bc49123b8258225e63c0d19a98ffb100` reached `origin/main`. GitHub records successful deployment `6227925217` at `2026-09-02T17:20:47Z`; the repository homepage identifies the current V2 private-review site. Its league and Glasgow Exposure routes return HTTP 200 with the new HSR label and removed Seasonal HSR panel. The legacy URL and the bare project-name hostname are not the V2 review target. No hosting-service management or access-control change was used.
+
 ---
 
 ## 2026-09-01: Cross-season diagnosis-family adjudication and separate illness reporting

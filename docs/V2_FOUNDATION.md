@@ -35,6 +35,8 @@ The system must produce academically defensible cleaned datasets, analysis, dash
 
 ### Cutover
 
+For the current private V2 review site, resolve the repository homepage and the successful deployment attached to the release commit through GitHub. The legacy URL below is a future cutover target, not proof that a V2 push is being served. As verified on 2 September 2026, the legacy site still serves the old application and the bare `urc-v2-db.vercel.app` hostname returns `DEPLOYMENT_NOT_FOUND`; neither is the current review target. The access-restoration gate remains open.
+
 1. Freeze and back up the approved Supabase release.
 2. Provision and verify the V2 Supabase read credential, new password hashes, cookie-signing key, and other required secrets in the existing Vercel project's Preview scope.
 3. Verify the candidate deployment against the release snapshot.
