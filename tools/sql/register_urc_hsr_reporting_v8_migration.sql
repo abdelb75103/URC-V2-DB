@@ -27,7 +27,7 @@ values (
   '20260902010000',
   'urc_hsr_reporting_v8',
   array[
-    'migration_sha256=769f8c0bdb2a18b6e4c128625c5bfbecce3a1f38274f65f9a23a5cb919063cbf',
+    'migration_sha256=e46cc707df165e7cf7b917e821579de11b6f5c41d9beea14f4cd2ce3f13ef365',
     'parameter_payload_sha256=821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149',
     'rule_version=hsr_source_to_display_reporting_2026_09_02_v1',
     'predecessor=20260901021000_urc_diagnosis_family_materialized_reader_boundary',
@@ -46,7 +46,7 @@ begin
     where version = '20260902010000'
       and name = 'urc_hsr_reporting_v8'
       and statements = array[
-        'migration_sha256=769f8c0bdb2a18b6e4c128625c5bfbecce3a1f38274f65f9a23a5cb919063cbf',
+        'migration_sha256=e46cc707df165e7cf7b917e821579de11b6f5c41d9beea14f4cd2ce3f13ef365',
         'parameter_payload_sha256=821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149',
         'rule_version=hsr_source_to_display_reporting_2026_09_02_v1',
         'predecessor=20260901021000_urc_diagnosis_family_materialized_reader_boundary',

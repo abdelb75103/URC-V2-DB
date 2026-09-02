@@ -400,40 +400,43 @@ begin
 end;
 $$;
 
+analyze analysis.hsr_source_observation_events_v1;
+
 create view analysis.hsr_dashboard_exposure_rows_v1
 with (security_invoker = false) as
+with scope as materialized (
+  select scope.season, scope.team_key, scope.curated_build_id,
+    scope.exposure_id as curated_exposure_id, scope.source_row_id,
+    scope.effective_period_start as period_start, scope.distance_m_clean
+  from analysis.urc_2024_25_effective_exposure_scope_v1 scope
+  where scope.season = '2024-25'
+  union all
+  select exposure.season, exposure.team_key, exposure.curated_build_id,
+    exposure.id, exposure.source_row_id,
+    coalesce(exposure.session_date, exposure.week_start_date), exposure.distance_m_clean
+  from analysis.analysis_window_active_builds_v6 active
+  join curated.exposure exposure on exposure.curated_build_id = active.curated_build_id
+   and exposure.team_key = active.team_key and exposure.season = active.season
+  join analysis.reporting_season_windows_v3 season_window
+    on season_window.cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
+   and season_window.season = exposure.season
+  join analysis.accepted_analysis_window_cohort_rules_v6 cohort_rule
+    on cohort_rule.cohort_view_version = season_window.cohort_view_version
+   and cohort_rule.season = season_window.season
+  where exposure.season = '2025-26'
+    and exposure.eligibility_status = 'included_pending_protocol'
+    and coalesce(exposure.session_date, exposure.week_start_date) is not null
+    and coalesce(exposure.session_date, exposure.week_start_date) <= season_window.season_end
+    and coalesce(exposure.session_date, exposure.week_start_date)
+      + case when exposure.grain = 'weekly' then 6 else 0 end >= season_window.season_start
+)
 select scope.season, scope.team_key, scope.curated_build_id,
-  scope.exposure_id as curated_exposure_id, scope.source_row_id,
-  scope.effective_period_start as period_start, scope.distance_m_clean,
+  scope.curated_exposure_id, scope.source_row_id, scope.period_start, scope.distance_m_clean,
   observation.source_status, observation.hsr_distance_m
-from analysis.urc_2024_25_effective_exposure_scope_v1 scope
+from scope
 left join analysis.hsr_active_source_observations_v1 observation
   on observation.source_row_id = scope.source_row_id
- and observation.curated_exposure_id = scope.exposure_id
-where scope.season = '2024-25'
-union all
-select exposure.season, exposure.team_key, exposure.curated_build_id,
-  exposure.id, exposure.source_row_id,
-  coalesce(exposure.session_date, exposure.week_start_date), exposure.distance_m_clean,
-  observation.source_status, observation.hsr_distance_m
-from analysis.analysis_window_active_builds_v6 active
-join curated.exposure exposure on exposure.curated_build_id = active.curated_build_id
- and exposure.team_key = active.team_key and exposure.season = active.season
-join analysis.reporting_season_windows_v3 season_window
-  on season_window.cohort_view_version = 'analysis_window_2025-26_2026-08-15_v1'
- and season_window.season = exposure.season
-join analysis.accepted_analysis_window_cohort_rules_v6 cohort_rule
-  on cohort_rule.cohort_view_version = season_window.cohort_view_version
- and cohort_rule.season = season_window.season
-left join analysis.hsr_active_source_observations_v1 observation
-  on observation.source_row_id = exposure.source_row_id
- and observation.curated_exposure_id = exposure.id
-where exposure.season = '2025-26'
-  and exposure.eligibility_status = 'included_pending_protocol'
-  and coalesce(exposure.session_date, exposure.week_start_date) is not null
-  and coalesce(exposure.session_date, exposure.week_start_date) <= season_window.season_end
-  and coalesce(exposure.session_date, exposure.week_start_date)
-    + case when exposure.grain = 'weekly' then 6 else 0 end >= season_window.season_start;
+ and observation.curated_exposure_id = scope.curated_exposure_id;
 
 select set_config('application_name', 'urc_hsr_v8:monthly_materialisation', true);
 
