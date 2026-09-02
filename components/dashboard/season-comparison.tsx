@@ -441,9 +441,6 @@ export function SeasonComparison({ comparison }: { comparison?: SeasonComparison
     return <EmptyState>No approved season comparison is available for this dashboard.</EmptyState>;
   }
   const impact = comparison.impact.find((row) => row.setting === setting);
-  const qualifications = [comparison.exposure.previous.qualification, comparison.exposure.current.qualification]
-    .filter((value): value is string => Boolean(value));
-  const uniqueQualifications = [...new Set(qualifications)];
 
   return (
     <div className="space-y-5">
@@ -458,12 +455,6 @@ export function SeasonComparison({ comparison }: { comparison?: SeasonComparison
           ))}
         </div>
       </div>
-
-      {uniqueQualifications.length > 0 && (
-        <div role="note" className="flex flex-wrap gap-x-2 rounded-md border border-amber-400/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-100">
-          {uniqueQualifications.map((qualification) => <p key={qualification}>{qualification}</p>)}
-        </div>
-      )}
 
       <Tabs value={setting} onValueChange={(value) => setSetting(value as Setting)}>
         <TabsList aria-label="Rugby setting" className="h-auto bg-muted/80 p-1">

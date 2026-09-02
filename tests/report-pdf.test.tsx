@@ -9,7 +9,7 @@ const workDirectory = path.join(process.cwd(), "tmp", "report-pdf-test");
 const bundledDocument = path.join(workDirectory, "report-document.mjs");
 const renderedPdf = path.join(workDirectory, "report.pdf");
 
-const syntheticComparison = {
+const syntheticComparison: NonNullable<ReportModel["seasonComparisonVisuals"]> = {
   rule_version: "season_comparison_reporting_2026_08_31_v4",
   scope: "team",
   previous_season: "2024-25",
@@ -20,14 +20,14 @@ const syntheticComparison = {
     { key: "injury_burden", label: "Injury burden", previous: { value: 300, unit: "days lost per 1,000 player-hours" }, current: { value: 192, unit: "days lost per 1,000 player-hours" }, outcome_improvement_percent: 36 },
     { key: "time_loss_injuries", label: "Time-loss injuries", previous: { value: 40, unit: "TL injuries" }, current: { value: 32, unit: "TL injuries" }, outcome_improvement_percent: 20 },
   ],
-  impact: ["all", "match", "training"].map((setting) => ({
+  impact: (["all", "match", "training"] as const).map((setting) => ({
     setting,
     label: setting === "all" ? "Overall" : setting[0].toUpperCase() + setting.slice(1),
     previous: { time_loss_incidence_per_1000h: 10, mean_severity_days: 30, burden_per_1000h: 300, time_loss_injuries: 40, exposure_hours: 4_000 },
     current: { time_loss_incidence_per_1000h: 8, mean_severity_days: 24, burden_per_1000h: 192, time_loss_injuries: 32, exposure_hours: 4_000 },
   })),
   monthly: ["Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"].map((label, index) => ({ month_key: `2024-${String((index + 8) % 12 + 1).padStart(2, "0")}`, label, previous_time_loss_injuries: 5 + index % 3, current_time_loss_injuries: 3 + index % 4 })),
-  diagnoses: ["all", "match", "training"].map((setting) => ({
+  diagnoses: (["all", "match", "training"] as const).map((setting) => ({
     setting,
     label: setting === "all" ? "Overall" : setting[0].toUpperCase() + setting.slice(1),
     previous: ["Hamstring Injury", "Concussion", "Ankle Injury"].map((diagnosis, index) => ({ rank: index + 1, diagnosis, time_loss_injuries: 6 - index, incidence_per_1000h: 2 - index / 2, burden_per_1000h: 30 - index * 5 })),
@@ -39,7 +39,7 @@ const syntheticComparison = {
   },
 };
 
-const syntheticModel = {
+const syntheticModel: ReportModel = {
   schemaVersion: "urc-report-v1",
   reportVersion: "1.0",
   exportedAt: "2026-08-31T00:00:00Z",
@@ -124,7 +124,7 @@ const syntheticModel = {
   limitations: ["Not available values are not inferred."],
 };
 
-function renderPdf(sectionIds?: string[], model = syntheticModel) {
+function renderPdf(sectionIds?: string[], model: ReportModel = syntheticModel) {
   mkdirSync(workDirectory, { recursive: true });
   execFileSync("./node_modules/.bin/esbuild", [
     "components/report/report-document.tsx", "--bundle", "--platform=node", "--format=esm",
@@ -193,6 +193,18 @@ test("selected sections render in canonical PDF order", () => {
   assert.match(result.pageText(2), /Team Comparison/);
   assert.match(result.pageText(3), /Season Comparison/);
   assert.doesNotMatch(result.pageText(2), /Season Comparison/);
+});
+
+test("the PDF timeline displays qualified released rates without inventing overall incidence", () => {
+  const result = renderPdf(["severity-contact"], {
+    ...syntheticModel,
+    monthlyInjuryPattern: [{ month: "Sep 2025", recordedInjuries: 20, timeLossInjuries: 12, daysLost: 50, overallIncidencePer1000h: null, incidencePer1000h: null, burdenPer1000h: null }],
+    preliminaryMonthlyRates: [{ month: "2025-09", contributor_count: 14, exposure_hours: 800, time_loss_injuries: 8, days_lost: 40, incidence_per_1000h: 10, burden_per_1000h: 50, qualification: "Preliminary contributor-aligned rate." }],
+  });
+  assert.equal(result.pages, 1);
+  assert.match(result.text, /Time Loss Incidence/);
+  assert.match(result.text, /preliminary contributor-aligned/);
+  assert.doesNotMatch(result.text, /Overall Incidence|Monthly incidence is not available/);
 });
 
 test("a dense diagnosis matrix keeps its complete key on its own page", () => {

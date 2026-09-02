@@ -1,5 +1,7 @@
 'use client';
 
+import { currentExposureWarnings } from '@/lib/exposure-chart';
+import { buildSeasonTimelineRows, PRELIMINARY_TIMELINE_NOTE } from '@/lib/season-timeline';
 import {
   useId,
   useLayoutEffect,
@@ -39,7 +41,7 @@ import { resolveLocationView } from '@/lib/location-view';
 import { withoutFrontFacingUnknown } from '@/lib/dashboard-visibility';
 import {
   commonInjuryColorMap, illnessColorMap, isKneeLigamentDiagnosis, metricValue,
-  RANKED_LANE_SIZE, rankedForMetric, rankedIllnesses, type CardColour,
+  rankedCommonInjuries, rankedIllnesses, type CardColour,
 } from '@/lib/report-presentation';
 import type { ComparisonScatterRow } from '@/components/dashboard/charts';
 import {
@@ -430,9 +432,11 @@ function OverviewTab({
         overall_incidence_per_1000h: row.overall_incidence_per_1000h ?? null,
         incidence_per_1000h: row.incidence_per_1000h ?? null,
       }));
-  // Every monthly chart plots from September and says how many pre-window months
-  // it dropped (handled inside the chart components). The KPI sparklines and every
-  // headline total stay on the full set, so the tiles keep reconciling.
+  const timelineRows = buildSeasonTimelineRows(monthlyRows, dashboard.preliminary_monthly_rates ?? []);
+  const timelineHasOverallIncidence = timelineRows.some((row) => row.overall_incidence_per_1000h != null);
+  const timelineHasTlIncidence = timelineRows.some((row) => row.incidence_per_1000h != null);
+  const timelineUsesPreliminary = timelineRows.some((row) => row.preliminary_rate);
+  // Charts start in September; KPI trends and headline totals keep the full set.
   const trend = sortByMonth(monthlyRows);
   const preliminaryRateTrend = dashboard.preliminary_monthly_rates ?? [];
   const usesPreliminaryRateTrend = preliminaryRateTrend.length > 1;
@@ -558,19 +562,21 @@ function OverviewTab({
           <div className="flex flex-wrap gap-4">
             <CheckToggle checked={showInjuries} onChange={setShowInjuries} label="Overall Injuries" swatch={SETTING_COLORS.all} />
             <CheckToggle checked={showTlInjuries} onChange={setShowTlInjuries} label="Time Loss Injuries" swatch="#ffc45c" />
-            <CheckToggle checked={showOverallIncidence} onChange={setShowOverallIncidence} label="Overall Incidence" swatch={SETTING_COLORS.all} />
-            <CheckToggle checked={showTlIncidence} onChange={setShowTlIncidence} label="Time Loss Incidence" swatch="#ffc45c" />
+            <CheckToggle checked={showOverallIncidence && timelineHasOverallIncidence} disabled={!timelineHasOverallIncidence} onChange={setShowOverallIncidence} label="Overall Incidence" swatch={SETTING_COLORS.all} />
+            <CheckToggle checked={showTlIncidence && timelineHasTlIncidence} disabled={!timelineHasTlIncidence} onChange={setShowTlIncidence} label="Time Loss Incidence" swatch="#ffc45c" />
           </div>
         </div>
         <div className="overflow-x-auto">
           <SeasonTimelineChart
-            rows={monthlyRows}
+            rows={timelineRows}
             showInjuries={showInjuries}
             showTlInjuries={showTlInjuries}
-            showOverallIncidence={showOverallIncidence}
-            showTlIncidence={showTlIncidence}
+            showOverallIncidence={showOverallIncidence && timelineHasOverallIncidence}
+            showTlIncidence={showTlIncidence && timelineHasTlIncidence}
           />
         </div>
+        {timelineUsesPreliminary && <p className="mt-2 text-xs leading-relaxed text-muted-foreground" role="note">{PRELIMINARY_TIMELINE_NOTE}</p>}
+        {!timelineHasOverallIncidence && <p className="mt-2 text-xs text-muted-foreground" role="note">Overall Incidence is not available for the released monthly cohort.</p>}
       </Panel>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -733,17 +739,19 @@ function ScopeChip({ show, label = 'Overall' }: { show: boolean; label?: string 
   );
 }
 
-function CheckToggle({ checked, onChange, label, swatch }: {
+function CheckToggle({ checked, onChange, label, swatch, disabled = false }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   label: string;
   swatch?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="inline-flex min-h-11 cursor-pointer select-none items-center gap-2 text-xs font-medium text-muted-foreground">
+    <label title={disabled ? `${label} is not available for the released monthly cohort.` : undefined} className={`inline-flex min-h-11 select-none items-center gap-2 text-xs font-medium text-muted-foreground ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
         className="h-4 w-4 rounded border-border accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
@@ -1075,7 +1083,7 @@ function CommonInjuryLane({
   totalInjuries: number;
   injuryColors: Map<string, InjuryCardColor>;
 }) {
-  const ranked = rankedForMetric(rows, metric.key).slice(0, RANKED_LANE_SIZE);
+  const ranked = rankedCommonInjuries(rows, metric.key);
 
   return (
     <section aria-labelledby={`common-injuries-${metric.key}`}>
@@ -1462,7 +1470,7 @@ function ExposureTab({
   const totalHours = coverage.hours;
   const totalDistance = coverage.distance_km;
   const totalHsr = coverage.hsr_distance_km;
-  const hsrWarnings = coverage.data_quality_warnings ?? [];
+  const hsrWarnings = currentExposureWarnings(coverage.data_quality_warnings ?? []);
   const options: Array<{ value: ExposureMeasure; label: string }> = [
     { value: 'hours', label: 'Hours' },
     { value: 'distance', label: 'Distance' },
@@ -2089,8 +2097,7 @@ export function TeamDashboard({
           role="note"
           aria-label="Temporary Exposure Estimate"
         >
-          <p className="font-semibold">Temporary Exposure Estimate Affects Rate Denominators</p>
-          <p className="mt-1">{exposureEstimateNote}</p>
+          <p>{exposureEstimateNote}</p>
         </div>
       )}
 

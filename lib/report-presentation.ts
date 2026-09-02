@@ -2,8 +2,8 @@
  * Presentation values the PDF shares with the dashboard.
  *
  * The dashboard renders on dark navy, the PDF on white paper, so a few of the
- * dashboard's colours are recomputed here for a light background. Nothing in
- * this module touches data: it maps released values to colours and labels only.
+ * dashboard's colours are recomputed here for a light background. Shared card
+ * rankings select from released values without changing the source rows.
  *
  * The card palettes and the colour resolvers live here rather than in the
  * dashboard: `components/dashboard/team-dashboard.tsx` imports them from this
@@ -180,6 +180,12 @@ export function rankedForMetric<T extends { label: string }, K extends keyof T>(
     .sort((a, b) => metricValue(b, metric) - metricValue(a, metric) || a.label.localeCompare(b.label));
 }
 
+/** Presentation exclusions requested for the common-injury cards, across seasons. */
+export function rankedCommonInjuries<T extends { label: string }, K extends keyof T>(rows: readonly T[], metric: K) {
+  const eligible = rows.filter((row) => !/^(?:foot pain(?:$|\/)|medical illness$)/i.test(row.label.trim()));
+  return rankedForMetric(eligible, metric).slice(0, RANKED_LANE_SIZE);
+}
+
 export function rankedIllnesses<T extends { label: string }>(rows: readonly T[], metric: (typeof ILLNESS_METRIC_KEYS)[number]) {
   return rankedForMetric(rows as ReadonlyArray<T & Record<string, unknown>>, metric).slice(0, RANKED_LANE_SIZE);
 }
@@ -213,7 +219,7 @@ function rankedLaneCodes<T extends ColourableProfileRow>(rows: readonly T[], set
   const codes = new Set<string>();
   const scoped = rows.filter((row) => row.setting === setting);
   for (const metric of PROFILE_METRIC_KEYS) {
-    for (const row of rankedForMetric(scoped, metric).slice(0, RANKED_LANE_SIZE)) codes.add(row.code);
+    for (const row of rankedCommonInjuries(scoped, metric)) codes.add(row.code);
   }
   return codes;
 }

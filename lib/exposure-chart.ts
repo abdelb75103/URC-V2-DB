@@ -1,5 +1,10 @@
 export type ExposureChartMeasure = 'hours' | 'distance' | 'hsr';
 
+/** Resolved source corrections stay in the payload, outside current warnings. */
+export function currentExposureWarnings(warnings: readonly string[]) {
+  return warnings.filter((warning) => !warning.includes('source total-distance anomaly was corrected'));
+}
+
 type ExposureChartRow = {
   exposure_hours?: number | null;
   distance_km?: number | null;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Bar,
   CartesianGrid,
@@ -24,13 +24,12 @@ import {
 import type { BarShapeProps } from 'recharts';
 import type { AnalyticsRow, InjuryProfileRow, MonthlySettingRow } from '@/lib/reporting-types';
 import {
-  contributingClubsText,
   exposureMonthLabel,
   hasReportedExposureValue,
   hsrPercentage,
-  hsrStatusLabel,
   showExposureMonthLabel,
 } from '@/lib/exposure-chart';
+import type { SeasonTimelineRow } from '@/lib/season-timeline';
 import {
   PROFILE_COLORS,
   SETTING_COLORS,
@@ -62,6 +61,12 @@ const AXIS_LINE = { stroke: 'hsl(0 0% 78%)', strokeWidth: 1.5 };
 const Y_TITLE_STYLE = { textAnchor: 'middle' as const };
 /** Every chart tooltip shares this surface: slightly transparent, no border. */
 const TOOLTIP_SURFACE = { background: 'hsl(205 47% 9% / 0.92)' };
+/**
+ * The hovered category band. Every categorical chart highlights the whole band
+ * behind its series, so the tooltip rows and the bars they describe read as one
+ * group.
+ */
+export const HOVER_BAND = { fill: 'hsl(0 0% 100% / 0.1)' };
 
 function number(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
@@ -78,10 +83,6 @@ function hours(value: number | null | undefined) {
     maximumFractionDigits: 0,
     minimumFractionDigits: 0,
   }).format(value);
-}
-
-function compactMonth(value: string) {
-  return value.replace(/\s\d{4}$/, '');
 }
 
 /**
@@ -112,41 +113,54 @@ const METRIC_COLORS = {
   severity: '#42d8b4',
 } as const;
 
+/** Time-loss series colour, shared by the timeline bars, line and tooltip rows. */
+const TIME_LOSS_COLOR = METRIC_COLORS.incidence;
+
 /**
  * The one tooltip surface every chart uses: a dark, slightly transparent panel,
- * a bold header naming the category, and one compact row per series drawn in
- * that series' own colour. Nothing else. The cohort footer was removed on
+ * a bold header naming the category, and one compact row per series with both
+ * the label and the value drawn in that series' own colour, so a row and its
+ * mark are matched by colour alone. The cohort footer was removed on
  * 25 July 2026: the hover states the values and stops there.
+ *
+ * `id` is passed by the charts that own their tooltip element rather than
+ * letting Recharts position it; those need the live region and the id that
+ * their marks point at with aria-describedby.
  */
 export function TooltipCard({
+  id,
   title,
+  aside,
   rows,
   note,
 }: {
+  id?: string;
   title: string;
+  aside?: ReactNode;
   rows: TooltipRow[];
   note?: string;
 }) {
   return (
     <div
+      id={id}
+      role={id ? 'tooltip' : undefined}
+      aria-live={id ? 'polite' : undefined}
       className="max-w-[min(18rem,calc(100vw-2rem))] rounded-lg px-3 py-2 text-xs shadow-xl backdrop-blur-sm"
       style={TOOLTIP_SURFACE}
     >
-      <p className="font-semibold text-white">{title}</p>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-semibold text-white">{title}</p>
+        {aside && <span className="shrink-0 text-[11px] capitalize text-muted-foreground">{aside}</span>}
+      </div>
       <dl className="mt-1.5 space-y-1">
         {rows.map((row) => (
-          <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-            <dt className="text-white">{row.label}</dt>
-            <dd
-              className="text-right font-semibold tabular-nums text-white"
-              style={row.color ? { color: row.color } : undefined}
-            >
-              {row.value}
-            </dd>
+          <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4" style={row.color ? { color: row.color } : undefined}>
+            <dt className={row.color ? undefined : 'text-white'}>{row.label}</dt>
+            <dd className={`text-right font-semibold tabular-nums ${row.color ? '' : 'text-white'}`}>{row.value}</dd>
           </div>
         ))}
       </dl>
-      {note && <p className="mt-1.5 text-[11px] text-muted-foreground">{note}</p>}
+      {note && <p className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{note}</p>}
     </div>
   );
 }
@@ -189,12 +203,7 @@ function MonthlyExposureTooltip({
     { label: 'Total Distance', value: `${number(row.distance_km)} km`, color: DISTANCE_COLOR },
     { label: 'HSR Distance', value: `${number(row.hsr_distance_km)} km`, color: HSR_COLOR },
     { label: 'HSR Percentage', value: percentage === null ? 'Not available' : `${number(percentage, 1)}%`, color: HSR_COLOR },
-    { label: 'HSR Status', value: hsrStatusLabel(row) },
   ];
-  const hoursContributors = contributingClubsText(row, 'hours');
-  const distanceContributors = contributingClubsText(row, 'distance');
-  if (hoursContributors) rows.splice(1, 0, { label: 'Hours Contributors', value: hoursContributors });
-  if (distanceContributors) rows.splice(3, 0, { label: 'Distance Contributors', value: distanceContributors });
   return <TooltipCard title={exposureMonthLabel(label ?? row.month ?? 'Month')} rows={rows} note={row.is_imputed ? row.display_note ?? undefined : undefined} />;
 }
 
@@ -230,6 +239,12 @@ function HsrInsetDistanceBar({ x, y, width, height, payload }: BarShapeProps) {
 
 export type RingDatum = { key: string; label: string; value: number; color?: string };
 
+/**
+ * The bars count the whole cohort; a preliminary rate is measured on the
+ * contributing clubs only. When the month carries one, its own numerator,
+ * contributors and exposure are named here so the two denominators cannot be
+ * read as the same thing.
+ */
 function TimelineTooltip({
   active,
   label,
@@ -237,11 +252,12 @@ function TimelineTooltip({
 }: {
   active?: boolean;
   label?: string;
-  payload?: Array<{ payload?: MonthlySettingRow }>;
+  payload?: Array<{ payload?: SeasonTimelineRow }>;
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
-  const rows: TooltipRow[] = [{ label: 'Time Loss Injuries', value: `${count(row.time_loss_injuries)} injuries`, color: '#ffc45c' }];
+  const preliminary = row.preliminary_rate;
+  const rows: TooltipRow[] = [{ label: 'Time Loss Injuries', value: `${count(row.time_loss_injuries)} injuries`, color: TIME_LOSS_COLOR }];
   if (typeof row.recorded_injuries === 'number') {
     rows.unshift({ label: 'Overall Injuries', value: `${count(row.recorded_injuries)} injuries`, color: SETTING_COLORS.all });
   }
@@ -249,15 +265,20 @@ function TimelineTooltip({
     rows.push({ label: 'Overall Incidence', value: `${number(row.overall_incidence_per_1000h)} /1,000 h`, color: SETTING_COLORS.all });
   }
   if (typeof row.incidence_per_1000h === 'number') {
-    rows.push({ label: 'Time Loss Incidence', value: `${number(row.incidence_per_1000h)} /1,000 h`, color: '#ffc45c' });
+    rows.push({ label: 'Time Loss Incidence', value: `${number(row.incidence_per_1000h)} /1,000 h`, color: TIME_LOSS_COLOR });
   }
-  if (typeof row.overall_incidence_per_1000h === 'number' || typeof row.incidence_per_1000h === 'number') {
+  if (preliminary) {
+    rows.push({ label: 'Rate Injuries', value: `${count(preliminary.time_loss_injuries)} injuries`, color: TIME_LOSS_COLOR });
+    rows.push({ label: 'Contributors', value: `${count(preliminary.contributor_count)} clubs` });
+    rows.push({ label: 'Exposure', value: `${hours(preliminary.exposure_hours)} player-hours` });
+  } else if (typeof row.overall_incidence_per_1000h === 'number' || typeof row.incidence_per_1000h === 'number') {
     rows.push({ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` });
   }
   return (
     <TooltipCard
-      title={label ?? row.month}
+      title={exposureMonthLabel(label ?? row.month)}
       rows={rows}
+      note={preliminary?.qualification}
     />
   );
 }
@@ -269,7 +290,7 @@ export function SeasonTimelineChart({
   showOverallIncidence,
   showTlIncidence,
 }: {
-  rows: MonthlySettingRow[];
+  rows: SeasonTimelineRow[];
   showInjuries: boolean;
   showTlInjuries: boolean;
   showOverallIncidence: boolean;
@@ -291,7 +312,7 @@ export function SeasonTimelineChart({
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="month"
-            tickFormatter={compactMonth}
+            tickFormatter={(value: string) => exposureMonthLabel(value, true)}
             tick={{ fill: AXIS, fontSize: 11 }}
             tickLine={false}
             axisLine={AXIS_LINE}
@@ -316,7 +337,7 @@ export function SeasonTimelineChart({
           />
           <Tooltip
             content={<TimelineTooltip />}
-            cursor={{ fill: 'hsl(var(--primary) / 0.08)' }}
+            cursor={HOVER_BAND}
             wrapperStyle={{ zIndex: 30 }}
           />
           <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
@@ -337,7 +358,7 @@ export function SeasonTimelineChart({
               yAxisId="cases"
               dataKey="time_loss_injuries"
               name="Time Loss Injuries"
-              fill="#ffc45c"
+              fill={TIME_LOSS_COLOR}
               fillOpacity={1}
               radius={[3, 3, 0, 0]}
               maxBarSize={34}
@@ -354,7 +375,6 @@ export function SeasonTimelineChart({
               strokeWidth={2.5}
               dot={{ r: 3, strokeWidth: 1.5 }}
               activeDot={{ r: 5, strokeWidth: 2 }}
-              connectNulls
               isAnimationActive={false}
             />
           )}
@@ -364,11 +384,10 @@ export function SeasonTimelineChart({
               type="monotone"
               dataKey="incidence_per_1000h"
               name="Time Loss Incidence"
-              stroke="#ffc45c"
+              stroke={TIME_LOSS_COLOR}
               strokeWidth={2.5}
               dot={{ r: 3, strokeWidth: 1.5 }}
               activeDot={{ r: 5, strokeWidth: 2 }}
-              connectNulls
               isAnimationActive={false}
             />
           )}
@@ -526,7 +545,7 @@ export function ExposureTrendChart({
           />
           <Tooltip
             content={<MonthlyExposureTooltip hoursColor={totalHoursColor} />}
-            cursor={{ fill: 'hsl(var(--muted) / 0.5)' }}
+            cursor={HOVER_BAND}
             allowEscapeViewBox={{ x: false, y: false }}
             wrapperStyle={{ zIndex: 30 }}
           />
@@ -774,46 +793,22 @@ function ImpactTooltip({
       ? 'Small sample: interpret 2 injuries cautiously'
       : '';
 
+  const note = [caution, pinned ? 'Pinned, press Escape to dismiss' : ''].filter(Boolean).join(' · ');
+
   return (
-    <div
+    <TooltipCard
       id={id}
-      role="tooltip"
-      aria-live="polite"
-      className="w-[min(18rem,calc(100vw-2rem))] rounded-lg px-3 py-2 text-xs shadow-xl backdrop-blur-sm"
-      style={TOOLTIP_SURFACE}
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="font-semibold text-white">{row.label}</p>
-        <span className="shrink-0 text-[11px] capitalize text-muted-foreground">{settingLabel(row.setting)}</span>
-      </div>
-      <dl className="mt-1.5 space-y-1">
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt className="text-white">Incidence</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.incidence }}>{number(row.incidence_per_1000h)} /1,000 h</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt className="text-white">Mean Severity</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.severity }}>{number(row.mean_severity_days)} days</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt className="text-white">Burden</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.burden }}>{number(row.burden_per_1000h)} days /1,000 h</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-t border-white/10 pt-1">
-          <dt className="text-white">Injuries</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.count }}>{count(row.time_loss_injuries)}</dd>
-        </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
-          <dt className="text-white">Total Days Lost</dt>
-          <dd className="text-right font-semibold tabular-nums" style={{ color: METRIC_COLORS.burden }}>{count(row.days_lost)}</dd>
-        </div>
-      </dl>
-      {(caution || pinned) && (
-        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-          {caution}{caution && pinned && ' · '}{pinned && 'Pinned, press Escape to dismiss'}
-        </p>
-      )}
-    </div>
+      title={row.label}
+      aside={settingLabel(row.setting)}
+      rows={[
+        { label: 'Incidence', value: `${number(row.incidence_per_1000h)} /1,000 h`, color: METRIC_COLORS.incidence },
+        { label: 'Mean Severity', value: `${number(row.mean_severity_days)} days`, color: METRIC_COLORS.severity },
+        { label: 'Burden', value: `${number(row.burden_per_1000h)} days /1,000 h`, color: METRIC_COLORS.burden },
+        { label: 'Injuries', value: count(row.time_loss_injuries), color: METRIC_COLORS.count },
+        { label: 'Total Days Lost', value: count(row.days_lost), color: METRIC_COLORS.burden },
+      ]}
+      note={note || undefined}
+    />
   );
 }
 

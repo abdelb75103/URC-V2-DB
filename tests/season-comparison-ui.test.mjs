@@ -52,7 +52,7 @@ test('comparison UI maps decreases and increases to the requested outcome direct
   assert.match(component, /bg-blue-400/);
   assert.match(component, /bg-cyan-300/);
   assert.match(presentationMigration, /Hamstring Injury/);
-  assert.match(component, /comparison\.exposure\.previous\.qualification/);
+  assert.doesNotMatch(component, /comparison\.exposure\.(?:previous|current)\.qualification/);
   assert.doesNotMatch(component, /Outcome improvement vs 2024-25/);
   assert.doesNotMatch(component, /Approved reporting values for/);
   assert.doesNotMatch(component, /Selected team values only/);

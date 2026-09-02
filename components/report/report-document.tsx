@@ -2,6 +2,9 @@ import {
   Circle, Defs, Document, Font, G, Image, Line, LinearGradient, Page, Path, Rect,
   Stop, StyleSheet, Svg, Text, Text as PdfSvgText, View,
 } from "@react-pdf/renderer";
+import { currentExposureWarnings } from "@/lib/exposure-chart";
+import { timelineRate, PRELIMINARY_TIMELINE_NOTE } from "@/lib/season-timeline";
+import type { PreliminaryMonthlyRateRow } from "@/lib/reporting-types";
 import { cloneElement, type ComponentType, type ReactElement, type ReactNode } from "react";
 import {
   orderedReportSectionIds,
@@ -13,7 +16,7 @@ import {
 import {
   cardFill, commonInjuryColorMap, diagnosisColourMap, heatColour, heatScaleStops,
   illnessColorMap, MATRIX_DOT,
-  NO_CASE_FILL, RANKED_LANE_SIZE, rankedForMetric, rankedIllnesses, readableOn,
+  NO_CASE_FILL, rankedCommonInjuries, rankedIllnesses, readableOn,
   RISK_ZONE_STOPS,
 } from "@/lib/report-presentation";
 
@@ -225,7 +228,13 @@ function OverviewCards({ model }: { model: ReportModel }) {
   </View>;
 }
 
-function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatternRow[]; chartHeight?: number }) {
+function TimelineChart({ rows: sourceRows, preliminary = [], chartHeight = 235 }: { rows: readonly ReportPatternRow[]; preliminary?: readonly PreliminaryMonthlyRateRow[]; chartHeight?: number }) {
+  const rows = sourceRows.map((row) => {
+    const rate = timelineRate(row.month, row.incidencePer1000h, preliminary);
+    return { ...row, incidencePer1000h: rate.incidence, preliminaryRate: rate.preliminary };
+  });
+  const hasOverallRates = rows.some((row) => row.overallIncidencePer1000h !== null);
+  const hasTlRates = rows.some((row) => row.incidencePer1000h !== null);
   const w = 517, h = chartHeight, left = 42, right = 56, top = 24, bottom = 36;
   const plotW = w - left - right, plotH = h - top - bottom;
   const cases = niceScale(Math.max(1, ...rows.flatMap((r) => [r.recordedInjuries ?? 0, r.timeLossInjuries])));
@@ -276,14 +285,13 @@ function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatte
     <Legend items={[
       { label: "Overall Injuries", colour: C.cyan, shape: "bar" },
       { label: "Time Loss Injuries", colour: C.amber, shape: "bar" },
-      ...(hasRates ? [
-        { label: "Overall Incidence", colour: C.cyan, shape: "line" as const },
-        { label: "Time Loss Incidence", colour: C.amber, shape: "line" as const },
-      ] : []),
+      ...(hasOverallRates ? [{ label: "Overall Incidence", colour: C.cyan, shape: "line" as const }] : []),
+      ...(hasTlRates ? [{ label: "Time Loss Incidence", colour: C.amber, shape: "line" as const }] : []),
     ]} />
     <Caption>{hasRates
       ? "Bars read against the left axis in cases. Lines read against the right axis in injuries per 1,000 player-hours."
       : "Bars read against the left axis in cases. Monthly incidence is not available in this release, so no rate lines are drawn."}</Caption>
+    {rows.some((row) => row.preliminaryRate) && <Caption>{PRELIMINARY_TIMELINE_NOTE}</Caption>}
   </View>;
 }
 
@@ -476,7 +484,7 @@ function CommonLanes({ rows }: { rows: readonly ReportProfileRow[] }) {
   const overallRows = colourInput(rows.filter((row) => row.setting === "all"));
   return <View style={{ flexDirection: "row", marginHorizontal: -3 }}>
     {LANE_METRICS.map((lane) => {
-      const ranked = rankedForMetric(overallRows, lane.metric).slice(0, RANKED_LANE_SIZE);
+      const ranked = rankedCommonInjuries(overallRows, lane.metric);
       return <View key={lane.metric} style={{ width: "25%", paddingHorizontal: 3 }}>
         <View style={[styles.headRow, { flexDirection: "column", alignItems: "flex-start" }]}>
           <Text style={styles.panelTitle}>{lane.label}</Text>
@@ -975,23 +983,8 @@ function DiagnosisDriversPdf({ comparison }: { comparison: SeasonComparisonVisua
 
 function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <Page size="A4" style={styles.cover}>
+    {/* The image is already dark on the left, keeping the text legible without obscuring the player. */}
     {model.brand.heroDataUri && <Image fixed src={model.brand.heroDataUri} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-    {/* A left-to-right wash instead of a panel: the old 61%-wide overlay drew a
-        hard vertical seam down the cover. It clears well before the athlete on
-        the right, so the type stays legible and the photograph stays visible. */}
-    <View style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%" }}>
-      <Svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
-        <Defs>
-          <LinearGradient id="cover-wash" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset={0} stopColor={C.navy} stopOpacity={0.88} />
-            <Stop offset={0.42} stopColor={C.navy} stopOpacity={0.7} />
-            <Stop offset={0.74} stopColor={C.navy} stopOpacity={0} />
-            <Stop offset={1} stopColor={C.navy} stopOpacity={0} />
-          </LinearGradient>
-        </Defs>
-        <Rect x={0} y={0} width={100} height={100} fill="url(#cover-wash)" />
-      </Svg>
-    </View>
     <View style={{ position: "absolute", left: 0, top: 0, width: 6, height: "100%", backgroundColor: model.brand.accentColour }} />
     <View style={{ height: 48, flexDirection: "row", alignItems: "center", marginHorizontal: 30, marginTop: 30 }}>
       {model.brand.urcLogoDataUri && <Image src={model.brand.urcLogoDataUri} style={{ width: 31, height: 32, objectFit: "contain", marginRight: 10 }} />}
@@ -1031,7 +1024,7 @@ function SeasonPattern({ model, meta }: { model: ReportModel; meta: ReportMetada
 function SeverityContact({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="severity-contact">
     <PageTitle title="Monthly Pattern, Severity And Mechanism" note="The monthly injury series leads into the released severity and contact profiles." />
-    <View style={{ height: 320 }}><Panel fill title="Season Timeline" note="Case counts, and incidence where the release carries monthly rates, for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={244} /></Panel></View>
+    <View style={{ height: 344 }}><Panel fill title="Season Timeline" note="Case counts, and incidence where the release carries monthly rates, for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} preliminary={model.preliminaryMonthlyRates} chartHeight={244} /></Panel></View>
     <View style={[styles.split, { marginTop: 8, height: 318 }]}>
       <View style={styles.third}><Panel fill title="Severity" note="Injuries by released duration band."><HalfRing rows={model.severityDistribution} colours={SEVERITY_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
       <View style={styles.third}><Panel fill title="Contact Mechanism" note="Injuries by released mechanism."><HalfRing rows={model.contactDistribution} colours={CONTACT_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
@@ -1168,7 +1161,7 @@ function Exposure({ model, meta }: { model: ReportModel; meta: ReportMetadata })
   return <PageShell model={model} meta={meta} section="exposure">
     <PageTitle title="Exposure" note="The released denominator is shown over time and against the league cohort." />
     <StatCards cards={cards} />
-    {exposure.dataQualityWarnings.map((warning) => <View key={warning} style={[styles.note, { marginTop: 7 }]}>
+    {currentExposureWarnings(exposure.dataQualityWarnings).map((warning) => <View key={warning} style={[styles.note, { marginTop: 7 }]}>
       <Text><Text style={{ fontFamily: "Helvetica-Bold" }}>Data Quality Warning. </Text>{warning}</Text>
     </View>)}
     <Text style={[styles.panelNote, { marginTop: 6, marginBottom: 0 }]}>{hsrNote}</Text>

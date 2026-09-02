@@ -29,26 +29,7 @@ export function profileColor(code: string) {
   return PROFILE_COLORS[hash % PROFILE_COLORS.length];
 }
 
-const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-
-/** The zero-based month in a payload label such as `Sep 2024`, or -1. */
-export function monthIndex(value: string) {
-  return MONTH_NAMES.indexOf(value.trim().slice(0, 3).toLowerCase());
-}
-
-function monthOrder(value: string) {
-  const month = monthIndex(value);
-  const year = Number(value.match(/\d{4}/)?.[0]);
-  return month < 0 || !Number.isFinite(year) ? null : year * 12 + month;
-}
-
-export function sortSeasonMonths<T extends { month: string }>(rows: T[]) {
-  return [...rows].sort((a, b) => {
-    const aOrder = monthOrder(a.month);
-    const bOrder = monthOrder(b.month);
-    return aOrder !== null && bOrder !== null ? aOrder - bOrder : a.month.localeCompare(b.month);
-  });
-}
+export { monthIndex, sortSeasonMonths } from '@/lib/dashboard-month';
 
 export function Sparkline({
   values,

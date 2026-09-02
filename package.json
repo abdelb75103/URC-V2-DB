@@ -4,7 +4,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:dashboard-access": "node --test tests/team-dashboard-access.test.mjs tests/league-dashboard-access.test.mjs tests/dashboard-tab.test.mjs",
+    "test:dashboard-access": "node --test tests/team-dashboard-access.test.mjs tests/league-dashboard-access.test.mjs tests/dashboard-tab.test.mjs && tsx --test tests/season-timeline.test.ts",
     "test:dashboard-v3": "node --test tests/dashboard-v3-validation.test.mjs && python3 tests/test_dashboard_v3_preview.py",
     "test:reports": "tsx --conditions=react-server --test tests/report-model.test.ts && tsx --conditions=react-server --test tests/report-pdf.test.tsx && node --test tests/report-boundary.test.mjs",
     "reports:render-fixtures": "tsx --conditions=react-server scripts/render-report-fixtures.tsx",

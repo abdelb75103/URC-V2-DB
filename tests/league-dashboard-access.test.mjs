@@ -711,17 +711,18 @@ test('injury impact tooltip prioritises the plotted axes, gives exact small-samp
   const interaction = charts.slice(charts.indexOf('function ImpactDot'), charts.indexOf('export function ImpactScatterChart'));
   const chart = charts.slice(charts.indexOf('export function ImpactScatterChart'));
 
-  assert.match(tooltip, /flex items-baseline.*\{row\.label\}.*settingLabel\(row\.setting\)/s);
-  assert.match(tooltip, /\{\(caution \|\| pinned\) && \(/);
-  assert.ok(tooltip.indexOf('>Incidence<') < tooltip.indexOf('>Mean Severity<'), 'incidence must lead the plotted metrics');
-  assert.ok(tooltip.indexOf('>Mean Severity<') < tooltip.indexOf('>Burden<'), 'burden must remain supporting detail');
-  assert.doesNotMatch(tooltip, />Recorded Injuries</);
-  assert.match(tooltip, />Injuries</);
-  assert.match(tooltip, />Total Days Lost</);
+  assert.match(tooltip, /<TooltipCard[\s\S]*title=\{row\.label\}[\s\S]*aside=\{settingLabel\(row\.setting\)\}/);
+  assert.match(tooltip, /note=\{note \|\| undefined\}/);
+  assert.ok(tooltip.indexOf("label: 'Incidence'") < tooltip.indexOf("label: 'Mean Severity'"), 'incidence must lead the plotted metrics');
+  assert.ok(tooltip.indexOf("label: 'Mean Severity'") < tooltip.indexOf("label: 'Burden'"), 'burden must remain supporting detail');
+  assert.doesNotMatch(tooltip, /label: 'Recorded Injuries'/);
+  assert.match(tooltip, /label: 'Injuries'/);
+  assert.match(tooltip, /label: 'Total Days Lost'/);
   assert.doesNotMatch(tooltip, /Time-loss cases/);
   assert.match(tooltip, /Caution: based on 1 injury/);
   assert.match(tooltip, /Small sample: interpret 2 injuries cautiously/);
-  assert.match(tooltip, /aria-live="polite"/);
+  assert.match(tooltip, /id=\{id\}/);
+  assert.match(charts, /aria-live=\{id \? 'polite' : undefined\}/);
   assert.match(interaction, /r=\{22\}/);
   assert.match(interaction, /role="button"/);
   assert.match(interaction, /onMouseEnter/);
@@ -827,7 +828,7 @@ test('timeline distinguishes overall from time loss injuries and ranked team com
   const comparison = dashboard.slice(dashboard.indexOf('function TeamComparisonTab'), dashboard.indexOf('function BenchmarkCell'));
 
   assert.match(timeline, /dataKey="recorded_injuries"[\s\S]*?name="Overall Injuries"[\s\S]*?fill=\{SETTING_COLORS\.all\}/);
-  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="Time Loss Injuries"[\s\S]*?fill="#ffc45c"/);
+  assert.match(timeline, /dataKey="time_loss_injuries"[\s\S]*?name="Time Loss Injuries"[\s\S]*?fill=\{TIME_LOSS_COLOR\}/);
   assert.match(comparison, /const leagueMean = benchmark\?\.\[metric\]/);
   assert.match(comparison, /leagueMean=\{leagueMean\}/);
   assert.match(comparison, /border-dotted border-orange-400/);
@@ -932,13 +933,11 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.match(charts, /\/\>HSR Distance/);
   assert.doesNotMatch(charts, /horizontalInset|HSR Inset/);
   assert.match(charts, /HSR Percentage/);
-  assert.match(charts, /hsrStatusLabel/);
   assert.doesNotMatch(charts, /firstReportedMonth/);
   // Monthly charts drop pre-September months first (decision, 25 July 2026,
   // site-wide), then still open on the club's own first reported month.
   assert.match(charts, /fromSeptember\(sorted\)/);
   assert.match(charts, /return fromSeptember\(sorted\)/);
-  assert.match(charts, /contributingClubsText/);
   assert.match(charts, /<ComposedChart aria-label="Monthly hours, total distance, and high-speed-running exposure chart" accessibilityLayer/);
   assert.match(charts, /yAxisId="hours"[\s\S]*?dataKey="exposure_hours"[\s\S]*?name="Hours"/);
   assert.match(charts, /yAxisId="distance"[\s\S]*?dataKey="distance_km"[\s\S]*?name="Total Distance"/);

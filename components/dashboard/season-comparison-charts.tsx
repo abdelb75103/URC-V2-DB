@@ -8,10 +8,12 @@ import {
   ResponsiveContainer,
   Scatter,
   ScatterChart,
+  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
-import { TooltipCard } from '@/components/dashboard/charts';
+import { HOVER_BAND, TooltipCard } from '@/components/dashboard/charts';
+import { exposureMonthLabel } from '@/lib/exposure-chart';
 
 export type ComparisonSeasonPoint = {
   season: string;
@@ -372,23 +374,20 @@ export function ImpactBubbles({ seasons }: { seasons: ComparisonSeasonPoint[] })
   );
 }
 
-const DISPLAY_MONTHS = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-
-function monthLabel(month: string): string {
-  const lower = month.trim().toLowerCase();
-  return DISPLAY_MONTHS.find((item) => item.toLowerCase() === lower || item.toLowerCase().startsWith(lower.slice(0, 3))) ?? month;
-}
-
 type MonthlyPlotPoint = ComparisonMonthlyPoint & {
   priorPlot: number;
   currentPlot: number;
 };
 
+/**
+ * Hovering one bar reports the whole month: both seasons are named in the
+ * tooltip whichever bar is the interaction target.
+ */
 type MonthlySelection = InteractiveDatum & TooltipAnchor & {
   month: string;
   season: string;
-  value: number | null;
-  colour: string;
+  prior: number | null;
+  current: number | null;
 };
 
 type BarShapeProps = {
@@ -432,10 +431,10 @@ function MonthlyBar({
   const value = payload[series];
   const selection = {
     interactionKey,
-    month: monthLabel(payload.month),
+    month: exposureMonthLabel(payload.month),
     season,
-    value,
-    colour,
+    prior: payload.prior,
+    current: payload.current,
     anchorX: x + width / 2,
     anchorY: y,
   };
@@ -497,8 +496,11 @@ function MonthlyBar({
 function MonthlyTooltip({ selection, pinned }: { selection: MonthlySelection; pinned: boolean }) {
   return (
     <TooltipCard
-      title={`${selection.month} · ${selection.season}`}
-      rows={[{ label: 'Injuries', value: formatNumber(selection.value, 0), color: selection.colour }]}
+      title={selection.month}
+      rows={[
+        { label: '2024-25', value: formatNumber(selection.prior, 0), color: OLD_COLOUR },
+        { label: '2025-26', value: formatNumber(selection.current, 0), color: CURRENT_COLOUR },
+      ]}
       note={pinned ? 'Pinned. Press Escape to dismiss.' : undefined}
     />
   );
@@ -532,9 +534,12 @@ export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) 
         <ResponsiveContainer width="100%" height="100%">
           <BarChart accessibilityLayer data={data} margin={{ top: 24, right: 24, bottom: 48, left: 20 }} barGap={4} barCategoryGap="24%">
             <CartesianGrid stroke={GRID_COLOUR} strokeDasharray="3 5" vertical={false} />
+            {/* The chart keeps its own pinnable tooltip; Recharts is here only to
+                draw the hovered month band behind both bars. */}
+            <Tooltip cursor={HOVER_BAND} content={() => null} />
             <XAxis
               dataKey="month"
-              tickFormatter={monthLabel}
+              tickFormatter={(value: string) => exposureMonthLabel(value, true)}
               tick={{ fill: AXIS_COLOUR, fontSize: 11 }}
               tickLine={false}
               axisLine={{ stroke: AXIS_COLOUR }}
