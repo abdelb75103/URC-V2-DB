@@ -1,0 +1,1268 @@
+{
+  "schema_version": "urc_hsr_mapping_v1",
+  "season": "2024-25",
+  "teams": [
+  {
+    "season": "2024-25",
+    "team": "Benetton",
+    "team_key": "benetton",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": ">20 km/h"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/benetton/benetton_exposure_cleaned_2024-25.csv",
+      "sha256": "60b2263beb4bc12ad9ed4990cfb6fdb908ed90190eeed29a6a6b7e4df2eb694e"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "HSR > 20 Km/h (m)",
+    "units": "metres",
+    "threshold_or_zone": ">20 km/h",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "data/intake/2024-25/benetton/benetton_exposure_standardised_sanitized_2024-25.csv",
+        "sha256": "3018d7ed75ec2ec551f1d9619148e1267ce4bddf820c6e6af3da9bb86a206f85",
+        "sheet": "CSV header"
+      },
+      "original_source_file": {
+        "path": "../URC/Benneton/Benneton exposure Data 24_25.xlsx",
+        "sha256": "e750f5492bc76d8cf5f0a46d11b84fcea43a56a6dd31b5bf19a9243103d41dc7",
+        "sheet": "ALL DATA"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw ALL DATA HSR > 20 Km/h (m) distance field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 8446,
+      "source_backed_rows": 8446,
+      "canonical_populated_rows": 8446,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-07-22",
+        "end": "2025-06-09"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The >20 km/h threshold and metre unit are source-labelled, but vendor/device calibration and cross-team equivalence are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 8446,
+      "canonical_populated_rows": 8446,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  },
+  {
+    "season": "2024-25",
+    "team": "Bulls",
+    "team_key": "bulls",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/bulls/bulls_exposure_cleaned_2024-25.csv",
+      "sha256": "75a04f73bb169fce594789fb7d975727c254eceb4158ecaa0db9e1b3b5f811d0"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "HS Distance (m)",
+    "units": "metres",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Bulls/Bulls standardised_Exposure data .xlsx",
+        "sha256": "cd4d71841cac47b95f7248f122e93263edc575d6b5ec99edbcd78de4cbd9c0b2",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Bulls/Bulls Exposure Data 24_25.xlsx",
+        "sha256": "a5037c8466c64a1e11000cb36a793bbfc4d9f93f68132419cfe4e104e58eafff",
+        "sheet": "EXPOSURE_AUGUST_2024_BULLS"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw HS Distance (m) field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 7118,
+      "source_backed_rows": 7118,
+      "canonical_populated_rows": 7118,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-07-23",
+        "end": "2025-06-14"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The metre unit is explicit in the source heading, but the HSR threshold, vendor/device calibration and cross-team equivalence are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 7118,
+      "canonical_populated_rows": 7118,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  },
+  {
+    "season": "2024-25",
+    "team": "Cardiff",
+    "team_key": "cardiff",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/cardiff/cardiff_exposure_cleaned_2024-25.csv",
+      "sha256": "9c24c5a223f7d4bc31914c709a22621965057c645e0993036c624c99c1d24e86"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "distance_high_speed",
+    "units": "metres",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Cardiff/Cardiff standardised_Exposure data .xlsx",
+        "sha256": "dd07d2ce6195a95e20a8b154ad0a7d73f29f96d3ab3958b3ed2cf54657eae10e",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Cardiff/Cardiff Exposure Data .csv",
+        "sha256": "d1045854d53b6099889cc825aef669615cfc7e315a7569f6f46a5b49c8ea5239",
+        "sheet": "CSV header"
+      },
+      "description": "Accepted rows carry source-preserved HSR distance restored from the raw distance_high_speed field; the retained adapter evidence marks this metric non-comparable."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256",
+      "hsr_reference_file_sha256",
+      "hsr_reference_row_number"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_reference_locator_fields": [
+        "hsr_reference_file_sha256",
+        "hsr_reference_row_number"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "original_hsr_value_field": "distance_high_speed",
+      "same_row_rule": "Use hsr_reference_file_sha256 plus hsr_reference_row_number carried on the same accepted row."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 7351,
+      "source_backed_rows": 7351,
+      "canonical_populated_rows": 7351,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-07-12",
+        "end": "2025-05-29"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The source-preserved metre interpretation is retained, but vendor/device calibration and the distance_high_speed threshold are not supplied; the adapter evidence excludes cross-team comparison."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 7351,
+      "canonical_populated_rows": 7351,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  },
+  {
+    "season": "2024-25",
+    "team": "Connacht",
+    "team_key": "connacht",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_zone_definition",
+    "hsr": {
+      "mode": "observation_group",
+      "source_field": "distance_z_4_to_z_6",
+      "distance_like": true,
+      "units": "unknown (distance-like source field; unit not supplied)",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "source": {
+        "path": "../URC/Connacht/URC_GPS_Connacht_Cleaned.xlsx",
+        "sha256": "2b3c9bc92a3c6b4415262f9c598485169bf2e590ccb07804fb4cc6d6e8ef5423",
+        "sheet": "Sheet1",
+        "source_locator_fields": ["__physical_row_number"],
+        "source_row_hash_fields": ["week_start", "player_name", "player_province", "distance_total", "distance_z_4_to_z_6", "time_z_4_to_z_6", "total_time_minutes"],
+        "source_row_hash_includes_physical_row": true
+      },
+      "join_fields": [{"accepted": "source_row_number", "source": "__physical_row_number"}]
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/connacht/connacht_exposure_cleaned_2024-25.csv",
+      "sha256": "7db203843198afd4fa90fb4ab59716bf9d6e5a4c94043326823f8306f848aa84"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "distance_z_4_to_z_6",
+    "original_field_name": "distance_z_4_to_z_6",
+    "units": "unknown (distance-like source field; unit not supplied)",
+    "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Connacht/Connacht standardised Exposure data .xlsx",
+        "sha256": "052f4d573b3ce7ad88d67e5ae99d6d2f0086a0f0cb011459bbc99763b740d561",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Connacht/URC_GPS_Connacht_Cleaned.xlsx",
+        "sha256": "2b3c9bc92a3c6b4415262f9c598485169bf2e590ccb07804fb4cc6d6e8ef5423",
+        "sheet": "Sheet1"
+      },
+      "description": "The accepted exposure rows are bridged to the retained GPS Sheet1 rows, where distance_z_4_to_z_6 is the distance-like HSR source field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_source_file_sha256": "2b3c9bc92a3c6b4415262f9c598485169bf2e590ccb07804fb4cc6d6e8ef5423",
+      "hsr_source_sheet": "Sheet1",
+      "hsr_source_row_number": "same one-based physical data-row number as accepted source_row_number",
+      "hsr_value_field": "distance_z_4_to_z_6",
+      "same_row_rule": "Require exact file hash and Sheet1, row-count equality, source_row_number sequence equality, and equality of session date to week_start, minutes total to total_time_minutes, and distance total to distance_total before binding the HSR field."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 679,
+      "source_backed_rows": 679,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 679,
+      "accepted_date_range": {
+        "start": "2024-09-16",
+        "end": "2025-06-09"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_zone_definition",
+      "limitation": "The retained zone 4 to zone 6 field is source-specific; numeric zone boundaries, units and vendor/device calibration are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_but_not_in_canonical_column",
+      "source_backed_rows": 679,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 679
+    },
+    "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above."
+  },
+  {
+    "season": "2024-25",
+    "team": "Dragons",
+    "team_key": "dragons",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/dragons/dragons_exposure_cleaned_2024-25.csv",
+      "sha256": "dc88dc7416a9f2dcdc46575132c89f2393fb26e891e09c37084e8e0dc8a5e92e"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "distance_high_speed",
+    "units": "metres",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Dragons/Dragons standardised_Exposure data .xlsx",
+        "sha256": "b628b47f3eb1843f439c678f4760143601f66faa1f22e556f9ee318411d850f3",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Dragons/Dragons Exposure Data 24_25.csv",
+        "sha256": "d2c46f8ac64925f8283c3b18e8f7500a45311f2c018d92804aef6c9bf57f9169",
+        "sheet": "CSV header"
+      },
+      "description": "Accepted rows carry source-preserved HSR distance restored from the raw distance_high_speed field; retained adapter evidence marks this metric non-comparable."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256",
+      "hsr_reference_file_sha256",
+      "hsr_reference_row_number"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_reference_locator_fields": [
+        "hsr_reference_file_sha256",
+        "hsr_reference_row_number"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "original_hsr_value_field": "distance_high_speed",
+      "same_row_rule": "Use hsr_reference_file_sha256 plus hsr_reference_row_number carried on the same accepted row."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 7126,
+      "source_backed_rows": 7126,
+      "canonical_populated_rows": 7126,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-07-09",
+        "end": "2025-05-22"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The source-preserved metre interpretation is retained, but vendor/device calibration and the distance_high_speed threshold are not supplied; the adapter evidence excludes cross-team comparison."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 7126,
+      "canonical_populated_rows": 7126,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  },
+  {
+    "season": "2024-25",
+    "team": "Edinburgh",
+    "team_key": "edinburgh",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "unknown (source header does not state a unit)",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/edinburgh/edinburgh_exposure_cleaned_2024-25.csv",
+      "sha256": "f2dae263947036980ec64a42e47467a872b9f4d8c946c3a7fe31f1a8f90f5cd0"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "High Speed Running",
+    "units": "unknown (source header does not state a unit)",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Edinburgh/Edinburgh standardised_data.xlsx",
+        "sha256": "a08ebce4a6f0325b5a700ee0c3b2e67080aea15b89d2320d76f927571ebe9c1d",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Edinburgh/Edinburgh Exposure Data .csv",
+        "sha256": "e6d345946aa53f98d1b91d41d051b6bb41c5ff49c0dd3532330d08972f660af9",
+        "sheet": "CSV header"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw High Speed Running field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 11416,
+      "source_backed_rows": 10756,
+      "canonical_populated_rows": 10756,
+      "canonical_blank_rows": 660,
+      "accepted_date_range": {
+        "start": "2024-06-17",
+        "end": "2025-05-20"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The raw High Speed Running label does not provide a unit or threshold, and vendor/device calibration is not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_available_rows",
+      "source_backed_rows": 10756,
+      "canonical_populated_rows": 10756,
+      "canonical_blank_rows": 660
+    },
+    "gap_reason": "660 accepted rows have no valid same-row source HSR value in the retained source; the canonical field remains blank for those rows."
+  },
+  {
+    "season": "2024-25",
+    "team": "Glasgow",
+    "team_key": "glasgow",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "unknown (source header does not state a unit)",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/glasgow/glasgow_exposure_cleaned_2024-25.csv",
+      "sha256": "1a7d31c7bdcce84846817bf4eb62c74bea1f8bb9b1e65410d5fdf270a0ea74fb"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "High Speed Running",
+    "units": "unknown (source header does not state a unit)",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Glasgow/Glasgow standardised_Exposure data .xlsx",
+        "sha256": "244f38c8b0ddfc0f2d3e3fd78b1a75030a54e4f4005397e24c25f29eff9353fd",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Glasgow/Glasgow Exposure Data.xlsx",
+        "sha256": "4218b5915a0e0aff54ba044b09296b7eae67431cc3c4b3bf9015daf3879ebae1",
+        "sheet": "Sheet1"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw High Speed Running field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 4672,
+      "source_backed_rows": 4661,
+      "canonical_populated_rows": 4661,
+      "canonical_blank_rows": 11,
+      "accepted_date_range": {
+        "start": "2024-09-16",
+        "end": "2025-06-07"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The raw High Speed Running label does not provide a unit or threshold, and vendor/device calibration is not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_available_rows",
+      "source_backed_rows": 4661,
+      "canonical_populated_rows": 4661,
+      "canonical_blank_rows": 11
+    },
+    "gap_reason": "11 accepted rows have no valid same-row source HSR value in the retained source; the canonical field remains blank for those rows."
+  },
+  {
+    "season": "2024-25",
+    "team": "Leinster",
+    "team_key": "leinster",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_zone_definition",
+    "hsr": {
+      "mode": "observation_group",
+      "source_field": "distance_z_4_to_z_6",
+      "distance_like": true,
+      "units": "unknown (distance-like source field; unit not supplied)",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "source": {
+        "path": "../URC/Leinster/URC_GPS_Leinster_Cleaned.xlsx",
+        "sha256": "b6e3c0f8d47f0b5f188797ad010d5eb795951df5348c673146bef453324a5edb",
+        "sheet": "Sheet1",
+        "source_locator_fields": ["__physical_row_number"],
+        "source_row_hash_fields": ["week_start", "player_name", "player_province", "distance_total", "distance_z_4_to_z_6", "time_z_4_to_z_6", "total_time_minutes"],
+        "source_row_hash_includes_physical_row": true
+      },
+      "join_fields": [{"accepted": "source_row_number", "source": "__physical_row_number"}]
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/leinster/leinster_exposure_cleaned_2024-25.csv",
+      "sha256": "b15de4026e70a1cd5de75eb08161d30fcf9854fcd4e9bb07fd257e1c454f8a9f"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "distance_z_4_to_z_6",
+    "original_field_name": "distance_z_4_to_z_6",
+    "units": "unknown (distance-like source field; unit not supplied)",
+    "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Leinster/Leinster standardised_Exposure data.xlsx",
+        "sha256": "70a6815631a09654f587adfa7f472b640599d17b57e232a7ca43be1bf3b289d2",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Leinster/URC_GPS_Leinster_Cleaned.xlsx",
+        "sha256": "b6e3c0f8d47f0b5f188797ad010d5eb795951df5348c673146bef453324a5edb",
+        "sheet": "Sheet1"
+      },
+      "description": "The accepted exposure rows are bridged to the retained GPS Sheet1 rows, where distance_z_4_to_z_6 is the distance-like HSR source field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_source_file_sha256": "b6e3c0f8d47f0b5f188797ad010d5eb795951df5348c673146bef453324a5edb",
+      "hsr_source_sheet": "Sheet1",
+      "hsr_source_row_number": "same one-based physical data-row number as accepted source_row_number",
+      "hsr_value_field": "distance_z_4_to_z_6",
+      "same_row_rule": "Require exact file hash and Sheet1, row-count equality, source_row_number sequence equality, and equality of session date to week_start, minutes total to total_time_minutes, and distance total to distance_total before binding the HSR field."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 954,
+      "source_backed_rows": 954,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 954,
+      "accepted_date_range": {
+        "start": "2024-09-16",
+        "end": "2025-06-09"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_zone_definition",
+      "limitation": "The retained zone 4 to zone 6 field is source-specific; numeric zone boundaries, units and vendor/device calibration are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_but_not_in_canonical_column",
+      "source_backed_rows": 954,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 954
+    },
+    "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above."
+  },
+  {
+    "season": "2024-25",
+    "team": "Lions",
+    "team_key": "lions",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/lions/lions_exposure_cleaned_2024-25.csv",
+      "sha256": "3667c5af1e3c237bf49289bc9f97cb6a710820a37b2dfa26c53cca851d551967"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "High Speed Distance (m)",
+    "units": "metres",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Lions/Lions standardised_Exposure data.xlsx",
+        "sha256": "a7df6cb3fd6e9886ab8ec8911121b2a836a438c5b1ea12de7c905912dee45fcf",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Lions/Lions Exposure Data.xlsx",
+        "sha256": "6661076f324bc9ec96fa6e38b35fa6aa60eb4fa385edc21e5f861457cb53b949",
+        "sheet": "Exposure_August_2024_Lions"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw High Speed Distance (m) field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 3656,
+      "source_backed_rows": 3109,
+      "canonical_populated_rows": 3109,
+      "canonical_blank_rows": 547,
+      "accepted_date_range": {
+        "start": "2024-08-05",
+        "end": "2025-05-13"
+      },
+      "unparseable_date_rows": 547
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The metre unit is explicit in the source heading, but the HSR threshold, vendor/device calibration and cross-team equivalence are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_available_rows",
+      "source_backed_rows": 3109,
+      "canonical_populated_rows": 3109,
+      "canonical_blank_rows": 547
+    },
+    "gap_reason": "547 accepted rows are team-only ghost rows with no valid same-row source HSR value; the canonical field remains blank for those rows."
+  },
+  {
+    "season": "2024-25",
+    "team": "Munster",
+    "team_key": "munster",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_zone_definition",
+    "hsr": {
+      "mode": "observation_group",
+      "source_field": "distance_z_4_to_z_6",
+      "distance_like": true,
+      "units": "unknown (distance-like source field; unit not supplied)",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "source": {
+        "path": "../URC/Munster/URC_GPS_Munster_Cleaned.xlsx",
+        "sha256": "93a5c236a56ab73e9975b29cdf15bd655b438986a9c17a92d441c2a015c2aea4",
+        "sheet": "Sheet1",
+        "source_locator_fields": ["__physical_row_number"],
+        "source_row_hash_fields": ["week_start", "player_name", "player_province", "distance_total", "distance_z_4_to_z_6", "time_z_4_to_z_6", "total_time_minutes"],
+        "source_row_hash_includes_physical_row": true
+      },
+      "join_fields": [{"accepted": "source_row_number", "source": "__physical_row_number"}]
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
+      "sha256": "c8a09d4dfc1a14cb469c5929a563af3fd5f61f5700578478fe1553268084adc1"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "distance_z_4_to_z_6",
+    "original_field_name": "distance_z_4_to_z_6",
+    "units": "unknown (distance-like source field; unit not supplied)",
+    "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Munster/Munster standardised_Exposure data.xlsx",
+        "sha256": "5d6f6854ee5224873e3969bd78764a21b389b73ccb538f555f3944c3833007d6",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Munster/URC_GPS_Munster_Cleaned.xlsx",
+        "sha256": "93a5c236a56ab73e9975b29cdf15bd655b438986a9c17a92d441c2a015c2aea4",
+        "sheet": "Sheet1"
+      },
+      "description": "The accepted exposure rows are bridged to the retained GPS Sheet1 rows, where distance_z_4_to_z_6 is the distance-like HSR source field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_source_file_sha256": "93a5c236a56ab73e9975b29cdf15bd655b438986a9c17a92d441c2a015c2aea4",
+      "hsr_source_sheet": "Sheet1",
+      "hsr_source_row_number": "same one-based physical data-row number as accepted source_row_number",
+      "hsr_value_field": "distance_z_4_to_z_6",
+      "same_row_rule": "Require exact file hash and Sheet1, row-count equality, source_row_number sequence equality, and equality of session date to week_start, minutes total to total_time_minutes, and distance total to distance_total before binding the HSR field."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 803,
+      "source_backed_rows": 803,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 803,
+      "accepted_date_range": {
+        "start": "2024-09-16",
+        "end": "2025-06-09"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_zone_definition",
+      "limitation": "The retained zone 4 to zone 6 field is source-specific; numeric zone boundaries, units and vendor/device calibration are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_but_not_in_canonical_column",
+      "source_backed_rows": 803,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 803
+    },
+    "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above."
+  },
+  {
+    "season": "2024-25",
+    "team": "Ospreys",
+    "team_key": "ospreys",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/ospreys/ospreys_exposure_cleaned_2024-25.csv",
+      "sha256": "83ee7c20d90bfbe12f643ee1e95fa8d9cb631eea5133463455f65efb082eb7fa"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "distance_high_speed",
+    "units": "metres",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Ospreys/Ospreys standardised_Exposure data.xlsx",
+        "sha256": "d72074c637e51b38502f55f0f43a7e05b462042991f90bbcf93541b572ea82e5",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Ospreys/Ospreys Exposure Data 24_25.csv",
+        "sha256": "ed01109bb179870f2d69255ec23b00c68c342028223cacbf72151a822a5fcd32",
+        "sheet": "CSV header"
+      },
+      "description": "Accepted rows carry source-preserved HSR distance restored from the raw distance_high_speed field; retained adapter evidence marks this metric non-comparable."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256",
+      "hsr_reference_file_sha256",
+      "hsr_reference_row_number"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_reference_locator_fields": [
+        "hsr_reference_file_sha256",
+        "hsr_reference_row_number"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "original_hsr_value_field": "distance_high_speed",
+      "same_row_rule": "Use hsr_reference_file_sha256 plus hsr_reference_row_number carried on the same accepted row."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 8604,
+      "source_backed_rows": 8604,
+      "canonical_populated_rows": 8604,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-07-15",
+        "end": "2025-07-10"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The source-preserved metre interpretation is retained, but vendor/device calibration and the distance_high_speed threshold are not supplied; the adapter evidence excludes cross-team comparison."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 8604,
+      "canonical_populated_rows": 8604,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  },
+  {
+    "season": "2024-25",
+    "team": "Scarlets",
+    "team_key": "scarlets",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/scarlets/scarlets_exposure_cleaned_2024-25.csv",
+      "sha256": "a457a26a79f7490f57fffba28ceb26e461fefd669515b7be2c914fdf4b17cd71"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "distance_high_speed",
+    "units": "metres",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Scarlets/Scarlets standardised_Exposure data .xlsx",
+        "sha256": "ecaca43bb337c3a22204a6456aeeb665fb01024745863b76593b1c1f8a40178f",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Scarlets/Scarlets Exposure Data 24_25.csv",
+        "sha256": "36d3974a326fb9cb628177a248807081737d05a112bf1f63d2316438d95a8c11",
+        "sheet": "CSV header"
+      },
+      "description": "Accepted rows carry source-preserved HSR distance restored from the raw distance_high_speed field; retained adapter evidence marks this metric non-comparable."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256",
+      "hsr_reference_file_sha256",
+      "hsr_reference_row_number"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_reference_locator_fields": [
+        "hsr_reference_file_sha256",
+        "hsr_reference_row_number"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "original_hsr_value_field": "distance_high_speed",
+      "same_row_rule": "Use hsr_reference_file_sha256 plus hsr_reference_row_number carried on the same accepted row."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 5866,
+      "source_backed_rows": 5866,
+      "canonical_populated_rows": 5866,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-07-02",
+        "end": "2025-05-31"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The source-preserved metre interpretation is retained, but vendor/device calibration and the distance_high_speed threshold are not supplied; the adapter evidence excludes cross-team comparison."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 5866,
+      "canonical_populated_rows": 5866,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  },
+  {
+    "season": "2024-25",
+    "team": "Sharks",
+    "team_key": "sharks",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "unknown (source header does not state a unit)",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/sharks/sharks_exposure_cleaned_2024-25.csv",
+      "sha256": "4c9c7aed6b6006d385b7ce4dc2031787d7c5b987fb6ca1d5c0dfd12abef9f669"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "High Speed Running (Absolute)",
+    "units": "unknown (source header does not state a unit)",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Sharks/Sharks standardised_Exposure data.xlsx",
+        "sha256": "5d9651791c9e5dba39a41c95dc70f89521c29e0504cefefcea25a736f70750b0",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Sharks/Sharks Exposure Data.xlsx",
+        "sha256": "459622d1591a8c9dac901140afb4af937e0bfb56c9e5da8a9774938bb42b0486",
+        "sheet": "Sheet1"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw High Speed Running (Absolute) field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 5624,
+      "source_backed_rows": 5377,
+      "canonical_populated_rows": 5377,
+      "canonical_blank_rows": 247,
+      "accepted_date_range": {
+        "start": "2024-09-02",
+        "end": "2025-06-07"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The raw absolute HSR label does not provide a unit or threshold, and vendor/device calibration is not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_available_rows",
+      "source_backed_rows": 5377,
+      "canonical_populated_rows": 5377,
+      "canonical_blank_rows": 247
+    },
+    "gap_reason": "247 accepted rows have no valid same-row source HSR value, including team-only ghost rows and one source row without an HSR value; the canonical field remains blank for those rows."
+  },
+  {
+    "season": "2024-25",
+    "team": "Stormers",
+    "team_key": "stormers",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": "threshold not supplied"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/stormers/stormers_exposure_cleaned_2024-25.csv",
+      "sha256": "c1ddb4fcc9a6aa16e29bbe720af16ebf7a696d91830bac1e7f1b52105fe2b169"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "High Speed Distance (m)",
+    "units": "metres",
+    "threshold_or_zone": "threshold not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Stormers/Stormers standardised_Exposure data .xlsx",
+        "sha256": "854bea77e30b512125d81325238a73c13ffe47981b6498316b5de1538f588612",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Stormers/Stormers Exposure Data.xlsx",
+        "sha256": "3d986eb2c076d8b7a2ef3606b8e2748d1ed59faeceed7ae1f64391cca6cfafa3",
+        "sheet": "September 24"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw High Speed Distance (m) field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 5186,
+      "source_backed_rows": 5186,
+      "canonical_populated_rows": 5186,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-01-03",
+        "end": "2025-05-31"
+      },
+      "missing_or_unparseable_date_rows": 15
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The metre unit is explicit in the source heading, but the HSR threshold, vendor/device calibration and cross-team equivalence are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 5186,
+      "canonical_populated_rows": 5186,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  },
+  {
+    "season": "2024-25",
+    "team": "Ulster",
+    "team_key": "ulster",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_zone_definition",
+    "hsr": {
+      "mode": "observation_group",
+      "source_field": "distance_z_4_to_z_6",
+      "distance_like": true,
+      "units": "unknown (distance-like source field; unit not supplied)",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "source": {
+        "path": "../URC/Ulster/URC_GPS_Ulster_Cleaned.xlsx",
+        "sha256": "5a3d9fc20956fc23d5250296d3d05abeeb17a01341e5749d1b4fdd8b405d9922",
+        "sheet": "Sheet1",
+        "source_locator_fields": ["__physical_row_number"],
+        "source_row_hash_fields": ["week_start", "player_name", "player_province", "distance_total", "distance_z_4_to_z_6", "time_z_4_to_z_6", "total_time_minutes"],
+        "source_row_hash_includes_physical_row": true
+      },
+      "join_fields": [{"accepted": "source_row_number", "source": "__physical_row_number"}]
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/ulster/ulster_exposure_cleaned_2024-25.csv",
+      "sha256": "447d290f6caec3f2d7928f32151434020bd8c42b69557482516248d99961677e"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "distance_z_4_to_z_6",
+    "original_field_name": "distance_z_4_to_z_6",
+    "units": "unknown (distance-like source field; unit not supplied)",
+    "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "../URC/Ulster/Ulster standardised_Exposure data.xlsx",
+        "sha256": "7960ab3f789e94a99d8db0e470b8639fda938928a5473af0e69fc963c6734ce4",
+        "sheet": "Standardized Data"
+      },
+      "original_source_file": {
+        "path": "../URC/Ulster/URC_GPS_Ulster_Cleaned.xlsx",
+        "sha256": "5a3d9fc20956fc23d5250296d3d05abeeb17a01341e5749d1b4fdd8b405d9922",
+        "sheet": "Sheet1"
+      },
+      "description": "The accepted exposure rows are bridged to the retained GPS Sheet1 rows, where distance_z_4_to_z_6 is the distance-like HSR source field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_source_file_sha256": "5a3d9fc20956fc23d5250296d3d05abeeb17a01341e5749d1b4fdd8b405d9922",
+      "hsr_source_sheet": "Sheet1",
+      "hsr_source_row_number": "same one-based physical data-row number as accepted source_row_number",
+      "hsr_value_field": "distance_z_4_to_z_6",
+      "same_row_rule": "Require exact file hash and Sheet1, row-count equality, source_row_number sequence equality, and equality of session date to week_start, minutes total to total_time_minutes, and distance total to distance_total before binding the HSR field."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 817,
+      "source_backed_rows": 817,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 817,
+      "accepted_date_range": {
+        "start": "2024-09-16",
+        "end": "2025-06-09"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_zone_definition",
+      "limitation": "The retained zone 4 to zone 6 field is source-specific; numeric zone boundaries, units and vendor/device calibration are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_but_not_in_canonical_column",
+      "source_backed_rows": 817,
+      "canonical_populated_rows": 0,
+      "canonical_blank_rows": 817
+    },
+    "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above."
+  },
+  {
+    "season": "2024-25",
+    "team": "Zebre",
+    "team_key": "zebre",
+      "date_field": "cleaned_date",
+    "accepted_locator_fields": ["source_file_sha256", "source_sheet", "source_row_number", "source_row_sha256"],
+    "comparability_status": "non_comparable_unknown_vendor_threshold",
+    "hsr": {
+      "mode": "accepted_row",
+      "source_field": "high speed running distance",
+      "distance_like": true,
+      "units": "metres",
+      "threshold_or_zone": ">20 km/h"
+    },
+    "accepted_input": {
+      "path": "data/intake/2024-25/zebre/zebre_exposure_cleaned_2024-25.csv",
+      "sha256": "522e97f0785c355f3f563b28533a3af382dc8cc3b9cd9c5baceec6d44af4d66c"
+    },
+    "canonical_output_field": "high speed running distance",
+    "source_field": "high speed running distance",
+    "original_field_name": "HSRm (>20km/h)",
+    "units": "metres",
+    "threshold_or_zone": ">20 km/h",
+    "source_evidence": {
+      "accepted_standardised_file": {
+        "path": "data/intake/2024-25/zebre/zebre_exposure_standardised_sanitized_2024-25.csv",
+        "sha256": "23eac0f7b1fa2200e5591a404abacc4dee1a76e2677a240eff53d5cf1d15155f",
+        "sheet": "CSV header"
+      },
+      "original_source_file": {
+        "path": "../URC/Zebre/Zebre Exposure Data 24_25 (1).xlsx",
+        "sha256": "84740a1465bd8797cd2ac5d4483589a6407ece70dd5ae045d88311ec79834ba9",
+        "sheet": "Sheet1"
+      },
+      "description": "Accepted standardised rows retain the canonical HSR distance field mapped from the raw HSRm (>20km/h) distance field."
+    },
+    "stable_row_join_fields": [
+      "source_file_sha256",
+      "source_sheet",
+      "source_row_number",
+      "source_row_sha256"
+    ],
+    "source_reference_fields": {
+      "accepted_input_locator_fields": [
+        "source_file_sha256",
+        "source_sheet",
+        "source_row_number",
+        "source_row_sha256"
+      ],
+      "hsr_value_field": "high speed running distance",
+      "same_row_rule": "Read the HSR value from the accepted row identified by its existing source locator; no player-only or date-only join."
+    },
+    "accepted_row_coverage": {
+      "accepted_rows": 4813,
+      "source_backed_rows": 4813,
+      "canonical_populated_rows": 4813,
+      "canonical_blank_rows": 0,
+      "accepted_date_range": {
+        "start": "2024-07-01",
+        "end": "2025-05-17"
+      }
+    },
+    "comparability": {
+      "status": "non_comparable_unknown_vendor_threshold",
+      "limitation": "The >20 km/h threshold and metre unit are source-labelled, but vendor/device calibration and cross-team equivalence are not supplied."
+    },
+    "expected_availability": {
+      "status": "source_backed_on_accepted_rows",
+      "source_backed_rows": 4813,
+      "canonical_populated_rows": 4813,
+      "canonical_blank_rows": 0
+    },
+    "gap_reason": null
+  }
+  ]
+}

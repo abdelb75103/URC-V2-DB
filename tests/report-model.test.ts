@@ -193,6 +193,41 @@ test("preserves released nulls and blocks rate deltas without comparable exposur
   assert.match(model.coverageNote ?? "", /Temporary league-mean exposure estimate/);
 });
 
+test("carries released HSR values and placeholder status into the exposure export", () => {
+  const current = dashboardFixture({
+    coverage: {
+      ...dashboardFixture().coverage,
+      hsr_distance_km: 6600,
+      hsr_percentage: 5.5,
+      is_imputed: true,
+      display_note: "League-mean placeholder pending source data.",
+      hsr_source_status: "placeholder",
+    },
+    monthly: [{
+      ...dashboardFixture().monthly[0],
+      hsr_distance_km: 550,
+      hsr_percentage: 5.5,
+      is_imputed: true,
+      imputation_method: "league_mean_paired_hsr_percentage",
+      display_note: "League-mean placeholder pending source data.",
+      hsr_source_status: "placeholder",
+    }],
+  });
+  const model = buildReportModel({
+    current,
+    prior: null,
+    expectedScope: "team",
+    expectedSeason: "2025-26",
+    subjectName: "Harbour RFC",
+    protectedTerms: ["Rivals RFC"],
+  });
+
+  assert.equal(model.exposure.totalHsrDistanceKm, 6600);
+  assert.equal(model.exposure.totalHsrPercentage, 5.5);
+  assert.equal(model.exposure.monthly[0].isImputed, true);
+  assert.equal(model.exposure.monthly[0].displayNote, "League-mean placeholder pending source data.");
+});
+
 test("keeps released month rows in chronological order when labels are presentation text", () => {
   const rows = dashboardFixture().monthly;
   const current = dashboardFixture({

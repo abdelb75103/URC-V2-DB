@@ -55,7 +55,7 @@ test('league dashboard uses the approved database consumer view and fails closed
   assert.doesNotMatch(page, /content\/reporting|_dashboard_2024-25\.json/);
   assert.doesNotMatch(page, /getExposureReviewPreview|exposurePreview/);
 
-  assert.match(reporting, /reporting\.latest_league_dashboard_v7/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v8/);
   assert.match(reporting, /where season = \$1/);
   assert.match(reporting, /to_jsonb\(league_dashboard\) -> 'preliminary_monthly_rates' as preliminary_monthly_rates/);
   assert.match(reporting, /expected one league dashboard row/);
@@ -118,12 +118,12 @@ test('published league dashboard is unlocked on the homepage', async () => {
   assert.match(tile, /<Link href=\{href\} prefetch=\{false\} className="group block">/);
 });
 
-test('shared readers use the v7 successor while preserving direct Year 1 pass-through', async () => {
+test('shared readers use the v8 successor while preserving direct Year 1 pass-through', async () => {
   const reporting = await readFile(new URL('../lib/reporting.ts', import.meta.url), 'utf8');
   const migration = await readFile(new URL('../supabase/migrations/20260815030000_urc_2025_26_team_release_v6.sql', import.meta.url), 'utf8');
 
-  assert.match(reporting, /reporting\.latest_team_dashboard_v7/);
-  assert.match(reporting, /reporting\.latest_league_dashboard_v7/);
+  assert.match(reporting, /reporting\.latest_team_dashboard_v8/);
+  assert.match(reporting, /reporting\.latest_league_dashboard_v8/);
   assert.match(migration, /from reporting\.latest_team_dashboard_v5\s+where season <> '2025-26'/);
   assert.match(migration, /from reporting\.latest_league_dashboard_v5\s+where season <> '2025-26'/);
   assert.match(migration, /from reporting\.latest_dashboard_cache_token_v1\s+where season <> '2025-26'/);
@@ -193,7 +193,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   let queryText = '';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v7')) {
+      if (sql.includes('approved_dashboard_reader_target_v8')) {
         return { rows: [{ target_attested: true }] };
       }
       queryText = sql;
@@ -254,7 +254,7 @@ test('reader preserves versioned family totals and exact subtype evidence', asyn
   try {
     const { getLeagueDashboard } = await loadReportingForFixtureTest();
     const dashboard = await getLeagueDashboard();
-    assert.match(queryText, /reporting\.latest_league_dashboard_v7/);
+    assert.match(queryText, /reporting\.latest_league_dashboard_v8/);
     assert.equal(dashboard.injury_type_families[0].burden_per_1000h, 50.8333333333);
     assert.equal(dashboard.injury_type_families[0].subtypes[0].code, 'muscle_injury');
 
@@ -313,7 +313,7 @@ test('team comparison overall setting is a validated projection of released head
   process.env.TEAM_DISPLAY_ALIAS_JSON = JSON.stringify({ 'fixture-team': 'Team Q' });
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => ({
-      ...(sql.includes('approved_dashboard_reader_target_v7')
+      ...(sql.includes('approved_dashboard_reader_target_v8')
         ? { rows: [{ target_attested: true }] }
         : { rows: [{
         team_key: 'fixture-team',
@@ -405,7 +405,7 @@ test('team comparisons preserve unavailable exposure and place it after known co
     setting_metrics: settingMetrics,
   });
   globalThis.__urcWebReaderPool = transactionMockPool(
-    async (sql) => (sql.includes('approved_dashboard_reader_target_v7')
+    async (sql) => (sql.includes('approved_dashboard_reader_target_v8')
       ? { rows: [{ target_attested: true }] }
       : { rows: [row('unavailable', null, null), row('known', 100, 40)] }),
   );
@@ -470,7 +470,7 @@ test('league and team page metrics include the released overall benchmark', asyn
   let releaseToken = 'release-a';
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v7')) {
+      if (sql.includes('approved_dashboard_reader_target_v8')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
@@ -506,7 +506,7 @@ test('league and team page metrics include the released overall benchmark', asyn
     assert.equal(pageData.leagueMetrics[0].burden_per_1000h, 93.75);
 
     globalThis.__urcWebReaderPool.query = async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v7')) {
+      if (sql.includes('approved_dashboard_reader_target_v8')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
@@ -582,7 +582,7 @@ test('Year 2 league page derives benchmarks from the complete released dashboard
   let payloadQueryCount = 0;
   globalThis.__urcWebReaderPool = transactionMockPool(
     async (sql) => {
-      if (sql.includes('approved_dashboard_reader_target_v7')) {
+      if (sql.includes('approved_dashboard_reader_target_v8')) {
         return { rows: [{ target_attested: true }] };
       }
       if (sql.includes('latest_dashboard_cache_token_v2')) {
@@ -877,14 +877,14 @@ test('overview leads with released time loss values and keeps overall values as 
   assert.match(charts, /const hasOverallIncidence = data\.some\(\(row\) => typeof row\.overall_incidence_per_1000h === 'number'\)/);
 });
 
-test('exposure tab combines monthly hours and distance while gating provisional HSR behind the local preview', async () => {
+test('exposure tab reads released HSR values through the shared V8 view', async () => {
   const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const tabConfig = await readFile(new URL('../lib/dashboard-tab.ts', import.meta.url), 'utf8');
 
   assert.match(dashboard, /Estimated Total Hours[\s\S]*Reported Distance/);
   assert.match(dashboard, /Estimated Exposure/);
-  assert.match(dashboard, /Monthly trend shows reported source-backed values/);
+  assert.match(dashboard, /Distance and monthly bars show reported values only/);
   assert.match(dashboard, /14 source-backed clubs \+ 2 temporary estimates|sourceBackedTeamCount/);
   assert.match(dashboard, /Awaiting source-backed exposure from/);
   assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
@@ -910,36 +910,41 @@ test('exposure tab combines monthly hours and distance while gating provisional 
   assert.match(reportsTab, /removeButtonRefs\.current\.get\(sectionId\)\?\.focus\(\)/);
   assert.match(reportsTab, /onPreviewReady=\{focusRestoredSection\}/);
   assert.match(dashboard, /<TabsContent value="reports"><ReportsTab key=\{`\$\{reportModel\.scope\}/);
-  assert.match(dashboard, /exposurePreview \? \[\{ value: 'hsr' as const, label: 'HSR' \}\] : \[\]/);
+  assert.doesNotMatch(dashboard, /\{ value: 'hsr', label: 'HSR' \}/);
+  assert.doesNotMatch(dashboard, /exposurePreview|ExposureReviewPreview/);
   assert.match(dashboard, /HSR Distance/);
+  assert.match(dashboard, /Seasonal HSR/);
+  assert.match(dashboard, /League-mean placeholder pending source data/);
+  assert.match(dashboard, /Zebre 2025-26 accepted total-distance anomaly/);
   const exposureComparison = dashboard.slice(dashboard.indexOf('function ExposureComparison'), dashboard.indexOf('function LocationTab'));
   assert.match(exposureComparison, /League Mean/);
   assert.doesNotMatch(exposureComparison, /\(dotted line\)/);
   assert.match(exposureComparison, /border-dotted border-orange-400/);
   assert.match(exposureComparison, /ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League Mean/);
   assert.match(exposureComparison, /ranked\.reduce\(\(sum, row\) => sum \+ \(metric\(row\) \?\? 0\), 0\) \/ ranked\.length/);
-  assert.match(dashboard, /showMonthlyHours[\s\S]*showMonthlyDistance[\s\S]*comparisonMeasure/);
-  assert.match(dashboard, /aria-label="Choose monthly exposure series"/);
-  assert.match(dashboard, /<CheckToggle checked=\{showMonthlyHours\}[\s\S]*?label="Hours"/);
-  assert.match(dashboard, /<CheckToggle checked=\{showMonthlyDistance\}[\s\S]*?label="Distance"/);
+  assert.match(dashboard, /useState<ExposureMeasure>\('hours'\)/);
   assert.match(dashboard, /label="Choose team comparison exposure measure"/);
   assert.ok((dashboard.match(/scrollable=\{false\}/g) ?? []).length >= 1);
   assert.match(dashboard, /scrollable \? 'overflow-x-auto' : 'flex-wrap overflow-visible'/);
   assert.match(dashboard, /distance_km/);
-  assert.match(charts, /match_exposure_hours/);
-  assert.match(charts, /hsr_distance_km|hsr_percentage/);
-  assert.match(charts, /HSR Share/);
+  assert.match(charts, /HsrInsetDistanceBar/);
+  assert.match(charts, /hsr_distance_km/);
+  assert.match(charts, /hsr_percentage/);
+  assert.match(charts, /HSR Percentage/);
+  assert.match(charts, /League-mean placeholder/);
   assert.doesNotMatch(charts, /firstReportedMonth/);
   // Monthly charts drop pre-September months first (decision, 25 July 2026,
   // site-wide), then still open on the club's own first reported month.
   assert.match(charts, /fromSeptember\(sorted\)/);
-  assert.match(charts, /const data = fromSeptember\(sorted\)/);
+  assert.match(charts, /return fromSeptember\(sorted\)/);
   assert.match(charts, /contributingClubsText/);
-  assert.match(charts, /<ComposedChart aria-label="Monthly exposure hours and distance chart" accessibilityLayer/);
+  assert.match(charts, /<ComposedChart aria-label="Monthly hours, total distance, and high-speed-running exposure chart" accessibilityLayer/);
   assert.match(charts, /yAxisId="hours"[\s\S]*?dataKey="exposure_hours"[\s\S]*?name="Hours"/);
-  assert.match(charts, /yAxisId="distance"[\s\S]*?dataKey="distance_km"[\s\S]*?name="Distance"/);
-  assert.match(charts, /showHours && hasReportedExposureValue\(row, 'hours'\)[\s\S]*?showDistance && hasReportedExposureValue\(row, 'distance'\)/);
-  assert.match(charts, /Select at least one series to plot\./);
+  assert.match(charts, /yAxisId="distance"[\s\S]*?dataKey="distance_km"[\s\S]*?name="Total Distance"/);
+  assert.match(charts, /hasReportedExposureValue\(row, 'hours'\)[\s\S]*?hasReportedExposureValue\(row, 'distance'\)/);
+  assert.match(charts, /exposureMonthLabel\(value, compactMonths\)/);
+  assert.match(charts, /showExposureMonthLabel\(index, compactMonths\)/);
+  assert.doesNotMatch(charts.slice(charts.indexOf('export function ExposureTrendChart'), charts.indexOf('const SCATTER_NARROW_BELOW')), /<Line[\s\S]*?hsr_distance_km/);
   assert.match(charts, /w-full min-w-0/);
   assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function ReportsTab')), /overflow-[xy]-auto|max-h-\[/);
 });

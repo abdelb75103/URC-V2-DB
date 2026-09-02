@@ -18,7 +18,6 @@ import { ArrowLeft, X } from 'lucide-react';
 import type {
   DashboardSupplement,
   DiagnosisFamilyRow,
-  ExposureReviewPreview,
   IllnessProfileRow,
   InjuryProfileRow,
   InjuryTypeFamilyRow,
@@ -230,14 +229,6 @@ function fmtHours(value: number | null | undefined) {
     maximumFractionDigits: 0,
     minimumFractionDigits: 0,
   }).format(value);
-}
-
-function addPreviewToKnownValue(
-  value: number | null | undefined,
-  previewValue: number | undefined,
-) {
-  if (value === null || value === undefined) return null;
-  return value + (previewValue ?? 0);
 }
 
 function hasKnownExposure(
@@ -1666,68 +1657,41 @@ function BenchmarkCell({ value, average, groupStart = false }: {
 function ExposureTab({
   dashboard,
   comparisons,
-  exposurePreview,
   viewerComparisonId,
   teamColor,
   teamName,
 }: {
   dashboard: TeamDashboardData;
   comparisons: TeamComparisonRow[];
-  exposurePreview?: ExposureReviewPreview;
   viewerComparisonId?: string | null;
   teamColor?: TeamColorSet;
   teamName?: string;
 }) {
-  type ExposureMeasure = 'hours' | 'distance' | 'hsr';
-  const [showMonthlyHours, setShowMonthlyHours] = useState(true);
-  const [showMonthlyDistance, setShowMonthlyDistance] = useState(true);
-  const [showMonthlyHsr, setShowMonthlyHsr] = useState(false);
+  type ExposureMeasure = 'hours' | 'distance';
   const [comparisonMeasure, setComparisonMeasure] = useState<ExposureMeasure>('hours');
   const coverage = dashboard.coverage;
-  const previewMonths = new Map(exposurePreview?.monthly.map((row) => [row.month, row]) ?? []);
-  const previewTeams = new Map(exposurePreview?.teams.map((row) => [row.team_alias, row]) ?? []);
-  const monthlyRows = dashboard.monthly.map((row) => {
-    const preview = row.month ? previewMonths.get(row.month) : undefined;
-    const exposureHours = addPreviewToKnownValue(row.exposure_hours, preview?.additional_hours);
-    const matchHours = preview?.match_hours ?? 0;
-    return {
-      ...row,
-      exposure_hours: exposureHours,
-      distance_km: addPreviewToKnownValue(row.distance_km, preview?.additional_distance_km),
-      hsr_distance_km: preview?.hsr_distance_km,
-      hsr_distance_denominator_km: preview?.hsr_distance_denominator_km,
-      match_exposure_hours: exposurePreview ? matchHours : undefined,
-      training_exposure_hours: exposurePreview && exposureHours !== null
-        ? Math.max(exposureHours - matchHours, 0)
-        : undefined,
-    };
-  });
-  const comparisonRows = comparisons.map((row) => {
-    const preview = previewTeams.get(row.team_alias);
-    return {
-      ...row,
-      exposure_hours: addPreviewToKnownValue(row.exposure_hours, preview?.additional_hours),
-      distance_km: addPreviewToKnownValue(row.distance_km, preview?.additional_distance_km),
-      hsr_distance_km: preview?.hsr_distance_km,
-    };
-  });
-  const totalHours = addPreviewToKnownValue(
-    coverage.hours,
-    exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_hours, 0),
-  );
-  const totalDistance = addPreviewToKnownValue(
-    coverage.distance_km,
-    exposurePreview?.monthly.reduce((sum, row) => sum + row.additional_distance_km, 0),
-  );
-  const totalHsr = exposurePreview?.monthly.reduce((sum, row) => sum + row.hsr_distance_km, 0) ?? 0;
+  const monthlyRows = dashboard.monthly;
+  const totalHours = coverage.hours;
+  const totalDistance = coverage.distance_km;
+  const totalHsr = coverage.hsr_distance_km;
+  const totalHsrPercentage = coverage.hsr_percentage;
+  const hsrPlaceholderMonths = coverage.placeholder_month_count ?? 0;
+  const hasHsrPlaceholder = coverage.is_imputed || hsrPlaceholderMonths > 0 || monthlyRows.some((row) => row.is_imputed);
+  const placeholderNote = coverage.display_note
+    ?? monthlyRows.find((row) => row.is_imputed && row.display_note)?.display_note
+    ?? 'League-mean placeholder pending source data.';
+  const hsrWarnings = [...(coverage.data_quality_warnings ?? [])];
+  if (dashboard.season === '2025-26' && (dashboard.scope === 'league' || /zebre/i.test(teamName ?? ''))
+    && !hsrWarnings.some((warning) => /zebre/i.test(warning))) {
+    hsrWarnings.push('Zebre 2025-26 accepted total-distance anomaly remains visible and has not been corrected in this dashboard.');
+  }
   const options: Array<{ value: ExposureMeasure; label: string }> = [
     { value: 'hours', label: 'Hours' },
     { value: 'distance', label: 'Distance' },
-    ...(exposurePreview ? [{ value: 'hsr' as const, label: 'HSR' }] : []),
   ];
   const hasExposureData = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value))
     || monthlyRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)))
-    || comparisonRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)));
+    || comparisons.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)));
   const hasExposureTotals = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value));
   const sourceBackedTeamCount = coverage.source_backed_team_count;
   const temporaryEstimateTeamCount = coverage.temporary_estimate_team_count;
@@ -1756,10 +1720,10 @@ function ExposureTab({
       <section aria-labelledby="total-exposure-heading">
         <h3 id="total-exposure-heading" className={`${PANEL_HEADING_CLASS} mb-3`}>Total Exposure</h3>
         {hasExposureTotals ? (
-          <div className={`grid overflow-hidden rounded-xl border border-border/70 bg-card/70 ${exposurePreview ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+          <div className="grid overflow-hidden rounded-xl border border-border/70 bg-card/70 sm:grid-cols-3">
             <OverviewStat label={hoursLabel} value={fmtHours(totalHours)} unit="player-hours" />
             <OverviewStat label={distanceLabel} value={fmt(totalDistance)} unit="km" />
-            {exposurePreview && <OverviewStat label="HSR Distance" value={fmt(totalHsr)} unit="km" />}
+            <OverviewStat label="HSR Distance" value={fmt(totalHsr)} unit="km" />
           </div>
         ) : (
           <EmptyState>No approved exposure totals are available for this season.</EmptyState>
@@ -1780,24 +1744,37 @@ function ExposureTab({
         )}
       </section>
       <Panel contentClassName="p-4 sm:p-5">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h3 className={PANEL_HEADING_CLASS}>Monthly Exposure</h3>
-          <div className="flex flex-wrap gap-4" role="group" aria-label="Choose monthly exposure series">
-            <CheckToggle checked={showMonthlyHours} onChange={setShowMonthlyHours} label="Hours" swatch={teamColor?.mark ?? SETTING_COLORS.training} />
-            <CheckToggle checked={showMonthlyDistance} onChange={setShowMonthlyDistance} label="Distance" swatch={SETTING_COLORS.all} />
-            {exposurePreview && <CheckToggle checked={showMonthlyHsr} onChange={setShowMonthlyHsr} label="HSR" swatch="#f59e0b" />}
-          </div>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-2">
+          <h3 className={PANEL_HEADING_CLASS}>Seasonal HSR</h3>
+          <p className="text-sm text-muted-foreground">
+            HSR Percentage <span className="font-semibold tabular-nums text-foreground">{totalHsrPercentage === null || totalHsrPercentage === undefined ? 'Not available' : `${fmt(totalHsrPercentage)}%`}</span>
+          </p>
         </div>
+        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+          <p>
+            {coverage.actual_month_count ?? 0} actual month{(coverage.actual_month_count ?? 0) === 1 ? '' : 's'}
+            {hsrPlaceholderMonths > 0 && `, ${hsrPlaceholderMonths} league-mean placeholder month${hsrPlaceholderMonths === 1 ? '' : 's'}`}.
+            {dashboard.scope === 'league' && typeof coverage.hsr_contributor_count === 'number'
+              && ` ${coverage.hsr_contributor_count} source-backed HSR team${coverage.hsr_contributor_count === 1 ? '' : 's'}.`}
+          </p>
+          {hasHsrPlaceholder && <p role="note">League-mean placeholder pending source data. {placeholderNote}</p>}
+          <p>HSR definitions are team-specific. Threshold or Zone: {coverage.threshold_or_zone ?? 'Unknown'}. Units: {coverage.units ?? 'Unknown'}. Cross-team comparability is not implied.</p>
+        </div>
+      </Panel>
+      {hsrWarnings.map((warning) => (
+        <div key={warning} className="rounded-lg border border-amber-400/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-100" role="note">
+          <span className="font-semibold">Data Quality Warning. </span>{warning}
+        </div>
+      ))}
+      <Panel contentClassName="p-4 sm:p-5">
+        <h3 className={`${PANEL_HEADING_CLASS} mb-3`}>Monthly Exposure</h3>
         <ExposureTrendChart
           rows={monthlyRows}
-          showHours={showMonthlyHours}
-          showDistance={showMonthlyDistance}
-          showHsr={showMonthlyHsr}
           totalHoursColor={teamColor?.mark}
         />
       </Panel>
       <ExposureComparison
-        rows={comparisonRows}
+        rows={comparisons}
         measure={comparisonMeasure}
         onMeasureChange={setComparisonMeasure}
         options={options}
@@ -1891,17 +1868,17 @@ function ExposureComparison({
   teamColor,
   teamName,
 }: {
-  rows: Array<TeamComparisonRow & { hsr_distance_km?: number | null }>;
-  measure: 'hours' | 'distance' | 'hsr';
-  onMeasureChange: (measure: 'hours' | 'distance' | 'hsr') => void;
-  options: Array<{ value: 'hours' | 'distance' | 'hsr'; label: string }>;
+  rows: TeamComparisonRow[];
+  measure: 'hours' | 'distance';
+  onMeasureChange: (measure: 'hours' | 'distance') => void;
+  options: Array<{ value: 'hours' | 'distance'; label: string }>;
   viewerComparisonId?: string | null;
   teamColor?: TeamColorSet;
   teamName?: string;
 }) {
   const metric = (row: typeof rows[number]) => measure === 'hours'
     ? row.exposure_hours
-    : measure === 'distance' ? row.distance_km : row.hsr_distance_km;
+    : row.distance_km;
   const ranked = [...rows]
     .filter((row) => typeof metric(row) === 'number' && Number.isFinite(metric(row)))
     .sort((a, b) => (metric(b) ?? 0) - (metric(a) ?? 0));
@@ -1911,7 +1888,7 @@ function ExposureComparison({
   const max = Math.max(...ranked.map((row) => metric(row) ?? 0), 1);
   const leagueMeanPosition = Math.min((leagueMean / max) * 100, 100);
   const label = measure === 'hours' ? 'player-hours' : 'km';
-  const measureLabel = measure === 'hours' ? 'Hours' : measure === 'distance' ? 'Distance' : 'HSR';
+  const measureLabel = measure === 'hours' ? 'Hours' : 'Distance';
   return (
     <Panel contentClassName="p-4 sm:p-5">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2287,7 +2264,6 @@ export function TeamDashboard({
   comparisons = [],
   leagueMetrics = [],
   supplement,
-  exposurePreview,
   seasonComparison,
   viewerComparisonId = null,
   teamColor,
@@ -2301,7 +2277,6 @@ export function TeamDashboard({
   comparisons?: TeamComparisonRow[];
   leagueMetrics?: SettingMetricRow[];
   supplement?: DashboardSupplement;
-  exposurePreview?: ExposureReviewPreview;
   seasonComparison?: SeasonComparisonData;
   /** The viewing team's own comparison row, resolved server-side (§1.0). */
   viewerComparisonId?: string | null;
@@ -2404,7 +2379,6 @@ export function TeamDashboard({
           <ExposureTab
             dashboard={dashboard}
             comparisons={comparisons}
-            exposurePreview={exposurePreview}
             viewerComparisonId={viewerComparisonId}
             teamColor={teamColor}
             teamName={teamName}

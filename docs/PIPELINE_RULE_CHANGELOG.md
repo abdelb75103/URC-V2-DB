@@ -11,6 +11,25 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-09-02: HSR source-to-display reporting successor
+
+| Field | Value |
+|---|---|
+| Status | `implementation-ready`: additive local migration and read-only verification are prepared. No database migration, release promotion, website deployment or access-control change has run. |
+| Rule version | `hsr_source_to_display_reporting_2026_09_02_v1`; dashboard reader `v8`. |
+| Carry-forward | `carries-forward`: row-resolution, null and display rules are versioned. The current 16/16 and 14/16 source-availability states, source blanks, mapping evidence and the Zebre warning are season-specific. |
+| Evidence | `docs/evidence/hsr_exposure_mapping_manifest.json`; `docs/evidence/hsr_exposure_validation_report.json`; flat parameter payload SHA-256 `821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149`. |
+| Migration | Additive successor `20260902010000_urc_hsr_reporting_v8.sql`, SHA-256 `4bfb3ac841238953c59c72aa65c36c76f289d543e9fb4ffc08751e7b78360b22`; checksum registration `tools/sql/register_urc_hsr_reporting_v8_migration.sql`; read-only proof `tools/sql/verify_hsr_reporting_v8.sql`. |
+| Decision provenance | Abdel Babiker, 2 September 2026. |
+
+**Source and lineage rule.** Each HSR observation is bound by its accepted locator to one existing `ingestion.source_rows` row and one active curated exposure row. HSR is an absolute distance from that same accepted observation. The source status, units, threshold or zone, comparability state, blank reason and row lineage remain private. Source blanks remain unknown; they are never zero. A valid paired actual observation takes precedence over a display placeholder without changing an existing source or curated row.
+
+**Display rule.** For each season and month, the league HSR percentage is the pooled ratio of valid paired actual HSR distance to accepted total distance. It is never an average of team percentages and does not include unknown, blank or unpaired rows. A team-month with no paired actual HSR may show a clearly labelled placeholder only when its accepted total distance and that season-month pooled percentage are both available. If total distance is absent, HSR distance remains null. V8 exposes actual HSR separately from `hsr_distance_km`, along with the 0 to 100 `hsr_percentage`, imputation fields, contributor counts and source status in coverage, monthly and team-comparison data.
+
+**Comparability and boundary.** HSR definitions, thresholds, units and vendor calibration vary or are unknown, so direct team HSR rankings are not shown. The 2025-26 Zebre accepted total-distance anomaly remains uncorrected and is disclosed wherever it affects a league-mean placeholder. V8 retains all V7 fields through successor readers and grants `web_reader` select access only to those readers and their target attestation; private HSR tables and helpers remain inaccessible.
+
+---
+
 ## 2026-09-01: Cross-season diagnosis-family adjudication and separate illness reporting
 
 | Field | Value |

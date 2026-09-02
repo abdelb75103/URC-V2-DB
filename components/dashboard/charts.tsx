@@ -21,8 +21,16 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts';
+import type { BarShapeProps, LabelProps } from 'recharts';
 import type { AnalyticsRow, InjuryProfileRow, MonthlySettingRow } from '@/lib/reporting-types';
-import { contributingClubsText, hasReportedExposureValue } from '@/lib/exposure-chart';
+import {
+  contributingClubsText,
+  exposureMonthLabel,
+  hasReportedExposureValue,
+  hsrPercentage,
+  hsrStatusLabel,
+  showExposureMonthLabel,
+} from '@/lib/exposure-chart';
 import {
   PROFILE_COLORS,
   SETTING_COLORS,
@@ -143,62 +151,92 @@ export function TooltipCard({
   );
 }
 
-type ExposureMonthlyRow = AnalyticsRow & {
-  hsr_distance_km?: number;
-  hsr_distance_denominator_km?: number;
-  match_exposure_hours?: number;
-  training_exposure_hours?: number;
-};
+type ExposureMonthlyRow = AnalyticsRow;
+
+const HSR_COLOR = '#f59e0b';
+const DISTANCE_COLOR = SETTING_COLORS.all;
+
+function useCompactExposureMonths() {
+  const [compact, setCompact] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 639px)');
+    const update = () => setCompact(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  return compact;
+}
 
 function MonthlyExposureTooltip({
   active,
   label,
   payload,
-  showHours,
-  showDistance,
-  showHsr,
   hoursColor,
 }: {
   active?: boolean;
   label?: string;
   payload?: Array<{ payload?: ExposureMonthlyRow }>;
-  showHours: boolean;
-  showDistance: boolean;
-  showHsr: boolean;
   hoursColor: string;
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
-  const rows: TooltipRow[] = [];
-  if (showHours && typeof row.exposure_hours === 'number') {
-    if (typeof row.match_exposure_hours === 'number' && typeof row.training_exposure_hours === 'number') {
-      rows.push(
-        { label: 'Match', value: `${hours(row.match_exposure_hours)} player-hours`, color: SETTING_COLORS.match },
-        { label: 'Training', value: `${hours(row.training_exposure_hours)} player-hours`, color: SETTING_COLORS.training },
-        { label: 'Total Hours', value: `${hours(row.exposure_hours)} player-hours` },
-      );
-    } else {
-      rows.push({ label: 'Hours', value: `${hours(row.exposure_hours)} player-hours`, color: hoursColor });
-    }
-    const hoursContributors = contributingClubsText(row, 'hours');
-    if (hoursContributors) rows.push({ label: 'Hours Contributors', value: hoursContributors });
-  }
-  if (showDistance && typeof row.distance_km === 'number') {
-    rows.push({ label: 'Distance', value: `${number(row.distance_km)} km`, color: SETTING_COLORS.all });
-    const distanceContributors = contributingClubsText(row, 'distance');
-    if (distanceContributors) rows.push({ label: 'Distance Contributors', value: distanceContributors });
-  }
-  if (showHsr && typeof row.hsr_distance_km === 'number') {
-    rows.push({ label: 'HSR Distance', value: `${number(row.hsr_distance_km)} km`, color: '#f59e0b' });
-    if (typeof row.hsr_distance_denominator_km === 'number' && row.hsr_distance_denominator_km > 0) {
-      rows.push({
-        label: 'HSR Share',
-        value: `${number(row.hsr_distance_km / row.hsr_distance_denominator_km * 100, 1)}%`,
-        color: '#f59e0b',
-      });
-    }
-  }
-  return <TooltipCard title={label ?? row.month ?? 'Month'} rows={rows} />;
+  const percentage = hsrPercentage(row);
+  const rows: TooltipRow[] = [
+    { label: 'Hours', value: `${hours(row.exposure_hours)} player-hours`, color: hoursColor },
+    { label: 'Total Distance', value: `${number(row.distance_km)} km`, color: DISTANCE_COLOR },
+    { label: 'HSR Distance', value: `${number(row.hsr_distance_km)} km`, color: HSR_COLOR },
+    { label: 'HSR Percentage', value: percentage === null ? 'Not available' : `${number(percentage, 1)}%`, color: HSR_COLOR },
+    { label: 'HSR Status', value: hsrStatusLabel(row) },
+  ];
+  const hoursContributors = contributingClubsText(row, 'hours');
+  const distanceContributors = contributingClubsText(row, 'distance');
+  if (hoursContributors) rows.splice(1, 0, { label: 'Hours Contributors', value: hoursContributors });
+  if (distanceContributors) rows.splice(3, 0, { label: 'Distance Contributors', value: distanceContributors });
+  return <TooltipCard title={exposureMonthLabel(label ?? row.month ?? 'Month')} rows={rows} note={row.is_imputed ? row.display_note ?? undefined : undefined} />;
+}
+
+function HsrInsetDistanceBar({ x, y, width, height, payload }: BarShapeProps) {
+  const totalDistance = payload?.distance_km;
+  const hsrDistance = payload?.hsr_distance_km;
+  const hasInset = typeof totalDistance === 'number' && totalDistance > 0
+    && typeof hsrDistance === 'number' && hsrDistance >= 0;
+  const insetHeight = hasInset ? Math.min(height, Math.max((hsrDistance / totalDistance) * height, hsrDistance > 0 ? 3 : 0)) : 0;
+  const horizontalInset = Math.min(4, width / 4);
+
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={3} fill={DISTANCE_COLOR} />
+      {hasInset && insetHeight > 0 && (
+        <rect
+          x={x + horizontalInset}
+          y={y + height - insetHeight}
+          width={Math.max(width - horizontalInset * 2, 0)}
+          height={insetHeight}
+          rx={2}
+          fill={HSR_COLOR}
+        />
+      )}
+    </g>
+  );
+}
+
+function HsrPercentageLabel({ x = 0, y = 0, width = 0, height = 0, payload }: LabelProps & {
+  payload?: ExposureMonthlyRow;
+}) {
+  const percentage = payload ? hsrPercentage(payload) : null;
+  if (percentage === null) return null;
+  const labelX = typeof x === 'number' ? x : Number(x);
+  const labelY = typeof y === 'number' ? y : Number(y);
+  const labelWidth = typeof width === 'number' ? width : Number(width);
+  const labelHeight = typeof height === 'number' ? height : Number(height);
+  return (
+    <text x={labelX + labelWidth / 2} y={labelY + labelHeight - 5} fill="#e2e8f0" fontSize={10} fontWeight={700} textAnchor="middle">
+      {number(percentage, 1)}%
+    </text>
+  );
 }
 
 export type RingDatum = { key: string; label: string; value: number; color?: string };
@@ -443,120 +481,79 @@ export function SeverityArc({
 
 export function ExposureTrendChart({
   rows,
-  showHours = true,
-  showDistance = true,
-  showHsr = false,
   totalHoursColor = SETTING_COLORS.training,
 }: {
   rows: ExposureMonthlyRow[];
-  showHours?: boolean;
-  showDistance?: boolean;
-  showHsr?: boolean;
-  /** Club identity colour for the single-series player-hours bars only. */
+  /** Club identity colour for the player-hours bars. */
   totalHoursColor?: string;
 }) {
+  const compactMonths = useCompactExposureMonths();
   const data = useMemo(() => {
     const sorted = sortSeasonMonths<ExposureMonthlyRow & { month: string }>((rows
       .filter((row) => {
         if (!row.month) return false;
-        return (showHours && hasReportedExposureValue(row, 'hours'))
-          || (showDistance && hasReportedExposureValue(row, 'distance'))
-          || (showHsr && hasReportedExposureValue(row, 'hsr'));
+        return hasReportedExposureValue(row, 'hours')
+          || hasReportedExposureValue(row, 'distance')
+          || hsrPercentage(row) !== null;
       })) as Array<ExposureMonthlyRow & { month: string }>);
-    // The value filter above removes unavailable months. Keep reported zeroes,
-    // because a source-backed zero is data rather than a missing month.
-    const data = fromSeptember(sorted);
-    return data;
-  }, [rows, showDistance, showHours, showHsr]);
-  if (!showHours && !showDistance && !showHsr) {
-    return <ChartEmpty reason="Select at least one series to plot." />;
-  }
+    return fromSeptember(sorted);
+  }, [rows]);
   if (!data.length) {
-    return <ChartEmpty reason="No monthly exposure is available for the selected series." />;
+    return <ChartEmpty reason="No monthly exposure is available for this season." />;
   }
 
   return (
-    <div className="h-[320px] w-full min-w-0" aria-label="Monthly exposure hours and distance chart">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart aria-label="Monthly exposure hours and distance chart" accessibilityLayer data={data} margin={{ top: 34, right: 16, bottom: 32, left: 12 }} barCategoryGap="24%">
+    <div className="min-w-0" aria-label="Monthly exposure comparison chart">
+      <div className="h-[340px] w-full min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart aria-label="Monthly hours, total distance, and high-speed-running exposure chart" accessibilityLayer data={data} margin={{ top: 34, right: 16, bottom: 32, left: 12 }} barCategoryGap="24%" barGap={3}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
           <XAxis
             dataKey="month"
-            tickFormatter={compactMonth}
-            interval="preserveStartEnd"
+            tickFormatter={(value, index) => showExposureMonthLabel(index, compactMonths) ? exposureMonthLabel(value, compactMonths) : ''}
+            interval={0}
             minTickGap={8}
             tick={{ fill: AXIS, fontSize: 10 }}
             tickLine={false}
             axisLine={AXIS_LINE}
             label={{ value: 'Month', position: 'insideBottom', fill: AXIS, fontSize: 11, offset: -14 }}
           />
-          {showHours && (
-            <YAxis
-              yAxisId="hours"
-              tickFormatter={(value) => value >= 1000 ? `${Math.round(value / 1000)}k` : number(value, 0)}
-              tick={{ fill: AXIS, fontSize: 11 }}
-              tickLine={false}
-              axisLine={AXIS_LINE}
-              label={{ value: 'Player-hours', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 11, offset: 4, style: Y_TITLE_STYLE }}
-            />
-          )}
-          {(showDistance || showHsr) && (
-            <YAxis
-              yAxisId="distance"
-              orientation="right"
-              tickFormatter={(value) => value >= 1000 ? `${number(value / 1000, 1)}k` : number(value, 0)}
-              tick={{ fill: AXIS, fontSize: 11 }}
-              tickLine={false}
-              axisLine={AXIS_LINE}
-              label={{ value: 'Distance (km)', angle: 90, position: 'insideRight', fill: AXIS, fontSize: 11, offset: 8, style: Y_TITLE_STYLE }}
-            />
-          )}
+          <YAxis
+            yAxisId="hours"
+            tickFormatter={(value) => value >= 1000 ? `${Math.round(value / 1000)}k` : number(value, 0)}
+            tick={{ fill: AXIS, fontSize: 11 }}
+            tickLine={false}
+            axisLine={AXIS_LINE}
+            label={{ value: 'Player-hours', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 11, offset: 4, style: Y_TITLE_STYLE }}
+          />
+          <YAxis
+            yAxisId="distance"
+            orientation="right"
+            tickFormatter={(value) => value >= 1000 ? `${number(value / 1000, 1)}k` : number(value, 0)}
+            tick={{ fill: AXIS, fontSize: 11 }}
+            tickLine={false}
+            axisLine={AXIS_LINE}
+            label={{ value: 'Distance (km)', angle: 90, position: 'insideRight', fill: AXIS, fontSize: 11, offset: 8, style: Y_TITLE_STYLE }}
+          />
           <Tooltip
-            content={<MonthlyExposureTooltip showHours={showHours} showDistance={showDistance} showHsr={showHsr} hoursColor={totalHoursColor} />}
+            content={<MonthlyExposureTooltip hoursColor={totalHoursColor} />}
             cursor={{ fill: 'hsl(var(--muted) / 0.5)' }}
             allowEscapeViewBox={{ x: false, y: false }}
             wrapperStyle={{ zIndex: 30 }}
           />
           <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
-          {showHours && typeof data[0]?.match_exposure_hours === 'number' ? (
-            <>
-              <Bar yAxisId="hours" dataKey="match_exposure_hours" name="Match Hours" stackId="hours" fill={SETTING_COLORS.match} isAnimationActive={false} />
-              <Bar yAxisId="hours" dataKey="training_exposure_hours" name="Training Hours" stackId="hours" fill={SETTING_COLORS.training} radius={[3, 3, 0, 0]} isAnimationActive={false} />
-            </>
-          ) : showHours ? (
-            <Bar yAxisId="hours" dataKey="exposure_hours" name="Hours" fill={totalHoursColor} radius={[3, 3, 0, 0]} maxBarSize={54} isAnimationActive={false} />
-          ) : null}
-          {showDistance && (
-            <Line
-              yAxisId="distance"
-              type="monotone"
-              dataKey="distance_km"
-              name="Distance"
-              stroke={SETTING_COLORS.all}
-              strokeWidth={2.5}
-              dot={{ r: 3, strokeWidth: 1.5 }}
-              activeDot={{ r: 5, strokeWidth: 2 }}
-              connectNulls
-              isAnimationActive={false}
-            />
-          )}
-          {showHsr && (
-            <Line
-              yAxisId="distance"
-              type="monotone"
-              dataKey="hsr_distance_km"
-              name="HSR Distance"
-              stroke="#f59e0b"
-              strokeWidth={2.5}
-              strokeDasharray="5 4"
-              dot={{ r: 3, strokeWidth: 1.5 }}
-              activeDot={{ r: 5, strokeWidth: 2 }}
-              connectNulls
-              isAnimationActive={false}
-            />
-          )}
-        </ComposedChart>
-      </ResponsiveContainer>
+          <Bar yAxisId="hours" dataKey="exposure_hours" name="Hours" fill={totalHoursColor} radius={[3, 3, 0, 0]} maxBarSize={54} isAnimationActive={false} />
+          <Bar yAxisId="distance" dataKey="distance_km" name="Total Distance" shape={HsrInsetDistanceBar} maxBarSize={54} isAnimationActive={false}>
+            <LabelList dataKey="hsr_percentage" content={HsrPercentageLabel} />
+          </Bar>
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Exposure chart legend">
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: totalHoursColor }} aria-hidden="true" />Hours</span>
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: DISTANCE_COLOR }} aria-hidden="true" />Total Distance</span>
+        <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: HSR_COLOR }} aria-hidden="true" />HSR Inset</span>
+      </div>
     </div>
   );
 }

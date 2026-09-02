@@ -720,6 +720,83 @@ const v7LeagueDashboardRowSchema = z.object({
   coverage: z.union([v6ReportedLeagueCoverageSchema, v6LeagueCoverageSchema]),
   monthly: z.array(z.union([v6ReportedLeagueMonthlyRowSchema, v6MonthlyRowSchema])),
 }).strict();
+const hsrCoverageShape = {
+  actual_hsr_distance_km: z.number().nonnegative().nullable(),
+  hsr_distance_km: z.number().nonnegative().nullable(),
+  hsr_percentage: z.number().min(0).max(100).nullable(),
+  is_imputed: z.boolean(),
+  imputation_method: z.string().nullable(),
+  display_note: z.string().nullable(),
+  hsr_contributor_count: z.number().int().min(0).max(16),
+  hsr_source_status: z.string(),
+  source_row_count: z.number().int().nonnegative(),
+  valid_paired_row_count: z.number().int().nonnegative(),
+  actual_month_count: z.number().int().nonnegative(),
+  placeholder_month_count: z.number().int().nonnegative(),
+  comparability_status: z.string(),
+  units: z.string(),
+  threshold_or_zone: z.string(),
+  data_quality_warnings: z.array(z.string()),
+};
+const hsrMonthlyShape = {
+  actual_hsr_distance_km: z.number().nonnegative().nullable(),
+  hsr_distance_km: z.number().nonnegative().nullable(),
+  hsr_percentage: z.number().min(0).max(100).nullable(),
+  is_imputed: z.boolean(),
+  imputation_method: z.string().nullable(),
+  display_note: z.string().nullable(),
+  hsr_contributor_count: z.number().int().min(0).max(16),
+  hsr_source_status: z.string(),
+};
+const hsrTeamComparisonSchema = z.object({
+  team_key: z.string(),
+  actual_hsr_distance_km: z.number().nonnegative().nullable(),
+  hsr_distance_km: z.number().nonnegative().nullable(),
+  hsr_percentage: z.number().min(0).max(100).nullable(),
+  is_imputed: z.boolean(),
+  imputation_method: z.string().nullable(),
+  display_note: z.string().nullable(),
+  hsr_contributor_count: z.number().int().min(0).max(16),
+  hsr_source_status: z.string(),
+  comparability_status: z.string(),
+}).strict();
+const v8TeamCoverageSchema = v6TeamCoverageSchema.extend(hsrCoverageShape).strict();
+const v8ReportedLeagueCoverageSchema = z.object({
+  ...v6CoverageCommonShape,
+  teams_included: z.literal(16),
+  source_backed_team_count: z.number().int().min(0).max(16),
+  temporary_estimate_team_count: z.number().int().min(0).max(16),
+  distance_contributor_count: z.number().int().min(0).max(16),
+  pending_source_teams: z.array(z.string()).max(16),
+  ...hsrCoverageShape,
+}).strict();
+const v8LeagueCoverageSchema = z.union([
+  v8ReportedLeagueCoverageSchema,
+  v6LeagueCoverageSchema.extend(hsrCoverageShape).strict(),
+]);
+const v8MonthlyRowSchema = v6MonthlyRowSchema.extend(hsrMonthlyShape).strict();
+const v8ReportedLeagueMonthlyRowSchema = v6MonthlyRowSchema.extend({
+  exposure_contributor_count: z.number().int().min(0).max(16),
+  distance_contributor_count: z.number().int().min(0).max(16),
+  ...hsrMonthlyShape,
+}).strict();
+const v8LegacyAnalyticsRowSchema = analyticsRowSchema.extend(hsrMonthlyShape);
+const v8LegacyCoverageSchema = coverageSchema.extend(hsrCoverageShape);
+const v8LegacyDashboardRowSchema = dashboardRowSchema.extend({
+  coverage: v8LegacyCoverageSchema,
+  monthly: z.array(v8LegacyAnalyticsRowSchema),
+  hsr_team_comparison: z.array(hsrTeamComparisonSchema),
+});
+const v8TeamDashboardRowSchema = v7TeamDashboardRowSchema.extend({
+  coverage: v8TeamCoverageSchema,
+  monthly: z.array(v8MonthlyRowSchema),
+  hsr_team_comparison: z.array(hsrTeamComparisonSchema),
+}).strict();
+const v8LeagueDashboardRowSchema = v7LeagueDashboardRowSchema.extend({
+  coverage: v8LeagueCoverageSchema,
+  monthly: z.array(z.union([v8ReportedLeagueMonthlyRowSchema, v8MonthlyRowSchema])),
+  hsr_team_comparison: z.array(hsrTeamComparisonSchema),
+}).strict();
 const v6ComparisonSourceRowSchema = z.object({
   team_key: z.string(),
   team: z.string(),
@@ -732,6 +809,12 @@ const v6ComparisonSourceRowSchema = z.object({
     v6SettingMetricSchema.extend({ setting: z.literal("unknown") }).strict(),
   ]),
 }).strict();
+const v8ComparisonSourceRowSchema = v6ComparisonSourceRowSchema.extend({
+  coverage: v8TeamCoverageSchema,
+}).strict();
+const v8LegacyComparisonSourceRowSchema = comparisonSourceRowSchema.extend({
+  coverage: v8LegacyCoverageSchema,
+});
 const v6LeagueMetricsSourceSchema = z.object({
   coverage: z.union([v6ReportedLeagueCoverageSchema, v6LeagueCoverageSchema]),
   headline: v6HeadlineSchema,
@@ -742,6 +825,12 @@ const v6LeagueMetricsSourceSchema = z.object({
     v6SettingMetricSchema.extend({ setting: z.literal("unknown") }).strict(),
   ]),
 }).strict();
+const v8LeagueMetricsSourceSchema = v6LeagueMetricsSourceSchema.extend({
+  coverage: v8LeagueCoverageSchema,
+}).strict();
+const v8LegacyLeagueMetricsSourceSchema = leagueMetricsSourceSchema.extend({
+  coverage: v8LegacyCoverageSchema,
+});
 
 const seasonComparisonMetricSchema = z.object({
   value: z.number().nullable(),
@@ -854,20 +943,29 @@ const seasonComparisonReaderSchema = z.object({
 
 type DashboardReaderRow =
   | z.infer<typeof dashboardRowSchema>
+  | z.infer<typeof v8LegacyDashboardRowSchema>
   | z.infer<typeof v6TeamDashboardRowSchema>
   | z.infer<typeof v6LeagueDashboardRowSchema>
   | z.infer<typeof v7TeamDashboardRowSchema>
-  | z.infer<typeof v7LeagueDashboardRowSchema>;
+  | z.infer<typeof v7LeagueDashboardRowSchema>
+  | z.infer<typeof v8TeamDashboardRowSchema>
+  | z.infer<typeof v8LeagueDashboardRowSchema>;
 type ComparisonReaderRow =
   | z.infer<typeof comparisonSourceRowSchema>
-  | z.infer<typeof v6ComparisonSourceRowSchema>;
+  | z.infer<typeof v6ComparisonSourceRowSchema>
+  | z.infer<typeof v8ComparisonSourceRowSchema>
+  | z.infer<typeof v8LegacyComparisonSourceRowSchema>;
 type LeagueMetricsReaderRow =
   | z.infer<typeof leagueMetricsSourceSchema>
-  | z.infer<typeof v6LeagueMetricsSourceSchema>;
+  | z.infer<typeof v6LeagueMetricsSourceSchema>
+  | z.infer<typeof v8LeagueMetricsSourceSchema>
+  | z.infer<typeof v8LegacyLeagueMetricsSourceSchema>;
 type ReaderCoverage =
   | z.infer<typeof coverageSchema>
   | z.infer<typeof v6TeamCoverageSchema>
-  | z.infer<typeof v6LeagueCoverageSchema>;
+  | z.infer<typeof v6LeagueCoverageSchema>
+  | z.infer<typeof v8TeamCoverageSchema>
+  | z.infer<typeof v8LeagueCoverageSchema>;
 
 export function parseSeasonComparisonReaderRow(
   raw: unknown,
@@ -885,8 +983,14 @@ export function parseDashboardReaderRow(
   season: string,
   scope: "team" | "league",
 ): DashboardReaderRow {
+  const hasHsr = Boolean(raw && typeof raw === "object"
+    && !Array.isArray(raw) && "hsr_team_comparison" in raw);
   const hasV7Profiles = Boolean(raw && typeof raw === "object"
     && !Array.isArray(raw) && ("diagnosis_families" in raw || "illness_profiles" in raw));
+  if (hasHsr) {
+    if (season !== "2025-26") return v8LegacyDashboardRowSchema.parse(raw);
+    return (scope === "team" ? v8TeamDashboardRowSchema : v8LeagueDashboardRowSchema).parse(raw);
+  }
   if (season !== "2025-26") return dashboardRowSchema.parse(raw);
   if (hasV7Profiles) {
     return (scope === "team" ? v7TeamDashboardRowSchema : v7LeagueDashboardRowSchema).parse(raw);
@@ -898,6 +1002,14 @@ function parseComparisonReaderRow(
   raw: unknown,
   season: string,
 ): ComparisonReaderRow {
+  const coverage = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? (raw as Record<string, unknown>).coverage
+    : undefined;
+  if (coverage && typeof coverage === "object" && "hsr_source_status" in coverage) {
+    return season === "2025-26"
+      ? v8ComparisonSourceRowSchema.parse(raw)
+      : v8LegacyComparisonSourceRowSchema.parse(raw);
+  }
   return season === "2025-26"
     ? v6ComparisonSourceRowSchema.parse(raw)
     : comparisonSourceRowSchema.parse(raw);
@@ -915,6 +1027,11 @@ function parseLeagueMetricsReaderRow(
     headline: row.headline,
     setting_metrics: row.setting_metrics,
   };
+  if (row.coverage && typeof row.coverage === "object" && "hsr_source_status" in row.coverage) {
+    return season === "2025-26"
+      ? v8LeagueMetricsSourceSchema.parse(metrics)
+      : v8LegacyLeagueMetricsSourceSchema.parse(metrics);
+  }
   return season === "2025-26"
     ? v6LeagueMetricsSourceSchema.parse(metrics)
     : leagueMetricsSourceSchema.parse(metrics);
@@ -973,7 +1090,7 @@ async function approvedWebReaderQuery(
     transactionOpen = true;
     const attestation = await client.query(
       `select target_attested
-       from reporting.approved_dashboard_reader_target_v7`,
+       from reporting.approved_dashboard_reader_target_v8`,
     );
     if (
       attestation.rows.length !== 1
@@ -1083,8 +1200,8 @@ function teamDisplayAliases(): Record<string, string> {
 
 /**
  * Reads the latest approved release for a team from
- * reporting.latest_team_dashboard_v7 and validates it into DashboardData.
- * The V7 successor keeps the V5 allowlisted immutable projection for Year 1
+ * reporting.latest_team_dashboard_v8 and validates it into DashboardData.
+ * The V8 successor keeps the V5 allowlisted immutable projection for Year 1
  * and adds the season-bound Year 2 release payload without widening the
  * frozen release-table contract.
  *
@@ -1102,13 +1219,13 @@ export async function getTeamDashboard(
   if (!pool) return undefined;
 
   const result = await approvedWebReaderQuery(pool,
-    `select team, season, generated_at, analysis_window, method, coverage,
+    `select team, season, generated_at, analysis_window, method, coverage, hsr_team_comparison,
             headline, setting_split, setting_metrics, monthly, body_locations,
             injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
             contact_distribution, prior_season,
             to_jsonb(team_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
             limitations
-     from reporting.latest_team_dashboard_v7 team_dashboard
+     from reporting.latest_team_dashboard_v8 team_dashboard
      where team_key = $1 and season = $2`,
     [teamId, season]
   );
@@ -1131,13 +1248,13 @@ export async function getLeagueDashboard(
   if (!pool) return undefined;
 
   const result = await approvedWebReaderQuery(pool,
-    `select team, season, generated_at, analysis_window, method, coverage,
+    `select team, season, generated_at, analysis_window, method, coverage, hsr_team_comparison,
             headline, setting_split, setting_metrics, monthly, body_locations,
             injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
             contact_distribution, prior_season,
             to_jsonb(league_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
             limitations
-     from reporting.latest_league_dashboard_v7 league_dashboard
+     from reporting.latest_league_dashboard_v8 league_dashboard
      where season = $1`,
     [season]
   );
@@ -1160,19 +1277,34 @@ export async function getTeamComparisons(
   const pool = webReaderPool();
   if (!pool) return [];
 
-  const result = await approvedWebReaderQuery(pool,
+  const [result, hsrResult] = await Promise.all([
+    approvedWebReaderQuery(pool,
     `select team_key, team, coverage, headline, setting_metrics
-     from reporting.latest_team_dashboard_v7
+     from reporting.latest_team_dashboard_v8
      where season = $1
      order by team_key`,
     [season]
-  );
+    ),
+    approvedWebReaderQuery(pool,
+      `select hsr_team_comparison
+       from reporting.latest_league_dashboard_v8
+       where season = $1`,
+      [season],
+    ),
+  ]);
 
-  return normalizeTeamComparisons(result.rows, season);
+  const hsrRows = hsrResult.rows.length === 1 && Array.isArray(hsrResult.rows[0].hsr_team_comparison)
+    ? z.array(hsrTeamComparisonSchema).parse(hsrResult.rows[0].hsr_team_comparison)
+    : [];
+  return normalizeTeamComparisons(result.rows, season, hsrRows);
 }
 
-function normalizeTeamComparisons(rawRows: unknown[], season = "2024-25"): TeamComparisonRow[] {
-  return normalizeTeamComparisonsWithKeys(rawRows, season).rows;
+function normalizeTeamComparisons(
+  rawRows: unknown[],
+  season = "2024-25",
+  hsrRows: z.infer<typeof hsrTeamComparisonSchema>[] = [],
+): TeamComparisonRow[] {
+  return normalizeTeamComparisonsWithKeys(rawRows, season, hsrRows).rows;
 }
 
 /**
@@ -1181,10 +1313,15 @@ function normalizeTeamComparisons(rawRows: unknown[], season = "2024-25"): TeamC
  * The map never crosses the server-component boundary; only the single
  * comparison_id belonging to the page's own team does.
  */
-function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"): {
+function normalizeTeamComparisonsWithKeys(
+  rawRows: unknown[],
+  season = "2024-25",
+  hsrRows: z.infer<typeof hsrTeamComparisonSchema>[] = [],
+): {
   rows: TeamComparisonRow[];
   comparisonIdByTeamKey: Map<string, string>;
 } {
+  const hsrByTeamKey = new Map(hsrRows.map((row) => [row.team_key, row]));
   const internalRows = rawRows.map((raw) => {
     const row = parseComparisonReaderRow(raw, season);
     const metric = (setting: SettingMetricRow["setting"]) => {
@@ -1201,6 +1338,7 @@ function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"
       } as SettingMetricRow;
     };
 
+    const hsr = hsrByTeamKey.get(row.team_key);
     return {
       internal_team_key: row.team_key,
       included_exposure_status: row.coverage.included_exposure_status,
@@ -1208,6 +1346,17 @@ function normalizeTeamComparisonsWithKeys(rawRows: unknown[], season = "2024-25"
       distance_km: row.coverage.distance_km,
       match_hours: row.coverage.match_hours ?? null,
       training_hours: row.coverage.training_hours ?? null,
+      ...(hsr ? {
+        actual_hsr_distance_km: hsr.actual_hsr_distance_km,
+        hsr_distance_km: hsr.hsr_distance_km,
+        hsr_percentage: hsr.hsr_percentage,
+        is_imputed: hsr.is_imputed,
+        imputation_method: hsr.imputation_method,
+        display_note: hsr.display_note,
+        hsr_contributor_count: hsr.hsr_contributor_count,
+        hsr_source_status: hsr.hsr_source_status,
+        comparability_status: hsr.comparability_status,
+      } : {}),
       all: overallSettingMetric(row.headline, row.coverage),
       match: metric("match"),
       training: metric("training"),
@@ -1243,6 +1392,10 @@ function compareNullableNumbersDescending(left: number | null, right: number | n
   if (left === null) return right === null ? 0 : 1;
   if (right === null) return -1;
   return right - left;
+}
+
+function hsrRowsForDashboard(row: DashboardReaderRow | null | undefined) {
+  return row && "hsr_team_comparison" in row ? row.hsr_team_comparison : [];
 }
 
 export type TeamPageData = {
@@ -1282,30 +1435,30 @@ async function loadTeamPageData(
   const result = await approvedWebReaderQuery(pool,
     `select
        (select to_jsonb(team_row) from (
-          select team, season, generated_at, analysis_window, method, coverage,
+          select team, season, generated_at, analysis_window, method, coverage, hsr_team_comparison,
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
                  to_jsonb(team_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_team_dashboard_v7 team_dashboard
+          from reporting.latest_team_dashboard_v8 team_dashboard
           where team_key = $1 and season = $2
         ) team_row) as dashboard,
        (select to_jsonb(comparison_team_row) from (
-          select team, season, generated_at, analysis_window, method, coverage,
+          select team, season, generated_at, analysis_window, method, coverage, hsr_team_comparison,
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
                  to_jsonb(comparison_team_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_team_dashboard_v7 comparison_team_dashboard
+          from reporting.latest_team_dashboard_v8 comparison_team_dashboard
           where team_key = $1 and season = $3
         ) comparison_team_row) as comparison_dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v7
+           from reporting.latest_team_dashboard_v8
            where season = $2
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
@@ -1313,7 +1466,7 @@ async function loadTeamPageData(
        -- setting_metrics for the league benchmark.
        (select to_jsonb(league_metrics_row) from (
           select coverage, headline, setting_metrics
-          from reporting.latest_league_dashboard_v7
+          from reporting.latest_league_dashboard_v8
           where season = $2
         ) league_metrics_row) as league_metrics,
        (select comparison
@@ -1325,21 +1478,25 @@ async function loadTeamPageData(
 
   const snapshot = season === "2025-26"
     ? z.object({
-        dashboard: z.union([v7TeamDashboardRowSchema, v6TeamDashboardRowSchema]).nullable(),
+        dashboard: z.union([v8TeamDashboardRowSchema, v7TeamDashboardRowSchema, v6TeamDashboardRowSchema]).nullable(),
         comparison_dashboard: z.unknown().nullish(),
-        comparisons: z.array(v6ComparisonSourceRowSchema),
-        league_metrics: v6LeagueMetricsSourceSchema.nullable(),
+        comparisons: z.array(z.union([v8ComparisonSourceRowSchema, v6ComparisonSourceRowSchema])),
+        league_metrics: z.union([v8LeagueMetricsSourceSchema, v6LeagueMetricsSourceSchema]).nullable(),
         season_comparison: seasonComparisonReaderSchema.nullable(),
       }).strict().parse(result.rows[0])
     : z.object({
-        dashboard: dashboardRowSchema.nullable(),
+        dashboard: z.union([v8LegacyDashboardRowSchema, dashboardRowSchema]).nullable(),
         comparison_dashboard: z.unknown().nullish(),
-        comparisons: z.array(comparisonSourceRowSchema),
-        league_metrics: leagueMetricsSourceSchema.nullable(),
+        comparisons: z.array(z.union([v8LegacyComparisonSourceRowSchema, comparisonSourceRowSchema])),
+        league_metrics: z.union([v8LegacyLeagueMetricsSourceSchema, leagueMetricsSourceSchema]).nullable(),
         season_comparison: seasonComparisonReaderSchema.nullable(),
       }).parse(result.rows[0]);
 
-  const { rows, comparisonIdByTeamKey } = normalizeTeamComparisonsWithKeys(snapshot.comparisons, season);
+  const { rows, comparisonIdByTeamKey } = normalizeTeamComparisonsWithKeys(
+    snapshot.comparisons,
+    season,
+    hsrRowsForDashboard(snapshot.dashboard),
+  );
 
   return {
     dashboard: snapshot.dashboard
@@ -1410,30 +1567,30 @@ async function loadLeaguePageData(
   const result = await approvedWebReaderQuery(pool,
     `select
        (select to_jsonb(league_row) from (
-          select team, season, generated_at, analysis_window, method, coverage,
+          select team, season, generated_at, analysis_window, method, coverage, hsr_team_comparison,
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
                  to_jsonb(league_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_league_dashboard_v7 league_dashboard
+          from reporting.latest_league_dashboard_v8 league_dashboard
           where season = $1
         ) league_row) as dashboard,
        (select to_jsonb(comparison_league_row) from (
-          select team, season, generated_at, analysis_window, method, coverage,
+          select team, season, generated_at, analysis_window, method, coverage, hsr_team_comparison,
                  headline, setting_split, setting_metrics, monthly, body_locations,
                  injury_types, injury_profiles, diagnosis_families, illness_profiles, illness_summary, injury_type_families, severity_distribution,
                  contact_distribution, prior_season,
                  to_jsonb(comparison_league_dashboard) -> 'preliminary_monthly_rates' as preliminary_monthly_rates,
                  limitations
-          from reporting.latest_league_dashboard_v7 comparison_league_dashboard
+          from reporting.latest_league_dashboard_v8 comparison_league_dashboard
           where season = $2
         ) comparison_league_row) as comparison_dashboard,
        coalesce((
          select jsonb_agg(to_jsonb(comparison_row) order by comparison_row.team_key)
          from (
            select team_key, team, coverage, headline, setting_metrics
-           from reporting.latest_team_dashboard_v7
+           from reporting.latest_team_dashboard_v8
           where season = $1
          ) comparison_row
        ), '[]'::jsonb) as comparisons,
@@ -1445,15 +1602,15 @@ async function loadLeaguePageData(
 
   const snapshot = season === "2025-26"
     ? z.object({
-        dashboard: z.union([v7LeagueDashboardRowSchema, v6LeagueDashboardRowSchema]).nullable(),
+        dashboard: z.union([v8LeagueDashboardRowSchema, v7LeagueDashboardRowSchema, v6LeagueDashboardRowSchema]).nullable(),
         comparison_dashboard: z.unknown().nullish(),
-        comparisons: z.array(v6ComparisonSourceRowSchema),
+        comparisons: z.array(z.union([v8ComparisonSourceRowSchema, v6ComparisonSourceRowSchema])),
         season_comparison: seasonComparisonReaderSchema.nullable(),
       }).strict().parse(result.rows[0])
     : z.object({
-        dashboard: dashboardRowSchema.nullable(),
+        dashboard: z.union([v8LegacyDashboardRowSchema, dashboardRowSchema]).nullable(),
         comparison_dashboard: z.unknown().nullish(),
-        comparisons: z.array(comparisonSourceRowSchema),
+        comparisons: z.array(z.union([v8LegacyComparisonSourceRowSchema, comparisonSourceRowSchema])),
         season_comparison: seasonComparisonReaderSchema.nullable(),
       }).parse(result.rows[0]);
 
@@ -1467,7 +1624,7 @@ async function loadLeaguePageData(
           "league",
         )
       : undefined,
-    comparisons: normalizeTeamComparisons(snapshot.comparisons, season),
+    comparisons: normalizeTeamComparisons(snapshot.comparisons, season, hsrRowsForDashboard(snapshot.dashboard)),
     leagueMetrics: snapshot.dashboard
       ? normalizeLeagueMetrics(parseLeagueMetricsReaderRow(snapshot.dashboard, season))
       : [],
@@ -1532,7 +1689,7 @@ export async function getLeagueSettingMetrics(
   if (!pool) return [];
   const result = await approvedWebReaderQuery(pool,
     `select setting_metrics
-     from reporting.latest_league_dashboard_v7
+     from reporting.latest_league_dashboard_v8
      where season = $1`,
     [season]
   );
@@ -1587,6 +1744,24 @@ function normalizeDashboardRow(
       ...stripNulls(row.coverage),
       hours: row.coverage.hours ?? null,
       distance_km: row.coverage.distance_km ?? null,
+      ...("hsr_source_status" in row.coverage ? {
+        actual_hsr_distance_km: row.coverage.actual_hsr_distance_km ?? null,
+        hsr_distance_km: row.coverage.hsr_distance_km ?? null,
+        hsr_percentage: row.coverage.hsr_percentage ?? null,
+        is_imputed: row.coverage.is_imputed,
+        imputation_method: row.coverage.imputation_method ?? null,
+        display_note: row.coverage.display_note ?? null,
+        hsr_contributor_count: row.coverage.hsr_contributor_count,
+        hsr_source_status: row.coverage.hsr_source_status,
+        source_row_count: row.coverage.source_row_count,
+        valid_paired_row_count: row.coverage.valid_paired_row_count,
+        actual_month_count: row.coverage.actual_month_count,
+        placeholder_month_count: row.coverage.placeholder_month_count,
+        comparability_status: row.coverage.comparability_status,
+        units: row.coverage.units,
+        threshold_or_zone: row.coverage.threshold_or_zone,
+        data_quality_warnings: row.coverage.data_quality_warnings,
+      } : {}),
     } as Coverage,
     headline: row.headline.map(({ value, ...rest }) => ({
       ...(stripNulls(rest) as Omit<HeadlineMetric, "value">),
@@ -1606,6 +1781,16 @@ function normalizeDashboardRow(
       ...stripNulls(item),
       exposure_hours: item.exposure_hours ?? null,
       distance_km: item.distance_km ?? null,
+      ...("hsr_source_status" in item ? {
+        actual_hsr_distance_km: item.actual_hsr_distance_km ?? null,
+        hsr_distance_km: item.hsr_distance_km ?? null,
+        hsr_percentage: item.hsr_percentage ?? null,
+        is_imputed: item.is_imputed,
+        imputation_method: item.imputation_method ?? null,
+        display_note: item.display_note ?? null,
+        hsr_contributor_count: item.hsr_contributor_count,
+        hsr_source_status: item.hsr_source_status,
+      } : {}),
     })) as AnalyticsRow[],
     body_locations: row.body_locations.map(stripNulls) as AnalyticsRow[],
     injury_types: row.injury_types.map(stripNulls) as AnalyticsRow[],

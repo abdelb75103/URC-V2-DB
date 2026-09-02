@@ -1,0 +1,1984 @@
+{
+  "local_materialisation": {
+    "2024-25": {
+      "declared_source_not_retained_locally": [],
+      "teams_with_exact_local_source": 16
+    },
+    "2025-26": {
+      "declared_source_not_retained_locally": [],
+      "teams_with_exact_local_source": 14
+    }
+  },
+  "mapping_files": {
+    "2024-25": {
+      "path": "pipeline/hsr_mappings/2024-25.json",
+      "sha256": "578dce00e0055be4b5aed07a59d518effd0fc79677bb16cdbe02d7006038c22f"
+    },
+    "2025-26": {
+      "path": "pipeline/hsr_mappings/2025-26.json",
+      "sha256": "6d1232124beb4bb61021ecf75321bcc9ba2734107627c968b680752b266cfb0a"
+    }
+  },
+  "privacy": {
+    "player_values_included": false,
+    "row_identifiers_included": false
+  },
+  "schema_version": "urc_hsr_exposure_mapping_manifest_v1",
+  "source_availability": {
+    "2024-25": {
+      "gaps": [],
+      "teams_total": 16,
+      "teams_with_source": 16
+    },
+    "2025-26": {
+      "gaps": [
+        "benetton",
+        "edinburgh"
+      ],
+      "teams_total": 16,
+      "teams_with_source": 14
+    }
+  },
+  "source_availability_summary": {
+    "2024-25": "16/16",
+    "2025-26": "14/16"
+  },
+  "team_seasons": [
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/benetton/benetton_exposure_cleaned_2024-25.csv",
+        "sha256": "60b2263beb4bc12ad9ed4990cfb6fdb908ed90190eeed29a6a6b7e4df2eb694e"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 8446,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 8446
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/benetton/benetton_exposure_cleaned_2024-25.csv",
+        "sha256": "60b2263beb4bc12ad9ed4990cfb6fdb908ed90190eeed29a6a6b7e4df2eb694e",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "benetton",
+      "threshold_or_zone": ">20 km/h",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/bulls/bulls_exposure_cleaned_2024-25.csv",
+        "sha256": "75a04f73bb169fce594789fb7d975727c254eceb4158ecaa0db9e1b3b5f811d0"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 7118,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 7118
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/bulls/bulls_exposure_cleaned_2024-25.csv",
+        "sha256": "75a04f73bb169fce594789fb7d975727c254eceb4158ecaa0db9e1b3b5f811d0",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "bulls",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/cardiff/cardiff_exposure_cleaned_2024-25.csv",
+        "sha256": "9c24c5a223f7d4bc31914c709a22621965057c645e0993036c624c99c1d24e86"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 7351,
+        "blank_hsr_rows": 2,
+        "matched_hsr_rows": 7349
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/cardiff/cardiff_exposure_cleaned_2024-25.csv",
+        "sha256": "9c24c5a223f7d4bc31914c709a22621965057c645e0993036c624c99c1d24e86",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "cardiff",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/connacht/connacht_exposure_cleaned_2024-25.csv",
+        "sha256": "7db203843198afd4fa90fb4ab59716bf9d6e5a4c94043326823f8306f848aa84"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 679,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 679
+      },
+      "comparability_status": "non_comparable_unknown_zone_definition",
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "file": "../URC/Connacht/URC_GPS_Connacht_Cleaned.xlsx",
+        "sha256": "2b3c9bc92a3c6b4415262f9c598485169bf2e590ccb07804fb4cc6d6e8ef5423",
+        "sheet": "Sheet1"
+      },
+      "source_mode": "observation_group",
+      "source_value_field": "distance_z_4_to_z_6",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_row_number",
+            "source": "__physical_row_number"
+          }
+        ],
+        "source_fields": [
+          "__physical_row_number"
+        ]
+      },
+      "team_key": "connacht",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "units": "unknown (distance-like source field; unit not supplied)"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/dragons/dragons_exposure_cleaned_2024-25.csv",
+        "sha256": "dc88dc7416a9f2dcdc46575132c89f2393fb26e891e09c37084e8e0dc8a5e92e"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 7126,
+        "blank_hsr_rows": 15,
+        "matched_hsr_rows": 7111
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/dragons/dragons_exposure_cleaned_2024-25.csv",
+        "sha256": "dc88dc7416a9f2dcdc46575132c89f2393fb26e891e09c37084e8e0dc8a5e92e",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "dragons",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/edinburgh/edinburgh_exposure_cleaned_2024-25.csv",
+        "sha256": "f2dae263947036980ec64a42e47467a872b9f4d8c946c3a7fe31f1a8f90f5cd0"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 11416,
+        "blank_hsr_rows": 660,
+        "matched_hsr_rows": 10756
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": "660 accepted rows have no valid same-row source HSR value in the retained source; the canonical field remains blank for those rows.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/edinburgh/edinburgh_exposure_cleaned_2024-25.csv",
+        "sha256": "f2dae263947036980ec64a42e47467a872b9f4d8c946c3a7fe31f1a8f90f5cd0",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "edinburgh",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "unknown (source header does not state a unit)"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/glasgow/glasgow_exposure_cleaned_2024-25.csv",
+        "sha256": "1a7d31c7bdcce84846817bf4eb62c74bea1f8bb9b1e65410d5fdf270a0ea74fb"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 4672,
+        "blank_hsr_rows": 11,
+        "matched_hsr_rows": 4661
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": "11 accepted rows have no valid same-row source HSR value in the retained source; the canonical field remains blank for those rows.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/glasgow/glasgow_exposure_cleaned_2024-25.csv",
+        "sha256": "1a7d31c7bdcce84846817bf4eb62c74bea1f8bb9b1e65410d5fdf270a0ea74fb",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "glasgow",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "unknown (source header does not state a unit)"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/leinster/leinster_exposure_cleaned_2024-25.csv",
+        "sha256": "b15de4026e70a1cd5de75eb08161d30fcf9854fcd4e9bb07fd257e1c454f8a9f"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 954,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 954
+      },
+      "comparability_status": "non_comparable_unknown_zone_definition",
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "file": "../URC/Leinster/URC_GPS_Leinster_Cleaned.xlsx",
+        "sha256": "b6e3c0f8d47f0b5f188797ad010d5eb795951df5348c673146bef453324a5edb",
+        "sheet": "Sheet1"
+      },
+      "source_mode": "observation_group",
+      "source_value_field": "distance_z_4_to_z_6",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_row_number",
+            "source": "__physical_row_number"
+          }
+        ],
+        "source_fields": [
+          "__physical_row_number"
+        ]
+      },
+      "team_key": "leinster",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "units": "unknown (distance-like source field; unit not supplied)"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/lions/lions_exposure_cleaned_2024-25.csv",
+        "sha256": "3667c5af1e3c237bf49289bc9f97cb6a710820a37b2dfa26c53cca851d551967"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 3656,
+        "blank_hsr_rows": 547,
+        "matched_hsr_rows": 3109
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": "547 accepted rows are team-only ghost rows with no valid same-row source HSR value; the canonical field remains blank for those rows.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/lions/lions_exposure_cleaned_2024-25.csv",
+        "sha256": "3667c5af1e3c237bf49289bc9f97cb6a710820a37b2dfa26c53cca851d551967",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "lions",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/munster/munster_exposure_cleaned_2024-25.csv",
+        "sha256": "c8a09d4dfc1a14cb469c5929a563af3fd5f61f5700578478fe1553268084adc1"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 803,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 803
+      },
+      "comparability_status": "non_comparable_unknown_zone_definition",
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "file": "../URC/Munster/URC_GPS_Munster_Cleaned.xlsx",
+        "sha256": "93a5c236a56ab73e9975b29cdf15bd655b438986a9c17a92d441c2a015c2aea4",
+        "sheet": "Sheet1"
+      },
+      "source_mode": "observation_group",
+      "source_value_field": "distance_z_4_to_z_6",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_row_number",
+            "source": "__physical_row_number"
+          }
+        ],
+        "source_fields": [
+          "__physical_row_number"
+        ]
+      },
+      "team_key": "munster",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "units": "unknown (distance-like source field; unit not supplied)"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/ospreys/ospreys_exposure_cleaned_2024-25.csv",
+        "sha256": "83ee7c20d90bfbe12f643ee1e95fa8d9cb631eea5133463455f65efb082eb7fa"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 8604,
+        "blank_hsr_rows": 100,
+        "matched_hsr_rows": 8504
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/ospreys/ospreys_exposure_cleaned_2024-25.csv",
+        "sha256": "83ee7c20d90bfbe12f643ee1e95fa8d9cb631eea5133463455f65efb082eb7fa",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "ospreys",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/scarlets/scarlets_exposure_cleaned_2024-25.csv",
+        "sha256": "a457a26a79f7490f57fffba28ceb26e461fefd669515b7be2c914fdf4b17cd71"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 5866,
+        "blank_hsr_rows": 8,
+        "matched_hsr_rows": 5858
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/scarlets/scarlets_exposure_cleaned_2024-25.csv",
+        "sha256": "a457a26a79f7490f57fffba28ceb26e461fefd669515b7be2c914fdf4b17cd71",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "scarlets",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/sharks/sharks_exposure_cleaned_2024-25.csv",
+        "sha256": "4c9c7aed6b6006d385b7ce4dc2031787d7c5b987fb6ca1d5c0dfd12abef9f669"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 5624,
+        "blank_hsr_rows": 247,
+        "matched_hsr_rows": 5377
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": "247 accepted rows have no valid same-row source HSR value, including team-only ghost rows and one source row without an HSR value; the canonical field remains blank for those rows.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/sharks/sharks_exposure_cleaned_2024-25.csv",
+        "sha256": "4c9c7aed6b6006d385b7ce4dc2031787d7c5b987fb6ca1d5c0dfd12abef9f669",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "sharks",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "unknown (source header does not state a unit)"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/stormers/stormers_exposure_cleaned_2024-25.csv",
+        "sha256": "c1ddb4fcc9a6aa16e29bbe720af16ebf7a696d91830bac1e7f1b52105fe2b169"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 5186,
+        "blank_hsr_rows": 2,
+        "matched_hsr_rows": 5184
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/stormers/stormers_exposure_cleaned_2024-25.csv",
+        "sha256": "c1ddb4fcc9a6aa16e29bbe720af16ebf7a696d91830bac1e7f1b52105fe2b169",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "stormers",
+      "threshold_or_zone": "threshold not supplied",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/ulster/ulster_exposure_cleaned_2024-25.csv",
+        "sha256": "447d290f6caec3f2d7928f32151434020bd8c42b69557482516248d99961677e"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 817,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 817
+      },
+      "comparability_status": "non_comparable_unknown_zone_definition",
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "file": "../URC/Ulster/URC_GPS_Ulster_Cleaned.xlsx",
+        "sha256": "5a3d9fc20956fc23d5250296d3d05abeeb17a01341e5749d1b4fdd8b405d9922",
+        "sheet": "Sheet1"
+      },
+      "source_mode": "observation_group",
+      "source_value_field": "distance_z_4_to_z_6",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_row_number",
+            "source": "__physical_row_number"
+          }
+        ],
+        "source_fields": [
+          "__physical_row_number"
+        ]
+      },
+      "team_key": "ulster",
+      "threshold_or_zone": "zone 4 to zone 6; numeric zone boundaries not supplied",
+      "units": "unknown (distance-like source field; unit not supplied)"
+    },
+    {
+      "accepted_exposure": {
+        "file": "data/intake/2024-25/zebre/zebre_exposure_cleaned_2024-25.csv",
+        "sha256": "522e97f0785c355f3f563b28533a3af382dc8cc3b9cd9c5baceec6d44af4d66c"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 4813,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 4813
+      },
+      "comparability_status": "non_comparable_unknown_vendor_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2024-25",
+      "source_available": true,
+      "source_field": "high speed running distance",
+      "source_location": {
+        "file": "data/intake/2024-25/zebre/zebre_exposure_cleaned_2024-25.csv",
+        "sha256": "522e97f0785c355f3f563b28533a3af382dc8cc3b9cd9c5baceec6d44af4d66c",
+        "sheet": null
+      },
+      "source_mode": "accepted_row",
+      "source_value_field": "high speed running distance",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "zebre",
+      "threshold_or_zone": ">20 km/h",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v13_exposure_successor_full_16_20260830_v4_scope_adjudicated/benetton/exposure_intake_final_clean_v10.csv",
+        "sha256": "e4a17032a108e65033df7c0aa92b02c8457352316e4895d4bacee35505328098"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 1882,
+        "blank_hsr_rows": 1882,
+        "matched_hsr_rows": 0
+      },
+      "comparability_status": "not_available",
+      "gap_reason": "accepted_rows_are_excluded_false_1900_era_dates_and_no_valid_current_period_hsr_source_is_available",
+      "local_source_available": false,
+      "season": "2025-26",
+      "source_available": false,
+      "source_field": null,
+      "source_location": null,
+      "source_mode": "gap",
+      "source_value_field": null,
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "benetton",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/bulls/exposure_intake_final_clean_v10.csv",
+        "sha256": "eb10d32f46e0eb85bf5f246b7a30f7778860a447cc5f633cdfc3f6c4c66c2ca3"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 10439,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 10439
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "HS Distance (m)",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "23bcfd06a048617e480e29c38ca3a636b0bab580fa6f21c0fd39110654c336a1",
+            "local_file_sha256": "23bcfd06a048617e480e29c38ca3a636b0bab580fa6f21c0fd39110654c336a1",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_DECEMBER_2025_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "2b935742541022d2bbea747d5d2e41daff1633867764f7245258a93f15cd126c",
+            "local_file_sha256": "2b935742541022d2bbea747d5d2e41daff1633867764f7245258a93f15cd126c",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_MAY_2026_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "599779e63f345af0db3352a152d5e12505746c55254c666841e245862e253dc3",
+            "local_file_sha256": "599779e63f345af0db3352a152d5e12505746c55254c666841e245862e253dc3",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_NOVEMBER_2025_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "64cfcb3652131f6d5b4ca65b29ed6c31df1573861519922baac4638fc47cfb48",
+            "local_file_sha256": "64cfcb3652131f6d5b4ca65b29ed6c31df1573861519922baac4638fc47cfb48",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_OCTOBER_2025_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "8eb3da851a0f8a1f1981d0add804dac48cd14e58aa5c20e9c76a4bdc0bbf6533",
+            "local_file_sha256": "8eb3da851a0f8a1f1981d0add804dac48cd14e58aa5c20e9c76a4bdc0bbf6533",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_AUGUST_2025_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "915d3810c1198872d711897ea5930e893d5e94a29be46d62c07d10f53d9755e7",
+            "local_file_sha256": "915d3810c1198872d711897ea5930e893d5e94a29be46d62c07d10f53d9755e7",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_JUNE_2026_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "931bc140de3f7701cbb0b50e401c1b701a6807e2bc5ed299a8fed81ca9db55c4",
+            "local_file_sha256": "931bc140de3f7701cbb0b50e401c1b701a6807e2bc5ed299a8fed81ca9db55c4",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_MARCH_2026_BULLS.xlsx"
+          },
+          {
+            "accepted_source_sha256": "a9e8fbdb0e28d27586656cd01e9a20a77e5cb6b9efe8969c9589777f772b220f",
+            "local_file_sha256": "a9e8fbdb0e28d27586656cd01e9a20a77e5cb6b9efe8969c9589777f772b220f",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_JANUARY_2026_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "c90247faa54b5e2093db42f23991be42d787d93f5ca2050f95a3d2553462027d",
+            "local_file_sha256": "c90247faa54b5e2093db42f23991be42d787d93f5ca2050f95a3d2553462027d",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_SEPTEMBER_2025_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "cff6c54eb15aa345f02776be01b1333837ebf0e860e95597dc682ab55e249c1f",
+            "local_file_sha256": "cff6c54eb15aa345f02776be01b1333837ebf0e860e95597dc682ab55e249c1f",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_APRIL_2026_BULLS.csv"
+          },
+          {
+            "accepted_source_sha256": "fc54acc4f378d35ab14f9d5eb5ff9c2523f414da2962108e9e9425799993d28a",
+            "local_file_sha256": "fc54acc4f378d35ab14f9d5eb5ff9c2523f414da2962108e9e9425799993d28a",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure/EXPOSURE_FEBRUARY_2026_BULLS.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "HS Distance (m)",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "bulls",
+      "threshold_or_zone": "unknown",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/cardiff/exposure_intake_final_clean_v10.csv",
+        "sha256": "0462c28deb1bdde6dad780b9e7410e74c6bf7b1bbbc1b9b56ed301353e775438"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 10204,
+        "blank_hsr_rows": 4,
+        "matched_hsr_rows": 10200
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_high_speed",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "30354c292514286fb6e3a0ebe6247f85a702f7998639c332bb69c86ca8948a06",
+            "local_file_sha256": "30354c292514286fb6e3a0ebe6247f85a702f7998639c332bb69c86ca8948a06",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Cardiff/Region_Combined_C.csv"
+          },
+          {
+            "accepted_source_sha256": "853fae21ab72d0c90ab8a0d933f26ab298e08bf9eb3e158f52c6289cd91f1e24",
+            "local_file_sha256": "853fae21ab72d0c90ab8a0d933f26ab298e08bf9eb3e158f52c6289cd91f1e24",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Cardiff/Region_Combined_C_final.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "distance_high_speed",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "cardiff",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/connacht/exposure_intake_final_clean_v10.csv",
+        "sha256": "db65fead17ddd81882fc7a7076b3a1a7f05eabe9a6224324f5e20b3e62b8c4e6"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 1244,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 1244
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "7a35f51426251590e59217c7b412115d74127668631ac4a5311679ab47ee100f",
+            "local_file_sha256": "7a35f51426251590e59217c7b412115d74127668631ac4a5311679ab47ee100f",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Connacht/URC GPS - Connacht(in).csv"
+          }
+        ]
+      },
+      "source_mode": "long_variable_files",
+      "source_value_field": "value",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "duration_source_row_number",
+          "distance_source_row_number",
+          "cleaned_date",
+          "player_uid",
+          "setting",
+          "minutes_total_clean",
+          "distance_total_m_clean"
+        ],
+        "date_repair": null,
+        "rule": "Complete long-format observation group with an exact HSR distance variable row.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "total_time_minutes physical row",
+          "distance_total physical row",
+          "week_start",
+          "pseudonym derived from player_display_name_harmonised",
+          "match_day",
+          "total_time_minutes value",
+          "distance_total value"
+        ]
+      },
+      "team_key": "connacht",
+      "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/dragons/exposure_intake_final_clean_v10.csv",
+        "sha256": "d179be4b86753792e726b649c75a93bb8fa0b59da528d1e8f6272e7efd74b3f0"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 6411,
+        "blank_hsr_rows": 68,
+        "matched_hsr_rows": 6343
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_high_speed",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "236c8a9afbfe402a61d8a68448011ad8b9b1f3eaef4b64fe7a13bd7c95f741d1",
+            "local_file_sha256": "236c8a9afbfe402a61d8a68448011ad8b9b1f3eaef4b64fe7a13bd7c95f741d1",
+            "path": "../URC-V2-DB-private/2025-26/source_updates_20260827/dragons/Region_Combined_D_final.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "distance_high_speed",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "dragons",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v13_exposure_successor_full_16_20260830_v4_scope_adjudicated/edinburgh/exposure_intake_final_clean_v10.csv",
+        "sha256": "26015af2575af9632e0cca49fd533f7256452b149ce1b8719486d92616ff1f9e"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 954,
+        "blank_hsr_rows": 954,
+        "matched_hsr_rows": 0
+      },
+      "comparability_status": "not_available",
+      "gap_reason": "accepted_rows_are_pre_season_and_no_valid_current_period_hsr_source_is_available",
+      "local_source_available": false,
+      "season": "2025-26",
+      "source_available": false,
+      "source_field": null,
+      "source_location": null,
+      "source_mode": "gap",
+      "source_value_field": null,
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "pairs": [
+          {
+            "accepted": "source_file_sha256",
+            "source": "source_file_sha256"
+          },
+          {
+            "accepted": "source_sheet",
+            "source": "source_sheet"
+          },
+          {
+            "accepted": "source_row_number",
+            "source": "source_row_number"
+          },
+          {
+            "accepted": "source_row_sha256",
+            "source": "source_row_sha256"
+          }
+        ],
+        "source_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ]
+      },
+      "team_key": "edinburgh",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/glasgow/exposure_intake_final_clean_v10.csv",
+        "sha256": "cc914cf335d506325148e263b6ead6eb968af9f06933f93e787030ce40e0fddb"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 9600,
+        "blank_hsr_rows": 8,
+        "matched_hsr_rows": 9592
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "High Speed Running",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "1809eddd159ba62753c253c211dea0ff07e96d343717680547b55d26432b862a",
+            "local_file_sha256": "1809eddd159ba62753c253c211dea0ff07e96d343717680547b55d26432b862a",
+            "path": "../URC-V2-DB-private/2025-26/source_updates_20260819/glasgow/GPS URC Upload 25.26.xlsx"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "High Speed Running",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "glasgow",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/leinster/exposure_intake_final_clean_v10.csv",
+        "sha256": "d003759fb23c70f94ee6cda8dd6ec3bdd22a7ece45b6efc57689f6043e922639"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 1397,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 1397
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "95462a7af334af85665f4467f6e6096194dfede2976dfb652c706d3bd2a38dbb",
+            "local_file_sha256": "ce80b0af11af2ed381950b86b378ce4fc65af700268c56942b356ba780fd6b40",
+            "path": "../URC-V2-DB-private/2025-26/source_updates_20260902/leinster/URC GPS - Leinster 11.6.2026.xlsx"
+          }
+        ]
+      },
+      "source_mode": "long_variable_files",
+      "source_value_field": "value",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "duration_source_row_number",
+          "distance_source_row_number",
+          "cleaned_date",
+          "player_uid",
+          "setting",
+          "minutes_total_clean",
+          "distance_total_m_clean"
+        ],
+        "date_repair": {
+          "method": "swap month and day only when the repaired source date exactly matches the accepted date",
+          "rationale": "Five ambiguous source week-date pairs were serialised month-first while the accepted intake retained the corresponding day-first dates; the repair is accepted only when swapping month and day produces the exact accepted date and all player, setting, minutes and total-distance checks also match.",
+          "rows_repaired": 325
+        },
+        "rule": "Complete long-format observation group with an exact HSR distance variable row.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "total_time_minutes physical row",
+          "distance_total physical row",
+          "week_start",
+          "pseudonym derived from player_display_name_harmonised",
+          "match_day",
+          "total_time_minutes value",
+          "distance_total value"
+        ]
+      },
+      "team_key": "leinster",
+      "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/lions/exposure_intake_final_clean_v10.csv",
+        "sha256": "b9b756d0dbd2dd285baa8b3e7f600fdc3d141e302500a28257dc39dbf6d0cbb1"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 4363,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 4363
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "High Speed Distance (m)",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "06a9b0d84d7c3feb51691d243b14fe2f456f18e241e922615a977ecf83f66553",
+            "local_file_sha256": "06a9b0d84d7c3feb51691d243b14fe2f456f18e241e922615a977ecf83f66553",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_February_2026_Lions.csv"
+          },
+          {
+            "accepted_source_sha256": "36d929322d6462b783dd8c4f8a1e1835e6f3cfdcdf364e9c1a8d173a155ca833",
+            "local_file_sha256": "36d929322d6462b783dd8c4f8a1e1835e6f3cfdcdf364e9c1a8d173a155ca833",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_August_2025_Lions.xlsx"
+          },
+          {
+            "accepted_source_sha256": "69ab20c13b249acac63249f8ac4438358a6ffa5f0f9a1d24ddfd434eff69bfd6",
+            "local_file_sha256": "69ab20c13b249acac63249f8ac4438358a6ffa5f0f9a1d24ddfd434eff69bfd6",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_December_2025_Lions.csv"
+          },
+          {
+            "accepted_source_sha256": "a286e0b6bb51da3f03763d229779594361287d117cc3273379e9851f1f0b733f",
+            "local_file_sha256": "a286e0b6bb51da3f03763d229779594361287d117cc3273379e9851f1f0b733f",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_September_2025_Lions.xlsx"
+          },
+          {
+            "accepted_source_sha256": "a7e4fb3801b325b5f55ac50fc752d97b6a3a6e3945bab46979af01f86f366901",
+            "local_file_sha256": "a7e4fb3801b325b5f55ac50fc752d97b6a3a6e3945bab46979af01f86f366901",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_November_2025_Lions.csv"
+          },
+          {
+            "accepted_source_sha256": "ae49d254b23ff59d8f7d2a0a275abb504951808c461570dc88ac0dbadc9f26eb",
+            "local_file_sha256": "ae49d254b23ff59d8f7d2a0a275abb504951808c461570dc88ac0dbadc9f26eb",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_March_2026_Lions.csv"
+          },
+          {
+            "accepted_source_sha256": "b0c0ccdbf1c82a6fbd3b7095ac65d65c0ea434843115830797808448ce4b092c",
+            "local_file_sha256": "b0c0ccdbf1c82a6fbd3b7095ac65d65c0ea434843115830797808448ce4b092c",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_April_2026_Lions.csv"
+          },
+          {
+            "accepted_source_sha256": "b57dcf21ef752442d3ae877bfcd760a8618c540ffc3ff970c5d2eb965488a3fd",
+            "local_file_sha256": "b57dcf21ef752442d3ae877bfcd760a8618c540ffc3ff970c5d2eb965488a3fd",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_May_2026_Lions.csv"
+          },
+          {
+            "accepted_source_sha256": "dc3e6b792fef492caf9dd6bc2f0214e4a35c0897caf33961c5df056e305bb157",
+            "local_file_sha256": "dc3e6b792fef492caf9dd6bc2f0214e4a35c0897caf33961c5df056e305bb157",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_October_2025_Lions.csv"
+          },
+          {
+            "accepted_source_sha256": "e93a18fc0da94e4d4515a0da54b2e0af989685910dbb52ff70847786d57a0e52",
+            "local_file_sha256": "e93a18fc0da94e4d4515a0da54b2e0af989685910dbb52ff70847786d57a0e52",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure/Exposure_January_2026_Lions.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "High Speed Distance (m)",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "lions",
+      "threshold_or_zone": "unknown",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/munster/exposure_intake_final_clean_v10.csv",
+        "sha256": "aacb57fd82c46b41f9479068bd4ada6966ca218052254fae28b4a411db663bf4"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 1279,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 1279
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "2ab285e9cf8c3e466afa3de7f4b2bd1a77599df8a287892d619b786f59df2fb3",
+            "local_file_sha256": "2ab285e9cf8c3e466afa3de7f4b2bd1a77599df8a287892d619b786f59df2fb3",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Munster/URC GPS - Munster(in).csv"
+          }
+        ]
+      },
+      "source_mode": "long_variable_files",
+      "source_value_field": "value",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "duration_source_row_number",
+          "distance_source_row_number",
+          "cleaned_date",
+          "player_uid",
+          "setting",
+          "minutes_total_clean",
+          "distance_total_m_clean"
+        ],
+        "date_repair": null,
+        "rule": "Complete long-format observation group with an exact HSR distance variable row.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "total_time_minutes physical row",
+          "distance_total physical row",
+          "week_start",
+          "pseudonym derived from player_display_name_harmonised",
+          "match_day",
+          "total_time_minutes value",
+          "distance_total value"
+        ]
+      },
+      "team_key": "munster",
+      "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/ospreys/exposure_intake_final_clean_v10.csv",
+        "sha256": "e99c4b44b2faba4d1e3bb76802f30c6817e9a89116a7edf6e97e31a02ca79c28"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 6965,
+        "blank_hsr_rows": 18,
+        "matched_hsr_rows": 6947
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_high_speed",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "92539edc82d5a3b6464d16d05cae9a3f7f5ff6935acf9018df0a285a56ec823e",
+            "local_file_sha256": "92539edc82d5a3b6464d16d05cae9a3f7f5ff6935acf9018df0a285a56ec823e",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Ospreys/Region_Combined_O_final.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "distance_high_speed",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "ospreys",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/scarlets/exposure_intake_final_clean_v10.csv",
+        "sha256": "db6123174ebcbd65845a9f294aa44b23a39990d7aace0c6b3c6d843ba0b6b775"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 4985,
+        "blank_hsr_rows": 294,
+        "matched_hsr_rows": 4691
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_high_speed",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "bc25a3372423823c3ebddc7f1c6b680019c6547a61487926eadb835d5a179d9b",
+            "local_file_sha256": "bc25a3372423823c3ebddc7f1c6b680019c6547a61487926eadb835d5a179d9b",
+            "path": "../URC-V2-DB-private/2025-26/source_updates_20260827/scarlets/Region_Combined_S_final.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "distance_high_speed",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "scarlets",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/sharks/exposure_intake_final_clean_v10.csv",
+        "sha256": "9e5f3653d66c359f1b72586224edab6942edb771a6aaa7b4f82295d31bd1b722"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 6136,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 6136
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "High Speed Running (Absolute)",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "357cea7bb4b1f4754a79eae6974dd890ea968b82c40014c1a9cec7086064749b",
+            "local_file_sha256": "357cea7bb4b1f4754a79eae6974dd890ea968b82c40014c1a9cec7086064749b",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_April_2026_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "405fbe2af57acfadd3b7c60f44c9135881e1ffb7094d1975f73b3296550d27f2",
+            "local_file_sha256": "405fbe2af57acfadd3b7c60f44c9135881e1ffb7094d1975f73b3296550d27f2",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_October_2025_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "4a073e923c6603bf20b4ff39c87cda5a8d18991670ad5a0e734cf6ee5c06a003",
+            "local_file_sha256": "4a073e923c6603bf20b4ff39c87cda5a8d18991670ad5a0e734cf6ee5c06a003",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_December_2025_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "62f6146e4d2afae10d90f5ea9629654c897eef4eefeb047fb887ec732bb14570",
+            "local_file_sha256": "62f6146e4d2afae10d90f5ea9629654c897eef4eefeb047fb887ec732bb14570",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_February_2026_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "924d25bd545e2817ee2764d3f5dbaedc57df15fc686c9a90ef6eee9c2f6e9171",
+            "local_file_sha256": "924d25bd545e2817ee2764d3f5dbaedc57df15fc686c9a90ef6eee9c2f6e9171",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_May_2026_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "9cebe53120dfb32e215017c983bb24be62d30d54756cae0ac2c608a71f561743",
+            "local_file_sha256": "9cebe53120dfb32e215017c983bb24be62d30d54756cae0ac2c608a71f561743",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_November_2025_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "c1a94da6494c20e1645e37bcd419bcbf06a2c4fc6dcfa4ede734ff34eea618c0",
+            "local_file_sha256": "c1a94da6494c20e1645e37bcd419bcbf06a2c4fc6dcfa4ede734ff34eea618c0",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_September_2025_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "c7ce0e657a190d9ee6067bc40ae670c3df52a85575acf475741a519c379c1db5",
+            "local_file_sha256": "c7ce0e657a190d9ee6067bc40ae670c3df52a85575acf475741a519c379c1db5",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_March_2026_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "cce0ab3869302f63302b6a724a6ca286e5de018216c3db49a4569f328f670ace",
+            "local_file_sha256": "cce0ab3869302f63302b6a724a6ca286e5de018216c3db49a4569f328f670ace",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_January_2026_Sharks.xlsx"
+          },
+          {
+            "accepted_source_sha256": "f2f5d557f7ff25377592f5f1d249fd5f29c49af5e17abd07e78b21d4fc82aa69",
+            "local_file_sha256": "f2f5d557f7ff25377592f5f1d249fd5f29c49af5e17abd07e78b21d4fc82aa69",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure/Exposure_August_2025_Sharks.xlsx"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "High Speed Running (Absolute)",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "sharks",
+      "threshold_or_zone": "unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/stormers/exposure_intake_final_clean_v10.csv",
+        "sha256": "cce607106b672eb7be05cf955638f603b03cd543546776c4d3fec39691049b1e"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 9208,
+        "blank_hsr_rows": 1,
+        "matched_hsr_rows": 9207
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_threshold",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "High Speed Distance (m)",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "141f875d7c626211813d41d753313c26d937185c2db9a6efdffd6d09125a55ef",
+            "local_file_sha256": "141f875d7c626211813d41d753313c26d937185c2db9a6efdffd6d09125a55ef",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_January_2026_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "2c390a5da08d66966a727f4809f04926004a67a96938494966ce11c002cb84b5",
+            "local_file_sha256": "2c390a5da08d66966a727f4809f04926004a67a96938494966ce11c002cb84b5",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_February_2026_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "6d6e92f78e2f18519d58924a8d73b8f1d4127b8be5ff3e54a32c6164eeedb7fc",
+            "local_file_sha256": "6d6e92f78e2f18519d58924a8d73b8f1d4127b8be5ff3e54a32c6164eeedb7fc",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_October_2025_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "85b93959bed9ba0033a79dd9b9a6babeeb0165bdd3a0b8da41b7c7146249c458",
+            "local_file_sha256": "85b93959bed9ba0033a79dd9b9a6babeeb0165bdd3a0b8da41b7c7146249c458",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_June_2026_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "86b0ecdcc77ff54d8c30e959ce69fc4152f501957d7c49304fa733400e5b07e6",
+            "local_file_sha256": "86b0ecdcc77ff54d8c30e959ce69fc4152f501957d7c49304fa733400e5b07e6",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_March_2026_Stormers.csv"
+          },
+          {
+            "accepted_source_sha256": "92a109e3014b422ea5e72ad951cafdd6bb1d0d408a1bbf8a6c55e1a8a4b634e3",
+            "local_file_sha256": "92a109e3014b422ea5e72ad951cafdd6bb1d0d408a1bbf8a6c55e1a8a4b634e3",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_August_2025_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "a3001ff802ab09af87096b56db4e686031702d1225260b3810c07a4ae6a7f13f",
+            "local_file_sha256": "a3001ff802ab09af87096b56db4e686031702d1225260b3810c07a4ae6a7f13f",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_September_2025_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "d67c99feb90c3121b5814d437f0056958bb15de9be248ba3d085cf0dd4ee91fd",
+            "local_file_sha256": "d67c99feb90c3121b5814d437f0056958bb15de9be248ba3d085cf0dd4ee91fd",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_April_2026_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "e767c2a4f6530427fc165e607f7111e364f2ce0b9215412a1e1a9592abcf7284",
+            "local_file_sha256": "e767c2a4f6530427fc165e607f7111e364f2ce0b9215412a1e1a9592abcf7284",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_December_2025_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "fbb0987adf563794592ca4d2e4c6146f63cfeda54ee8b01f950d46c564b143ed",
+            "local_file_sha256": "fbb0987adf563794592ca4d2e4c6146f63cfeda54ee8b01f950d46c564b143ed",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_November_2025_Stormers.xlsx"
+          },
+          {
+            "accepted_source_sha256": "ff92ba4a12a5bd1d3e9a2a3217ceca69af7eb097b03ec3110d289adc50064255",
+            "local_file_sha256": "ff92ba4a12a5bd1d3e9a2a3217ceca69af7eb097b03ec3110d289adc50064255",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure/Exposure_May_2026_Stormers.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "High Speed Distance (m)",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "stormers",
+      "threshold_or_zone": "unknown",
+      "units": "metres"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/ulster/exposure_intake_final_clean_v10.csv",
+        "sha256": "9ad6331f328f75af9a408ea5f8bdef6f093678f5d808592f0a47329a22e357d8"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 1315,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 1315
+      },
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "distance_z_4_to_z_6",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "eb8bd17ec13a6e3530794d8eabb43daf68bfccd2c17e4782eeea74531913c4a1",
+            "local_file_sha256": "eb8bd17ec13a6e3530794d8eabb43daf68bfccd2c17e4782eeea74531913c4a1",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Ulster/URC GPS - Ulster(in).csv"
+          }
+        ]
+      },
+      "source_mode": "long_variable_files",
+      "source_value_field": "value",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "duration_source_row_number",
+          "distance_source_row_number",
+          "cleaned_date",
+          "player_uid",
+          "setting",
+          "minutes_total_clean",
+          "distance_total_m_clean"
+        ],
+        "date_repair": null,
+        "rule": "Complete long-format observation group with an exact HSR distance variable row.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "total_time_minutes physical row",
+          "distance_total physical row",
+          "week_start",
+          "pseudonym derived from player_display_name_harmonised",
+          "match_day",
+          "total_time_minutes value",
+          "distance_total value"
+        ]
+      },
+      "team_key": "ulster",
+      "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+      "units": "unknown"
+    },
+    {
+      "accepted_exposure": {
+        "file": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/zebre/exposure_intake_final_clean_v10.csv",
+        "sha256": "26c058a659823e5c9f818b2525d3daab6c16fd3a4cd0722b7e9c82af0089c1fa"
+      },
+      "accepted_row_coverage": {
+        "accepted_rows": 6694,
+        "blank_hsr_rows": 0,
+        "matched_hsr_rows": 6694
+      },
+      "comparability_status": "team_defined_non_comparable_vendor_calibration_unknown",
+      "gap_reason": null,
+      "local_source_available": true,
+      "season": "2025-26",
+      "source_available": true,
+      "source_field": "HSRm (>20km/h)",
+      "source_location": {
+        "files": [
+          {
+            "accepted_source_sha256": "20055ff071efe8360a133bf36ae0bd872cef3fae2bb2a93295ad3c999a6418ab",
+            "local_file_sha256": "20055ff071efe8360a133bf36ae0bd872cef3fae2bb2a93295ad3c999a6418ab",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/NOV-2025.csv"
+          },
+          {
+            "accepted_source_sha256": "34dc8e1aeafec2e492a09ba589ee1690fd675a8472761fa98622c1c336496c0c",
+            "local_file_sha256": "34dc8e1aeafec2e492a09ba589ee1690fd675a8472761fa98622c1c336496c0c",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/JEN-2027.csv"
+          },
+          {
+            "accepted_source_sha256": "55087b6aa715a1e8b2d537073c0d65f05a64ae8c9092684b13b45827adad8811",
+            "local_file_sha256": "55087b6aa715a1e8b2d537073c0d65f05a64ae8c9092684b13b45827adad8811",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/APR-2026.csv"
+          },
+          {
+            "accepted_source_sha256": "8021ecca0aab30beb471aaf7cdeeae3e4778b515b96f76fc0a5a9280bf52d154",
+            "local_file_sha256": "8021ecca0aab30beb471aaf7cdeeae3e4778b515b96f76fc0a5a9280bf52d154",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/DIC-2025.csv"
+          },
+          {
+            "accepted_source_sha256": "866a7aaf8ba58c72439c36a11e8a64fff0e294652009c295f39ee880cf0d4d3c",
+            "local_file_sha256": "866a7aaf8ba58c72439c36a11e8a64fff0e294652009c295f39ee880cf0d4d3c",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/JUL-2025.xlsx"
+          },
+          {
+            "accepted_source_sha256": "9bddcf317a4a51158beddefb30fc3ae02b3715417ae2c88748b345c19e7243b4",
+            "local_file_sha256": "9bddcf317a4a51158beddefb30fc3ae02b3715417ae2c88748b345c19e7243b4",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/OCT-2025.csv"
+          },
+          {
+            "accepted_source_sha256": "aeb0f01da7f607fcebbab9a374fa5fe1fd8e26c4e6251df2a839a4b87875b8db",
+            "local_file_sha256": "aeb0f01da7f607fcebbab9a374fa5fe1fd8e26c4e6251df2a839a4b87875b8db",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/JUN-2026.csv"
+          },
+          {
+            "accepted_source_sha256": "b1b082eadb5d420ae71ba4389683f5ce4dfd961c41743eb42620221436f3f7a1",
+            "local_file_sha256": "b1b082eadb5d420ae71ba4389683f5ce4dfd961c41743eb42620221436f3f7a1",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/FEB-2026.csv"
+          },
+          {
+            "accepted_source_sha256": "c4c1a58ec6465554053af36874fe3011303be886ac6535fc1b0987e3ec972949",
+            "local_file_sha256": "c4c1a58ec6465554053af36874fe3011303be886ac6535fc1b0987e3ec972949",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/AUG-2025.xlsx"
+          },
+          {
+            "accepted_source_sha256": "da3f6510d7b05370fd33942672481ce88f1f25bbbb1d8669af4633f266b61f3c",
+            "local_file_sha256": "da3f6510d7b05370fd33942672481ce88f1f25bbbb1d8669af4633f266b61f3c",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/MAY-2026.csv"
+          },
+          {
+            "accepted_source_sha256": "ebd201fc2e2a9218a19c312f61c176dc48436503240fd4081816844374186bf2",
+            "local_file_sha256": "ebd201fc2e2a9218a19c312f61c176dc48436503240fd4081816844374186bf2",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/SEP-2025.xlsx"
+          },
+          {
+            "accepted_source_sha256": "f6c959a51e3b0484e45f69e516935a8028cb1d80a7b08429c30808f43c3fa2c7",
+            "local_file_sha256": "f6c959a51e3b0484e45f69e516935a8028cb1d80a7b08429c30808f43c3fa2c7",
+            "path": "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure/MAR-2026.csv"
+          }
+        ]
+      },
+      "source_mode": "locator_files",
+      "source_value_field": "HSRm (>20km/h)",
+      "stable_row_join": {
+        "accepted_fields": [
+          "source_file_sha256",
+          "source_sheet",
+          "source_row_number",
+          "source_row_sha256"
+        ],
+        "rule": "Exact source file, sheet and physical row; accepted source-row hash retained as provenance.",
+        "source_fields": [
+          "checksum-bound local file",
+          "resolved table or worksheet",
+          "__physical_row_number",
+          "accepted source-row lineage hash"
+        ]
+      },
+      "team_key": "zebre",
+      "threshold_or_zone": ">20 km/h",
+      "units": "metres"
+    }
+  ]
+}

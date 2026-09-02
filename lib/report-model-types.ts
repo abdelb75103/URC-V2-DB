@@ -84,6 +84,12 @@ export type ReportExposureRow = {
   month: string;
   exposureHours: number | null;
   distanceKm: number | null;
+  hsrDistanceKm: number | null;
+  hsrPercentage: number | null;
+  isImputed: boolean;
+  imputationMethod: string | null;
+  displayNote: string | null;
+  hsrSourceStatus: string | null;
 };
 
 export type ReportComparisonRow = {
@@ -173,6 +179,11 @@ export type ReportModel = {
     matchHours: number | null;
     trainingHours: number | null;
     totalDistanceKm: number | null;
+    totalHsrDistanceKm: number | null;
+    totalHsrPercentage: number | null;
+    hsrIsImputed: boolean;
+    hsrDisplayNote: string | null;
+    hsrSourceStatus: string | null;
     monthly: ReportExposureRow[];
   };
   comparisonHeatmap: ReportComparisonRow[];

@@ -34,6 +34,22 @@ export type Coverage = {
   scope_status?: string;
   scope_status_counts?: Record<string, number>;
   injury_cohort_filters?: Record<string, boolean | Record<string, number>>;
+  actual_hsr_distance_km?: number | null;
+  hsr_distance_km?: number | null;
+  hsr_percentage?: number | null;
+  is_imputed?: boolean;
+  imputation_method?: string | null;
+  display_note?: string | null;
+  hsr_contributor_count?: number;
+  hsr_source_status?: string;
+  source_row_count?: number;
+  valid_paired_row_count?: number;
+  actual_month_count?: number;
+  placeholder_month_count?: number;
+  comparability_status?: string;
+  units?: string;
+  threshold_or_zone?: string;
+  data_quality_warnings?: string[];
 };
 
 export type AnalyticsRow = {
@@ -44,6 +60,16 @@ export type AnalyticsRow = {
   distance_km?: number | null;
   exposure_contributor_count?: number;
   distance_contributor_count?: number;
+  /** Observed HSR only. It is null for a league-mean placeholder. */
+  actual_hsr_distance_km?: number | null;
+  /** Display HSR, observed or an explicit league-mean placeholder. */
+  hsr_distance_km?: number | null;
+  hsr_percentage?: number | null;
+  is_imputed?: boolean;
+  imputation_method?: string | null;
+  display_note?: string | null;
+  hsr_contributor_count?: number;
+  hsr_source_status?: string;
   time_loss_injuries: number;
   recorded_injuries?: number;
   days_lost: number;
@@ -295,6 +321,15 @@ export type TeamComparisonRow = {
   distance_km: number | null;
   match_hours: number | null;
   training_hours: number | null;
+  actual_hsr_distance_km?: number | null;
+  hsr_distance_km?: number | null;
+  hsr_percentage?: number | null;
+  is_imputed?: boolean;
+  imputation_method?: string | null;
+  display_note?: string | null;
+  hsr_contributor_count?: number;
+  hsr_source_status?: string;
+  comparability_status?: string;
   all: SettingMetricRow | null;
   match: SettingMetricRow | null;
   training: SettingMetricRow | null;

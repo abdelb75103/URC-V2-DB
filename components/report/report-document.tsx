@@ -81,7 +81,11 @@ function fmt(value: number | null | undefined, unit = "", digits = 1): string {
 function tickText(value: number): string { return new Intl.NumberFormat("en-IE", { maximumFractionDigits: Number.isInteger(value) ? 0 : 1 }).format(value); }
 /** en-IE renders September as "Sept"; the report uses three letters everywhere. */
 function formatDate(value: string): string { const date = new Date(value.length === 10 ? `${value}T00:00:00Z` : value); if (Number.isNaN(date.valueOf())) return value; return new Intl.DateTimeFormat("en-IE", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(date).replace("Sept", "Sep"); }
-function shortMonth(value: string): string { return value.trim().slice(0, 3).toUpperCase(); }
+function shortMonth(value: string): string {
+  const isoMonth = /^\d{4}-(\d{2})$/.exec(value.trim())?.[1];
+  if (isoMonth) return ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][Number(isoMonth) - 1] ?? value;
+  return value.trim().slice(0, 3).toUpperCase();
+}
 function monthRange(rows: ReadonlyArray<{ month: string }>): string { if (!rows.length) return ""; return `${shortMonth(rows[0].month)} to ${shortMonth(rows[rows.length - 1].month)}`; }
 function metadata(model: ReportModel): ReportMetadata { return { version: model.reportVersion, sourceGeneratedAt: model.dataGeneratedAt, exportedAt: model.exportedAt }; }
 
@@ -602,8 +606,7 @@ function ExposureTrend({ model, chartHeight = 218 }: { model: ReportModel; chart
   const distance = niceScale(Math.max(1, ...rows.map((r) => r.distanceKm ?? 0)));
   const slot = plotW / Math.max(1, rows.length), x = (i: number) => left + slot * i + slot / 2;
   const hoursY = (v: number) => top + plotH - v / hours.top * plotH, distY = (v: number) => top + plotH - v / distance.top * plotH;
-  const distancePath = rows.map((r, i) => r.distanceKm === null ? "" : `${i ? "L" : "M"} ${x(i)} ${distY(r.distanceKm)}`).filter(Boolean).join(" ");
-  const barWidth = Math.min(30, slot * 0.6);
+  const barWidth = Math.min(26, slot * 0.45);
   return <View>
     <Svg viewBox={`0 0 ${w} ${h}`} style={{ height: h }}>
       <Rect x={left} y={top} width={plotW} height={plotH} fill={C.white} stroke={C.line} strokeWidth={0.8} />
@@ -616,16 +619,20 @@ function ExposureTrend({ model, chartHeight = 218 }: { model: ReportModel; chart
         <SvgText x={left + plotW + 6} y={distY(tick) + 2.4} fontSize={6.5} fill={C.muted}>{tickText(tick)}</SvgText>
       </G>)}
       {rows.map((r, i) => <G key={r.month}>
-        <Rect x={x(i) - barWidth / 2} y={hoursY(r.exposureHours ?? 0)} width={barWidth} height={top + plotH - hoursY(r.exposureHours ?? 0)} fill={C.mint} />
+        <Rect x={x(i) - barWidth - 1} y={hoursY(r.exposureHours ?? 0)} width={barWidth} height={top + plotH - hoursY(r.exposureHours ?? 0)} fill={C.mint} />
+        {r.distanceKm !== null && <Rect x={x(i) + 1} y={distY(r.distanceKm)} width={barWidth} height={top + plotH - distY(r.distanceKm)} fill={C.cyan} />}
+        {r.distanceKm !== null && r.hsrDistanceKm !== null && r.distanceKm > 0 && (() => {
+          const insetHeight = Math.min(top + plotH - distY(r.distanceKm), Math.max((r.hsrDistanceKm / r.distanceKm) * (top + plotH - distY(r.distanceKm)), r.hsrDistanceKm > 0 ? 2 : 0));
+          return <Rect x={x(i) + 3} y={top + plotH - insetHeight} width={Math.max(barWidth - 4, 0)} height={insetHeight} fill={C.orange} />;
+        })()}
+        {r.hsrPercentage !== null && <SvgText x={x(i) + barWidth / 2 + 1} y={top + plotH - 4} textAnchor="middle" fontSize={5.5} fill={C.white}>{fmt(r.hsrPercentage, "%")}</SvgText>}
         <SvgText x={x(i)} y={top + plotH + 12} textAnchor="middle" fontSize={6.5} fill={C.muted}>{shortMonth(r.month)}</SvgText>
       </G>)}
-      <Path d={distancePath} fill="none" stroke={C.cyan} strokeWidth={2.3} />
-      {rows.map((r, i) => r.distanceKm !== null ? <Circle key={`p-${r.month}`} cx={x(i)} cy={distY(r.distanceKm)} r={2.4} fill={C.cyan} stroke={C.white} strokeWidth={0.8} /> : null)}
       <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Player-hours</SvgText>
       <SvgText x={w - 2} y={top - 9} textAnchor="end" fontSize={6.8} fill={C.ink}>Distance (km)</SvgText>
     </Svg>
-    <Legend items={[{ label: "Player-hours (left axis)", colour: C.mint, shape: "bar" }, { label: "Distance in km (right axis)", colour: C.cyan, shape: "line" }]} />
-    <Caption>Monthly released exposure across {monthRange(rows)}.</Caption>
+    <Legend items={[{ label: "Player-hours (left axis)", colour: C.mint, shape: "bar" }, { label: "Total distance (right axis)", colour: C.cyan, shape: "bar" }, { label: "HSR inset", colour: C.orange, shape: "bar" }]} />
+    <Caption>Monthly released exposure across {monthRange(rows)}. The HSR inset is part of total distance, not additional distance.</Caption>
   </View>;
 }
 function ExposureLadder({ model, keyName, label, unit, colour, rowGap = 9 }: { model: ReportModel; keyName: "exposureHours" | "distanceKm"; label: string; unit: string; colour: string; rowGap?: number }) {
@@ -930,10 +937,13 @@ function Exposure({ model, meta }: { model: ReportModel; meta: ReportMetadata })
     { key: "distance", label: "Distance", value: model.exposure.totalDistanceKm, unit: "km", formula: "released distance" },
   ];
   const pseudo = { ...model, snapshotMetrics: cards };
+  const hsrStatus = model.exposure.hsrIsImputed
+    ? "League-mean placeholder"
+    : model.exposure.totalHsrDistanceKm === null ? "HSR not available" : "Actual source data";
   return <PageShell model={model} meta={meta} section="exposure">
     <PageTitle title="Exposure" note="The released denominator is shown over time and against the anonymous league cohort." />
     <MetricCards model={pseudo} limit={4} trend={false} />
-    <View style={{ marginTop: 8, height: 280 }}><Panel fill title="Monthly Exposure And Distance" note="Player-hours on the left axis and kilometres on the right axis."><ExposureTrend model={model} chartHeight={213} /></Panel></View>
+    <View style={{ marginTop: 8, height: 280 }}><Panel fill title="Monthly Exposure And HSR" note={`Player-hours use the left axis. Total distance uses the right axis, with HSR drawn as an inset. HSR Distance: ${fmt(model.exposure.totalHsrDistanceKm, "km")}. HSR Percentage: ${fmt(model.exposure.totalHsrPercentage, "%")}. HSR Status: ${hsrStatus}. ${model.exposure.hsrDisplayNote ?? model.exposure.hsrSourceStatus ?? ""}`}><ExposureTrend model={model} chartHeight={213} /></Panel></View>
     <View style={[styles.split, { marginTop: 8, height: 320 }]}>
       <View style={styles.half}><Panel fill title="Club Exposure Hours" note="Released player-hours for every club in the cohort."><ExposureLadder model={model} keyName="exposureHours" label="Player-hours" unit="Hours" colour={C.mint} rowGap={9} /></Panel></View>
       <View style={styles.half}><Panel fill title="Club Distance" note="Released distance for every club in the cohort."><ExposureLadder model={model} keyName="distanceKm" label="Kilometres" unit="km" colour={C.cyan} rowGap={9} /></Panel></View>

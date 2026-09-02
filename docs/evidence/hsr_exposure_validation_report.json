@@ -1,0 +1,978 @@
+{
+  "local_materialisation": {
+    "2024-25": {
+      "declared_source_not_retained_locally": [],
+      "teams_with_exact_local_source": 16
+    },
+    "2025-26": {
+      "declared_source_not_retained_locally": [],
+      "teams_with_exact_local_source": 14
+    }
+  },
+  "mapping_files": {
+    "2024-25": {
+      "path": "pipeline/hsr_mappings/2024-25.json",
+      "sha256": "578dce00e0055be4b5aed07a59d518effd0fc79677bb16cdbe02d7006038c22f"
+    },
+    "2025-26": {
+      "path": "pipeline/hsr_mappings/2025-26.json",
+      "sha256": "6d1232124beb4bb61021ecf75321bcc9ba2734107627c968b680752b266cfb0a"
+    }
+  },
+  "privacy": {
+    "player_values_included": false,
+    "row_identifiers_included": false
+  },
+  "schema_version": "urc_hsr_exposure_validation_report_v1",
+  "source_availability": {
+    "2024-25": {
+      "gaps": [],
+      "teams_total": 16,
+      "teams_with_source": 16
+    },
+    "2025-26": {
+      "gaps": [
+        "benetton",
+        "edinburgh"
+      ],
+      "teams_total": 16,
+      "teams_with_source": 14
+    }
+  },
+  "source_availability_summary": {
+    "2024-25": "16/16",
+    "2025-26": "14/16"
+  },
+  "team_seasons": [
+    {
+      "after_row_count": 8446,
+      "before_row_count": 8446,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2025-06-09",
+        "start": "2024-07-22"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "3dc416c11e66bf84c73a1d1ac35bbd87c66544a667bad326cdfdc4c831d757c8",
+        "before_sha256": "3dc416c11e66bf84c73a1d1ac35bbd87c66544a667bad326cdfdc4c831d757c8",
+        "identical": true
+      },
+      "matched_hsr_count": 8446,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "65ec671c51d843d3e7290ce0c3e9463b234ec80ad0e9ebec6e0156268355752e",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 8446,
+        "source_rows_matched": 8446,
+        "source_trace_rows": 8446
+      },
+      "team_key": "benetton"
+    },
+    {
+      "after_row_count": 7118,
+      "before_row_count": 7118,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2025-06-14",
+        "start": "2024-07-23"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "fd117dc2e4e6874e6e5b0b4d3fe8a6a920bcf8248036393ed28956b6af6ee039",
+        "before_sha256": "fd117dc2e4e6874e6e5b0b4d3fe8a6a920bcf8248036393ed28956b6af6ee039",
+        "identical": true
+      },
+      "matched_hsr_count": 7118,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "e43021910e9637ec4f06ab8e8d1f8fd8dcb86927d1d4d1ef5edfb7133ccd816e",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 7118,
+        "source_rows_matched": 7118,
+        "source_trace_rows": 7118
+      },
+      "team_key": "bulls"
+    },
+    {
+      "after_row_count": 7351,
+      "before_row_count": 7351,
+      "blank_hsr_count": 2,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 2
+      },
+      "date_range": {
+        "end": "2025-05-29",
+        "start": "2024-07-12"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "2decc88567dfcff617d2ad6ed7fbdd957dfd15be594a5affddaec18b89db6685",
+        "before_sha256": "2decc88567dfcff617d2ad6ed7fbdd957dfd15be594a5affddaec18b89db6685",
+        "identical": true
+      },
+      "matched_hsr_count": 7349,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "13e27186ee98c56774e9df7ea9049b87591f2e277aaec1a63500e737636600ce",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 7351,
+        "source_rows_matched": 7351,
+        "source_trace_rows": 7349
+      },
+      "team_key": "cardiff"
+    },
+    {
+      "after_row_count": 679,
+      "before_row_count": 679,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2025-06-09",
+        "start": "2024-09-16"
+      },
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "locator_set_identity": {
+        "after_sha256": "08d55fa3e6979b9dc534cbee07875adddc4525da6d88e9f9acf76c608f21ba3d",
+        "before_sha256": "08d55fa3e6979b9dc534cbee07875adddc4525da6d88e9f9acf76c608f21ba3d",
+        "identical": true
+      },
+      "matched_hsr_count": 679,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "a850af55f0f652d95c31bb28ac68da61cf351b92d532120bee8a0274b5093c62",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 679,
+        "source_rows_matched": 679,
+        "source_trace_rows": 679
+      },
+      "team_key": "connacht"
+    },
+    {
+      "after_row_count": 7126,
+      "before_row_count": 7126,
+      "blank_hsr_count": 15,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 15
+      },
+      "date_range": {
+        "end": "2025-05-22",
+        "start": "2024-07-09"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "3fbb65dfd2668de8cca3d5e61391d54813d6e17f721ca3df66e3923ba503bdca",
+        "before_sha256": "3fbb65dfd2668de8cca3d5e61391d54813d6e17f721ca3df66e3923ba503bdca",
+        "identical": true
+      },
+      "matched_hsr_count": 7111,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "fbf53546a34eee9edce595490dee66ce7c12cfe19ed6e20fcebc21b0ad57f5ee",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 7126,
+        "source_rows_matched": 7126,
+        "source_trace_rows": 7111
+      },
+      "team_key": "dragons"
+    },
+    {
+      "after_row_count": 11416,
+      "before_row_count": 11416,
+      "blank_hsr_count": 660,
+      "blank_reason_counts": {
+        "hsr_source_value_blank": 660
+      },
+      "date_range": {
+        "end": "2025-05-20",
+        "start": "2024-06-17"
+      },
+      "gap_reason": "660 accepted rows have no valid same-row source HSR value in the retained source; the canonical field remains blank for those rows.",
+      "locator_set_identity": {
+        "after_sha256": "6f7dd897082b1f61162d83c6925dc448be4916825a44faba4ae942c6d8611fc3",
+        "before_sha256": "6f7dd897082b1f61162d83c6925dc448be4916825a44faba4ae942c6d8611fc3",
+        "identical": true
+      },
+      "matched_hsr_count": 10756,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "21fea0bd4c77af34f0c3c2cd0f5c3a786631a4e5ae184e306361706441187383",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 11416,
+        "source_rows_matched": 11416,
+        "source_trace_rows": 10756
+      },
+      "team_key": "edinburgh"
+    },
+    {
+      "after_row_count": 4672,
+      "before_row_count": 4672,
+      "blank_hsr_count": 11,
+      "blank_reason_counts": {
+        "hsr_source_value_blank": 11
+      },
+      "date_range": {
+        "end": "2025-06-07",
+        "start": "2024-09-16"
+      },
+      "gap_reason": "11 accepted rows have no valid same-row source HSR value in the retained source; the canonical field remains blank for those rows.",
+      "locator_set_identity": {
+        "after_sha256": "8e8faf24d9320f69d9223d59e4139adf3a43e8b5f61faab2cf8079b9897b442f",
+        "before_sha256": "8e8faf24d9320f69d9223d59e4139adf3a43e8b5f61faab2cf8079b9897b442f",
+        "identical": true
+      },
+      "matched_hsr_count": 4661,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "5b358edaa1af9942cbc44f1442565c1cc8a3a7f8bb8f45f3fcf0b46a987e0ade",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 4672,
+        "source_rows_matched": 4672,
+        "source_trace_rows": 4661
+      },
+      "team_key": "glasgow"
+    },
+    {
+      "after_row_count": 954,
+      "before_row_count": 954,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2025-06-09",
+        "start": "2024-09-16"
+      },
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "locator_set_identity": {
+        "after_sha256": "10ee37ebe893b7a79227635cfbbec52a8ed4396c1d826a21d0126c28a7aa4440",
+        "before_sha256": "10ee37ebe893b7a79227635cfbbec52a8ed4396c1d826a21d0126c28a7aa4440",
+        "identical": true
+      },
+      "matched_hsr_count": 954,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "2472cf1d677c8b78d925e7748dd0a75544f3bc1fe47ea712a00c61058386368d",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 954,
+        "source_rows_matched": 954,
+        "source_trace_rows": 954
+      },
+      "team_key": "leinster"
+    },
+    {
+      "after_row_count": 3656,
+      "before_row_count": 3656,
+      "blank_hsr_count": 547,
+      "blank_reason_counts": {
+        "hsr_source_value_blank": 547
+      },
+      "date_range": {
+        "end": "2025-05-13",
+        "start": "2024-08-05"
+      },
+      "gap_reason": "547 accepted rows are team-only ghost rows with no valid same-row source HSR value; the canonical field remains blank for those rows.",
+      "locator_set_identity": {
+        "after_sha256": "7c6f5dbe146331c39970d7fafffaef0559808ac27b03269eea33ef12613a9851",
+        "before_sha256": "7c6f5dbe146331c39970d7fafffaef0559808ac27b03269eea33ef12613a9851",
+        "identical": true
+      },
+      "matched_hsr_count": 3109,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "d4e12e2e9413f8a6c2bef5bda7780464f348b4090e4bfa41a6572d47209d7a00",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 3656,
+        "source_rows_matched": 3656,
+        "source_trace_rows": 3109
+      },
+      "team_key": "lions"
+    },
+    {
+      "after_row_count": 803,
+      "before_row_count": 803,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2025-06-09",
+        "start": "2024-09-16"
+      },
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "locator_set_identity": {
+        "after_sha256": "2190575523836a3edd6a4f555f38423b9e38d458f154bc46ce7ea0361d6ea122",
+        "before_sha256": "2190575523836a3edd6a4f555f38423b9e38d458f154bc46ce7ea0361d6ea122",
+        "identical": true
+      },
+      "matched_hsr_count": 803,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "adcd8657e969b3680d65ab09baa7d740174859d16706416fe665215ee5d3216a",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 803,
+        "source_rows_matched": 803,
+        "source_trace_rows": 803
+      },
+      "team_key": "munster"
+    },
+    {
+      "after_row_count": 8604,
+      "before_row_count": 8604,
+      "blank_hsr_count": 100,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 100
+      },
+      "date_range": {
+        "end": "2025-07-10",
+        "start": "2024-07-15"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "5d854f4cd74e24da2f3c449f4ba0b441c1693e168d6f39fcf240b39a3faa0c0d",
+        "before_sha256": "5d854f4cd74e24da2f3c449f4ba0b441c1693e168d6f39fcf240b39a3faa0c0d",
+        "identical": true
+      },
+      "matched_hsr_count": 8504,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "2ffac7fea8fe15b6cee176ab932dc22a9a4f04a34092b722917d6d88e007c689",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 8604,
+        "source_rows_matched": 8604,
+        "source_trace_rows": 8504
+      },
+      "team_key": "ospreys"
+    },
+    {
+      "after_row_count": 5866,
+      "before_row_count": 5866,
+      "blank_hsr_count": 8,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 8
+      },
+      "date_range": {
+        "end": "2025-05-31",
+        "start": "2024-07-02"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "ce6c867680ed1a1f2c70e0206af38841a7deca8bf556d59b454d4264f5da2266",
+        "before_sha256": "ce6c867680ed1a1f2c70e0206af38841a7deca8bf556d59b454d4264f5da2266",
+        "identical": true
+      },
+      "matched_hsr_count": 5858,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "ccb95c72de6abaa642a80b819381a4d1931376f96b3701bb39497bcee3d584e3",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 5866,
+        "source_rows_matched": 5866,
+        "source_trace_rows": 5858
+      },
+      "team_key": "scarlets"
+    },
+    {
+      "after_row_count": 5624,
+      "before_row_count": 5624,
+      "blank_hsr_count": 247,
+      "blank_reason_counts": {
+        "hsr_source_value_blank": 247
+      },
+      "date_range": {
+        "end": "2025-06-07",
+        "start": "2024-09-02"
+      },
+      "gap_reason": "247 accepted rows have no valid same-row source HSR value, including team-only ghost rows and one source row without an HSR value; the canonical field remains blank for those rows.",
+      "locator_set_identity": {
+        "after_sha256": "6b5740d746e474ea97a2015c0b8ad53ae3c82b442ff337328b1232c0fb609c21",
+        "before_sha256": "6b5740d746e474ea97a2015c0b8ad53ae3c82b442ff337328b1232c0fb609c21",
+        "identical": true
+      },
+      "matched_hsr_count": 5377,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "3d29a2cf28a25b19e326cf84d09a1385de8a61f04b53b077a582fbc2b3cade82",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 5624,
+        "source_rows_matched": 5624,
+        "source_trace_rows": 5377
+      },
+      "team_key": "sharks"
+    },
+    {
+      "after_row_count": 5186,
+      "before_row_count": 5186,
+      "blank_hsr_count": 2,
+      "blank_reason_counts": {
+        "hsr_source_value_exceeds_total_distance": 2
+      },
+      "date_range": {
+        "end": "2025-05-31",
+        "start": "2024-01-03"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "548642e47768b3db1d436e2086468c62f22c8f69d83435fa27cdfbdecd6a3422",
+        "before_sha256": "548642e47768b3db1d436e2086468c62f22c8f69d83435fa27cdfbdecd6a3422",
+        "identical": true
+      },
+      "matched_hsr_count": 5184,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "1304e0f2e089c82992a563fecca9d102c61b8c04b02d1bf3bda2553a06f0f5dd",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 5186,
+        "source_rows_matched": 5186,
+        "source_trace_rows": 5184
+      },
+      "team_key": "stormers"
+    },
+    {
+      "after_row_count": 817,
+      "before_row_count": 817,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2025-06-09",
+        "start": "2024-09-16"
+      },
+      "gap_reason": "The canonical field is blank in the accepted exposure file because the valid distance value is retained in the separate GPS workbook and requires the validated same-row bridge above.",
+      "locator_set_identity": {
+        "after_sha256": "7ad33493a0488dbeb1269dc9d48cb9e0711fffa71e87cfe49e8ed35c598526b4",
+        "before_sha256": "7ad33493a0488dbeb1269dc9d48cb9e0711fffa71e87cfe49e8ed35c598526b4",
+        "identical": true
+      },
+      "matched_hsr_count": 817,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "102b505a5ac40d394e0ca432fbcdd80c3405468a77056e4e70b9847fc6c7aec3",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 817,
+        "source_rows_matched": 817,
+        "source_trace_rows": 817
+      },
+      "team_key": "ulster"
+    },
+    {
+      "after_row_count": 4813,
+      "before_row_count": 4813,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2025-05-17",
+        "start": "2024-07-01"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "751985341fe79977d5bc4d7a606bc70a3aa2b87a5b3019876df2fcaf7bb9a9a0",
+        "before_sha256": "751985341fe79977d5bc4d7a606bc70a3aa2b87a5b3019876df2fcaf7bb9a9a0",
+        "identical": true
+      },
+      "matched_hsr_count": 4813,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "46a45c261269002f18b379464784c8bae971e6c74edfd5203d39ddd23e187846",
+      "season": "2024-25",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 4813,
+        "source_rows_matched": 4813,
+        "source_trace_rows": 4813
+      },
+      "team_key": "zebre"
+    },
+    {
+      "after_row_count": 1882,
+      "before_row_count": 1882,
+      "blank_hsr_count": 1882,
+      "blank_reason_counts": {
+        "accepted_rows_are_excluded_false_1900_era_dates_and_no_valid_current_period_hsr_source_is_available": 1882
+      },
+      "date_range": {
+        "end": null,
+        "start": null
+      },
+      "gap_reason": "accepted_rows_are_excluded_false_1900_era_dates_and_no_valid_current_period_hsr_source_is_available",
+      "locator_set_identity": {
+        "after_sha256": "251017966fa6aaa5fcee8ea221a79b0a0fd1a86efa3d1ce935227ccd0c923d5b",
+        "before_sha256": "251017966fa6aaa5fcee8ea221a79b0a0fd1a86efa3d1ce935227ccd0c923d5b",
+        "identical": true
+      },
+      "matched_hsr_count": 0,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "2f2bf688d06d60e4ca72763a84160532bf531225dd2c478ac62cc0dcd368c642",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": false,
+        "source_available": false,
+        "source_rows": 0,
+        "source_rows_matched": 0,
+        "source_trace_rows": 0
+      },
+      "team_key": "benetton"
+    },
+    {
+      "after_row_count": 10439,
+      "before_row_count": 10439,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-06-30",
+        "start": "2025-08-01"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "e3b17c7518afd08c505c9052e43c7bafbbc41d8ecb63d693611bd7fc435dc313",
+        "before_sha256": "e3b17c7518afd08c505c9052e43c7bafbbc41d8ecb63d693611bd7fc435dc313",
+        "identical": true
+      },
+      "matched_hsr_count": 10439,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "376bca729bc33ef2e6ea268817147f5d898ae17423e6917fe923bf9df4188a59",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 10439,
+        "source_rows_matched": 10439,
+        "source_trace_rows": 10439
+      },
+      "team_key": "bulls"
+    },
+    {
+      "after_row_count": 10204,
+      "before_row_count": 10204,
+      "blank_hsr_count": 4,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 4
+      },
+      "date_range": {
+        "end": "2026-06-05",
+        "start": "2025-07-14"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "a6b1bea29b56ef4ad1f73f6c3190ee71566df406c1e1397fc1816d90ad6e86c7",
+        "before_sha256": "a6b1bea29b56ef4ad1f73f6c3190ee71566df406c1e1397fc1816d90ad6e86c7",
+        "identical": true
+      },
+      "matched_hsr_count": 10200,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "3b4a232a651f6b1cd05237e566685631be79e4b3f60b857e9057b8e6275d5cf6",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 10204,
+        "source_rows_matched": 10204,
+        "source_trace_rows": 10200
+      },
+      "team_key": "cardiff"
+    },
+    {
+      "after_row_count": 1244,
+      "before_row_count": 1244,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-06-01",
+        "start": "2025-09-22"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "31833914cdaf17c4eb59a0d6e7763f15129700d22c6fe511daad072aa6f846f8",
+        "before_sha256": "31833914cdaf17c4eb59a0d6e7763f15129700d22c6fe511daad072aa6f846f8",
+        "identical": true
+      },
+      "matched_hsr_count": 1244,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "34fb60759c0eeca8c7150c28166de7e94fcd18c930cd4720bfa7199cbc2844fb",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 1244,
+        "source_rows_matched": 1244,
+        "source_trace_rows": 1244
+      },
+      "team_key": "connacht"
+    },
+    {
+      "after_row_count": 6411,
+      "before_row_count": 6411,
+      "blank_hsr_count": 68,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 68
+      },
+      "date_range": {
+        "end": "2026-06-26",
+        "start": "2021-10-06"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "a7f5411094960b4faf9b8287f405383c4df04e203f946e6908e2856431f10a09",
+        "before_sha256": "a7f5411094960b4faf9b8287f405383c4df04e203f946e6908e2856431f10a09",
+        "identical": true
+      },
+      "matched_hsr_count": 6343,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "0ff7eecd25c6234af4aee63ab545f160a5176a5be8a5ac05eee18cac952d68ed",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 6411,
+        "source_rows_matched": 6411,
+        "source_trace_rows": 6343
+      },
+      "team_key": "dragons"
+    },
+    {
+      "after_row_count": 954,
+      "before_row_count": 954,
+      "blank_hsr_count": 954,
+      "blank_reason_counts": {
+        "accepted_rows_are_pre_season_and_no_valid_current_period_hsr_source_is_available": 954
+      },
+      "date_range": {
+        "end": "2025-08-05",
+        "start": "2025-06-23"
+      },
+      "gap_reason": "accepted_rows_are_pre_season_and_no_valid_current_period_hsr_source_is_available",
+      "locator_set_identity": {
+        "after_sha256": "6337a4aa682b4336ad34e3234b49ad77998aacabd59a68eb57cfeb153ca822c9",
+        "before_sha256": "6337a4aa682b4336ad34e3234b49ad77998aacabd59a68eb57cfeb153ca822c9",
+        "identical": true
+      },
+      "matched_hsr_count": 0,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "b5fdbd34847c84f2524deda50873fa89659c17b82d69eb95903b5de1fa76b601",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": false,
+        "source_available": false,
+        "source_rows": 0,
+        "source_rows_matched": 0,
+        "source_trace_rows": 0
+      },
+      "team_key": "edinburgh"
+    },
+    {
+      "after_row_count": 9600,
+      "before_row_count": 9600,
+      "blank_hsr_count": 8,
+      "blank_reason_counts": {
+        "hsr_source_value_blank": 8
+      },
+      "date_range": {
+        "end": "2026-06-05",
+        "start": "2025-09-01"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "df4b63bbc2f6c96d80385d490c0541c0ae1698d13ae7cf65f2791e2ae7b071c0",
+        "before_sha256": "df4b63bbc2f6c96d80385d490c0541c0ae1698d13ae7cf65f2791e2ae7b071c0",
+        "identical": true
+      },
+      "matched_hsr_count": 9592,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "dd508841a31fc32a1be0569e66e7f1f7593282064f3f10fdba4c3ba3e3631df9",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 54668,
+        "source_rows_matched": 9600,
+        "source_trace_rows": 9592
+      },
+      "team_key": "glasgow"
+    },
+    {
+      "after_row_count": 1397,
+      "before_row_count": 1397,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-06-01",
+        "start": "2025-09-22"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "4a8b6d75cad54b19ebefd8c50397a9d812c969c4430157028a235316d56ce01c",
+        "before_sha256": "4a8b6d75cad54b19ebefd8c50397a9d812c969c4430157028a235316d56ce01c",
+        "identical": true
+      },
+      "matched_hsr_count": 1397,
+      "month_day_swap_repair_count": 325,
+      "output_sha256": "4067783dd27861d82edf2e63580048ae08a53ad6abed2403584cf783693b2594",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 1397,
+        "source_rows_matched": 1397,
+        "source_trace_rows": 1397
+      },
+      "team_key": "leinster"
+    },
+    {
+      "after_row_count": 4363,
+      "before_row_count": 4363,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-05-28",
+        "start": "2025-08-04"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "0810d65331a4997ed0f1864b7289ab585919833b1dfb90515d0a11cc7bf49274",
+        "before_sha256": "0810d65331a4997ed0f1864b7289ab585919833b1dfb90515d0a11cc7bf49274",
+        "identical": true
+      },
+      "matched_hsr_count": 4363,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "371e29b46a3ec665abe04475dd42898f6bcc1d161ae4c86a49a57b924b2fd42e",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 4363,
+        "source_rows_matched": 4363,
+        "source_trace_rows": 4363
+      },
+      "team_key": "lions"
+    },
+    {
+      "after_row_count": 1279,
+      "before_row_count": 1279,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-06-01",
+        "start": "2025-09-22"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "ec767b495d683da2a635ca2a6122619f3184e7f036c6e771560840ef8f8dd6af",
+        "before_sha256": "ec767b495d683da2a635ca2a6122619f3184e7f036c6e771560840ef8f8dd6af",
+        "identical": true
+      },
+      "matched_hsr_count": 1279,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "e648945bd66cea621d122e9189251fca83d078ff42e239944b963c65266adf40",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 1279,
+        "source_rows_matched": 1279,
+        "source_trace_rows": 1279
+      },
+      "team_key": "munster"
+    },
+    {
+      "after_row_count": 6965,
+      "before_row_count": 6965,
+      "blank_hsr_count": 18,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 18
+      },
+      "date_range": {
+        "end": "2026-07-17",
+        "start": "2025-06-16"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "22bb0ac13f98e088df25a05ed1721c53e1706510aa61403aececc64a27a4353a",
+        "before_sha256": "22bb0ac13f98e088df25a05ed1721c53e1706510aa61403aececc64a27a4353a",
+        "identical": true
+      },
+      "matched_hsr_count": 6947,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "ab835a4e7b0ca9b655565d469982038a1ac8cbc0d0f2456250e101cb861d8536",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 6965,
+        "source_rows_matched": 6965,
+        "source_trace_rows": 6947
+      },
+      "team_key": "ospreys"
+    },
+    {
+      "after_row_count": 4985,
+      "before_row_count": 4985,
+      "blank_hsr_count": 294,
+      "blank_reason_counts": {
+        "hsr_source_value_missing_token": 294
+      },
+      "date_range": {
+        "end": "2026-05-16",
+        "start": "2025-07-18"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "4234dbd99f7c6dde3a2bad4183057511f132194d1628c73f87f66a65959a81e4",
+        "before_sha256": "4234dbd99f7c6dde3a2bad4183057511f132194d1628c73f87f66a65959a81e4",
+        "identical": true
+      },
+      "matched_hsr_count": 4691,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "89376a67d7e98ce73ade811b2e318df4f5d20c357b09358defb13ebe94a27e68",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 4985,
+        "source_rows_matched": 4985,
+        "source_trace_rows": 4691
+      },
+      "team_key": "scarlets"
+    },
+    {
+      "after_row_count": 6136,
+      "before_row_count": 6136,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-05-25",
+        "start": "2025-08-01"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "331ed9edd8f12d3aea569551df62fdab0c9819176d0eda79bc465d353f149864",
+        "before_sha256": "331ed9edd8f12d3aea569551df62fdab0c9819176d0eda79bc465d353f149864",
+        "identical": true
+      },
+      "matched_hsr_count": 6136,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "16a5f768f8c22cf502763c7a762eea94a324256d38296a7e87ac3d7eebf8a1df",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 6136,
+        "source_rows_matched": 6136,
+        "source_trace_rows": 6136
+      },
+      "team_key": "sharks"
+    },
+    {
+      "after_row_count": 9208,
+      "before_row_count": 9208,
+      "blank_hsr_count": 1,
+      "blank_reason_counts": {
+        "hsr_source_value_exceeds_total_distance": 1
+      },
+      "date_range": {
+        "end": "2026-09-18",
+        "start": "2025-01-13"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "fb6c0fb24b9ec8cfc83468e4e5639f3ccb4232e0b966f7a02a666970db1fda2e",
+        "before_sha256": "fb6c0fb24b9ec8cfc83468e4e5639f3ccb4232e0b966f7a02a666970db1fda2e",
+        "identical": true
+      },
+      "matched_hsr_count": 9207,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "364f74444e7bdabfd420eb2b605a37ea6cb8e6f2521734f599a2846b5cb93305",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 9208,
+        "source_rows_matched": 9208,
+        "source_trace_rows": 9207
+      },
+      "team_key": "stormers"
+    },
+    {
+      "after_row_count": 1315,
+      "before_row_count": 1315,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-06-01",
+        "start": "2025-09-22"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "2f37899e3204721a8a688abb913aed78cce9ab35e739cca01f6f82bfc7b5039e",
+        "before_sha256": "2f37899e3204721a8a688abb913aed78cce9ab35e739cca01f6f82bfc7b5039e",
+        "identical": true
+      },
+      "matched_hsr_count": 1315,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "900176424356e3090b5290a625537fe3c610092febe69589e7c6cf6031908d76",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 1315,
+        "source_rows_matched": 1315,
+        "source_trace_rows": 1315
+      },
+      "team_key": "ulster"
+    },
+    {
+      "after_row_count": 6694,
+      "before_row_count": 6694,
+      "blank_hsr_count": 0,
+      "blank_reason_counts": {},
+      "date_range": {
+        "end": "2026-06-29",
+        "start": "2025-06-30"
+      },
+      "gap_reason": null,
+      "locator_set_identity": {
+        "after_sha256": "36e82745289754c077f5acb8b25f58d5573c71dfdec72cab6d6a96059683986b",
+        "before_sha256": "36e82745289754c077f5acb8b25f58d5573c71dfdec72cab6d6a96059683986b",
+        "identical": true
+      },
+      "matched_hsr_count": 6694,
+      "month_day_swap_repair_count": 0,
+      "output_sha256": "41a88922fbed81a803df7f50bb80cd9970197391050dceb2deecaffc4f94afe8",
+      "season": "2025-26",
+      "source_coverage": {
+        "local_source_available": true,
+        "source_available": true,
+        "source_rows": 6694,
+        "source_rows_matched": 6694,
+        "source_trace_rows": 6694
+      },
+      "team_key": "zebre"
+    }
+  ]
+}

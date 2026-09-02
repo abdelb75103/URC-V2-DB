@@ -1,0 +1,313 @@
+{
+  "schema_version": "urc_hsr_mapping_v1",
+  "season": "2025-26",
+  "teams": [
+    {
+      "team_key": "benetton",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v13_exposure_successor_full_16_20260830_v4_scope_adjudicated/benetton/exposure_intake_final_clean_v10.csv",
+        "sha256": "e4a17032a108e65033df7c0aa92b02c8457352316e4895d4bacee35505328098"
+      },
+      "hsr": {
+        "mode": "gap",
+        "source_available": false,
+        "gap_reason": "accepted_rows_are_excluded_false_1900_era_dates_and_no_valid_current_period_hsr_source_is_available"
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "not_available"
+    },
+    {
+      "team_key": "bulls",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/bulls/exposure_intake_final_clean_v10.csv",
+        "sha256": "eb10d32f46e0eb85bf5f246b7a30f7778860a447cc5f633cdfc3f6c4c66c2ca3"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "HS Distance (m)",
+        "metric_kind": "hsr_distance",
+        "units": "metres",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Bulls/Exposure"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_threshold"
+    },
+    {
+      "team_key": "cardiff",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/cardiff/exposure_intake_final_clean_v10.csv",
+        "sha256": "0462c28deb1bdde6dad780b9e7410e74c6bf7b1bbbc1b9b56ed301353e775438"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "distance_high_speed",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Cardiff"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold"
+    },
+    {
+      "team_key": "connacht",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/connacht/exposure_intake_final_clean_v10.csv",
+        "sha256": "db65fead17ddd81882fc7a7076b3a1a7f05eabe9a6224324f5e20b3e62b8c4e6"
+      },
+      "hsr": {
+        "mode": "long_variable_files",
+        "source_field": "value",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+        "source_filter": {"variable": "distance_z_4_to_z_6"},
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Connacht/URC GPS - Connacht(in).csv"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries"
+    },
+    {
+      "team_key": "dragons",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/dragons/exposure_intake_final_clean_v10.csv",
+        "sha256": "d179be4b86753792e726b649c75a93bb8fa0b59da528d1e8f6272e7efd74b3f0"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "distance_high_speed",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/source_updates_20260827/dragons"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold"
+    },
+    {
+      "team_key": "edinburgh",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v13_exposure_successor_full_16_20260830_v4_scope_adjudicated/edinburgh/exposure_intake_final_clean_v10.csv",
+        "sha256": "26015af2575af9632e0cca49fd533f7256452b149ce1b8719486d92616ff1f9e"
+      },
+      "hsr": {
+        "mode": "gap",
+        "source_available": false,
+        "gap_reason": "accepted_rows_are_pre_season_and_no_valid_current_period_hsr_source_is_available"
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "not_available"
+    },
+    {
+      "team_key": "glasgow",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/glasgow/exposure_intake_final_clean_v10.csv",
+        "sha256": "cc914cf335d506325148e263b6ead6eb968af9f06933f93e787030ce40e0fddb"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "High Speed Running",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/source_updates_20260819/glasgow/GPS URC Upload 25.26.xlsx"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold"
+    },
+    {
+      "team_key": "leinster",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/leinster/exposure_intake_final_clean_v10.csv",
+        "sha256": "d003759fb23c70f94ee6cda8dd6ec3bdd22a7ece45b6efc57689f6043e922639"
+      },
+      "hsr": {
+        "mode": "long_variable_files",
+        "source_field": "value",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+        "source_filter": {"variable": "distance_z_4_to_z_6"},
+        "require_component_hash_match": false,
+        "source_date_order": "month-first",
+        "allow_month_day_swap_repair": true,
+        "month_day_swap_repair_rationale": "Five ambiguous source week-date pairs were serialised month-first while the accepted intake retained the corresponding day-first dates; the repair is accepted only when swapping month and day produces the exact accepted date and all player, setting, minutes and total-distance checks also match.",
+        "source_sheet_aliases": {"table_1": "Sheet1"},
+        "source_files": [
+          {
+            "path": "../URC-V2-DB-private/2025-26/source_updates_20260902/leinster/URC GPS - Leinster 11.6.2026.xlsx",
+            "sha256": "ce80b0af11af2ed381950b86b378ce4fc65af700268c56942b356ba780fd6b40",
+            "accepted_source_sha256": "95462a7af334af85665f4467f6e6096194dfede2976dfb652c706d3bd2a38dbb"
+          }
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries"
+    },
+    {
+      "team_key": "lions",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/lions/exposure_intake_final_clean_v10.csv",
+        "sha256": "b9b756d0dbd2dd285baa8b3e7f600fdc3d141e302500a28257dc39dbf6d0cbb1"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "High Speed Distance (m)",
+        "metric_kind": "hsr_distance",
+        "units": "metres",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Lions/Exposure"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_threshold"
+    },
+    {
+      "team_key": "munster",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/munster/exposure_intake_final_clean_v10.csv",
+        "sha256": "aacb57fd82c46b41f9479068bd4ada6966ca218052254fae28b4a411db663bf4"
+      },
+      "hsr": {
+        "mode": "long_variable_files",
+        "source_field": "value",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+        "source_filter": {"variable": "distance_z_4_to_z_6"},
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Munster/URC GPS - Munster(in).csv"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries"
+    },
+    {
+      "team_key": "ospreys",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/ospreys/exposure_intake_final_clean_v10.csv",
+        "sha256": "e99c4b44b2faba4d1e3bb76802f30c6817e9a89116a7edf6e97e31a02ca79c28"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "distance_high_speed",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Ospreys/Region_Combined_O_final.csv"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold"
+    },
+    {
+      "team_key": "scarlets",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/scarlets/exposure_intake_final_clean_v10.csv",
+        "sha256": "db6123174ebcbd65845a9f294aa44b23a39990d7aace0c6b3c6d843ba0b6b775"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "distance_high_speed",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/source_updates_20260827/scarlets"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold"
+    },
+    {
+      "team_key": "sharks",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/sharks/exposure_intake_final_clean_v10.csv",
+        "sha256": "9e5f3653d66c359f1b72586224edab6942edb771a6aaa7b4f82295d31bd1b722"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "High Speed Running (Absolute)",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Sharks/Exposure"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_threshold"
+    },
+    {
+      "team_key": "stormers",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/stormers/exposure_intake_final_clean_v10.csv",
+        "sha256": "cce607106b672eb7be05cf955638f603b03cd543546776c4d3fec39691049b1e"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "High Speed Distance (m)",
+        "metric_kind": "hsr_distance",
+        "units": "metres",
+        "threshold_or_zone": "unknown",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Stormers/Exposure"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_threshold"
+    },
+    {
+      "team_key": "ulster",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/ulster/exposure_intake_final_clean_v10.csv",
+        "sha256": "9ad6331f328f75af9a408ea5f8bdef6f093678f5d808592f0a47329a22e357d8"
+      },
+      "hsr": {
+        "mode": "long_variable_files",
+        "source_field": "value",
+        "metric_kind": "hsr_distance",
+        "units": "unknown",
+        "threshold_or_zone": "zone 4 to zone 6; numeric boundaries unknown",
+        "source_filter": {"variable": "distance_z_4_to_z_6"},
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Ulster/URC GPS - Ulster(in).csv"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_unknown_units_and_zone_boundaries"
+    },
+    {
+      "team_key": "zebre",
+      "accepted_exposure": {
+        "path": "../URC-V2-DB-private/2025-26/v14_exposure_successor_approved_20260830/zebre/exposure_intake_final_clean_v10.csv",
+        "sha256": "26c058a659823e5c9f818b2525d3daab6c16fd3a4cd0722b7e9c82af0089c1fa"
+      },
+      "hsr": {
+        "mode": "locator_files",
+        "source_field": "HSRm (>20km/h)",
+        "metric_kind": "hsr_distance",
+        "units": "metres",
+        "threshold_or_zone": ">20 km/h",
+        "source_roots": [
+          "../URC-V2-DB-private/2025-26/raw-drive/2025_26/Zebre/exposure"
+        ]
+      },
+      "date_field": "cleaned_date",
+      "comparability_status": "team_defined_non_comparable_vendor_calibration_unknown"
+    }
+  ]
+}
