@@ -509,7 +509,8 @@ select actual.season, actual.team_key, actual.month_start,
 from analysis.hsr_dashboard_monthly_actual_v1 actual
 join analysis.hsr_team_season_metadata_v1 metadata
   on metadata.season = actual.season and metadata.team_key = actual.team_key
-left join means using (season, month_start);
+left join means on means.season = actual.season
+  and means.month_start = actual.month_start;
 
 create view analysis.hsr_dashboard_team_display_v1
 with (security_invoker = false) as

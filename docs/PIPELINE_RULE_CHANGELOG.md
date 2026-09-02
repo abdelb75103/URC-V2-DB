@@ -19,7 +19,7 @@ Every change that alters a derived value, classification, cohort, denominator, o
 | Rule version | `hsr_source_to_display_reporting_2026_09_02_v1`; dashboard reader `v8`. |
 | Carry-forward | `carries-forward`: row-resolution, null and display rules are versioned. The current 16/16 and 14/16 source-availability states, source blanks, mapping evidence and the Zebre warning are season-specific. |
 | Evidence | `docs/evidence/hsr_exposure_mapping_manifest.json`; `docs/evidence/hsr_exposure_validation_report.json`; flat parameter payload SHA-256 `821a3b15eddfdb444a564ffa709410fdc3062b6f3cb49bf4740dabd625735149`. |
-| Migration | Additive successor `20260902010000_urc_hsr_reporting_v8.sql`, SHA-256 `e46cc707df165e7cf7b917e821579de11b6f5c41d9beea14f4cd2ce3f13ef365`; checksum registration `tools/sql/register_urc_hsr_reporting_v8_migration.sql`; read-only proof `tools/sql/verify_hsr_reporting_v8.sql`. |
+| Migration | Additive successor `20260902010000_urc_hsr_reporting_v8.sql`, SHA-256 `4a2598034b3715263231468444762eb453ed56a025f36e9e45d651284f8b3fb3`; checksum registration `tools/sql/register_urc_hsr_reporting_v8_migration.sql`; read-only proof `tools/sql/verify_hsr_reporting_v8.sql`. |
 | Decision provenance | Abdel Babiker, 2 September 2026. |
 
 **Source and lineage rule.** Each HSR observation is bound by its accepted locator to one existing `ingestion.source_rows` row and one active curated exposure row. HSR is an absolute distance from that same accepted observation. The source status, units, threshold or zone, comparability state, blank reason and row lineage remain private. Source blanks remain unknown; they are never zero. A valid paired actual observation takes precedence over a display placeholder without changing an existing source or curated row.
@@ -37,6 +37,8 @@ An available source may retain a gap note describing partial blanks or a validat
 **Bounded import.** A later full-array JSONB attempt coincided with a database restart at `2026-09-02T16:19:53.087Z`; no HSR objects or registration survived. Resource exhaustion is suspected but not proved by server logs. The final importer reads the existing loader's parameter rows into typed transaction-local tables, resolves each locator once, and reuses that relation. It removes the full-payload JSON aggregation and repeated parser functions without changing the loader, payload, row checks or atomic commit boundary. Safe application-name markers identify each database stage.
 
 The monthly query's original plan estimated one 2025-26 exposure row and chose a nested-loop join over the entire deduplicated HSR set. The final view materialises the combined approved exposure scope before one HSR join and analyses freshly inserted events. Scope filters, row membership and calculations are unchanged. A rollback-only `EXPLAIN ANALYZE` proved one hash join over 126,707 included exposure rows and a 3,410.831 ms execution time, versus the original query's 300-second timeout.
+
+The display view uses explicit join keys where earlier joins expose duplicate column names. Before the final import, all reporting definitions compiled successfully in a rollback-only check with materialised views left unpopulated. This catches definition errors without repeating the bulk import.
 
 ---
 
