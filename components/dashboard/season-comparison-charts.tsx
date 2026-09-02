@@ -11,8 +11,10 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  usePlotArea,
+  useXAxisScale,
 } from 'recharts';
-import { HOVER_BAND, TooltipCard } from '@/components/dashboard/charts';
+import { TOOLTIP_STRIP_CLASS, TooltipCard, tooltipXBesideBand, useCategoryBand } from '@/components/dashboard/charts';
 import { exposureMonthLabel } from '@/lib/exposure-chart';
 
 export type ComparisonSeasonPoint = {
@@ -81,19 +83,30 @@ function SeasonLegend({ burden = false }: { burden?: boolean }) {
 }
 
 type InteractiveDatum = { interactionKey: string };
-type TooltipAnchor = { anchorX: number; anchorY: number };
+/**
+ * `anchorX`/`anchorY` are the mark's own coordinates. A category chart also
+ * reports `tooltipX`/`tooltipY`: the place beside the hovered band that clears
+ * every bar grouped in it.
+ */
+type TooltipAnchor = { anchorX: number; anchorY: number; tooltipX?: number; tooltipY?: number };
 
 function FloatingChartTooltip({
   id,
   anchor,
+  below = false,
   fallback,
   children,
 }: {
   id: string;
   anchor?: TooltipAnchor;
+  /** Narrow charts render the card in reserved space under the plot instead. */
+  below?: boolean;
   fallback: string;
   children: ReactNode;
 }) {
+  if (below) {
+    return <div id={id} role="tooltip" aria-live="polite" className={TOOLTIP_STRIP_CLASS}>{anchor ? children : <span className="sr-only">{fallback}</span>}</div>;
+  }
   if (!anchor) {
     return <div id={id} role="tooltip" aria-live="polite" className="sr-only">{fallback}</div>;
   }
@@ -105,8 +118,8 @@ function FloatingChartTooltip({
       aria-live="polite"
       className="pointer-events-none absolute z-30 w-[18rem] max-w-[calc(100%_-_1.5rem)]"
       style={{
-        left: `clamp(0.75rem, ${anchor.anchorX + 12}px, calc(100% - 18.75rem))`,
-        top: `clamp(0.75rem, ${anchor.anchorY + 12}px, calc(100% - 8rem))`,
+        left: `clamp(0.75rem, ${anchor.tooltipX ?? anchor.anchorX + 12}px, calc(100% - 18.75rem))`,
+        top: `clamp(0.75rem, ${anchor.tooltipY ?? anchor.anchorY + 12}px, calc(100% - 8rem))`,
       }}
     >
       {children}
@@ -426,7 +439,11 @@ function MonthlyBar({
   onPin: (selection: MonthlySelection) => void;
   onDismiss: () => void;
 }) {
+  const scale = useXAxisScale();
+  const plot = usePlotArea();
   if (x === undefined || y === undefined || width === undefined || height === undefined || !payload) return null;
+  const start = scale?.(payload.month, { position: 'start' });
+  const end = scale?.(payload.month, { position: 'end' });
   const interactionKey = `${payload.month}-${series}`;
   const value = payload[series];
   const selection = {
@@ -437,6 +454,8 @@ function MonthlyBar({
     current: payload.current,
     anchorX: x + width / 2,
     anchorY: y,
+    tooltipX: start !== undefined && end !== undefined && plot ? tooltipXBesideBand({ start, end }, plot) : undefined,
+    tooltipY: plot ? plot.y + 8 : undefined,
   };
   const selected = pinnedKey === interactionKey;
   const active = activeKey === interactionKey;
@@ -518,6 +537,7 @@ export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) 
   const yMax = Math.ceil((Math.max(...values, 0) * 1.15) / 5) * 5 || 5;
   const resetKey = data.map((row) => `${row.month}-${row.prior}-${row.current}`).join('|');
   const interaction = useInteractiveTooltip<MonthlySelection>(resetKey);
+  const band = useCategoryBand();
   const commonShapeProps = {
     activeKey: interaction.active?.interactionKey,
     pinnedKey: interaction.pinned?.interactionKey,
@@ -530,13 +550,14 @@ export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) 
 
   return (
     <section className="min-w-0 space-y-3" aria-label="Injuries By Month. Paired bars compare injuries from September through June. Focus a bar to preview it, then press Enter or Space to pin it.">
-      <div className="relative h-[350px] w-full min-w-0 sm:h-[420px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
+      <div ref={band.containerRef} className="relative h-[350px] w-full min-w-0 sm:h-[420px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart accessibilityLayer data={data} margin={{ top: 24, right: 24, bottom: 48, left: 20 }} barGap={4} barCategoryGap="24%">
             <CartesianGrid stroke={GRID_COLOUR} strokeDasharray="3 5" vertical={false} />
             {/* The chart keeps its own pinnable tooltip; Recharts is here only to
-                draw the hovered month band behind both bars. */}
-            <Tooltip cursor={HOVER_BAND} content={() => null} />
+                draw the hovered month band behind both bars and report where a
+                tooltip clears them. */}
+            <Tooltip cursor={band.cursor} content={() => null} />
             <XAxis
               dataKey="month"
               tickFormatter={(value: string) => exposureMonthLabel(value, true)}
@@ -572,14 +593,26 @@ export function MonthlyBars({ monthly }: { monthly: ComparisonMonthlyPoint[] }) 
             />
           </BarChart>
         </ResponsiveContainer>
+        {!band.below && (
+          <FloatingChartTooltip
+            id={tooltipId}
+            anchor={interaction.active}
+            fallback="Focus or hover over a monthly bar to view its value."
+          >
+            {interaction.active && <MonthlyTooltip selection={interaction.active} pinned={Boolean(interaction.pinned)} />}
+          </FloatingChartTooltip>
+        )}
+      </div>
+      {band.below && (
         <FloatingChartTooltip
           id={tooltipId}
           anchor={interaction.active}
+          below
           fallback="Focus or hover over a monthly bar to view its value."
         >
           {interaction.active && <MonthlyTooltip selection={interaction.active} pinned={Boolean(interaction.pinned)} />}
         </FloatingChartTooltip>
-      </div>
+      )}
       <SeasonLegend />
     </section>
   );

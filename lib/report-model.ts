@@ -1,4 +1,5 @@
 import "server-only";
+import { monthlyIncidence } from "./season-timeline";
 import { withoutFrontFacingUnknown } from "@/lib/dashboard-visibility";
 import { diagnosisFamilyProfiles } from "@/lib/reporting-types";
 import { isKneeLigamentDiagnosis } from "@/lib/report-presentation";
@@ -345,8 +346,8 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
       recordedInjuries: row.recorded_injuries ?? null,
       timeLossInjuries: row.time_loss_injuries,
       daysLost: row.days_lost,
-      overallIncidencePer1000h: row.overall_incidence_per_1000h ?? null,
-      incidencePer1000h: row.incidence_per_1000h ?? null,
+      overallIncidencePer1000h: monthlyIncidence(row.recorded_injuries, row.exposure_hours, row.overall_incidence_per_1000h),
+      incidencePer1000h: monthlyIncidence(row.time_loss_injuries, row.exposure_hours, row.incidence_per_1000h),
       burdenPer1000h: row.burden_per_1000h ?? null,
     })),
     matchTraining: sortByPresentation(current.setting_metrics.filter((metric) => metric.setting === "match" || metric.setting === "training")).map(asSettingMetric),

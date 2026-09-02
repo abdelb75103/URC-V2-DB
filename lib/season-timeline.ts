@@ -1,23 +1,14 @@
-import { monthOrder } from './dashboard-month';
-import type { MonthlySettingRow, PreliminaryMonthlyRateRow } from './reporting-types';
+import type { MonthlySettingRow } from './reporting-types';
 
-export type SeasonTimelineRow = MonthlySettingRow & {
-  preliminary_rate?: PreliminaryMonthlyRateRow;
-};
-
-export const PRELIMINARY_TIMELINE_NOTE = 'Time Loss Incidence uses preliminary contributor-aligned monthly data. Its numerator and exposure include only contributing clubs; the bars show the full injury cohort.';
-
-/** Select a released rate without recalculating it against another cohort. */
-export function timelineRate(month: string, officialRate: number | null | undefined, preliminary: readonly PreliminaryMonthlyRateRow[]) {
-  if (officialRate != null) return { incidence: officialRate, preliminary: undefined };
-  const key = monthOrder(month);
-  const row = key === null ? undefined : preliminary.find((item) => monthOrder(item.month) === key);
-  return { incidence: row?.incidence_per_1000h ?? null, preliminary: row };
+/** Use an existing rate, otherwise calculate it from that month's released count and hours. */
+export function monthlyIncidence(count: number | null | undefined, hours: number | null | undefined, releasedRate: number | null | undefined) {
+  return releasedRate ?? (count != null && hours != null && hours > 0 ? count / hours * 1000 : null);
 }
 
-export function buildSeasonTimelineRows(rows: readonly MonthlySettingRow[], preliminary: readonly PreliminaryMonthlyRateRow[]): SeasonTimelineRow[] {
-  return rows.map((row) => {
-    const rate = timelineRate(row.month, row.incidence_per_1000h, row.setting === 'all' ? preliminary : []);
-    return { ...row, incidence_per_1000h: rate.incidence, ...(rate.preliminary ? { preliminary_rate: rate.preliminary } : {}) };
-  });
+export function buildSeasonTimelineRows(rows: readonly MonthlySettingRow[]): MonthlySettingRow[] {
+  return rows.map((row) => ({
+    ...row,
+    overall_incidence_per_1000h: monthlyIncidence(row.recorded_injuries, row.exposure_hours, row.overall_incidence_per_1000h),
+    incidence_per_1000h: monthlyIncidence(row.time_loss_injuries, row.exposure_hours, row.incidence_per_1000h),
+  }));
 }

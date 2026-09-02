@@ -187,7 +187,8 @@ export function rankedCommonInjuries<T extends { label: string }, K extends keyo
 }
 
 export function rankedIllnesses<T extends { label: string }>(rows: readonly T[], metric: (typeof ILLNESS_METRIC_KEYS)[number]) {
-  return rankedForMetric(rows as ReadonlyArray<T & Record<string, unknown>>, metric).slice(0, RANKED_LANE_SIZE);
+  const eligible = rows.filter((row) => !/^(?:medical illness|foot pain(?:,?\s+undiagnosed)?)$/i.test(row.label.trim()));
+  return rankedForMetric(eligible as ReadonlyArray<T & Record<string, unknown>>, metric).slice(0, RANKED_LANE_SIZE);
 }
 
 export function isKneeLigamentDiagnosis(row?: { code: string; label: string }) {

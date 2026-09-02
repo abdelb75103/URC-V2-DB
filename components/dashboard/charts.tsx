@@ -20,6 +20,9 @@ import {
   XAxis,
   YAxis,
   ZAxis,
+  useActiveTooltipLabel,
+  usePlotArea,
+  useXAxisScale,
 } from 'recharts';
 import type { BarShapeProps } from 'recharts';
 import type { AnalyticsRow, InjuryProfileRow, MonthlySettingRow } from '@/lib/reporting-types';
@@ -29,7 +32,6 @@ import {
   hsrPercentage,
   showExposureMonthLabel,
 } from '@/lib/exposure-chart';
-import type { SeasonTimelineRow } from '@/lib/season-timeline';
 import {
   PROFILE_COLORS,
   SETTING_COLORS,
@@ -66,7 +68,98 @@ const TOOLTIP_SURFACE = { background: 'hsl(205 47% 9% / 0.92)' };
  * behind its series, so the tooltip rows and the bars they describe read as one
  * group.
  */
-export const HOVER_BAND = { fill: 'hsl(0 0% 100% / 0.1)' };
+export const HOVER_BAND_FILL = 'hsl(0 0% 100% / 0.1)';
+/** Clear air between the band and the tooltip beside it. */
+const BAND_TOOLTIP_GAP = 12;
+/** The shared card at its widest; the positioner never assumes more room. */
+const TOOLTIP_WIDTH = 288;
+
+/**
+ * A chart narrower than this cannot hold the card beside a band without
+ * covering it, so it reserves a strip under the plot instead. A centre band
+ * leaves (plotWidth - bandWidth) / 2 on each side, so clearing the 288px card
+ * and its 12px gap needs a plot of about 667px; these charts spend up to 148px
+ * of their width on margins and the two 60px default y-axes. A 390px phone and
+ * the 560px minimum the scrollable charts fall back to are both well inside it.
+ */
+const TOOLTIP_BESIDE_MIN_WIDTH = 840;
+
+/**
+ * Where the tooltip sits beside a hovered band: to its right, flipped to its
+ * left when the card would run past the plot. Only called on charts wide enough
+ * for one of those to fit, so it never covers the band itself.
+ */
+export function tooltipXBesideBand(band: { start: number; end: number }, plot: { x: number; width: number }) {
+  const right = band.end + BAND_TOOLTIP_GAP;
+  if (right + TOOLTIP_WIDTH <= plot.x + plot.width) return right;
+  return Math.max(plot.x, band.start - BAND_TOOLTIP_GAP - TOOLTIP_WIDTH);
+}
+
+/**
+ * Recharts draws a full-height category band only for BarChart; every other
+ * cartesian chart falls through to a one-pixel Curve
+ * (node_modules/recharts/es6/component/Cursor.js). This cursor asks the x-axis
+ * scale for the hovered band's own start and end, so the highlight covers the
+ * whole category slot and every series grouped in it, and reports where the
+ * tooltip should sit beside it.
+ */
+function CategoryBandCursor({ onPosition }: { onPosition: (coordinate?: { x: number; y: number }) => void }) {
+  const label = useActiveTooltipLabel();
+  const scale = useXAxisScale();
+  const plot = usePlotArea();
+  const start = label === undefined || !scale ? undefined : scale(label, { position: 'start' });
+  const end = label === undefined || !scale ? undefined : scale(label, { position: 'end' });
+  const x = start !== undefined && end !== undefined && plot ? tooltipXBesideBand({ start, end }, plot) : undefined;
+  const y = plot ? plot.y + 8 : undefined;
+
+  useEffect(() => {
+    onPosition(x === undefined || y === undefined ? undefined : { x, y });
+    // The cursor unmounts when the tooltip goes inactive, so clearing on unmount
+    // is what releases the pinned position.
+    return () => onPosition(undefined);
+  }, [onPosition, x, y]);
+
+  if (start === undefined || end === undefined || !plot) return null;
+  return <rect x={start} y={plot.y} width={end - start} height={plot.height} fill={HOVER_BAND_FILL} pointerEvents="none" />;
+}
+
+/** The reserved strip under a narrow plot, tall enough for the longest card. */
+export const TOOLTIP_STRIP_CLASS = 'min-h-[9.5rem] pt-2';
+
+/**
+ * Wiring for the band cursor and the card it belongs to. Wide charts put the
+ * card beside the hovered band; narrow ones reserve a strip under the plot and
+ * render it there, where it can cover no bar at all. The strip is always in the
+ * layout, so nothing shifts when a hover starts.
+ */
+export function useCategoryBand() {
+  const [container, containerRef] = useState<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState<{ x: number; y: number }>();
+  const [strip, setStrip] = useState<HTMLDivElement | null>(null);
+  const [below, setBelow] = useState(false);
+  useLayoutEffect(() => {
+    if (!container) return;
+    const measure = () => setBelow(container.clientWidth > 0 && container.clientWidth < TOOLTIP_BESIDE_MIN_WIDTH);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [container]);
+  const cursor = useMemo(() => <CategoryBandCursor onPosition={setPosition} />, []);
+
+  return {
+    /** Put this on the element that wraps the chart itself. */
+    containerRef,
+    below,
+    cursor,
+    /** Where a card placed beside the hovered band goes; unset when there is none. */
+    position,
+    /** Spread onto the chart's Tooltip. */
+    tooltipProps: below ? { cursor, portal: strip } : { cursor, position },
+    /** Render `{band.below && <div {...band.stripProps} />}` directly under the plot. */
+    stripProps: { ref: setStrip, className: TOOLTIP_STRIP_CLASS },
+  };
+}
 
 function number(value: number | null | undefined, digits = 1) {
   if (value === null || value === undefined || !Number.isFinite(value)) return 'Not available';
@@ -118,10 +211,10 @@ const TIME_LOSS_COLOR = METRIC_COLORS.incidence;
 
 /**
  * The one tooltip surface every chart uses: a dark, slightly transparent panel,
- * a bold header naming the category, and one compact row per series with both
- * the label and the value drawn in that series' own colour, so a row and its
- * mark are matched by colour alone. The cohort footer was removed on
- * 25 July 2026: the hover states the values and stops there.
+ * a bold header naming the category, and one compact row per series: the label
+ * is always white and only the value carries the series colour. The cohort
+ * footer was removed on 25 July 2026: the hover states the values and stops
+ * there.
  *
  * `id` is passed by the charts that own their tooltip element rather than
  * letting Recharts position it; those need the live region and the id that
@@ -154,9 +247,14 @@ export function TooltipCard({
       </div>
       <dl className="mt-1.5 space-y-1">
         {rows.map((row) => (
-          <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4" style={row.color ? { color: row.color } : undefined}>
-            <dt className={row.color ? undefined : 'text-white'}>{row.label}</dt>
-            <dd className={`text-right font-semibold tabular-nums ${row.color ? '' : 'text-white'}`}>{row.value}</dd>
+          <div key={row.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-4">
+            <dt className="text-white">{row.label}</dt>
+            <dd
+              className="text-right font-semibold tabular-nums text-white"
+              style={row.color ? { color: row.color } : undefined}
+            >
+              {row.value}
+            </dd>
           </div>
         ))}
       </dl>
@@ -204,7 +302,7 @@ function MonthlyExposureTooltip({
     { label: 'HSR Distance', value: `${number(row.hsr_distance_km)} km`, color: HSR_COLOR },
     { label: 'HSR Percentage', value: percentage === null ? 'Not available' : `${number(percentage, 1)}%`, color: HSR_COLOR },
   ];
-  return <TooltipCard title={exposureMonthLabel(label ?? row.month ?? 'Month')} rows={rows} note={row.is_imputed ? row.display_note ?? undefined : undefined} />;
+  return <TooltipCard title={exposureMonthLabel(label ?? row.month ?? 'Month')} rows={rows} />;
 }
 
 function HsrInsetDistanceBar({ x, y, width, height, payload }: BarShapeProps) {
@@ -239,12 +337,6 @@ function HsrInsetDistanceBar({ x, y, width, height, payload }: BarShapeProps) {
 
 export type RingDatum = { key: string; label: string; value: number; color?: string };
 
-/**
- * The bars count the whole cohort; a preliminary rate is measured on the
- * contributing clubs only. When the month carries one, its own numerator,
- * contributors and exposure are named here so the two denominators cannot be
- * read as the same thing.
- */
 function TimelineTooltip({
   active,
   label,
@@ -252,11 +344,10 @@ function TimelineTooltip({
 }: {
   active?: boolean;
   label?: string;
-  payload?: Array<{ payload?: SeasonTimelineRow }>;
+  payload?: Array<{ payload?: MonthlySettingRow }>;
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
-  const preliminary = row.preliminary_rate;
   const rows: TooltipRow[] = [{ label: 'Time Loss Injuries', value: `${count(row.time_loss_injuries)} injuries`, color: TIME_LOSS_COLOR }];
   if (typeof row.recorded_injuries === 'number') {
     rows.unshift({ label: 'Overall Injuries', value: `${count(row.recorded_injuries)} injuries`, color: SETTING_COLORS.all });
@@ -267,20 +358,10 @@ function TimelineTooltip({
   if (typeof row.incidence_per_1000h === 'number') {
     rows.push({ label: 'Time Loss Incidence', value: `${number(row.incidence_per_1000h)} /1,000 h`, color: TIME_LOSS_COLOR });
   }
-  if (preliminary) {
-    rows.push({ label: 'Rate Injuries', value: `${count(preliminary.time_loss_injuries)} injuries`, color: TIME_LOSS_COLOR });
-    rows.push({ label: 'Contributors', value: `${count(preliminary.contributor_count)} clubs` });
-    rows.push({ label: 'Exposure', value: `${hours(preliminary.exposure_hours)} player-hours` });
-  } else if (typeof row.overall_incidence_per_1000h === 'number' || typeof row.incidence_per_1000h === 'number') {
+  if (typeof row.overall_incidence_per_1000h === 'number' || typeof row.incidence_per_1000h === 'number') {
     rows.push({ label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` });
   }
-  return (
-    <TooltipCard
-      title={exposureMonthLabel(label ?? row.month)}
-      rows={rows}
-      note={preliminary?.qualification}
-    />
-  );
+  return <TooltipCard title={exposureMonthLabel(label ?? row.month)} rows={rows} />;
 }
 
 export function SeasonTimelineChart({
@@ -290,13 +371,14 @@ export function SeasonTimelineChart({
   showOverallIncidence,
   showTlIncidence,
 }: {
-  rows: SeasonTimelineRow[];
+  rows: MonthlySettingRow[];
   showInjuries: boolean;
   showTlInjuries: boolean;
   showOverallIncidence: boolean;
   showTlIncidence: boolean;
 }) {
   const data = useMemo(() => fromSeptember(sortSeasonMonths(rows)), [rows]);
+  const band = useCategoryBand();
   if (!data.length) return <ChartEmpty reason="No dated injury cases are available for the selected setting." />;
   if (!showInjuries && !showTlInjuries && !showOverallIncidence && !showTlIncidence) {
     return <ChartEmpty reason="Select at least one series to plot." />;
@@ -306,93 +388,96 @@ export function SeasonTimelineChart({
   const hasTlIncidence = data.some((row) => typeof row.incidence_per_1000h === 'number');
 
   return (
-    <div className="h-[320px] sm:min-w-[560px]" aria-label="Season Timeline of Overall Injuries, Time Loss Injuries, Overall Incidence and Time Loss Incidence">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart accessibilityLayer data={data} margin={{ top: 34, right: 16, bottom: 32, left: 12 }}>
-          <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
-          <XAxis
-            dataKey="month"
-            tickFormatter={(value: string) => exposureMonthLabel(value, true)}
-            tick={{ fill: AXIS, fontSize: 11 }}
-            tickLine={false}
-            axisLine={AXIS_LINE}
-            label={{ value: 'Month', position: 'insideBottom', fill: AXIS, fontSize: 11, offset: -14 }}
-          />
-          <YAxis
-            yAxisId="cases"
-            allowDecimals={false}
-            tick={{ fill: AXIS, fontSize: 11 }}
-            tickLine={false}
-            axisLine={AXIS_LINE}
-            label={{ value: 'Injuries (n)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 11, offset: 4, style: Y_TITLE_STYLE }}
-          />
-          <YAxis
-            yAxisId="rate"
-            orientation="right"
-            tickFormatter={formatAxisTick}
-            tick={{ fill: AXIS, fontSize: 11 }}
-            tickLine={false}
-            axisLine={AXIS_LINE}
-            label={{ value: '/1,000 h', angle: 90, position: 'insideRight', fill: AXIS, fontSize: 11, offset: 8, style: Y_TITLE_STYLE }}
-          />
-          <Tooltip
-            content={<TimelineTooltip />}
-            cursor={HOVER_BAND}
-            wrapperStyle={{ zIndex: 30 }}
-          />
-          <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
-          {showInjuries && hasRecordedCases && (
-            <Bar
+    <div className="sm:min-w-[560px]">
+      <div ref={band.containerRef} className="h-[320px]" aria-label="Season Timeline of Overall Injuries, Time Loss Injuries, Overall Incidence and Time Loss Incidence">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart accessibilityLayer data={data} margin={{ top: 34, right: 16, bottom: 32, left: 12 }}>
+            <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
+            <XAxis
+              dataKey="month"
+              tickFormatter={(value: string) => exposureMonthLabel(value, true)}
+              tick={{ fill: AXIS, fontSize: 11 }}
+              tickLine={false}
+              axisLine={AXIS_LINE}
+              label={{ value: 'Month', position: 'insideBottom', fill: AXIS, fontSize: 11, offset: -14 }}
+            />
+            <YAxis
               yAxisId="cases"
-              dataKey="recorded_injuries"
-              name="Overall Injuries"
-              fill={SETTING_COLORS.all}
-              fillOpacity={0.72}
-              radius={[3, 3, 0, 0]}
-              maxBarSize={34}
-              isAnimationActive={false}
+              allowDecimals={false}
+              tick={{ fill: AXIS, fontSize: 11 }}
+              tickLine={false}
+              axisLine={AXIS_LINE}
+              label={{ value: 'Injuries (n)', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 11, offset: 4, style: Y_TITLE_STYLE }}
             />
-          )}
-          {showTlInjuries && (
-            <Bar
-              yAxisId="cases"
-              dataKey="time_loss_injuries"
-              name="Time Loss Injuries"
-              fill={TIME_LOSS_COLOR}
-              fillOpacity={1}
-              radius={[3, 3, 0, 0]}
-              maxBarSize={34}
-              isAnimationActive={false}
-            />
-          )}
-          {showOverallIncidence && hasOverallIncidence && (
-            <Line
+            <YAxis
               yAxisId="rate"
-              type="monotone"
-              dataKey="overall_incidence_per_1000h"
-              name="Overall Incidence"
-              stroke={SETTING_COLORS.all}
-              strokeWidth={2.5}
-              dot={{ r: 3, strokeWidth: 1.5 }}
-              activeDot={{ r: 5, strokeWidth: 2 }}
-              isAnimationActive={false}
+              orientation="right"
+              tickFormatter={formatAxisTick}
+              tick={{ fill: AXIS, fontSize: 11 }}
+              tickLine={false}
+              axisLine={AXIS_LINE}
+              label={{ value: '/1,000 h', angle: 90, position: 'insideRight', fill: AXIS, fontSize: 11, offset: 8, style: Y_TITLE_STYLE }}
             />
-          )}
-          {showTlIncidence && hasTlIncidence && (
-            <Line
-              yAxisId="rate"
-              type="monotone"
-              dataKey="incidence_per_1000h"
-              name="Time Loss Incidence"
-              stroke={TIME_LOSS_COLOR}
-              strokeWidth={2.5}
-              dot={{ r: 3, strokeWidth: 1.5 }}
-              activeDot={{ r: 5, strokeWidth: 2 }}
-              isAnimationActive={false}
+            <Tooltip
+              content={<TimelineTooltip />}
+              {...band.tooltipProps}
+              wrapperStyle={{ zIndex: 30 }}
             />
-          )}
-        </ComposedChart>
-      </ResponsiveContainer>
+            <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
+            {showInjuries && hasRecordedCases && (
+              <Bar
+                yAxisId="cases"
+                dataKey="recorded_injuries"
+                name="Overall Injuries"
+                fill={SETTING_COLORS.all}
+                fillOpacity={0.72}
+                radius={[3, 3, 0, 0]}
+                maxBarSize={34}
+                isAnimationActive={false}
+              />
+            )}
+            {showTlInjuries && (
+              <Bar
+                yAxisId="cases"
+                dataKey="time_loss_injuries"
+                name="Time Loss Injuries"
+                fill={TIME_LOSS_COLOR}
+                fillOpacity={1}
+                radius={[3, 3, 0, 0]}
+                maxBarSize={34}
+                isAnimationActive={false}
+              />
+            )}
+            {showOverallIncidence && hasOverallIncidence && (
+              <Line
+                yAxisId="rate"
+                type="monotone"
+                dataKey="overall_incidence_per_1000h"
+                name="Overall Incidence"
+                stroke={SETTING_COLORS.all}
+                strokeWidth={2.5}
+                dot={{ r: 3, strokeWidth: 1.5 }}
+                activeDot={{ r: 5, strokeWidth: 2 }}
+                isAnimationActive={false}
+              />
+            )}
+            {showTlIncidence && hasTlIncidence && (
+              <Line
+                yAxisId="rate"
+                type="monotone"
+                dataKey="incidence_per_1000h"
+                name="Time Loss Incidence"
+                stroke={TIME_LOSS_COLOR}
+                strokeWidth={2.5}
+                dot={{ r: 3, strokeWidth: 1.5 }}
+                activeDot={{ r: 5, strokeWidth: 2 }}
+                isAnimationActive={false}
+              />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      {band.below && <div {...band.stripProps} />}
     </div>
   );
 }
@@ -496,6 +581,7 @@ export function ExposureTrendChart({
   totalHoursColor?: string;
 }) {
   const compactMonths = useCompactExposureMonths();
+  const band = useCategoryBand();
   const data = useMemo(() => {
     const sorted = sortSeasonMonths<ExposureMonthlyRow & { month: string }>((rows
       .filter((row) => {
@@ -512,7 +598,7 @@ export function ExposureTrendChart({
 
   return (
     <div className="min-w-0" aria-label="Monthly exposure comparison chart">
-      <div className="h-[340px] w-full min-w-0">
+      <div ref={band.containerRef} className="h-[340px] w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart aria-label="Monthly hours, total distance, and high-speed-running exposure chart" accessibilityLayer data={data} margin={{ top: 34, right: 16, bottom: 32, left: 12 }} barCategoryGap="24%" barGap={3}>
           <CartesianGrid stroke={GRID} strokeDasharray="3 5" vertical={false} />
@@ -545,7 +631,7 @@ export function ExposureTrendChart({
           />
           <Tooltip
             content={<MonthlyExposureTooltip hoursColor={totalHoursColor} />}
-            cursor={HOVER_BAND}
+            {...band.tooltipProps}
             allowEscapeViewBox={{ x: false, y: false }}
             wrapperStyle={{ zIndex: 30 }}
           />
@@ -555,6 +641,7 @@ export function ExposureTrendChart({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      {band.below && <div {...band.stripProps} />}
       <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Exposure chart legend">
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: totalHoursColor }} aria-hidden="true" />Hours</span>
         <span className="inline-flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: DISTANCE_COLOR }} aria-hidden="true" />Total Distance</span>

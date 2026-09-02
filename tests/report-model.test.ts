@@ -280,14 +280,15 @@ test("preserves released nulls and blocks rate deltas without comparable exposur
   assert.match(model.coverageNote ?? "", /Temporary league-mean exposure estimate/);
 });
 
-test("keeps preliminary sparkline rates separate from released monthly rates and preserves source warnings safely", () => {
+test("calculates missing monthly incidence from released counts and hours and preserves source warnings safely", () => {
   const current = dashboardFixture({
     preliminary_monthly_rates: [{ month: "Sep 2025", contributor_count: 14, exposure_hours: 1000, time_loss_injuries: 10, days_lost: 50, incidence_per_1000h: 10, burden_per_1000h: 50, qualification: "Preliminary contributor-aligned monthly rates." }],
     coverage: { ...dashboardFixture().coverage, data_quality_warnings: ["Rivals RFC retains a source distance anomaly."] },
   });
   const model = buildReportModel({ current, prior: null, expectedScope: "team", expectedSeason: current.season, subjectName: current.team, protectedTerms: ["Rivals RFC"] });
   assert.deepEqual(model.preliminaryMonthlyRates, current.preliminary_monthly_rates);
-  assert.equal(model.monthlyInjuryPattern[0].incidencePer1000h, current.monthly[1].incidence_per_1000h ?? null);
+  assert.equal(model.monthlyInjuryPattern[0].incidencePer1000h, 5);
+  assert.equal(model.monthlyInjuryPattern[0].overallIncidencePer1000h, 4 / 600 * 1000);
   assert.deepEqual(model.exposure.dataQualityWarnings, ["A club retains a source distance anomaly."]);
 });
 

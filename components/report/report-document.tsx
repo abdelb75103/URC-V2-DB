@@ -3,8 +3,6 @@ import {
   Stop, StyleSheet, Svg, Text, Text as PdfSvgText, View,
 } from "@react-pdf/renderer";
 import { currentExposureWarnings } from "@/lib/exposure-chart";
-import { timelineRate, PRELIMINARY_TIMELINE_NOTE } from "@/lib/season-timeline";
-import type { PreliminaryMonthlyRateRow } from "@/lib/reporting-types";
 import { cloneElement, type ComponentType, type ReactElement, type ReactNode } from "react";
 import {
   orderedReportSectionIds,
@@ -222,17 +220,10 @@ function OverviewCards({ model }: { model: ReportModel }) {
   ];
   return <View>
     <StatCards cards={cards} />
-    {usesPreliminary && <Text style={[styles.panelNote, { marginTop: 4, marginBottom: 0 }]}>
-      The Incidence and Burden trends use preliminary contributor-aligned monthly data. Headline values remain the approved season figures.
-    </Text>}
   </View>;
 }
 
-function TimelineChart({ rows: sourceRows, preliminary = [], chartHeight = 235 }: { rows: readonly ReportPatternRow[]; preliminary?: readonly PreliminaryMonthlyRateRow[]; chartHeight?: number }) {
-  const rows = sourceRows.map((row) => {
-    const rate = timelineRate(row.month, row.incidencePer1000h, preliminary);
-    return { ...row, incidencePer1000h: rate.incidence, preliminaryRate: rate.preliminary };
-  });
+function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatternRow[]; chartHeight?: number }) {
   const hasOverallRates = rows.some((row) => row.overallIncidencePer1000h !== null);
   const hasTlRates = rows.some((row) => row.incidencePer1000h !== null);
   const w = 517, h = chartHeight, left = 42, right = 56, top = 24, bottom = 36;
@@ -291,7 +282,6 @@ function TimelineChart({ rows: sourceRows, preliminary = [], chartHeight = 235 }
     <Caption>{hasRates
       ? "Bars read against the left axis in cases. Lines read against the right axis in injuries per 1,000 player-hours."
       : "Bars read against the left axis in cases. Monthly incidence is not available in this release, so no rate lines are drawn."}</Caption>
-    {rows.some((row) => row.preliminaryRate) && <Caption>{PRELIMINARY_TIMELINE_NOTE}</Caption>}
   </View>;
 }
 
@@ -1024,7 +1014,7 @@ function SeasonPattern({ model, meta }: { model: ReportModel; meta: ReportMetada
 function SeverityContact({ model, meta }: { model: ReportModel; meta: ReportMetadata }) {
   return <PageShell model={model} meta={meta} section="severity-contact">
     <PageTitle title="Monthly Pattern, Severity And Mechanism" note="The monthly injury series leads into the released severity and contact profiles." />
-    <View style={{ height: 344 }}><Panel fill title="Season Timeline" note="Case counts, and incidence where the release carries monthly rates, for each month of the analysis window."><TimelineChart rows={model.monthlyInjuryPattern} preliminary={model.preliminaryMonthlyRates} chartHeight={244} /></Panel></View>
+    <View style={{ height: 320 }}><Panel fill title="Season Timeline" note="Monthly injury counts and incidence per 1,000 player-hours."><TimelineChart rows={model.monthlyInjuryPattern} chartHeight={244} /></Panel></View>
     <View style={[styles.split, { marginTop: 8, height: 318 }]}>
       <View style={styles.third}><Panel fill title="Severity" note="Injuries by released duration band."><HalfRing rows={model.severityDistribution} colours={SEVERITY_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>
       <View style={styles.third}><Panel fill title="Contact Mechanism" note="Injuries by released mechanism."><HalfRing rows={model.contactDistribution} colours={CONTACT_COLOURS} value="timeLoss" unitHead="Cases (share)" /></Panel></View>

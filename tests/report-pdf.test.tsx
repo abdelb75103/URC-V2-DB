@@ -195,16 +195,16 @@ test("selected sections render in canonical PDF order", () => {
   assert.doesNotMatch(result.pageText(2), /Season Comparison/);
 });
 
-test("the PDF timeline displays qualified released rates without inventing overall incidence", () => {
+test("the PDF timeline displays both released incidence series without extra rate notes", () => {
   const result = renderPdf(["severity-contact"], {
     ...syntheticModel,
-    monthlyInjuryPattern: [{ month: "Sep 2025", recordedInjuries: 20, timeLossInjuries: 12, daysLost: 50, overallIncidencePer1000h: null, incidencePer1000h: null, burdenPer1000h: null }],
+    monthlyInjuryPattern: [{ month: "Sep 2025", recordedInjuries: 20, timeLossInjuries: 12, daysLost: 50, overallIncidencePer1000h: 25, incidencePer1000h: 15, burdenPer1000h: null }],
     preliminaryMonthlyRates: [{ month: "2025-09", contributor_count: 14, exposure_hours: 800, time_loss_injuries: 8, days_lost: 40, incidence_per_1000h: 10, burden_per_1000h: 50, qualification: "Preliminary contributor-aligned rate." }],
   });
   assert.equal(result.pages, 1);
   assert.match(result.text, /Time Loss Incidence/);
-  assert.match(result.text, /preliminary contributor-aligned/);
-  assert.doesNotMatch(result.text, /Overall Incidence|Monthly incidence is not available/);
+  assert.match(result.text, /Overall Incidence/);
+  assert.doesNotMatch(result.text, /preliminary contributor-aligned|Monthly incidence is not available/);
 });
 
 test("a dense diagnosis matrix keeps its complete key on its own page", () => {

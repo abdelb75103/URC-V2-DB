@@ -89,7 +89,6 @@ test('shared presentation leads with time loss metrics and uses concise dashboar
   assert.match(dashboard, /dashboard\.preliminary_monthly_rates \?\? \[\]/);
   assert.match(dashboard, /const incidenceTrend = usesPreliminaryRateTrend/);
   assert.match(dashboard, /const burdenTrend = usesPreliminaryRateTrend/);
-  assert.match(dashboard, /preliminary contributor-aligned monthly data/);
   assert.match(dashboard, /const showsOverallOnlyKpiTrends = filtered && !perSettingMonthly/);
   assert.equal((dashboard.match(/<ScopeChip show=\{showsOverallOnlyKpiTrends\} label="Overall Trend" \/>/g) ?? []).length, 4);
 

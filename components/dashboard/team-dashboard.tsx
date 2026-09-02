@@ -1,7 +1,7 @@
 'use client';
 
+import { buildSeasonTimelineRows } from '@/lib/season-timeline';
 import { currentExposureWarnings } from '@/lib/exposure-chart';
-import { buildSeasonTimelineRows, PRELIMINARY_TIMELINE_NOTE } from '@/lib/season-timeline';
 import {
   useId,
   useLayoutEffect,
@@ -432,10 +432,9 @@ function OverviewTab({
         overall_incidence_per_1000h: row.overall_incidence_per_1000h ?? null,
         incidence_per_1000h: row.incidence_per_1000h ?? null,
       }));
-  const timelineRows = buildSeasonTimelineRows(monthlyRows, dashboard.preliminary_monthly_rates ?? []);
+  const timelineRows = buildSeasonTimelineRows(monthlyRows);
   const timelineHasOverallIncidence = timelineRows.some((row) => row.overall_incidence_per_1000h != null);
   const timelineHasTlIncidence = timelineRows.some((row) => row.incidence_per_1000h != null);
-  const timelineUsesPreliminary = timelineRows.some((row) => row.preliminary_rate);
   // Charts start in September; KPI trends and headline totals keep the full set.
   const trend = sortByMonth(monthlyRows);
   const preliminaryRateTrend = dashboard.preliminary_monthly_rates ?? [];
@@ -547,12 +546,6 @@ function OverviewTab({
         </StatTile>
       </div>
 
-      {usesPreliminaryRateTrend && (
-        <p className="-mt-2 text-xs text-muted-foreground" role="note">
-          The Incidence and Burden trends use preliminary contributor-aligned monthly data. Headline values remain the approved season figures.
-        </p>
-      )}
-
       <Panel contentClassName="p-4 sm:p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -575,8 +568,6 @@ function OverviewTab({
             showTlIncidence={showTlIncidence && timelineHasTlIncidence}
           />
         </div>
-        {timelineUsesPreliminary && <p className="mt-2 text-xs leading-relaxed text-muted-foreground" role="note">{PRELIMINARY_TIMELINE_NOTE}</p>}
-        {!timelineHasOverallIncidence && <p className="mt-2 text-xs text-muted-foreground" role="note">Overall Incidence is not available for the released monthly cohort.</p>}
       </Panel>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
