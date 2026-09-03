@@ -449,17 +449,16 @@ test("2024-25 legacy reader still rejects unavailable coverage", async () => {
   );
 });
 
-test("exposure UI does not add preview figures to unavailable coverage", async () => {
+test("exposure UI uses reporting coverage directly without preview additions", async () => {
   const dashboard = await readFile(new URL("../components/dashboard/team-dashboard.tsx", import.meta.url), "utf8");
 
-  assert.match(dashboard, /function addPreviewToKnownValue[\s\S]*?if \(value === null \|\| value === undefined\) return null;/);
+  assert.doesNotMatch(dashboard, /addPreviewToKnownValue/);
   assert.doesNotMatch(dashboard, /\(row\.exposure_hours \?\? 0\) \+ \(preview\?\.additional_hours \?\? 0\)/);
   assert.doesNotMatch(dashboard, /\(row\.distance_km \?\? 0\) \+ \(preview\?\.additional_distance_km \?\? 0\)/);
-  assert.match(dashboard, /const totalHours = addPreviewToKnownValue\(\s*coverage\.hours,/);
-  assert.match(dashboard, /const totalDistance = addPreviewToKnownValue\(\s*coverage\.distance_km,/);
-  assert.match(dashboard, /hoursLabel[\s\S]*?'Estimated Total Hours'/);
-  assert.match(dashboard, /distanceLabel[\s\S]*?'Reported Distance'/);
-  assert.match(dashboard, /Awaiting source-backed exposure from/);
+  assert.match(dashboard, /const totalHours = coverage\.hours;/);
+  assert.match(dashboard, /const totalDistance = coverage\.distance_km;/);
+  assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
+  assert.match(dashboard, /aria-label="Temporary Exposure Estimate"/);
 });
 
 test("2025-26 reader requires explicit nullable keys and complete ordered nested grids", async () => {

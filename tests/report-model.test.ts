@@ -377,16 +377,16 @@ test("refuses an unapproved prior release", () => {
 });
 
 test("restores enabled sections in canonical order", () => {
-  assert.deepEqual(DEFAULT_REPORT_SECTION_IDS, ["cover", "season-pattern", "severity-contact", "injury-location", "common-injuries", "diagnosis-matrix", "illnesses", "impact-matrices", "injury-types", "exposure", "team-comparison", "season-methodology", "closing"]);
+  assert.deepEqual(DEFAULT_REPORT_SECTION_IDS, ["cover", "season-pattern", "severity-contact", "injury-location", "common-injuries", "diagnosis-matrix", "impact-matrices", "illnesses", "injury-types", "exposure", "team-comparison", "season-methodology", "closing"]);
   assert.deepEqual(REPORT_SECTION_LABELS, {
     cover: "Cover",
     "season-pattern": "Season Overview",
     "severity-contact": "Severity And Mechanism",
     "injury-location": "Injury Location",
     "common-injuries": "Most Common Injuries",
-    "diagnosis-matrix": "Risk Matrix",
-    illnesses: "Illnesses",
-    "impact-matrices": "Injury Impact Matrix",
+    "diagnosis-matrix": "Risk Matrix: Diagnosis",
+    illnesses: "Most Common Illnesses",
+    "impact-matrices": "Risk Matrix: Location And Type",
     "injury-types": "Injury Types",
     exposure: "Exposure",
     "team-comparison": "Team Comparison",

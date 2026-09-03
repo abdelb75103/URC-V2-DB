@@ -43,7 +43,7 @@ import {
   commonInjuryColorMap, illnessColorMap, isKneeLigamentDiagnosis, metricValue,
   rankedCommonInjuries, rankedIllnesses, type CardColour,
 } from '@/lib/report-presentation';
-import type { ComparisonScatterRow } from '@/components/dashboard/charts';
+import { ComparisonScatterChart, type ComparisonScatterRow } from '@/components/dashboard/charts';
 import {
   SETTING_COLORS,
   SEVERITY_BAND_COLORS,
@@ -105,10 +105,6 @@ const SeverityArc = dynamic(
 const ImpactScatterChart = dynamic(
   () => import('@/components/dashboard/charts').then((module) => module.ImpactScatterChart),
   { ssr: false, loading: () => <ChartLoading className="h-[580px]" /> },
-);
-const ComparisonScatterChart = dynamic(
-  () => import('@/components/dashboard/charts').then((module) => module.ComparisonScatterChart),
-  { ssr: false, loading: () => <ChartLoading className="h-[420px]" /> },
 );
 const ExposureTrendChart = dynamic(
   () => import('@/components/dashboard/charts').then((module) => module.ExposureTrendChart),
@@ -382,10 +378,6 @@ function OverviewTab({
   const [benchMetric, setBenchMetric] = useState<ProfileMetric>('time_loss_injuries');
   const [selectedCode, setSelectedCode] = useState<string>();
   const [hoveredCode, setHoveredCode] = useState<string>();
-  const usesReportedLeagueContract = dashboard.scope === 'league'
-    && typeof dashboard.coverage.source_backed_team_count === 'number';
-  const usesTemporaryExposureEstimate = usesReportedLeagueContract
-    && (dashboard.coverage.temporary_estimate_team_count ?? 0) > 0;
 
   const headline = Object.fromEntries(dashboard.headline.map((row) => [row.key, row.value]));
   const settingMetrics = supplement?.rate_setting_metrics ?? dashboard.setting_metrics;
@@ -537,7 +529,7 @@ function OverviewTab({
           <Sparkline values={burdenTrend} color="#ef7189" ariaLabel="Burden By Month" />
         </StatTile>
         <StatTile
-          label={usesTemporaryExposureEstimate ? 'Estimated Exposure' : 'Exposure'}
+          label="Exposure"
           value={fmtHours(filtered ? active?.exposure_hours : dashboard.coverage.hours)}
           unit="player-hours"
         >
@@ -1470,15 +1462,8 @@ function ExposureTab({
     || monthlyRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)))
     || comparisons.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)));
   const hasExposureTotals = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value));
-  const sourceBackedTeamCount = coverage.source_backed_team_count;
-  const temporaryEstimateTeamCount = coverage.temporary_estimate_team_count;
-  const usesReportedLeagueContract = dashboard.scope === 'league'
-    && typeof sourceBackedTeamCount === 'number'
-    && typeof temporaryEstimateTeamCount === 'number';
-  const hoursLabel = usesReportedLeagueContract && temporaryEstimateTeamCount > 0
-    ? 'Estimated Total Hours'
-    : 'Total Hours';
-  const distanceLabel = usesReportedLeagueContract ? 'Reported Distance' : 'Total Distance';
+  const hoursLabel = 'Total Hours';
+  const distanceLabel = 'Total Distance';
 
   if (!hasExposureData) {
     return (

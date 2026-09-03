@@ -11,6 +11,16 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-09-03: Setting-responsive comparison KPIs
+
+The Season Comparison setting selector previously changed only the impact chart while its KPI cards always used overall figures. Abdel separately approved correcting those cards. Overall KPIs retain their supplied values and percentages. Match and Training use the corresponding supplied impact values, with percentage change calculated as `100 * (previous - current) / previous`, exactly as in the existing comparison contract. A missing value or zero baseline remains not comparable; a missing setting never substitutes Overall. This is presentation arithmetic only, not a new incidence, burden or severity definition.
+
+The correction lives in `lib/season-comparison-presentation.ts` and the shared Season Comparison component. Database classifications, migrations, source rows and saved parity exports remain untouched. Deployment is separate from this local implementation.
+
+A proposed IOC injury-family display regrouping was implemented locally, then withdrawn by Abdel before completion. The dashboard and PDF model retain the existing injury-type families and their supplied counts, incidence, burden and mean severity. No regrouping was applied to the database or deployed.
+
+---
+
 ## 2026-09-02: HSR source-to-display reporting successor
 
 | Field | Value |

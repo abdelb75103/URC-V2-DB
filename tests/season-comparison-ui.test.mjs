@@ -16,6 +16,16 @@ test('season comparison is a shared tab immediately before Reports', async () =>
   assert.match(tabs.slice(seasonIndex, reportsIndex), /label: 'Season Comparison'/);
 });
 
+test('the rugby setting drives KPI cards without changing the monthly or diagnosis sections', async () => {
+  const component = await source('components/dashboard/season-comparison.tsx');
+
+  assert.match(component, /const kpis = seasonComparisonKpis\(comparison, setting\)/);
+  assert.match(component, /kpis\.map\(\(metric\) => <KpiTile key=\{metric\.key\} metric=\{metric\}/);
+  assert.doesNotMatch(component, /comparison\.kpis\.map/);
+  assert.match(component, /<MonthlyBars monthly=\{monthlyPoints\(comparison\)\}/);
+  assert.match(component, /<DiagnosisDrivers data=\{comparison\}/);
+});
+
 test('comparison UI maps decreases and increases to the requested outcome direction', async () => {
   const component = await source('components/dashboard/season-comparison.tsx');
   const charts = await source('components/dashboard/season-comparison-charts.tsx');
@@ -36,8 +46,8 @@ test('comparison UI maps decreases and increases to the requested outcome direct
   assert.doesNotMatch(component, /Worsened/);
   assert.match(component, /No Change/);
   assert.match(component, /Season Comparison/);
-  assert.match(component, /Diagnosis Drivers/);
-  assert.doesNotMatch(component, /Most Common Diagnosis/);
+  assert.match(component, /Most Common Diagnosis/);
+  assert.doesNotMatch(component, /Diagnosis Drivers/);
   assert.match(component, /Diagnosis measure/);
   assert.match(component, /data\.previous_season/);
   assert.match(component, /data\.current_season/);
@@ -121,7 +131,7 @@ test('diagnosis ranks stack on mobile and use the mirrored comparison from sm up
   assert.match(component, /role="tooltip"/);
   assert.match(component, /SETTING_LABELS\[activeRow!\.setting\][\s\S]*activeRank\.rank[\s\S]*activeMetricLabel/);
   assert.match(component, /activePrevious\?\.diagnosis[\s\S]*activeCurrent\?\.diagnosis/);
-  assert.match(component, /pointer-events-none absolute z-30/);
+  assert.match(component, /pointer-events-none fixed z-50/);
   assert.match(component, /<TooltipCard/);
   assert.doesNotMatch(component, /className=\{activeRank[\s\S]*mb-5 rounded-lg/);
   assert.doesNotMatch(component, /overflow-x-auto/);
@@ -136,7 +146,7 @@ test('comparison headings and metric labels use Title Case and the default injur
   assert.match(component, /time_loss_injuries: 'Injuries'/);
   assert.match(component, /title="Injury Impact By Season"/);
   assert.match(component, /title="Injuries By Month"/);
-  assert.match(component, />Diagnosis Drivers</);
+  assert.match(component, />Most Common Diagnosis</);
   assert.doesNotMatch(component, /TL Injury Incidence|Time-Loss Injuries By Month/);
 });
 

@@ -163,23 +163,25 @@ test("the full document emits one A4 page for each stable section", () => {
   assert.match(result.overviewText, /Overall Injuries/);
   assert.match(result.overviewText, /Injury Impact By Season/);
   assert.match(result.pageText(6), /Risk Matrix/);
-  assert.match(result.pageText(7), /Most Common Illnesses/);
-  assert.match(result.pageText(7), /Respiratory Illness/);
+  assert.match(result.pageText(7), /Risk Matrix/);
+  assert.match(result.pageText(8), /Most Common Illnesses/);
+  assert.match(result.pageText(8), /Respiratory Illness/);
   assert.match(result.pageText(10), /HSR Distance/);
   assert.match(result.pageText(10), /6,600/);
   assert.match(result.pageText(10), /League-mean placeholder/);
   assert.match(result.pageText(11), /Team B/);
   assert.doesNotMatch(result.text, /Overall Incidence Ladder|Anonymous club \d|Impact Matrices/);
   assert.match(result.comparisonText, /Injuries By Month/);
-  assert.match(result.comparisonText, /Diagnosis Drivers/);
+  assert.match(result.comparisonText, /Most Common Diagnosis/);
   assert.match(result.comparisonText, /Decreased/);
   assert.doesNotMatch(result.comparisonText, /Improved/);
   assert.doesNotMatch(result.comparisonText, /Publication record/);
   assert.match(result.text, /End of report/i);
   assert.match(result.pageText(13), /\bSCRIIPT\b/);
+  assert.doesNotMatch(result.text, /approved releases?|released|arc length|key numbers run|bars share one scale/i);
   for (const page of [1, 13]) {
     const cover = result.pageText(page).replace(/\s+/g, " ");
-    assert.match(cover, /SCRIIPT Surveillance of Continental Rugby Injury\/Illness and Performance Tracking/);
+    assert.match(cover, /SCRIIPT Surveillance Of Continental Rugby Injury, Illness And Performance Tracking/i);
     assert.doesNotMatch(cover, /Injury surveillance|INJURY SURVEILLANCE|SCRIIPT Project|Source 30 Aug|\d+ \/ 13/);
   }
   assert.match(result.overviewText, /Source 30 Aug 2026/);
@@ -220,6 +222,47 @@ test("a dense diagnosis matrix keeps its complete key on its own page", () => {
   assert.equal(result.pages, 1);
   assert.match(result.text, /Diagnosis 1\b/);
   assert.match(result.text, /Diagnosis 42\b/);
+});
+
+test("copy cleanup preserves material qualifications and unavailable monthly exposure", () => {
+  const model: ReportModel = {
+    ...syntheticModel,
+    exposure: {
+      ...syntheticModel.exposure,
+      dataQualityWarnings: ["Approved season totals include estimated exposure."],
+      monthly: syntheticModel.exposure.monthly.map((row) => ({ ...row, exposureHours: null, distanceKm: null, hsrDistanceKm: null, hsrPercentage: null })),
+    },
+  };
+  const result = renderPdf(["illnesses", "exposure"], model);
+  assert.equal(result.pages, 2);
+  const text = result.text.replace(/\s+/g, " ");
+  assert.match(text, /season totals include estimated exposure/i);
+  assert.match(text, /Monthly exposure data (?:is |are )?(?:not available|unavailable)/i);
+  assert.match(text, /8,400/);
+  assert.doesNotMatch(text, /Overall illness metrics use|Illness is not attributed/);
+});
+
+test("severity and contact show all three settings without raw severity slices or duplicate metrics", () => {
+  const severityDistribution = (["all", "match", "training"] as const).flatMap((setting, index) => [
+    { key: "one_day", label: "1 day", setting, recordedInjuries: 1 + index, timeLossInjuries: 1 + index, daysLost: 1 + index },
+    { key: "two_to_three_days", label: "2-3 days", setting, recordedInjuries: 2, timeLossInjuries: 2, daysLost: 5 },
+    { key: "four_to_seven_days", label: "4-7 days", setting, recordedInjuries: 3, timeLossInjuries: 3, daysLost: 15 },
+    { key: "eight_to_twenty_eight_days", label: "8-28 days", setting, recordedInjuries: 4, timeLossInjuries: 4, daysLost: 50 },
+    { key: "greater_than_twenty_eight_days", label: ">28 days", setting, recordedInjuries: 5, timeLossInjuries: 5, daysLost: 200 },
+    { key: "unknown_or_censored", label: "Unknown or censored", setting, recordedInjuries: 77, timeLossInjuries: 77, daysLost: 0 },
+  ]);
+  const contactDistribution = (["all", "match", "training"] as const).flatMap((setting) => [
+    { key: "contact", label: "Contact", setting, recordedInjuries: 10, timeLossInjuries: 10, daysLost: null },
+    { key: "non_contact", label: "Non-contact", setting, recordedInjuries: 5, timeLossInjuries: 5, daysLost: null },
+    { key: "unknown", label: "Unknown", setting, recordedInjuries: 2, timeLossInjuries: 2, daysLost: null },
+  ]);
+  const result = renderPdf(["severity-contact"], { ...syntheticModel, severityDistribution, contactDistribution });
+  assert.equal(result.pages, 1);
+  for (const label of ["1-7 Days", "8-28 Days", "Over 28 Days"]) {
+    assert.equal(result.text.split(label).length - 1, 3, `${label} appears once for each setting`);
+  }
+  assert.equal(result.text.split("Unknown").length - 1, 3, "contact keeps its unclassified share");
+  assert.doesNotMatch(result.text, /Unknown or censored|2-3 days|4-7 days|Match Versus Training|arc length/i);
 });
 
 test("rendered document metadata and source model do not contain protected sentinels", () => {

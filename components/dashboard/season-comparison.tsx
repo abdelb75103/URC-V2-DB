@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ArrowDown, ArrowUp, Minus } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { SeasonComparisonData } from '@/lib/season-comparison';
+import { seasonComparisonKpis } from '@/lib/season-comparison-presentation';
 import {
   ImpactBubbles,
   MonthlyBars,
@@ -199,6 +200,12 @@ function diagnosisMetricValue(
   return season[metric];
 }
 
+const RANK_LABELS: Record<number, string> = {
+  1: 'Most Common',
+  2: 'Second Most Common',
+  3: 'Third Most Common',
+};
+
 function diagnosisMetricFormat(value: number | null, metric: DiagnosisMetric): string {
   if (value === null || !Number.isFinite(value)) return 'N/A';
   return format(value, metric === 'incidence' ? 2 : 0);
@@ -208,7 +215,6 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
   const [metric, setMetric] = useState<DiagnosisMetric>('count');
   const [preview, setPreview] = useState<{ setting: Setting; rank: number; anchorX: number; anchorY: number }>();
   const [pinned, setPinned] = useState<{ setting: Setting; rank: number; anchorX: number; anchorY: number }>();
-  const cardRef = useRef<HTMLDivElement>(null);
   const tooltipId = `diagnosis-tooltip-${useId().replace(/:/g, '')}`;
   const rows = diagnosisPoints(data);
   const diagnosisColours = diagnosisColourMap(rows);
@@ -230,14 +236,15 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
     setPreview(undefined);
     setPinned(undefined);
   };
-  const interactionAt = (setting: Setting, rank: number, target: HTMLElement) => {
-    const card = cardRef.current?.getBoundingClientRect();
+  // Viewport coordinates: the tooltip is fixed-positioned so it tracks the pointer
+  // and is clamped to the window rather than to this card.
+  const interactionAt = (setting: Setting, rank: number, target: HTMLElement, event?: { clientX: number; clientY: number }) => {
     const rect = target.getBoundingClientRect();
     return {
       setting,
       rank,
-      anchorX: rect.left - (card?.left ?? 0) + rect.width / 2,
-      anchorY: rect.top - (card?.top ?? 0) + rect.height / 2,
+      anchorX: event?.clientX ?? rect.left + rect.width / 2,
+      anchorY: event?.clientY ?? rect.bottom,
     };
   };
 
@@ -253,9 +260,9 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
 
   return (
     <Card className="min-w-0 border-border/70 bg-card/70 shadow-none">
-      <CardContent ref={cardRef} className="relative p-4 sm:p-5">
+      <CardContent className="relative p-4 sm:p-5">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h3 className={PANEL_HEADING_CLASS}>Diagnosis Drivers</h3>
+          <h3 className={PANEL_HEADING_CLASS}>Most Common Diagnosis</h3>
           <Tabs value={metric} onValueChange={(value) => setMetric(value as DiagnosisMetric)}>
             <TabsList aria-label="Diagnosis measure" className="h-auto bg-muted/80 p-1">
               {DIAGNOSIS_METRICS.map((item) => (
@@ -272,14 +279,14 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
             id={tooltipId}
             role="tooltip"
             aria-live="polite"
-            className="pointer-events-none absolute z-30 w-[18rem] max-w-[calc(100%_-_1.5rem)]"
+            className="pointer-events-none fixed z-50 w-[18rem] max-w-[calc(100vw_-_1.5rem)]"
             style={{
-              left: `clamp(0.75rem, ${active.anchorX + 12}px, calc(100% - 18.75rem))`,
-              top: `clamp(0.75rem, ${active.anchorY + 12}px, calc(100% - 8rem))`,
+              left: `clamp(0.75rem, ${active.anchorX + 16}px, calc(100vw - 19rem))`,
+              top: `clamp(0.75rem, ${active.anchorY + 16}px, calc(100vh - 11rem))`,
             }}
           >
             <TooltipCard
-              title={`${SETTING_LABELS[activeRow!.setting]} · Rank ${activeRank.rank} · ${activeMetricLabel}`}
+              title={`${SETTING_LABELS[activeRow!.setting]} · ${RANK_LABELS[activeRank.rank] ?? `Rank ${activeRank.rank}`} · ${activeMetricLabel}`}
               rows={[
                 {
                   label: `${data.previous_season}: ${activePrevious?.diagnosis ?? 'Not available'}`,
@@ -357,11 +364,12 @@ function DiagnosisDrivers({ data }: { data: SeasonComparisonData }) {
                               aria-pressed={isPinned}
                               data-diagnosis-target={interactionKey}
                               className={`min-h-11 w-full min-w-0 rounded-lg p-2 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${isActive ? 'bg-background/60' : 'hover:bg-background/35'}`}
-                              onMouseEnter={(event) => setPreview(interactionAt(setting, rankRow.rank, event.currentTarget))}
+                              onMouseEnter={(event) => setPreview(interactionAt(setting, rankRow.rank, event.currentTarget, event))}
+                              onMouseMove={(event) => setPreview(interactionAt(setting, rankRow.rank, event.currentTarget, event))}
                               onMouseLeave={() => setPreview(undefined)}
                               onFocus={(event) => setPreview(interactionAt(setting, rankRow.rank, event.currentTarget))}
                               onBlur={() => setPreview(undefined)}
-                              onPointerDown={(event) => setPinned(interactionAt(setting, rankRow.rank, event.currentTarget))}
+                              onPointerDown={(event) => setPinned(interactionAt(setting, rankRow.rank, event.currentTarget, event))}
                               onKeyDown={(event) => {
                                 if (event.key === 'Escape') {
                                   event.preventDefault();
@@ -441,6 +449,7 @@ export function SeasonComparison({ comparison }: { comparison?: SeasonComparison
     return <EmptyState>No approved season comparison is available for this dashboard.</EmptyState>;
   }
   const impact = comparison.impact.find((row) => row.setting === setting);
+  const kpis = seasonComparisonKpis(comparison, setting);
 
   return (
     <div className="space-y-5">
@@ -465,7 +474,7 @@ export function SeasonComparison({ comparison }: { comparison?: SeasonComparison
       </Tabs>
 
       <section aria-label="Season change KPIs" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {comparison.kpis.map((metric) => <KpiTile key={metric.key} metric={metric} />)}
+        {kpis.map((metric) => <KpiTile key={metric.key} metric={metric} />)}
       </section>
 
       <Panel title="Injury Impact By Season">

@@ -315,7 +315,7 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
     : current.limitations;
   const temporaryEstimateCount = current.coverage.temporary_estimate_team_count ?? 0;
   const safeLimitations = expectedScope === "league" && temporaryEstimateCount > 0
-    ? [`${temporaryEstimateCount} clubs use temporary league-mean exposure estimates while source-backed exposure is awaited.`, ...limitations]
+    ? [`${temporaryEstimateCount} clubs use temporary league-mean exposure estimates.`, ...limitations]
     : limitations;
   const visibleProfiles = withoutFrontFacingUnknown(current.injury_profiles);
   const injuryProfile = {
@@ -366,8 +366,8 @@ export function buildReportModel(request: ReportModelRequest): ReportModel {
       injuryTypes: impactProfiles(injuryProfile.injuryTypes, totalInjuries),
     },
     exposure: {
-      totalHoursLabel: current.scope === "league" && temporaryEstimateCount > 0 ? "Estimated Total Hours" : "Total Hours",
-      totalDistanceLabel: current.scope === "league" && typeof current.coverage.source_backed_team_count === "number" ? "Reported Distance" : "Total Distance",
+      totalHoursLabel: "Total Hours",
+      totalDistanceLabel: "Total Distance",
       totalHours: current.coverage.hours,
       matchHours: current.coverage.match_hours ?? null,
       trainingHours: current.coverage.training_hours ?? null,

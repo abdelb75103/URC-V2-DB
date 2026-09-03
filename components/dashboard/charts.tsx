@@ -665,9 +665,11 @@ export type ComparisonScatterRow = {
 function ComparisonScatterTooltip({
   active,
   payload,
+  pinned,
 }: {
   active?: boolean;
   payload?: Array<{ payload?: ComparisonScatterRow }>;
+  pinned?: boolean;
 }) {
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
@@ -679,6 +681,7 @@ function ComparisonScatterTooltip({
         { label: 'Training Incidence', value: `${number(row.training_incidence, 2)} /1,000 h`, color: SETTING_COLORS.training },
         { label: 'Exposure', value: `${hours(row.exposure_hours)} player-hours` },
       ]}
+      note={pinned ? 'Pinned, press Escape or click again to dismiss' : undefined}
     />
   );
 }
@@ -716,6 +719,18 @@ export function ComparisonScatterChart({
   const viewer = labelledRows.filter((row) => row.is_viewer);
   const boxRef = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(false);
+  // Recharts keeps separate hover and click selections. Use the click selection
+  // while pinned, and hide dismissed tooltips until the pointer leaves the dot.
+  const [tooltipMode, setTooltipMode] = useState<'hover' | 'pinned' | 'dismissed'>('hover');
+  const pinned = tooltipMode === 'pinned';
+  useEffect(() => {
+    if (tooltipMode === 'dismissed') return;
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setTooltipMode('dismissed');
+    };
+    document.addEventListener('keydown', dismissOnEscape);
+    return () => document.removeEventListener('keydown', dismissOnEscape);
+  }, [tooltipMode]);
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box) return;
@@ -744,9 +759,13 @@ export function ComparisonScatterChart({
   return (
     <section aria-label="Match versus training incidence for every club. Horizontal position is match incidence, vertical position is training incidence, and circle area is player-hours. The green zone is below both league means and the red zone is above both league means.">
       <div className="pb-2" ref={boxRef}>
-        <div className="h-[360px] sm:min-w-[620px]">
+        <div className="h-[360px] sm:min-w-[620px] [&_*:focus]:outline-none [&_*:focus-visible]:outline-none">
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart accessibilityLayer margin={{ top: 34, right: narrow ? 16 : 116, bottom: 32, left: 14 }}>
+            <ScatterChart
+              accessibilityLayer
+              margin={{ top: 34, right: narrow ? 16 : 116, bottom: 32, left: 14 }}
+              onClick={() => setTooltipMode('dismissed')}
+            >
               {showIncidenceZones && (
                 <>
                   <ReferenceArea
@@ -794,7 +813,13 @@ export function ComparisonScatterChart({
                 label={{ value: 'Training Incidence, Injuries /1,000 h', angle: -90, position: 'insideLeft', fill: AXIS, fontSize: 12, offset: 2, style: Y_TITLE_STYLE }}
               />
               <ZAxis type="number" dataKey="exposure_hours" range={[70, 620]} name="Exposure" />
-              <Tooltip content={<ComparisonScatterTooltip />} cursor={{ stroke: GRID }} wrapperStyle={{ zIndex: 30 }} />
+              <Tooltip
+                content={<ComparisonScatterTooltip pinned={pinned} />}
+                trigger={pinned ? 'click' : 'hover'}
+                active={tooltipMode === 'dismissed' ? false : pinned ? true : undefined}
+                cursor={{ stroke: GRID }}
+                wrapperStyle={{ zIndex: 30 }}
+              />
               {/* Each league mean is drawn in the colour of the axis it belongs to,
                   and labelled outside the plot so it cannot collide with a club dot. */}
               {typeof leagueMatchIncidence === 'number' && (
@@ -817,24 +842,34 @@ export function ComparisonScatterChart({
               )}
               <Scatter
                 data={others}
+                onMouseLeave={() => setTooltipMode((mode) => mode === 'dismissed' ? 'hover' : mode)}
+                onClick={(_point, _index, event) => {
+                  event.stopPropagation();
+                  setTooltipMode((mode) => mode === 'pinned' ? 'dismissed' : 'pinned');
+                }}
                 fill={SETTING_COLORS.all}
                 fillOpacity={0.5}
                 stroke="hsl(0 0% 96%)"
                 strokeOpacity={0.55}
                 isAnimationActive={false}
               >
-                <LabelList dataKey="marker_label" position="center" fill="hsl(0 0% 100%)" fontSize={9} fontWeight={700} />
+                <LabelList dataKey="marker_label" position="center" fill="hsl(0 0% 100%)" fontSize={9} fontWeight={700} style={{ pointerEvents: 'none' }} />
               </Scatter>
               {viewer.length > 0 && (
                 <Scatter
                   data={viewer}
+                  onMouseLeave={() => setTooltipMode((mode) => mode === 'dismissed' ? 'hover' : mode)}
+                  onClick={(_point, _index, event) => {
+                    event.stopPropagation();
+                    setTooltipMode((mode) => mode === 'pinned' ? 'dismissed' : 'pinned');
+                  }}
                   fill={viewerColor}
                   fillOpacity={0.92}
                   stroke="hsl(0 0% 100%)"
                   strokeWidth={2}
                   isAnimationActive={false}
                 >
-                  <LabelList dataKey="marker_label" position="center" fill="hsl(0 0% 100%)" fontSize={9} fontWeight={700} />
+                  <LabelList dataKey="marker_label" position="center" fill="hsl(0 0% 100%)" fontSize={9} fontWeight={700} style={{ pointerEvents: 'none' }} />
                 </Scatter>
               )}
             </ScatterChart>
@@ -1150,7 +1185,7 @@ export function ImpactScatterChart({ rows }: { rows: InjuryProfileRow[] }) {
           onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}
           className="overflow-x-auto pb-2"
         >
-          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[520px] sm:min-w-[680px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none">
+          <div ref={chartRef} onPointerDown={dismissTooltip} className="h-[520px] sm:min-w-[680px] [&_.recharts-wrapper:focus]:outline-none [&_svg:focus]:outline-none [&_*:focus]:outline-none [&_*:focus-visible]:outline-none">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart accessibilityLayer margin={{ top: 30, right: 30, bottom: 34, left: 24 }}>
                 <defs>

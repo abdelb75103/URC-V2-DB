@@ -882,9 +882,6 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   const charts = await readFile(new URL('../components/dashboard/charts.tsx', import.meta.url), 'utf8');
   const tabConfig = await readFile(new URL('../lib/dashboard-tab.ts', import.meta.url), 'utf8');
 
-  assert.match(dashboard, /Estimated Total Hours[\s\S]*Reported Distance/);
-  assert.match(dashboard, /Estimated Exposure/);
-  assert.match(dashboard, /14 source-backed clubs \+ 2 temporary estimates|sourceBackedTeamCount/);
   assert.doesNotMatch(dashboard, /Awaiting source-backed exposure from/);
   assert.match(dashboard, /coverage\.included_exposure_status\.includes\('estimate'\)/);
   assert.match(dashboard, /Temporary Exposure Estimate/);
