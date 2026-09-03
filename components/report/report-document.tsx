@@ -200,7 +200,7 @@ function Panel({ title, note, legend, footer, children, fill = false }: { title?
         {title && <Text style={styles.headTitle}>{title}</Text>}
         {note && <Text style={styles.headNote}>{note}</Text>}
       </View>
-      {legend && <View style={{ maxWidth: "56%" }}>{legend}</View>}
+      {legend && <View style={{ maxWidth: "64%", flexShrink: 0 }}>{legend}</View>}
     </View>}
     <View style={styles.panelBody}>{children}</View>
     {footer && <View style={styles.panelFooter}><Text style={styles.footNote}>{footer}</Text></View>}
@@ -213,11 +213,23 @@ function SubHeading({ children }: { children: ReactNode }) { return <Text style=
 type LegendItem = { label: string; colour: string; shape?: "bar" | "line" | "swatch" };
 function Legend({ items, align = "left" }: { items: LegendItem[]; align?: "left" | "right" }) {
   const right = align === "right";
-  return <View style={[styles.legend, right ? { marginTop: 0, justifyContent: "flex-end" } : {}]}>{items.map((item) => <View key={item.label} style={[styles.legendItem, right ? { marginRight: 0, marginLeft: 9, marginBottom: 2 } : {}]}>
+  // Up to three keys sit side by side on one line. Beyond that a fixed two-column
+  // grid keeps the rows even (four keys read as 2x2) instead of wrapping ragged.
+  const grid = items.length > 3;
+  return <View style={[
+    styles.legend,
+    right ? { marginTop: 0, justifyContent: "flex-end" } : {},
+    grid ? { width: 196, alignSelf: right ? "flex-end" : "flex-start", justifyContent: "flex-start" } : {},
+  ]}>{items.map((item) => <View key={item.label} style={[
+    styles.legendItem,
+    right ? { marginRight: 0, marginLeft: 9, marginBottom: 2 } : {},
+    grid ? {} : { flexShrink: 0 },
+    grid ? { width: "50%", marginLeft: 0, marginRight: 0, paddingRight: 6, marginBottom: 3, alignItems: "flex-start" } : {},
+  ]}>
     {item.shape === "line"
-      ? <View style={{ width: 12, height: 2.4, backgroundColor: item.colour, marginRight: 4 }} />
-      : <View style={[styles.legendDot, item.shape === "bar" || item.shape === "swatch" ? { width: 8, height: 7, borderRadius: 1 } : {}, { backgroundColor: item.colour }]} />}
-    <Text style={styles.legendText}>{item.label}</Text>
+      ? <View style={{ width: 12, height: 2.4, backgroundColor: item.colour, marginRight: 4, marginTop: 2 }} />
+      : <View style={[styles.legendDot, item.shape === "bar" || item.shape === "swatch" ? { width: 8, height: 7, borderRadius: 1 } : {}, { backgroundColor: item.colour }, grid ? { marginTop: 1 } : {}]} />}
+    <Text style={[styles.legendText, grid ? { flex: 1, lineHeight: 1.2 } : {}]}>{item.label}</Text>
   </View>)}</View>;
 }
 
@@ -354,8 +366,8 @@ function TimelineChart({ rows, chartHeight = 235 }: { rows: readonly ReportPatte
         {r.incidencePer1000h !== null && <Circle cx={x(i)} cy={rateY(r.incidencePer1000h)} r={2.4} fill={C.amber} stroke={C.white} strokeWidth={0.8} />}
       </G>)}
       {/* Both axis titles run vertically alongside their own scale. */}
-      <SvgText x={11} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 11 ${top + plotH / 2})`} fontSize={7} fontWeight="bold" fill={C.ink}>Injury Cases</SvgText>
-      {hasRates && <SvgText x={w - 9} y={top + plotH / 2} textAnchor="middle" transform={`rotate(90 ${w - 9} ${top + plotH / 2})`} fontSize={7} fontWeight="bold" fill={C.ink}>Injuries Per 1,000 Hours</SvgText>}
+      <SvgText x={9} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 9 ${top + plotH / 2})`} fontSize={7} fontWeight="bold" fill={C.ink}>Injury Cases</SvgText>
+      {hasRates && <SvgText x={w - 7} y={top + plotH / 2} textAnchor="middle" transform={`rotate(90 ${w - 7} ${top + plotH / 2})`} fontSize={7} fontWeight="bold" fill={C.ink}>Injuries Per 1,000 Hours</SvgText>}
     </Svg>
   </View>;
 }
@@ -448,12 +460,10 @@ function RankedCountTable({ rows, limit = 8, heading, rowHeight = 15 }: { rows: 
   const max = Math.max(1, ...ranked.map((r) => r.timeLossInjuries));
   return <View>
     <View style={styles.tableHead}>
-      <Text style={[styles.columnHead, { width: 16 }]}>#</Text>
       <Text style={[styles.columnHead, { flex: 1 }]}>{heading}</Text>
       <Text style={[styles.columnHead, { width: 52, textAlign: "right" }]}>Cases</Text>
     </View>
-    {ranked.map((r, i) => <View key={r.code} style={[styles.tableRow, { minHeight: rowHeight }]}>
-      <Text style={[styles.tableCell, { width: 16, color: C.muted, fontSize: 6.5 }]}>{String(i + 1).padStart(2, "0")}</Text>
+    {ranked.map((r) => <View key={r.code} style={[styles.tableRow, { minHeight: rowHeight }]}>
       <Text style={[styles.tableCell, { flex: 1, paddingRight: 4 }]}>{r.label}</Text>
       <View style={{ width: 52, alignItems: "flex-end" }}>
         <Text style={{ backgroundColor: heatColour(r.timeLossInjuries, max), color: readableOn(heatColour(r.timeLossInjuries, max)), fontFamily: "Helvetica-Bold", fontSize: 6.8, paddingVertical: 1.5, paddingHorizontal: 6, borderRadius: 2, textAlign: "right" }}>{r.timeLossInjuries}</Text>
@@ -678,7 +688,6 @@ function ImpactMatrix({ rows, chartHeight = 250, gradientId }: { rows: readonly 
   const radius = 6.5;
   const points = data.map((r) => ({ x: px(r.incidencePer1000h ?? 0), y: py(r.meanSeverityDays ?? 0) }));
   const labels = placeLabels(points, radius, { x0: left, y0: top, x1: left + plotW, y1: top + plotH });
-  const sparse = data.some((r) => r.timeLossInjuries <= 2);
   // The key is split into two aligned tables so every label and burden lines up.
   const half = Math.ceil(data.length / 2);
   const keyColumns = [data.slice(0, half), data.slice(half)];
@@ -704,7 +713,7 @@ function ImpactMatrix({ rows, chartHeight = 250, gradientId }: { rows: readonly 
       {/* A moved numeral gets its own white disc, so a crossing leader never runs through it. */}
       {labels.map((spot, i) => spot.offset ? <Circle key={`pad-${data[i].code}`} cx={spot.x} cy={spot.y} r={5.2} fill={C.white} stroke={C.line} strokeWidth={0.4} /> : null)}
       {data.map((r, i) => { const spot = labels[i]; return <SvgText key={`n-${r.code}`} x={spot.x} y={spot.y + 2.3} textAnchor="middle" fontSize={6.5} fontWeight="bold" fill={spot.offset ? C.ink : C.white}>{i + 1}</SvgText>; })}
-      <SvgText x={2} y={top - 8} fontSize={6.8} fill={C.ink}>Mean Severity, Days</SvgText>
+      <SvgText x={9} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 9 ${top + plotH / 2})`} fontSize={6.8} fill={C.ink}>Mean Severity, Days</SvgText>
       <SvgText x={left + plotW / 2} y={h - 3} textAnchor="middle" fontSize={6.8} fill={C.ink}>Incidence, Injuries /1,000 h</SvgText>
     </Svg>
     <View style={{ flexDirection: "row", marginHorizontal: -5, marginTop: 8 }}>
@@ -725,9 +734,6 @@ function ImpactMatrix({ rows, chartHeight = 250, gradientId }: { rows: readonly 
         </View>; })}
       </View>)}
     </View>
-    {sparse && <View style={{ borderTopWidth: 1, borderTopColor: C.rule, marginTop: 6, paddingTop: 5 }}>
-      <Text style={styles.footNote}>Groups based on one or two injuries carry wide uncertainty and should be read cautiously.</Text>
-    </View>}
   </View>;
 }
 
@@ -818,7 +824,8 @@ function scatterLegend(model: ReportModel): LegendItem[] {
   return [
     ...(subject ? [{ label: model.subjectName, colour: model.brand.accentColour }] : []),
     { label: subject ? "Other Teams" : "Teams", colour: C.blue },
-    { label: "League Mean", colour: C.coral, shape: "line" as const },
+    { label: "Match Mean", colour: C.red, shape: "line" as const },
+    { label: "Training Mean", colour: C.orange, shape: "line" as const },
   ];
 }
 function ComparisonScatter({ model, chartHeight = 275 }: { model: ReportModel; chartHeight?: number }) {
@@ -842,8 +849,11 @@ function ComparisonScatter({ model, chartHeight = 275 }: { model: ReportModel; c
         <Line x1={px(tick)} x2={px(tick)} y1={top} y2={top + plotH} stroke={C.rule} strokeWidth={0.8} />
         <SvgText x={px(tick)} y={top + plotH + 12} textAnchor="middle" fontSize={6.5} fill={C.muted}>{tickText(tick)}</SvgText>
       </G>)}
-      <Line x1={px(meanX)} x2={px(meanX)} y1={top} y2={top + plotH} stroke={C.coral} strokeWidth={1} strokeDasharray="4 3" />
-      <Line x1={left} x2={left + plotW} y1={py(meanY)} y2={py(meanY)} stroke={C.coral} strokeWidth={1} strokeDasharray="4 3" />
+      {/* Red for the match mean and orange for the training mean, each named on its own line. */}
+      <Line x1={px(meanX)} x2={px(meanX)} y1={top} y2={top + plotH} stroke={C.red} strokeWidth={1} strokeDasharray="4 3" />
+      <SvgText x={px(meanX) + (px(meanX) > left + plotW * 0.8 ? -3 : 3)} y={top + 7} textAnchor={px(meanX) > left + plotW * 0.8 ? "end" : "start"} fontSize={6} fontWeight="bold" fill={C.red}>Match Mean</SvgText>
+      <Line x1={left} x2={left + plotW} y1={py(meanY)} y2={py(meanY)} stroke={C.orange} strokeWidth={1} strokeDasharray="4 3" />
+      <SvgText x={left + plotW - 2} y={py(meanY) - 3} textAnchor="end" fontSize={6} fontWeight="bold" fill={C.orange}>Training Mean</SvgText>
       {data.map((r, i) => <Circle key={`${r.label}-${i}`} cx={px(r.matchIncidencePer1000h ?? 0)} cy={py(r.trainingIncidencePer1000h ?? 0)} r={4 + Math.sqrt((r.exposureHours ?? 0) / maxExposure) * 8} fill={r.isSubject ? model.brand.accentColour : C.blue} opacity={r.isSubject ? 1 : 0.55} stroke={C.white} strokeWidth={1} />)}
       {subject && (() => {
         // The point stays put; the name is offset with a leader line and flips
@@ -855,7 +865,7 @@ function ComparisonScatter({ model, chartHeight = 275 }: { model: ReportModel; c
           <SvgText x={sx + 19 * side} y={sy - 12} textAnchor={flip ? "end" : "start"} fontSize={8} fontWeight="bold" fill={model.brand.accentColour}>{model.subjectName}</SvgText>
         </G>;
       })()}
-      <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Training Incidence (per 1,000 player-hours)</SvgText>
+      <SvgText x={9} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 9 ${top + plotH / 2})`} fontSize={6.8} fill={C.ink}>Training Incidence (per 1,000 player-hours)</SvgText>
       <SvgText x={left + plotW / 2} y={h - 5} textAnchor="middle" fontSize={6.8} fill={C.ink}>Match Incidence (injuries per 1,000 player-hours)</SvgText>
     </Svg>
   </View>;
@@ -904,8 +914,8 @@ function ExposureTrend({ model, chartHeight = 218 }: { model: ReportModel; chart
         })()}
         <SvgText x={x(i)} y={top + plotH + 12} textAnchor="middle" fontSize={6.5} fill={C.muted}>{shortMonth(r.month)}</SvgText>
       </G>)}
-      <SvgText x={2} y={top - 9} fontSize={6.8} fill={C.ink}>Player-hours</SvgText>
-      <SvgText x={w - 2} y={top - 9} textAnchor="end" fontSize={6.8} fill={C.ink}>Distance (km)</SvgText>
+      <SvgText x={9} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 9 ${top + plotH / 2})`} fontSize={6.8} fill={C.ink}>Player-hours</SvgText>
+      <SvgText x={w - 7} y={top + plotH / 2} textAnchor="middle" transform={`rotate(90 ${w - 7} ${top + plotH / 2})`} fontSize={6.8} fill={C.ink}>Distance (km)</SvgText>
     </Svg>
   </View>;
 }
@@ -913,10 +923,10 @@ function ExposureLadder({ model, keyName, unit, colour, rowGap = 9 }: { model: R
   const rows = model.comparisonHeatmap.filter((r) => r[keyName] !== null).sort((a, b) => (b[keyName] ?? 0) - (a[keyName] ?? 0));
   const max = Math.max(1, ...rows.map((r) => r[keyName] ?? 0));
   return <View>
-    <View style={[styles.tableHead, { marginBottom: 6 }]}>
+    <View style={[styles.tableHead, { marginBottom: 6, borderBottomWidth: 0.8, borderBottomColor: C.line }]}>
       <Text style={[styles.columnHead, { width: 15 }]}>#</Text>
       <Text style={[styles.columnHead, { width: 74 }]}>Club</Text>
-      <Text style={[styles.columnHead, { flex: 1 }]}>0 to {fmt(max, "", 0)}</Text>
+      <Text style={[styles.columnHead, { flex: 1 }]} />
       <Text style={[styles.columnHead, { width: 36, textAlign: "right" }]}>{unit}</Text>
     </View>
     {rows.map((r, i) => <View key={`${r.label}-${i}`} style={{ flexDirection: "row", alignItems: "center", marginBottom: rowGap }}>
@@ -1033,13 +1043,13 @@ function SeasonImpactChart({ comparison, setting = "all", chartHeight = 190 }: {
         <SvgText x={point.x} y={index === 0 ? point.y - point.r - 6 : point.y + point.r + 10} textAnchor="middle" fontSize={7} fontWeight="bold" fill={point.colour}>{point.season}</SvgText>
       </G> : null)}
       <SvgText x={left + plotW / 2} y={h - 4} textAnchor="middle" fontSize={6.7} fontWeight="bold" fill={C.ink}>Incidence per 1,000 player-hours</SvgText>
-      <SvgText x={12} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 12 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Mean Severity in days</SvgText>
+      <SvgText x={9} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 9 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Mean Severity in days</SvgText>
     </Svg>
   </View>;
 }
 
 function SeasonMonthlyBars({ comparison, chartHeight = 205 }: { comparison: SeasonComparisonVisuals; chartHeight?: number }) {
-  const rows = comparison.monthly, w = 517, h = chartHeight, left = 38, right = 12, top = 18, bottom = 35;
+  const rows = comparison.monthly, w = 517, h = chartHeight, left = 38, right = 12, top = 10, bottom = 26;
   const plotW = w - left - right, plotH = h - top - bottom;
   const scale = niceScale(Math.max(1, ...rows.flatMap((row) => [row.previous_time_loss_injuries, row.current_time_loss_injuries])));
   const y = (value: number) => top + plotH - value / scale.top * plotH;
@@ -1060,7 +1070,7 @@ function SeasonMonthlyBars({ comparison, chartHeight = 205 }: { comparison: Seas
         </G>;
       })}
       <SvgText x={left + plotW / 2} y={h - 3} textAnchor="middle" fontSize={6.7} fontWeight="bold" fill={C.ink}>Month</SvgText>
-      <SvgText x={8} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 8 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Injury Count</SvgText>
+      <SvgText x={9} y={top + plotH / 2} textAnchor="middle" transform={`rotate(-90 9 ${top + plotH / 2})`} fontSize={6.7} fontWeight="bold" fill={C.ink}>Injury Count</SvgText>
     </Svg>
   </View>;
 }
@@ -1074,32 +1084,40 @@ function MostCommonDiagnosisPdf({ comparison }: { comparison: SeasonComparisonVi
   const bar = (value: number) => `${value / max * 100}%`;
   const dotFor = (diagnosis?: string | null) => (diagnosis && colours.get(diagnosis)) || C.grey;
   return <View>
-    <View style={[styles.tableHead, { marginBottom: 4, flexShrink: 0 }]}>
-      <Text style={[styles.columnHead, { width: 42 }]}>Rank</Text>
-      <Text style={[styles.columnHead, { flex: 1, textAlign: "right", color: SEASON_COLOURS[0] }]}>{comparison.previous_season}</Text>
-      <Text style={[styles.columnHead, { width: 46, textAlign: "center" }]}>Injuries</Text>
-      <Text style={[styles.columnHead, { flex: 1, color: SEASON_COLOURS[1] }]}>{comparison.current_season}</Text>
+    {/* Mirrored like the match-versus-training bench: the two seasons grow out from
+        a shared centre line, each diagnosis named above its own bar and its count
+        parked on the outer edge. */}
+    <View style={[styles.tableHead, { marginBottom: 6, flexShrink: 0 }]}>
+      <View style={{ width: 22 }} />
+      <Text style={[styles.columnHead, { flex: 1, textAlign: "right", paddingRight: 5, color: SEASON_COLOURS[0] }]}>{comparison.previous_season}, {max} to 0 cases</Text>
+      <View style={{ width: 14 }} />
+      <Text style={[styles.columnHead, { flex: 1, paddingLeft: 5, color: SEASON_COLOURS[1] }]}>{comparison.current_season}, 0 to {max} cases</Text>
+      <View style={{ width: 22 }} />
     </View>
-    {comparison.diagnoses.map((row) => <View key={row.setting} style={{ borderWidth: 1, borderColor: C.rule, borderRadius: 4, padding: 4, marginBottom: 4, flexShrink: 0 }}>
-      <Text style={{ color: C.navy, fontFamily: "Helvetica-Bold", fontSize: 7.5, textAlign: "center", marginBottom: 2 }}>{row.label}</Text>
+    {comparison.diagnoses.map((row) => <View key={row.setting} wrap={false} style={{ borderWidth: 1, borderColor: C.rule, borderRadius: 4, paddingHorizontal: 6, paddingBottom: 6, marginBottom: 5, flexShrink: 0 }}>
+      <Text style={{ color: C.navy, fontFamily: "Helvetica-Bold", fontSize: 7.5, textAlign: "center", backgroundColor: "#EAF1F8", marginHorizontal: -6, paddingVertical: 3, marginBottom: 6 }}>{row.label}</Text>
       {[0, 1, 2].map((rank) => {
         const previous = row.previous[rank], current = row.current[rank];
-        return <View key={rank} style={{ flexDirection: "row", alignItems: "center", flexShrink: 0, borderTopWidth: rank > 0 ? 1 : 0, borderTopColor: C.rule, paddingTop: rank > 0 ? 3 : 0, marginTop: rank > 0 ? 3 : 0 }}>
-          <Text style={{ width: 42, color: C.muted, fontFamily: "Helvetica-Bold", fontSize: 6 }}>RANK {rank + 1}</Text>
-          <View style={{ flex: 1, alignItems: "flex-end", paddingRight: 4 }}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
+        return <View key={rank} style={{ flexShrink: 0, marginTop: rank > 0 ? 5 : 0 }}>
+          <View style={{ flexDirection: "row", alignItems: "flex-end", marginBottom: 2 }}>
+            <View style={{ width: 22 }} />
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingRight: 5 }}>
               <Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.15, textAlign: "right" }}>{previous?.diagnosis ?? "Not available"}</Text>
               <View style={[styles.legendDot, { width: 5, height: 5, borderRadius: 2.5, marginLeft: 4, marginRight: 0, backgroundColor: dotFor(previous?.diagnosis) }]} />
             </View>
-            <View style={{ height: 6, width: "100%", backgroundColor: C.track, marginTop: 2, alignItems: "flex-end" }}><View style={{ height: 6, width: bar(previous?.time_loss_injuries ?? 0), backgroundColor: SEASON_COLOURS[0] }} /></View>
-          </View>
-          <Text style={{ width: 46, textAlign: "center", fontFamily: "Helvetica-Bold", fontSize: 7 }}>{previous?.time_loss_injuries ?? 0} | {current?.time_loss_injuries ?? 0}</Text>
-          <View style={{ flex: 1, paddingLeft: 4 }}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={{ width: 14 }} />
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", paddingLeft: 5 }}>
               <View style={[styles.legendDot, { width: 5, height: 5, borderRadius: 2.5, marginRight: 4, backgroundColor: dotFor(current?.diagnosis) }]} />
               <Text style={{ color: C.ink, fontSize: 6.2, lineHeight: 1.15 }}>{current?.diagnosis ?? "Not available"}</Text>
             </View>
-            <View style={{ height: 6, width: "100%", backgroundColor: C.track, marginTop: 2 }}><View style={{ height: 6, width: bar(current?.time_loss_injuries ?? 0), backgroundColor: SEASON_COLOURS[1] }} /></View>
+            <View style={{ width: 22 }} />
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={{ width: 22, textAlign: "right", paddingRight: 4, color: C.ink, fontSize: 6.8 }}>{previous?.time_loss_injuries ?? 0}</Text>
+            <View style={{ flex: 1, height: 10, backgroundColor: C.track, alignItems: "flex-end", marginRight: 5 }}><View style={{ height: 10, width: bar(previous?.time_loss_injuries ?? 0), backgroundColor: SEASON_COLOURS[0] }} /></View>
+            <View style={{ width: 14 }} />
+            <View style={{ flex: 1, height: 10, backgroundColor: C.track, marginLeft: 5 }}><View style={{ height: 10, width: bar(current?.time_loss_injuries ?? 0), backgroundColor: SEASON_COLOURS[1] }} /></View>
+            <Text style={{ width: 22, paddingLeft: 4, color: C.ink, fontSize: 6.8 }}>{current?.time_loss_injuries ?? 0}</Text>
           </View>
         </View>;
       })}
@@ -1111,7 +1129,8 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
   return <Page size="A4" style={styles.cover}>
     {/* The image is already dark on the left, keeping the text legible without obscuring the player. */}
     {model.brand.heroDataUri && <Image fixed src={model.brand.heroDataUri} style={{ position: "absolute", left: 0, top: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-    <View style={{ position: "absolute", left: 0, top: 0, width: 6, height: "100%", backgroundColor: model.brand.accentColour }} />
+    {/* The cover spine stays cyan for every subject; the team is identified by its crest and name. */}
+    <View style={{ position: "absolute", left: 0, top: 0, width: 6, height: "100%", backgroundColor: C.cyan }} />
     <View style={{ height: 48, flexDirection: "row", alignItems: "center", marginHorizontal: 30, marginTop: 30 }}>
       {model.brand.urcLogoDataUri && <Image src={model.brand.urcLogoDataUri} style={{ width: 31, height: 32, objectFit: "contain", marginRight: 10 }} />}
       {/* The old lockup repeated the cover title. It is the league wordmark now;
@@ -1122,14 +1141,15 @@ function CoverPage({ model, meta }: { model: ReportModel; meta: ReportMetadata }
       <Text style={{ color: "#D8E4F0", fontFamily: "Helvetica-Bold", fontSize: 7, letterSpacing: .7, marginRight: 9 }}>IN PARTNERSHIP WITH</Text>
       {model.brand.partnerLogoDataUri && <Image src={model.brand.partnerLogoDataUri} style={{ width: 31, height: 34, objectFit: "contain" }} />}
     </View>
-    {model.scope === "team" && model.brand.crestDataUri && <View style={{ position: "absolute", right: 31, top: 82, width: 84, height: 84, borderRadius: 8, backgroundColor: C.white, padding: 11, alignItems: "center", justifyContent: "center" }}><Image src={model.brand.crestDataUri} style={{ width: 62, height: 62, objectFit: "contain" }} /></View>}
     <View style={{ flex: 1, width: "61%", justifyContent: "center", paddingRight: 18, marginLeft: 30 }}>
+      {/* The crest sits bare above the title; the hero is dark enough behind it to need no plate. */}
+      {model.scope === "team" && model.brand.crestDataUri && <Image src={model.brand.crestDataUri} style={{ width: 72, height: 72, objectFit: "contain", marginBottom: 14 }} />}
       <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 8, letterSpacing: 1.5 }}>{model.scope === "league" ? "LEAGUE REPORT" : "TEAM PERFORMANCE REPORT"}</Text>
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 36, lineHeight: 1.02, marginTop: 14 }}>{model.subjectName}</Text>
       {/* SCRIIPT is set to the cover title size, so the programme reads as strongly as the subject. */}
       <Text style={{ color: C.white, fontFamily: "Helvetica-Bold", fontSize: 36, lineHeight: 1.02, marginTop: 4 }}>SCRIIPT</Text>
       <Text style={{ color: "#D8E4F0", fontSize: 10.5, lineHeight: 1.3, marginTop: 6 }}>Surveillance Of Continental Rugby Injury, Illness And Performance Tracking</Text>
-      <View style={{ width: 54, height: 3, backgroundColor: model.brand.accentColour, marginTop: 18 }} />
+      <View style={{ width: 54, height: 3, backgroundColor: C.cyan, marginTop: 18 }} />
       <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 16, marginTop: 13 }}>{model.season} Season</Text>
     </View>
     <View style={{ width: "61%", borderTopWidth: 1, borderTopColor: "#36516E", paddingTop: 13, marginLeft: 30, marginBottom: 34, flexDirection: "row" }}>
@@ -1385,13 +1405,13 @@ function SeasonMethodology({ model, meta }: { model: ReportModel; meta: ReportMe
     <PageTitle title="Season Comparison" />
     {comparison ? <>
       <View style={{ height: 111 }}><ComparisonKpiCards comparison={comparison} /></View>
-      <View style={{ marginTop: 8, height: 252 }}>
+      <View style={{ marginTop: 8, height: 180 }}>
         <Panel fill title="Injuries By Month" legend={<Legend align="right" items={seasonLegend(comparison)} />}>
-          <SeasonMonthlyBars comparison={comparison} chartHeight={186} />
+          <SeasonMonthlyBars comparison={comparison} chartHeight={120} />
         </Panel>
       </View>
-      <View style={{ marginTop: 8 }}>
-        <Panel title="Most Common Diagnosis" note="The three leading diagnoses by injury count for Overall, Match and Training." legend={<Legend align="right" items={seasonLegend(comparison)} />}>
+      <View style={{ marginTop: 8, flex: 1 }}>
+        <Panel fill title="Most Common Diagnosis" note="The three leading diagnoses by injury count for Overall, Match and Training." legend={<Legend align="right" items={seasonLegend(comparison)} />}>
           <MostCommonDiagnosisPdf comparison={comparison} />
         </Panel>
       </View>
@@ -1417,7 +1437,8 @@ function ClosingPage({ model }: { model: ReportModel }) {
       <Text style={{ color: "#D8E4F0", fontSize: 10.5, textAlign: "center", lineHeight: 1.3, marginTop: 8 }}>Surveillance Of Continental Rugby Injury, Illness And Performance Tracking</Text>
       <Text style={{ color: C.cyan, fontFamily: "Helvetica-Bold", fontSize: 16, textAlign: "center", marginTop: 14 }}>{model.subjectName} · {model.season}</Text>
       <View style={{ width: 56, height: 3, backgroundColor: model.brand.accentColour, marginVertical: 23 }} />
-      {model.scope === "team" && model.brand.crestDataUri && <View style={{ width: 78, height: 78, borderRadius: 8, backgroundColor: C.white, padding: 11, alignItems: "center", justifyContent: "center" }}><Image src={model.brand.crestDataUri} style={{ width: 56, height: 56, objectFit: "contain" }} /></View>}
+      {/* The crest sits bare on the scrim, matching the cover. */}
+      {model.scope === "team" && model.brand.crestDataUri && <Image src={model.brand.crestDataUri} style={{ width: 72, height: 72, objectFit: "contain" }} />}
     </View>
   </Page>;
 }
