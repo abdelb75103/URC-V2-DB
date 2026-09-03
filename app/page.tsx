@@ -27,11 +27,6 @@ export default function Home() {
             <TeamTile key={team.id} team={team} href={`/team/${team.id}`} />
           ))}
         </div>
-
-        <p className="mx-auto mt-10 max-w-2xl text-center text-xs leading-relaxed text-muted-foreground">
-          Only aggregates that have passed governance-approved disclosure control are
-          published. Team dashboards appear as their cleared aggregates are released.
-        </p>
       </div>
     </div>
   );
