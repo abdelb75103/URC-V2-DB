@@ -5,17 +5,14 @@ import { currentExposureWarnings } from '@/lib/exposure-chart';
 import {
   useId,
   useLayoutEffect,
-  useOptimistic,
   useRef,
   useState,
-  useTransition,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, X } from 'lucide-react';
 import type {
   DashboardSupplement,
@@ -62,6 +59,7 @@ import {
 import { SUPPORTED_DASHBOARD_SEASONS, type DashboardSeason } from '@/lib/dashboard-season';
 import type { SeasonComparisonData } from '@/lib/season-comparison';
 import { SeasonComparison } from '@/components/dashboard/season-comparison';
+import { LinkPendingStatus } from '@/components/link-pending-status';
 import {
   DASHBOARD_TABS,
   DEFAULT_DASHBOARD_TAB,
@@ -255,29 +253,11 @@ function SeasonSelector({ season, seasonPath, activeTab }: {
   seasonPath: string;
   activeTab: DashboardTab;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [optimisticSeason, setOptimisticSeason] = useOptimistic(season);
   const tabParameter = activeTab === DEFAULT_DASHBOARD_TAB ? '' : `&tab=${activeTab}`;
-
-  const selectSeason = (event: ReactMouseEvent<HTMLAnchorElement>, option: DashboardSeason) => {
-    const modifiedClick = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
-    if (modifiedClick || event.currentTarget.target === '_blank') return;
-
-    event.preventDefault();
-    if (option === optimisticSeason) return;
-
-    const href = `${seasonPath}?season=${option}${tabParameter}`;
-    startTransition(() => {
-      setOptimisticSeason(option);
-      router.push(href);
-    });
-  };
 
   return (
     <nav
       aria-label="Choose season"
-      aria-busy={isPending}
       className="mt-3 inline-flex rounded-md border border-border bg-background/50 p-1"
     >
       {SUPPORTED_DASHBOARD_SEASONS.map((option) => (
@@ -285,23 +265,16 @@ function SeasonSelector({ season, seasonPath, activeTab }: {
           key={option}
           href={`${seasonPath}?season=${option}${tabParameter}`}
           prefetch={false}
-          aria-current={optimisticSeason === option ? 'page' : undefined}
-          aria-busy={isPending && optimisticSeason === option}
-          onClick={(event) => selectSeason(event, option)}
-          className={`relative min-h-11 rounded px-3 py-2 text-sm font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${optimisticSeason === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          aria-current={season === option ? 'page' : undefined}
+          className={`relative min-h-11 rounded px-3 py-2 text-sm font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${season === option ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
         >
           {option}
-          {isPending && optimisticSeason === option && (
-            <span
-              aria-hidden="true"
-              className="absolute inset-x-2 bottom-1 h-0.5 rounded-full bg-primary-foreground/70 motion-safe:animate-pulse"
-            />
-          )}
+          <LinkPendingStatus
+            label={`Loading ${option} season`}
+            className={`inset-x-2 bottom-1 h-0.5 rounded-full ${season === option ? 'bg-primary-foreground/70' : 'bg-primary'}`}
+          />
         </Link>
       ))}
-      <span className="sr-only" role="status" aria-live="polite">
-        {isPending ? `Loading ${optimisticSeason} season` : ''}
-      </span>
     </nav>
   );
 }

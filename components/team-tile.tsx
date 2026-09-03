@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Lock } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { LinkPendingStatus } from '@/components/link-pending-status';
 import { cn } from '@/lib/utils';
 
 export type TileData = {
@@ -84,8 +85,12 @@ export function TeamTile({ team, href, featured = false }: TeamTileProps) {
   }
 
   return (
-    <Link href={href} prefetch={false} className="group block">
+    <Link href={href} prefetch={false} className="group relative block">
       {inner}
+      <LinkPendingStatus
+        label={`Loading ${team.name} dashboard`}
+        className="right-3 top-3 h-5 w-5 rounded-full border-2 border-primary bg-background"
+      />
     </Link>
   );
 }

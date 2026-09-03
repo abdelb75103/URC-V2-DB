@@ -114,7 +114,7 @@ test('published league dashboard is unlocked on the homepage', async () => {
 
   assert.match(home, /name: 'URC Overall'[\s\S]*status: 'live' as const/);
   assert.match(home, /href="\/urc"/);
-  assert.match(tile, /<Link href=\{href\} prefetch=\{false\} className="group block">/);
+  assert.match(tile, /<Link href=\{href\} prefetch=\{false\} className="group relative block">/);
 });
 
 test('shared readers use the v8 successor while preserving direct Year 1 pass-through', async () => {

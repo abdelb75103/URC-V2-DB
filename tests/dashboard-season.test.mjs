@@ -61,13 +61,17 @@ test('the shared dashboard renders an accessible season selector on the current 
   assert.match(dashboard, /href=\{`\$\{seasonPath\}\?season=\$\{option\}\$\{tabParameter\}`\}/);
 });
 
-test('season switching gives immediate feedback and suppresses duplicate navigation', async () => {
-  const dashboard = await readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8');
+test('team, league and season links give native link-local pending feedback', async () => {
+  const [dashboard, teamTile, status] = await Promise.all([
+    readFile(new URL('../components/dashboard/team-dashboard.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/team-tile.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../components/link-pending-status.tsx', import.meta.url), 'utf8'),
+  ]);
 
-  assert.match(dashboard, /useOptimistic\(season\)/);
-  assert.match(dashboard, /startTransition\(\(\) => \{[\s\S]*setOptimisticSeason\(option\);[\s\S]*router\.push\(href\)/);
-  assert.match(dashboard, /if \(option === optimisticSeason\) return/);
-  assert.match(dashboard, /aria-current=\{optimisticSeason === option \? 'page' : undefined\}/);
-  assert.match(dashboard, /aria-busy=\{isPending && optimisticSeason === option\}/);
-  assert.match(dashboard, /Loading \$\{optimisticSeason\} season/);
+  assert.match(status, /useLinkStatus\(\)/);
+  assert.match(status, /role="status" aria-live="polite"/);
+  assert.match(dashboard, /<LinkPendingStatus[\s\S]*Loading \$\{option\} season/);
+  assert.match(dashboard, /aria-current=\{season === option \? 'page' : undefined\}/);
+  assert.doesNotMatch(dashboard, /useOptimistic|useTransition|router\.push/);
+  assert.match(teamTile, /<LinkPendingStatus[\s\S]*Loading \$\{team\.name\} dashboard/);
 });
