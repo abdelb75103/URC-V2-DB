@@ -1548,7 +1548,7 @@ function ReportsTab({ model }: { model: ReportModel }) {
       <div>
         <SectionHeading title="Reports" />
         <p className="-mt-4 text-sm text-muted-foreground">
-          Preview and export a versioned PDF built from this dashboard&apos;s released values.
+          Preview and export a versioned PDF built from this dashboard&apos;s values.
         </p>
       </div>
       <ReportPreview
