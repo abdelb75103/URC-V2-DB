@@ -101,14 +101,17 @@ export function ReportPreview({ model, enabledSectionIds, fileName, sectionContr
   const generating = !empty && !currentPdf && !error;
   const loadingPreview = !empty && !error && (!currentPdf || pageCount === 0);
   const status = empty
-    ? "0 pages. Restore a section to generate a preview."
+    ? "No sections selected. Restore a section to generate a preview."
     : generating || loadingPreview
-      ? `Generating ${sections.length}-page report...`
-      : error ?? `${pageCount}-page PDF ready to export. Scroll to review.`;
+      ? "Generating report..."
+      : error ?? "Report ready to export. Scroll to review.";
   const previewPages = reportPreviewPages(sections).slice(0, pageCount);
   return <section className="min-h-[calc(100vh-13rem)] rounded-xl border border-border bg-muted/20 p-3 sm:p-5" aria-label="PDF report preview">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-      <p id="report-preview-status" role="status" aria-live="polite" aria-atomic="true" className="text-sm text-muted-foreground">{status}</p>
+      <div className="min-w-0">
+        <p id="report-preview-status" role="status" aria-live="polite" aria-atomic="true" className="text-sm text-muted-foreground">{status}</p>
+        <p className="mt-1 text-sm text-muted-foreground">Remove any sections you do not want, and restore them whenever you need. The exported PDF matches this preview.</p>
+      </div>
       <Button type="button" onClick={download} disabled={!currentPdf || loadingPreview} aria-describedby="report-preview-status" className="min-h-11 gap-2"><Download className="size-4" aria-hidden="true" />Export PDF</Button>
     </div>
     {sectionControls && <div key="section-controls">{sectionControls}</div>}

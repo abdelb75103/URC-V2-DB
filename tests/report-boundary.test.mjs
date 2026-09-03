@@ -47,7 +47,8 @@ test('the preview exposes accessible updating and empty states', async () => {
   assert.match(preview, /role="region" tabIndex=\{0\} aria-label="Scrollable PDF report pages" aria-busy=\{generating \|\| loadingPreview\}/);
   assert.match(preview, /aria-describedby="report-preview-status"/);
   assert.match(preview, /No report sections selected/);
-  assert.match(preview, /0 pages\. Restore a section/);
+  assert.match(preview, /No sections selected\. Restore a section/);
+  assert.doesNotMatch(preview, /pageCount\}-page|sections\.length\}-page/);
   assert.match(preview, /TextLayer\.css/);
   assert.doesNotMatch(preview, /renderTextLayer=\{false\}/);
   assert.doesNotMatch(preview, /<section[^>]*aria-busy/);
