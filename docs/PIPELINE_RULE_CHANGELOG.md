@@ -11,6 +11,20 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-09-15: Local 2025-26 Benetton exposure join and source exceptions
+
+Status: `accepted-local-preparation`, `not-yet-in-pipeline`. Rule `benetton_weekly_join_20260915_v3` applies only to this Benetton 2025-26 submission. Abdel supplied the calendar and source-season interpretation and explicitly requested retention of friendly-match minutes and distances. Database ingestion, processing, release and replacement of the temporary estimate remain separate actions. No live denominator or reporting view changed.
+
+The minutes source is the `data.csv` uploaded on 14 September 2026. Its 2,952 athlete/week/category rows are combined with the older all-season GPS workbook's 1,882 athlete/week distance rows. Aggregate minutes once per athlete/week and use each reported weekly distance once. Retain every original row and a checksum-bound many-to-one source bridge. Never copy one weekly distance into each category row or apportion it without evidence.
+
+Use the explicitly assumed Week 1 start of 14 July 2025, with consecutive seven-day weeks. Week 8 starts 1 September 2025; weeks 1 to 7 are excluded. The GPS workbook's embedded 2024-25 dates remain in source evidence and are not presented as observed 2025-26 dates. Assign each weekly record to the calendar month of its assumed week-start date, retaining the whole weekly total in that month.
+
+Retain friendly-match minutes and reported weekly distances together, including mixed friendly/training weeks, under Abdel's explicit submission-specific exception. Record the limitation in internal intake documentation for future team follow-up and disclosure. Do not add a front-facing caveat as part of this local preparation. This is not a general relaxation of other teams' non-URC-match, academy, international or rehab/RTP exclusions.
+
+The existing weekly validity limits and missing-value exclusions still apply. The join has 192 minutes weeks without GPS distance and 366 GPS weeks without minutes. The minutes source ends at week 43, while GPS continues to week 50. Preserve these unmatched rows as exclusions; do not fabricate late-season hours or zero-fill monthly graphs. Candidate identities remain protected outside Git and are not an authoritative codebook promotion.
+
+Local canonical data, source decisions, monthly totals, QC and review evidence are retained under `data/intake/2025-26/benetton/`. A later approved processing and release successor must carry this rule version and its source-bound decisions. No automatic carry-forward to another season is authorised.
+
 ## 2026-09-03: Included 2025-26 injury-to-illness correction
 
 Status: `applied-and-verified-targeted-correction`. Migration `20260903010000_urc_2025_26_injury_to_illness_reporting.sql` is applied and checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`, with SHA-256 `dbca0452c7777d169a6b1eb2df8e5a0344591e078cb839cd46dcbfe436260297`. Abdel approved these 24 row decisions and the targeted reporting-only correction. Rule `urc_2025_26_injury_to_illness_2026_09_03_v1` is season-specific and creates no automatic diagnosis-to-problem-type rule. Wider report readiness remains qualified by the separate monthly-rate issue below.
