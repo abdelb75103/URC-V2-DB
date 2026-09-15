@@ -1429,7 +1429,7 @@ function candidateDashboardFilePath(): string | undefined {
 async function loadCandidateDashboardFile(): Promise<CandidateDashboardFile | undefined> {
   const path = candidateDashboardFilePath();
   if (!path) return undefined;
-  return candidateDashboardFileSchema.parse(JSON.parse(await readFile(path, "utf8")));
+  return candidateDashboardFileSchema.parse(JSON.parse(await readFile(/* turbopackIgnore: true */ path, "utf8")));
 }
 
 function candidateEntry<T>(entries: T[], matches: (entry: T) => boolean, label: string): T {
