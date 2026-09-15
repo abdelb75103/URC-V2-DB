@@ -32,4 +32,6 @@ test('missing monthly incidence uses released counts and exposure while preservi
   assert.equal(monthlyIncidence(20, 0, null), null);
   assert.equal(monthlyIncidence(20, null, null), null);
   assert.equal(monthlyIncidence(null, 800, null), null);
+  assert.equal(monthlyIncidence(20, 800, null, false), null);
+  assert.equal(monthlyIncidence(20, 800, 25, false), 25);
 });

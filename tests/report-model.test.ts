@@ -292,6 +292,22 @@ test("calculates missing monthly incidence from released counts and hours and pr
   assert.deepEqual(model.exposure.dataQualityWarnings, ["A club retains a source distance anomaly."]);
 });
 
+test("league report keeps an incomplete month's released null rate", () => {
+  const fixture = dashboardFixture();
+  const current = dashboardFixture({
+    scope: "league",
+    team: "United Rugby Championship",
+    monthly: [
+      { ...fixture.monthly[0], month: "Jun 2026", exposure_hours: 1290, time_loss_injuries: 11, recorded_injuries: 18, incidence_per_1000h: null, overall_incidence_per_1000h: null },
+      { ...fixture.monthly[1], month: "May 2026", incidence_per_1000h: 5, overall_incidence_per_1000h: 7 },
+    ],
+  });
+  const model = buildReportModel({ current, prior: null, expectedScope: "league", expectedSeason: current.season, subjectName: current.team, protectedTerms: ["Rivals RFC"] });
+  assert.equal(model.monthlyInjuryPattern[0].incidencePer1000h, 5);
+  assert.equal(model.monthlyInjuryPattern[1].incidencePer1000h, null);
+  assert.equal(model.monthlyInjuryPattern[1].overallIncidencePer1000h, null);
+});
+
 test("carries released HSR values and placeholder status into the exposure export", () => {
   const current = dashboardFixture({
     coverage: {

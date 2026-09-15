@@ -397,7 +397,7 @@ function OverviewTab({
         overall_incidence_per_1000h: row.overall_incidence_per_1000h ?? null,
         incidence_per_1000h: row.incidence_per_1000h ?? null,
       }));
-  const timelineRows = buildSeasonTimelineRows(monthlyRows);
+  const timelineRows = buildSeasonTimelineRows(monthlyRows, dashboard.scope !== 'league');
   const timelineHasOverallIncidence = timelineRows.some((row) => row.overall_incidence_per_1000h != null);
   const timelineHasTlIncidence = timelineRows.some((row) => row.incidence_per_1000h != null);
   // Charts start in September; KPI trends and headline totals keep the full set.
