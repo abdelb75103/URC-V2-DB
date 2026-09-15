@@ -1,4 +1,5 @@
 import "server-only";
+import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
 import { z } from "zod";
 import { comparisonDashboardSeason, type DashboardSeason } from "@/lib/dashboard-season";
@@ -967,6 +968,27 @@ type ReaderCoverage =
   | z.infer<typeof v8TeamCoverageSchema>
   | z.infer<typeof v8LeagueCoverageSchema>;
 
+const candidateDashboardFileSchema = z.object({
+  teams: z.array(z.object({
+    team_key: z.string().min(1),
+    season: z.enum(SEASON_COMPARISON_SEASONS),
+    dashboard: z.unknown(),
+  }).strict()),
+  league: z.array(z.object({
+    season: z.enum(SEASON_COMPARISON_SEASONS),
+    dashboard: z.unknown(),
+  }).strict()),
+  team_comparison: z.array(z.object({
+    team_key: z.string().min(1),
+    comparison: z.unknown(),
+  }).strict()),
+  league_comparison: z.array(z.object({
+    comparison: z.unknown(),
+  }).strict()),
+}).strict();
+
+type CandidateDashboardFile = z.infer<typeof candidateDashboardFileSchema>;
+
 export function parseSeasonComparisonReaderRow(
   raw: unknown,
   scope: SeasonComparisonData["scope"],
@@ -1398,6 +1420,44 @@ function hsrRowsForDashboard(row: DashboardReaderRow | null | undefined) {
   return row && "hsr_team_comparison" in row ? row.hsr_team_comparison : [];
 }
 
+function candidateDashboardFilePath(): string | undefined {
+  if (process.env.NODE_ENV !== "development") return undefined;
+  const path = process.env.URC_CANDIDATE_FILE?.trim();
+  return path || undefined;
+}
+
+async function loadCandidateDashboardFile(): Promise<CandidateDashboardFile | undefined> {
+  const path = candidateDashboardFilePath();
+  if (!path) return undefined;
+  return candidateDashboardFileSchema.parse(JSON.parse(await readFile(path, "utf8")));
+}
+
+function candidateEntry<T>(entries: T[], matches: (entry: T) => boolean, label: string): T {
+  const found = entries.filter(matches);
+  if (found.length !== 1) {
+    throw new Error(`candidate dashboard file must contain exactly one ${label}`);
+  }
+  return found[0];
+}
+
+function candidateComparisonRows(candidate: CandidateDashboardFile, season: DashboardSeason): unknown[] {
+  const teamKeys = new Set<string>();
+  return candidate.teams.filter((entry) => entry.season === season).map((entry) => {
+    if (teamKeys.has(entry.team_key)) {
+      throw new Error(`candidate dashboard file has duplicate team key ${entry.team_key}`);
+    }
+    teamKeys.add(entry.team_key);
+    const dashboard = parseDashboardReaderRow(entry.dashboard, entry.season, "team");
+    return {
+      team_key: entry.team_key,
+      team: dashboard.team,
+      coverage: dashboard.coverage,
+      headline: dashboard.headline,
+      setting_metrics: dashboard.setting_metrics,
+    };
+  });
+}
+
 export type TeamPageData = {
   dashboard: DashboardData | undefined;
   comparisonDashboard: DashboardData | undefined;
@@ -1411,6 +1471,47 @@ export type TeamPageData = {
    */
   viewer_comparison_id: string | null;
 };
+
+async function loadCandidateTeamPageData(
+  candidate: CandidateDashboardFile,
+  teamId: string,
+  season: DashboardSeason,
+): Promise<TeamPageData> {
+  const teamEntry = candidateEntry(
+    candidate.teams,
+    (entry) => entry.team_key === teamId && entry.season === season,
+    `team dashboard for ${teamId} in ${season}`,
+  );
+  const comparisonSeason = comparisonDashboardSeason(season);
+  const comparisonEntry = candidateEntry(
+    candidate.teams,
+    (entry) => entry.team_key === teamId && entry.season === comparisonSeason,
+    `team dashboard for ${teamId} in ${comparisonSeason}`,
+  );
+  const dashboard = parseDashboardReaderRow(teamEntry.dashboard, season, "team");
+  const comparisonDashboard = parseDashboardReaderRow(comparisonEntry.dashboard, comparisonSeason, "team");
+  const leagueEntry = candidateEntry(candidate.league, (entry) => entry.season === season, `league dashboard for ${season}`);
+  const leagueDashboard = parseDashboardReaderRow(leagueEntry.dashboard, season, "league");
+  const seasonComparisonEntry = candidateEntry(
+    candidate.team_comparison,
+    (entry) => entry.team_key === teamId,
+    `team comparison for ${teamId}`,
+  );
+  const { rows, comparisonIdByTeamKey } = normalizeTeamComparisonsWithKeys(
+    candidateComparisonRows(candidate, season),
+    season,
+    hsrRowsForDashboard(dashboard),
+  );
+
+  return {
+    dashboard: normalizeDashboardRow(dashboard, "team"),
+    comparisonDashboard: normalizeDashboardRow(comparisonDashboard, "team"),
+    comparisons: rows,
+    leagueMetrics: normalizeLeagueMetrics(parseLeagueMetricsReaderRow(leagueDashboard, season)),
+    seasonComparison: parseSeasonComparisonReaderRow(seasonComparisonEntry.comparison, "team"),
+    viewer_comparison_id: comparisonIdByTeamKey.get(teamId) ?? null,
+  };
+}
 
 /**
  * Loads every production payload needed by a team page in one PostgreSQL
@@ -1523,6 +1624,10 @@ export async function getTeamPageData(
   teamId: string,
   season: DashboardSeason = "2024-25"
 ): Promise<TeamPageData> {
+  if (season === "2025-26") {
+    const candidate = await loadCandidateDashboardFile();
+    if (candidate) return loadCandidateTeamPageData(candidate, teamId, season);
+  }
   const pool = webReaderPool();
   const unavailable = {
     dashboard: undefined,
@@ -1549,6 +1654,34 @@ export type LeaguePageData = {
   leagueMetrics: SettingMetricRow[];
   seasonComparison: SeasonComparisonData | undefined;
 };
+
+async function loadCandidateLeaguePageData(
+  candidate: CandidateDashboardFile,
+  season: DashboardSeason,
+): Promise<LeaguePageData> {
+  const leagueEntry = candidateEntry(candidate.league, (entry) => entry.season === season, `league dashboard for ${season}`);
+  const comparisonSeason = comparisonDashboardSeason(season);
+  const comparisonEntry = candidateEntry(
+    candidate.league,
+    (entry) => entry.season === comparisonSeason,
+    `league dashboard for ${comparisonSeason}`,
+  );
+  const dashboard = parseDashboardReaderRow(leagueEntry.dashboard, season, "league");
+  const comparisonDashboard = parseDashboardReaderRow(comparisonEntry.dashboard, comparisonSeason, "league");
+  const seasonComparisonEntry = candidateEntry(candidate.league_comparison, () => true, "league comparison");
+
+  return {
+    dashboard: normalizeDashboardRow(dashboard, "league"),
+    comparisonDashboard: normalizeDashboardRow(comparisonDashboard, "league"),
+    comparisons: normalizeTeamComparisons(
+      candidateComparisonRows(candidate, season),
+      season,
+      hsrRowsForDashboard(dashboard),
+    ),
+    leagueMetrics: normalizeLeagueMetrics(parseLeagueMetricsReaderRow(dashboard, season)),
+    seasonComparison: parseSeasonComparisonReaderRow(seasonComparisonEntry.comparison, "league"),
+  };
+}
 
 /** Same single-statement snapshot guarantee as getTeamPageData(). */
 async function loadLeaguePageData(
@@ -1637,6 +1770,10 @@ async function loadLeaguePageData(
 export async function getLeaguePageData(
   season: DashboardSeason = "2024-25"
 ): Promise<LeaguePageData> {
+  if (season === "2025-26") {
+    const candidate = await loadCandidateDashboardFile();
+    if (candidate) return loadCandidateLeaguePageData(candidate, season);
+  }
   const pool = webReaderPool();
   const unavailable = {
     dashboard: undefined,

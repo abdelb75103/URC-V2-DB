@@ -206,6 +206,23 @@ V13_INTAKE_MANIFEST_SCHEMA = "urc_2025_26_v13_signed_intake_manifest_v1"
 V14_EXPOSURE_PROFILE_SCHEMA = "urc_2025_26_v14_exposure_profile_v1"
 V14_EXPOSURE_MANIFEST_SCHEMA = "urc_2025_26_v14_exposure_manifest_v1"
 V14_EXPOSURE_ROOT_SCHEMA = "urc_2025_26_v14_exposure_root_v1"
+V15_CANDIDATE_PROFILE_SCHEMA = "urc_2025_26_v15_candidate_intake_profile_v1"
+V15_CANDIDATE_MANIFEST_SCHEMA = "urc_2025_26_v15_candidate_intake_manifest_v1"
+V15_CANDIDATE_ROOT_SCHEMA = "urc_2025_26_v15_candidate_intake_root_v1"
+V15_CANDIDATE_AUTHORISATION = {
+    "database_action_authorised": True,
+    "project_ref": "eukkvswaxweenovqqgzr",
+    "database": "postgres",
+    "actions": ["ingestion"],
+}
+V15_CANDIDATE_INPUT_KINDS = {
+    "benetton": "exposure",
+    "connacht": "injury",
+    "edinburgh": "exposure",
+    "leinster": "injury",
+    "munster": "injury",
+    "ulster": "injury",
+}
 V13_DATABASE_AUTHORISATION = {
     "database_action_authorised": True,
     "basis": (
@@ -4469,8 +4486,13 @@ def validate_intake_profile_manifest(
         and isinstance(profile_document, dict)
         and profile_document.get("schema") == V14_EXPOSURE_PROFILE_SCHEMA
     )
+    v15_candidate_profile = (
+        manifest.get("schema") == V15_CANDIDATE_MANIFEST_SCHEMA
+        and isinstance(profile_document, dict)
+        and profile_document.get("schema") == V15_CANDIDATE_PROFILE_SCHEMA
+    )
     v13_authorisation_required = (
-        (season == "2025-26" and not v14_exposure_profile)
+        (season == "2025-26" and not v14_exposure_profile and not v15_candidate_profile)
         or profile.get("profile_version") == "urc_2025_26_v13_signed_profile_v1"
         or manifest.get("schema") == V13_INTAKE_MANIFEST_SCHEMA
         or (
@@ -4537,6 +4559,29 @@ def validate_intake_profile_manifest(
             ))
         ):
             raise SystemExit("V14 exposure approval envelope is missing or inconsistent")
+    elif v15_candidate_profile:
+        approval_line = clean_text(manifest.get("approval_line"))
+        approval_line_sha256 = hashlib.sha256(approval_line.encode()).hexdigest()
+        if (
+            season != "2025-26"
+            or clean_text(manifest.get("team_key")) not in V15_CANDIDATE_INPUT_KINDS
+            or clean_text(manifest.get("input_kind"))
+            != V15_CANDIDATE_INPUT_KINDS[clean_text(manifest.get("team_key"))]
+            or not approval_line
+            or any(document.get("approval_line_sha256") != approval_line_sha256 for document in (
+                manifest, profile, profile_document
+            ))
+            or any(document.get("authorisation") != V15_CANDIDATE_AUTHORISATION for document in (
+                manifest, profile, profile_document
+            ))
+            or any(
+                not all(key in document for key in (
+                    "mapping_path", "mapping_sha256", "mapping_version"
+                ))
+                for document in (profile, profile_document)
+            )
+        ):
+            raise SystemExit("V15 candidate intake approval envelope is missing or inconsistent")
     bound_fields = (
         "team", "season", "profile_version", "decision", "mapping_path", "mapping_sha256",
         "mapping_version", "ai_review_status", "ai_reviewed_by", "ai_reviewed_at", "approved_by",
@@ -5313,6 +5358,174 @@ def validate_v14_exposure_root_for_ingest(
     return root_sha256
 
 
+def validate_v15_candidate_root_for_ingest(
+    signed_root_manifest_path: Path,
+    manifest_path: Path,
+    input_path: Path,
+    input_sha256: str,
+    team: str,
+    season: str,
+) -> str:
+    """Validate the six-input, ingestion-only Year 2 candidate package."""
+    if season != "2025-26":
+        raise SystemExit("V15 candidate intake is only defined for 2025-26")
+    supplied_root = signed_root_manifest_path.absolute()
+    if supplied_root.is_symlink():
+        raise SystemExit("V15 candidate root manifest must not be a symlink")
+    root_path = supplied_root.resolve()
+    if root_path.name != "v15_candidate_intake_root_manifest.json" or not root_path.is_file():
+        raise SystemExit("2025-26 candidate ingest requires its physical V15 root manifest")
+    try:
+        root = json.loads(root_path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("V15 candidate root manifest must be valid JSON") from exc
+    if not isinstance(root, dict):
+        raise SystemExit("V15 candidate root manifest must be a JSON object")
+
+    package_root = root_path.parent
+    if (
+        not stat.S_ISDIR(package_root.lstat().st_mode)
+        or stat.S_IMODE(package_root.lstat().st_mode) != 0o700
+    ):
+        raise SystemExit("V15 candidate package root directory must have exact mode 0700")
+    actual_outputs: dict[str, str] = {}
+    for path in sorted(package_root.rglob("*")):
+        relative = path.relative_to(package_root).as_posix()
+        mode = path.lstat().st_mode
+        if stat.S_ISLNK(mode):
+            raise SystemExit("V15 candidate package must not contain symlinks")
+        if stat.S_ISDIR(mode):
+            if stat.S_IMODE(mode) != 0o700:
+                raise SystemExit("V15 candidate package directories must have exact mode 0700")
+            continue
+        if not stat.S_ISREG(mode) or stat.S_IMODE(mode) != 0o600:
+            raise SystemExit("V15 candidate package files must be regular files with mode 0600")
+        if path != root_path:
+            actual_outputs[relative] = sha256_file(path)
+    file_set_sha256 = hashlib.sha256(
+        json.dumps(actual_outputs, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    approval_line = clean_text(root.get("approval_line"))
+    approval_line_sha256 = hashlib.sha256(approval_line.encode()).hexdigest()
+    if (
+        root.get("schema") != V15_CANDIDATE_ROOT_SCHEMA
+        or root.get("season") != "2025-26"
+        or root.get("candidate_scope") != "isolated_candidate_only"
+        or root.get("approved_by") != "Abdel Babiker"
+        or root.get("approval_ready") is not True
+        or root.get("ingest_ready") is not True
+        or not approval_line
+        or root.get("approval_line_sha256") != approval_line_sha256
+        or root.get("authorisation") != V15_CANDIDATE_AUTHORISATION
+        or root.get("output_sha256s") != actual_outputs
+        or root.get("root_file_set_sha256") != file_set_sha256
+    ):
+        raise SystemExit("V15 candidate root approval, scope, or file binding is invalid")
+
+    bindings = root.get("team_inputs")
+    if not isinstance(bindings, list) or len(bindings) != len(V15_CANDIDATE_INPUT_KINDS):
+        raise SystemExit("V15 candidate root must bind exactly six candidate inputs")
+    required_binding_fields = {
+        "team_key", "input_kind", "input", "input_sha256", "manifest",
+        "manifest_sha256", "profile", "profile_sha256", "mapping", "mapping_sha256",
+    }
+    bindings_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for binding in bindings:
+        if not isinstance(binding, dict) or set(binding) != required_binding_fields:
+            raise SystemExit("V15 candidate input binding is invalid")
+        team_key = clean_text(binding.get("team_key"))
+        input_kind = clean_text(binding.get("input_kind"))
+        key = (team_key, input_kind)
+        if (
+            V15_CANDIDATE_INPUT_KINDS.get(team_key) != input_kind
+            or key in bindings_by_key
+            or any(
+                not isinstance(binding.get(field), str)
+                or not binding[field]
+                or "\\" in binding[field]
+                or Path(binding[field]).is_absolute()
+                or any(part in {"", ".", ".."} for part in binding[field].split("/"))
+                for field in ("input", "manifest", "profile", "mapping")
+            )
+            or any(
+                not isinstance(binding.get(field), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", binding[field])
+                for field in ("input_sha256", "manifest_sha256", "profile_sha256", "mapping_sha256")
+            )
+            or any(
+                actual_outputs.get(binding[path_field]) != binding[sha_field]
+                for path_field, sha_field in (
+                    ("input", "input_sha256"),
+                    ("manifest", "manifest_sha256"),
+                    ("profile", "profile_sha256"),
+                    ("mapping", "mapping_sha256"),
+                )
+            )
+        ):
+            raise SystemExit("V15 candidate input binding is invalid")
+
+        member_manifest_path = package_root / binding["manifest"]
+        member_input_path = package_root / binding["input"]
+        try:
+            member_manifest = json.loads(member_manifest_path.read_text())
+            profile = member_manifest.get("intake_profile")
+            profile_path = Path(profile["profile_path"])
+            mapping_path = Path(profile["mapping_path"])
+            if not profile_path.is_absolute():
+                profile_path = member_manifest_path.parent / profile_path
+            if not mapping_path.is_absolute():
+                mapping_path = member_manifest_path.parent / mapping_path
+            profile_relative = profile_path.resolve().relative_to(package_root).as_posix()
+            mapping_relative = mapping_path.resolve().relative_to(package_root).as_posix()
+        except (OSError, json.JSONDecodeError, AttributeError, KeyError, TypeError, ValueError) as exc:
+            raise SystemExit("V15 candidate input manifest is invalid") from exc
+        if (
+            member_manifest.get("schema") != V15_CANDIDATE_MANIFEST_SCHEMA
+            or member_manifest.get("team_key") != team_key
+            or member_manifest.get("input_kind") != input_kind
+            or member_manifest.get("authorisation") != V15_CANDIDATE_AUTHORISATION
+            or member_manifest.get("approval_line_sha256") != approval_line_sha256
+            or profile_relative != binding["profile"]
+            or mapping_relative != binding["mapping"]
+        ):
+            raise SystemExit("V15 candidate input manifest is not bound to its root member")
+        validate_intake_profile_manifest(
+            member_manifest,
+            member_manifest_path,
+            binding["input_sha256"],
+            V13_REVIEWED_V12_TEAMS[team_key][0],
+            season,
+            input_path=member_input_path,
+        )
+        bindings_by_key[key] = binding
+
+    expected_keys = {(team_key, input_kind) for team_key, input_kind in V15_CANDIDATE_INPUT_KINDS.items()}
+    if set(bindings_by_key) != expected_keys:
+        raise SystemExit("V15 candidate root does not bind the exact six candidate inputs")
+    manifest_resolved = manifest_path.resolve()
+    input_resolved = input_path.resolve()
+    try:
+        relative_manifest = manifest_resolved.relative_to(package_root).as_posix()
+        relative_input = input_resolved.relative_to(package_root).as_posix()
+    except ValueError as exc:
+        raise SystemExit("V15 candidate input must be inside the signed package") from exc
+    current_manifest = json.loads(manifest_resolved.read_text())
+    team_key = clean_text(current_manifest.get("team_key"))
+    input_kind = clean_text(current_manifest.get("input_kind"))
+    binding = bindings_by_key.get((team_key, input_kind))
+    if (
+        binding is None
+        or team != V13_REVIEWED_V12_TEAMS[team_key][0]
+        or relative_manifest != binding["manifest"]
+        or relative_input != binding["input"]
+        or input_sha256 != binding["input_sha256"]
+        or current_manifest.get("authorisation") != V15_CANDIDATE_AUTHORISATION
+        or current_manifest.get("approval_line_sha256") != approval_line_sha256
+    ):
+        raise SystemExit("current V15 candidate input is not an exact approved root member")
+    return sha256_file(root_path)
+
+
 def validate_v14_task_approval_evidence(
     path: Path,
     *,
@@ -5361,6 +5574,7 @@ def ingest(args: argparse.Namespace) -> None:
     file_hash = sha256_file(path)
     manifest_path = Path(args.manifest)
     source_manifest = json.loads(manifest_path.read_text())
+    candidate_root_sha256 = None
     if args.season == "2025-26":
         signed_root_manifest = clean_text(
             getattr(args, "signed_root_manifest", "")
@@ -5370,6 +5584,10 @@ def ingest(args: argparse.Namespace) -> None:
         root_path = Path(signed_root_manifest)
         if root_path.name == "v14_exposure_root_manifest.json":
             validate_v14_exposure_root_for_ingest(
+                root_path, manifest_path, path, file_hash, args.team, args.season,
+            )
+        elif root_path.name == "v15_candidate_intake_root_manifest.json":
+            candidate_root_sha256 = validate_v15_candidate_root_for_ingest(
                 root_path, manifest_path, path, file_hash, args.team, args.season,
             )
         else:
@@ -5411,6 +5629,8 @@ def ingest(args: argparse.Namespace) -> None:
             "redacted_manifest_keys": sorted(redacted_manifest_keys),
         },
     }
+    if candidate_root_sha256:
+        manifest["candidate_root_sha256"] = candidate_root_sha256
 
     row_sql = []
     redacted_source_value_count = 0
