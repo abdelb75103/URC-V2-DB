@@ -11,6 +11,34 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-09-15: Unreleased six-source intake candidate
+
+Status: candidate preparation, no release. Rule `urc_intake_candidate_20260915_v1` applies to the four rebuilt IRFU 2025-26 injury/illness sources and the reviewed Benetton/Edinburgh exposure inputs. Abdel authorised intake and delegated adjudication in task `01a0a287-a441-7ba3-bb63-976962cf2f4f`, explicitly preserving the served dashboard. The six exact file hashes and verbatim authority are retained in the ignored V15 intake root. Registration preserves all 13,548 rows and records that root hash in the source-file manifest.
+
+The four IRFU replacements retain all 842 source records, using their reviewed inclusion ledger. Known source anatomy takes precedence over conflicting Orchard prefixes. Exact source diagnoses remain in the source rows; unresolved identities and insufficiently specific clinical categories remain Unknown. The other twelve teams retain their effective injury and illness rows, including the September injury-to-illness correction.
+
+Benetton retains the submission-specific calendar, weekly distance join and friendly exposure decision below. Edinburgh retains Duration-first minutes, source-labelled estimates and reviewed exclusions. No missing hours or distances are filled. The batch identity version adds 47 unique exact identities while retaining all predecessor mappings.
+
+Abdel subsequently selected Benetton `HSR > 18 km/h` and Edinburgh `High Speed Running` for actual HSR. Both are paired to accepted exposure rows, in metres. Benetton uses its explicit threshold; Edinburgh's threshold remains unspecified. All 1,319 accepted Benetton weeks and 3,974 of 3,975 Edinburgh sessions have source HSR; one December Edinburgh blank stays unknown. Existing pooled HSR calculations are reused with these inputs.
+
+Candidate monthly preliminary rates join injury numerators to the same team-months contributing positive source-backed exposure. Official league monthly rates remain null where fewer than 16 teams contribute. A complete ten-month calendar retains unknown months instead of omitting them. This corrects the documented September monthly-rate mismatch only in the candidate.
+
+The private candidate schema retains source bridges, typed rows, reused versioned SQL calculators, 32 team payloads, two league payloads and 17 comparisons. Active curated builds, release selectors, live readers and cache tokens are not changed. A development-only local file option renders the candidate through the shared dashboard components. Production cannot select that file.
+
+## 2026-09-15: Local 2025-26 Benetton exposure join and source exceptions
+
+Status: `accepted-local-preparation`, `not-yet-in-pipeline`. Rule `benetton_weekly_join_20260915_v3` applies only to this Benetton 2025-26 submission. Abdel supplied the calendar and source-season interpretation and explicitly requested retention of friendly-match minutes and distances. Database ingestion, processing, release and replacement of the temporary estimate remain separate actions. No live denominator or reporting view changed.
+
+The minutes source is the `data.csv` uploaded on 14 September 2026. Its 2,952 athlete/week/category rows are combined with the older all-season GPS workbook's 1,882 athlete/week distance rows. Aggregate minutes once per athlete/week and use each reported weekly distance once. Retain every original row and a checksum-bound many-to-one source bridge. Never copy one weekly distance into each category row or apportion it without evidence.
+
+Use the explicitly assumed Week 1 start of 14 July 2025, with consecutive seven-day weeks. Week 8 starts 1 September 2025; weeks 1 to 7 are excluded. The GPS workbook's embedded 2024-25 dates remain in source evidence and are not presented as observed 2025-26 dates. Assign each weekly record to the calendar month of its assumed week-start date, retaining the whole weekly total in that month.
+
+Retain friendly-match minutes and reported weekly distances together, including mixed friendly/training weeks, under Abdel's explicit submission-specific exception. Record the limitation in internal intake documentation for future team follow-up and disclosure. Do not add a front-facing caveat as part of this local preparation. This is not a general relaxation of other teams' non-URC-match, academy, international or rehab/RTP exclusions.
+
+The existing weekly validity limits and missing-value exclusions still apply. The join has 192 minutes weeks without GPS distance and 366 GPS weeks without minutes. The minutes source ends at week 43, while GPS continues to week 50. Preserve these unmatched rows as exclusions; do not fabricate late-season hours or zero-fill monthly graphs. Candidate identities remain protected outside Git and are not an authoritative codebook promotion.
+
+Local canonical data, source decisions, monthly totals, QC and review evidence are retained under `data/intake/2025-26/benetton/`. A later approved processing and release successor must carry this rule version and its source-bound decisions. No automatic carry-forward to another season is authorised.
+
 ## 2026-09-03: Included 2025-26 injury-to-illness correction
 
 Status: `applied-and-verified-targeted-correction`. Migration `20260903010000_urc_2025_26_injury_to_illness_reporting.sql` is applied and checksum-registered on approved project `eukkvswaxweenovqqgzr`, database `postgres`, with SHA-256 `dbca0452c7777d169a6b1eb2df8e5a0344591e078cb839cd46dcbfe436260297`. Abdel approved these 24 row decisions and the targeted reporting-only correction. Rule `urc_2025_26_injury_to_illness_2026_09_03_v1` is season-specific and creates no automatic diagnosis-to-problem-type rule. Wider report readiness remains qualified by the separate monthly-rate issue below.
