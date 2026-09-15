@@ -20,6 +20,34 @@ from _pipeline_params where value->>'kind' = 'injury';
 create unique index candidate_injury_key on urc_candidate_20260915.urc_canonical_injury_rows_v1(team_key,source_row);
 create view urc_candidate_20260915.urc_2025_26_canonical_injury_rows_v1 as
 select * from urc_candidate_20260915.urc_canonical_injury_rows_v1;
+create table urc_candidate_20260915.irfu_diagnosis_family_mapping (
+ team_key text not null,
+ source_row integer not null,
+ source_label text not null,
+ osics10_code text not null,
+ body_location text not null,
+ pathology text not null,
+ family_code text not null,
+ family_label text not null,
+ subtype_code text not null,
+ mapping_basis text not null,
+ primary key(team_key,source_row)
+);
+insert into urc_candidate_20260915.irfu_diagnosis_family_mapping
+select (jsonb_populate_record(null::urc_candidate_20260915.irfu_diagnosis_family_mapping,value->'row')).*
+from _pipeline_params where value->>'kind'='diagnosis_mapping';
+do $$ begin
+ if (select count(*) from urc_candidate_20260915.irfu_diagnosis_family_mapping)<>402
+ or (select count(*) from urc_candidate_20260915.irfu_diagnosis_family_mapping where mapping_basis='inherited_diagnosis')<>256
+ or (select count(*) from urc_candidate_20260915.irfu_diagnosis_family_mapping where mapping_basis='existing_family_alias')<>139
+ or (select count(*) from urc_candidate_20260915.irfu_diagnosis_family_mapping where mapping_basis='candidate_identity_group')<>7
+ or exists(select 1 from urc_candidate_20260915.irfu_diagnosis_family_mapping
+   where family_code='unknown' or family_label='Unknown diagnosis')
+ or exists(select 1 from urc_candidate_20260915.urc_canonical_injury_rows_v1 i
+   left join urc_candidate_20260915.irfu_diagnosis_family_mapping m using(team_key,source_row)
+   where i.team_key in ('connacht','leinster','munster','ulster') and m.source_row is null)
+ then raise exception 'IRFU diagnosis-family mapping is incomplete'; end if;
+end $$;
 create table urc_candidate_20260915.urc_illness_profile_rows_v2 as
 select * from analysis.urc_illness_profile_rows_v2 where false;
 insert into urc_candidate_20260915.urc_illness_profile_rows_v2
@@ -214,9 +242,13 @@ set dashboard=jsonb_set(dashboard,'{hsr_team_comparison}',rows.hsr) from rows wh
 
 create view urc_candidate_20260915.urc_diagnosis_family_rows_v1 as
 select i.season,i.team_key,i.source_row,i.setting_code,i.is_time_loss,i.days_lost,
- coalesce(f.family_code,'unknown') family_code,coalesce(f.family_label,'Unknown diagnosis') family_label,
- coalesce(f.subtype_code,'subtype_unknown') subtype_code,coalesce(f.source_label,i.diagnosis_label) subtype_label
+ coalesce(m.family_code,f.family_code,'unknown') family_code,
+ coalesce(m.family_label,f.family_label,'Unknown diagnosis') family_label,
+ coalesce(m.subtype_code,f.subtype_code,'subtype_unknown') subtype_code,
+ coalesce(m.source_label,f.source_label,i.diagnosis_label) subtype_label
 from urc_candidate_20260915.urc_canonical_injury_rows_v1 i
+left join urc_candidate_20260915.irfu_diagnosis_family_mapping m
+ on m.team_key=i.team_key and m.source_row=i.source_row
 left join audit.urc_2025_26_diagnosis_family_exact_labels_v1 f on f.source_label=i.diagnosis_label and f.family_code is not null;
 
 -- CLONED_CALCULATORS
