@@ -906,7 +906,7 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.match(reportsTab, /removeButtonRefs\.current\.get\(sectionId\)\?\.focus\(\)/);
   assert.match(reportsTab, /onPreviewReady=\{focusRestoredSection\}/);
   assert.match(dashboard, /<TabsContent value="reports"><ReportsTab key=\{`\$\{reportModel\.scope\}/);
-  assert.doesNotMatch(dashboard, /\{ value: 'hsr', label: 'HSR' \}/);
+  assert.match(dashboard, /\{ value: 'hsr', label: 'HSR' \}/);
   assert.doesNotMatch(dashboard, /exposurePreview|ExposureReviewPreview/);
   assert.match(dashboard, /HSR Distance/);
   assert.doesNotMatch(dashboard, /Seasonal HSR/);
@@ -918,6 +918,8 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.match(exposureComparison, /ranked\.map[\s\S]*?mt-4 flex justify-end border-t[\s\S]*?League Mean/);
   assert.match(exposureComparison, /ranked\.reduce\(\(sum, row\) => sum \+ \(metric\(row\) \?\? 0\), 0\) \/ ranked\.length/);
   assert.match(dashboard, /useState<ExposureMeasure>\('hours'\)/);
+  assert.match(dashboard, /\{ value: 'hsr', label: 'HSR' \}/);
+  assert.match(exposureComparison, /return row\.hsr_distance_km/);
   assert.match(dashboard, /label="Choose team comparison exposure measure"/);
   assert.ok((dashboard.match(/scrollable=\{false\}/g) ?? []).length >= 1);
   assert.match(dashboard, /scrollable \? 'overflow-x-auto' : 'flex-wrap overflow-visible'/);
@@ -940,6 +942,8 @@ test('exposure tab reads released HSR values through the shared V8 view', async 
   assert.match(charts, /hasReportedExposureValue\(row, 'hours'\)[\s\S]*?hasReportedExposureValue\(row, 'distance'\)/);
   assert.match(charts, /exposureMonthLabel\(value, compactMonths\)/);
   assert.match(charts, /showExposureMonthLabel\(index, compactMonths\)/);
+  const exposureTrend = charts.slice(charts.indexOf('export function ExposureTrendChart'), charts.indexOf('const SCATTER_NARROW_BELOW'));
+  assert.doesNotMatch(exposureTrend, /<Legend/);
   assert.doesNotMatch(charts.slice(charts.indexOf('export function ExposureTrendChart'), charts.indexOf('const SCATTER_NARROW_BELOW')), /<Line[\s\S]*?hsr_distance_km/);
   assert.match(charts, /w-full min-w-0/);
   assert.doesNotMatch(dashboard.slice(dashboard.indexOf('function ExposureTab'), dashboard.indexOf('function ReportsTab')), /overflow-[xy]-auto|max-h-\[/);

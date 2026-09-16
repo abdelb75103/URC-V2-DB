@@ -397,7 +397,11 @@ function OverviewTab({
         overall_incidence_per_1000h: row.overall_incidence_per_1000h ?? null,
         incidence_per_1000h: row.incidence_per_1000h ?? null,
       }));
-  const timelineRows = buildSeasonTimelineRows(monthlyRows, dashboard.scope !== 'league');
+  const timelineRows = buildSeasonTimelineRows(
+    monthlyRows,
+    dashboard.scope !== 'league',
+    dashboard.preliminary_monthly_rates ?? [],
+  );
   const timelineHasOverallIncidence = timelineRows.some((row) => row.overall_incidence_per_1000h != null);
   const timelineHasTlIncidence = timelineRows.some((row) => row.incidence_per_1000h != null);
   // Charts start in September; KPI trends and headline totals keep the full set.
@@ -1419,7 +1423,7 @@ function ExposureTab({
   teamColor?: TeamColorSet;
   teamName?: string;
 }) {
-  type ExposureMeasure = 'hours' | 'distance';
+  type ExposureMeasure = 'hours' | 'distance' | 'hsr';
   const [comparisonMeasure, setComparisonMeasure] = useState<ExposureMeasure>('hours');
   const coverage = dashboard.coverage;
   const monthlyRows = dashboard.monthly;
@@ -1430,6 +1434,7 @@ function ExposureTab({
   const options: Array<{ value: ExposureMeasure; label: string }> = [
     { value: 'hours', label: 'Hours' },
     { value: 'distance', label: 'Distance' },
+    { value: 'hsr', label: 'HSR' },
   ];
   const hasExposureData = [totalHours, totalDistance].some((value) => typeof value === 'number' && Number.isFinite(value))
     || monthlyRows.some((row) => [row.exposure_hours, row.distance_km, row.hsr_distance_km].some((value) => typeof value === 'number' && Number.isFinite(value)))
@@ -1570,16 +1575,18 @@ function ExposureComparison({
   teamName,
 }: {
   rows: TeamComparisonRow[];
-  measure: 'hours' | 'distance';
-  onMeasureChange: (measure: 'hours' | 'distance') => void;
-  options: Array<{ value: 'hours' | 'distance'; label: string }>;
+  measure: 'hours' | 'distance' | 'hsr';
+  onMeasureChange: (measure: 'hours' | 'distance' | 'hsr') => void;
+  options: Array<{ value: 'hours' | 'distance' | 'hsr'; label: string }>;
   viewerComparisonId?: string | null;
   teamColor?: TeamColorSet;
   teamName?: string;
 }) {
-  const metric = (row: typeof rows[number]) => measure === 'hours'
-    ? row.exposure_hours
-    : row.distance_km;
+  const metric = (row: typeof rows[number]) => {
+    if (measure === 'hours') return row.exposure_hours;
+    if (measure === 'distance') return row.distance_km;
+    return row.hsr_distance_km;
+  };
   const ranked = [...rows]
     .filter((row) => typeof metric(row) === 'number' && Number.isFinite(metric(row)))
     .sort((a, b) => (metric(b) ?? 0) - (metric(a) ?? 0));
@@ -1589,7 +1596,7 @@ function ExposureComparison({
   const max = Math.max(...ranked.map((row) => metric(row) ?? 0), 1);
   const leagueMeanPosition = Math.min((leagueMean / max) * 100, 100);
   const label = measure === 'hours' ? 'player-hours' : 'km';
-  const measureLabel = measure === 'hours' ? 'Hours' : 'Distance';
+  const measureLabel = measure === 'hours' ? 'Hours' : measure === 'distance' ? 'Distance' : 'HSR Distance';
   return (
     <Panel contentClassName="p-4 sm:p-5">
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

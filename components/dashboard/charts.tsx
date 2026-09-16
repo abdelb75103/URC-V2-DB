@@ -635,7 +635,6 @@ export function ExposureTrendChart({
             allowEscapeViewBox={{ x: false, y: false }}
             wrapperStyle={{ zIndex: 30 }}
           />
-          <Legend verticalAlign="top" height={22} wrapperStyle={{ fontSize: 11, paddingTop: 0 }} />
           <Bar yAxisId="hours" dataKey="exposure_hours" name="Hours" fill={totalHoursColor} radius={[3, 3, 0, 0]} maxBarSize={54} isAnimationActive={false} />
           <Bar yAxisId="distance" dataKey="distance_km" name="Total Distance" fill={DISTANCE_COLOR} shape={HsrInsetDistanceBar} maxBarSize={54} isAnimationActive={false} />
           </ComposedChart>

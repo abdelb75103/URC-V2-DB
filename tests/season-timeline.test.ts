@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { rankedCommonInjuries, rankedIllnesses } from '../lib/report-presentation';
-import { monthlyIncidence } from '../lib/season-timeline';
+import { buildSeasonTimelineRows, monthlyIncidence } from '../lib/season-timeline';
 import { monthIndex, sortSeasonMonths } from '../lib/dashboard-month';
 
 test('both reader month formats sort together across the year boundary', () => {
@@ -34,4 +34,31 @@ test('missing monthly incidence uses released counts and exposure while preservi
   assert.equal(monthlyIncidence(null, 800, null), null);
   assert.equal(monthlyIncidence(20, 800, null, false), null);
   assert.equal(monthlyIncidence(20, 800, 25, false), 25);
+});
+
+test('league timeline uses contributor-aligned incidence when the official monthly rate is unavailable', () => {
+  const rows = buildSeasonTimelineRows([
+    {
+      month: 'Jun 2026',
+      setting: 'all',
+      recorded_injuries: 20,
+      time_loss_injuries: 8,
+      rate_time_loss_injuries: 8,
+      exposure_hours: 500,
+      overall_incidence_per_1000h: null,
+      incidence_per_1000h: null,
+    },
+  ], false, [{
+    month: '2026-06',
+    contributor_count: 10,
+    exposure_hours: 400,
+    time_loss_injuries: 6,
+    days_lost: 80,
+    incidence_per_1000h: 15,
+    burden_per_1000h: 200,
+    qualification: 'Preliminary contributor-aligned monthly rates.',
+  }]);
+
+  assert.equal(rows[0]?.incidence_per_1000h, 15);
+  assert.equal(rows[0]?.overall_incidence_per_1000h, null);
 });
