@@ -12,14 +12,22 @@ export function buildSeasonTimelineRows(
   preliminaryRows: readonly PreliminaryMonthlyRateRow[] = [],
 ): MonthlySettingRow[] {
   const preliminaryByMonth = new Map(preliminaryRows.map((row) => [monthIndex(row.month), row]));
-  return rows.map((row) => ({
-    ...row,
-    overall_incidence_per_1000h: monthlyIncidence(row.recorded_injuries, row.exposure_hours, row.overall_incidence_per_1000h, allowFallback),
-    incidence_per_1000h: monthlyIncidence(
-      row.time_loss_injuries,
-      row.exposure_hours,
-      row.incidence_per_1000h ?? preliminaryByMonth.get(monthIndex(row.month))?.incidence_per_1000h,
-      allowFallback,
-    ),
-  }));
+  return rows.map((row) => {
+    const preliminary = preliminaryByMonth.get(monthIndex(row.month));
+    return {
+      ...row,
+      overall_incidence_per_1000h: monthlyIncidence(
+        row.recorded_injuries,
+        preliminary?.exposure_hours ?? row.exposure_hours,
+        row.overall_incidence_per_1000h,
+        allowFallback || preliminary != null,
+      ),
+      incidence_per_1000h: monthlyIncidence(
+        row.time_loss_injuries,
+        row.exposure_hours,
+        row.incidence_per_1000h ?? preliminary?.incidence_per_1000h,
+        allowFallback,
+      ),
+    };
+  });
 }

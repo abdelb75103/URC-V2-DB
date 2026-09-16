@@ -36,7 +36,7 @@ test('missing monthly incidence uses released counts and exposure while preservi
   assert.equal(monthlyIncidence(20, 800, 25, false), 25);
 });
 
-test('league timeline uses contributor-aligned incidence when the official monthly rate is unavailable', () => {
+test('league timeline plots both incidence series through a contributor-aligned month', () => {
   const rows = buildSeasonTimelineRows([
     {
       month: 'Jun 2026',
@@ -60,5 +60,5 @@ test('league timeline uses contributor-aligned incidence when the official month
   }]);
 
   assert.equal(rows[0]?.incidence_per_1000h, 15);
-  assert.equal(rows[0]?.overall_incidence_per_1000h, null);
+  assert.equal(rows[0]?.overall_incidence_per_1000h, 50);
 });

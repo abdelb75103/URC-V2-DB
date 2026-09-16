@@ -11,6 +11,10 @@ Every change that alters a derived value, classification, cohort, denominator, o
 
 ---
 
+## 2026-09-16: June League Incidence Timeline Continuity
+
+Status: accepted frontend presentation update. June has fewer exposure contributors because several teams had left the competition, not because their intake is incomplete. The league Season Timeline now carries both incidence lines through June. Time Loss incidence uses the supplied contributor-aligned monthly rate. Overall incidence uses the displayed June recorded-injury count and the reported June exposure denominator. Released source rows, database values, headline metrics and reader views do not change. This rule affects only the shared dashboard timeline presentation.
+
 ## 2026-09-15: League Monthly Null Rate Presentation
 
 Status: versioned dashboard and report presentation correction after private-review release QA. The released league 2025-26 June row has positive exposure from ten teams but null official Overall and Time Loss injury rates because six team denominators are missing. The shared timeline fallback had divided all league injury counts by those ten teams' hours, drawing an apparent official June rate in the dashboard and report. League timelines and report monthly patterns now retain a released null rate; team timelines still calculate a missing rate from that team's own released count and hours. The source aggregates, reader views and June HSR pooled from ten paired source contributors do not change. This presentation correction applies in the shared components for both seasons. Type checking, dashboard-access tests, report tests and production build passed.
