@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getTeamById } from '@/config/teams';
 import { getTeamPageData } from '@/lib/reporting';
@@ -11,8 +12,10 @@ import { buildReportModel } from '@/lib/report-model';
 import { reportProtectedTerms } from '@/lib/report-privacy';
 import { buildReportComparisonBenchmarks, buildReportComparisonRows } from '@/lib/report-comparison';
 import { loadReportBrand } from '@/lib/report-brand';
+import { isTeamSessionAuthorized } from '@/lib/team-auth';
+import { TEAM_SESSION_COOKIE } from '@/lib/team-session';
 
-// Dashboard availability follows approved reporting releases at request time.
+// Protected dashboards must never be prerendered or shared through ISR.
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -35,6 +38,21 @@ export default async function TeamPage({
         title={team.name}
         crest={team.crest}
         accent={team.accent}
+      />
+    );
+  }
+
+  const sessionToken = (await cookies()).get(TEAM_SESSION_COOKIE)?.value;
+  if (!isTeamSessionAuthorized(team.id, sessionToken)) {
+    return (
+      <LockedShell
+        title={team.name}
+        crest={team.crest}
+        accent={team.accent}
+        reason="Enter the shared team password to view this disclosure-controlled dashboard."
+        statusLabel="Team Access Required"
+        actionHref={`/unlock?teamId=${encodeURIComponent(team.id)}`}
+        actionLabel="Unlock Dashboard"
       />
     );
   }

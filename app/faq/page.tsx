@@ -40,8 +40,8 @@ const faqItems: { question: string; answer: React.ReactNode }[] = [
     question: 'Who can access the microsite?',
     answer: (
       <p>
-        The current pre-production review build does not require a password. Access controls will
-        be enabled before the site is shared more widely or moved to production.
+        Access is restricted to approved URC players, medical staff, and performance team members.
+        You will need your team password to log in.
       </p>
     ),
   },

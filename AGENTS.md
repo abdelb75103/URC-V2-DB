@@ -26,7 +26,7 @@ Maintain season parity: render each season in its own tab through shared compone
 
 - The web app is read-only and queries approved reporting views server-side through least-privilege access. Never connect the browser directly to Supabase or run pipeline mutations from preview or deployment code.
 - Before every query, migration, or write, prove the exact approved live Supabase/Postgres target. A profile or release approval never authorises a separate database action.
-- Before sharing a V2 URL with teams or the public, complete the access-restoration gate; legacy passwords are public.
+- Team dashboards require a signed, expiring, exact-team session. Before sharing a V2 URL, complete the remaining deployment checks in `docs/ACCESS_RESTORATION_GATE.md`; legacy passwords are public.
 - Do not access or manage Vercel through the CLI, browser automation, plugins, connectors, or APIs for this project.
 
 <!-- BEGIN:nextjs-agent-rules -->

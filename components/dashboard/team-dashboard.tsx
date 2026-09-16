@@ -13,7 +13,7 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, LogOut, X } from 'lucide-react';
 import type {
   DashboardSupplement,
   DiagnosisFamilyRow,
@@ -2038,6 +2038,12 @@ export function TeamDashboard({
           </h1>
           <SeasonSelector season={season} seasonPath={seasonPath} activeTab={activeTab} />
         </div>
+        <form action="/api/team-session/logout" method="post" className="ml-auto">
+          <Button type="submit" variant="outline" className="min-h-11 gap-2">
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </Button>
+        </form>
       </header>
 
       {usesExposureEstimate && (
