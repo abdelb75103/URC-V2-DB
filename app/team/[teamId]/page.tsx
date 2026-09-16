@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getTeamById } from '@/config/teams';
 import { getTeamPageData } from '@/lib/reporting';
 import { resolveTeamPalette } from '@/lib/team-color';
@@ -44,17 +44,7 @@ export default async function TeamPage({
 
   const sessionToken = (await cookies()).get(TEAM_SESSION_COOKIE)?.value;
   if (!isTeamSessionAuthorized(team.id, sessionToken)) {
-    return (
-      <LockedShell
-        title={team.name}
-        crest={team.crest}
-        accent={team.accent}
-        reason="Enter the shared team password to view this disclosure-controlled dashboard."
-        statusLabel="Team Access Required"
-        actionHref={`/unlock?teamId=${encodeURIComponent(team.id)}`}
-        actionLabel="Unlock Dashboard"
-      />
-    );
+    redirect(`/unlock?teamId=${encodeURIComponent(team.id)}`);
   }
 
   let dashboard;

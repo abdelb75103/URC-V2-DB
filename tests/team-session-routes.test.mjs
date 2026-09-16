@@ -122,11 +122,16 @@ test('unlock routes fail closed and issue only an exact-team session', async (t)
   }
   const cookie = setCookie.split(';', 1)[0];
 
-  const noSession = await fetch(`${app.base}/team/munster`);
-  assert.match(await noSession.text(), /Team Access Required/);
+  const noSession = await fetch(`${app.base}/team/munster`, { redirect: 'manual' });
+  assert.equal(noSession.status, 307);
+  assert.equal(noSession.headers.get('location'), '/unlock?teamId=munster');
 
-  const wrongTeam = await fetch(`${app.base}/team/leinster`, { headers: { cookie } });
-  assert.match(await wrongTeam.text(), /Team Access Required/);
+  const wrongTeam = await fetch(`${app.base}/team/leinster`, {
+    redirect: 'manual',
+    headers: { cookie },
+  });
+  assert.equal(wrongTeam.status, 307);
+  assert.equal(wrongTeam.headers.get('location'), '/unlock?teamId=leinster');
   assert.equal(database.connections(), 0);
 
   const token = cookie.slice(cookie.indexOf('=') + 1);
@@ -134,9 +139,11 @@ test('unlock routes fail closed and issue only an exact-team session', async (t)
   const tampered = `${token.slice(0, -1)}${token.endsWith('A') ? 'B' : 'A'}`;
   for (const invalidToken of [expired, tampered]) {
     const response = await fetch(`${app.base}/team/munster`, {
+      redirect: 'manual',
       headers: { cookie: `__Host-urc-team-session=${invalidToken}` },
     });
-    assert.match(await response.text(), /Team Access Required/);
+    assert.equal(response.status, 307);
+    assert.equal(response.headers.get('location'), '/unlock?teamId=munster');
   }
 
   const sameTeam = await fetch(`${app.base}/team/munster`, { headers: { cookie } });
